@@ -34,7 +34,6 @@ import {
 
 import {
   MIN_RESIZABLE_PANE_PX,
-  NOTIFICATIONS_INBOX_STACK_TOP,
   NOTIFICATIONS_PANEL,
 } from '../lib/layoutStore';
 
@@ -59,16 +58,14 @@ import {
 } from '../lib/todayHub';
 
 import {DesktopHorizontalSplitEnd} from './DesktopHorizontalSplitEnd';
-import {DesktopVerticalSplit} from './DesktopVerticalSplit';
 import {EditorPaneOpenNoteTabs} from './EditorPaneOpenNoteTabs';
 import {EditorWorkspaceToolbar} from './EditorWorkspaceToolbar';
 import {MainWorkspaceSplit} from './MainWorkspaceSplit';
-import {NotificationsPanel} from './NotificationsPanel';
 import {MaterialIcon} from './MaterialIcon';
 import {TodayHubCanvas} from './TodayHubCanvas';
-import {InboxTreePane} from './InboxTreePane';
 import {VaultTreePane} from './VaultTreePane';
 import {VaultTabDialogs} from './VaultTabDialogs';
+import {VaultTabSideColumn} from './VaultTabSideColumn';
 import {shouldHandleDeleteNoteGlobalShortcut} from './vaultTabDeleteNoteShortcut';
 import {buildVaultTabBacklinkRows} from './vaultTabBacklinkRows';
 import {
@@ -809,8 +806,6 @@ export function VaultTab({
     onToggleInboxPane,
     onOpenInboxPane,
     onCloseInboxPane,
-    notificationsInboxStackTopHeightPx,
-    onNotificationsInboxStackTopHeightPxChanged,
     vaultWidthPx,
     episodesWidthPx,
     onVaultWidthPxChanged,
@@ -866,9 +861,6 @@ export function VaultTab({
     notificationsPanelVisible,
     onToggleNotificationsPanel,
     notificationItems,
-    notificationHighlightId,
-    onDismissNotification,
-    onClearAllNotifications,
   } = notificationsController;
   const {
     notes,
@@ -1297,33 +1289,17 @@ export function VaultTab({
           titleBarEditorTabsHost,
         )
       : null;
-
   const shellEndColumnVisible = notificationsPanelVisible || inboxPaneVisible;
-
-  const notificationsPanelEl = (
-    <NotificationsPanel
-      appSurface={vaultPaneVisible ? 'capture' : 'consume'}
-      items={notificationItems}
-      highlightId={notificationHighlightId}
-      onDismiss={onDismissNotification}
-      onClearAll={onClearAllNotifications}
-    />
-  );
-
-  const inboxTreePaneEl = (
-    <InboxTreePane
-      vaultRoot={vaultRoot}
-      fs={fs}
-      fsRefreshNonce={fsRefreshNonce}
-      vaultTreeSelectionClearNonce={vaultTreeSelectionClearNonce}
-      editorActiveMarkdownUri={composingNewEntry ? null : selectedUri}
-      revealActiveNoteNonce={revealTreeNonce}
+  const shellEndColumnContent = shellEndColumnVisible ? (
+    <VaultTabSideColumn
+      environment={environment}
+      layoutController={layoutController}
+      editorController={editorController}
+      treeController={treeController}
+      notificationsController={notificationsController}
+      revealTreeNonce={revealTreeNonce}
       onRevealActiveNoteInTree={bumpRevealActiveNoteInTree}
-      revealActiveNoteDisabled={revealInInboxTreeDisabled || busy}
-      busy={busy}
-      onAddEntry={onAddEntry}
-      onOpenMarkdownNote={onSelectNote}
-      onOpenMarkdownNoteInNewActiveTab={onSelectNoteInNewActiveTab}
+      revealInInboxTreeDisabled={revealInInboxTreeDisabled}
       onRenameMarkdownRequest={openRenameDialog}
       onDeleteMarkdownRequest={openTreeDeleteNoteDialog}
       onRenameFolderRequest={openRenameFolderDialog}
@@ -1332,23 +1308,7 @@ export function VaultTab({
       onMoveVaultTreeItem={moveVaultTreeItemStable}
       onBulkMoveVaultTreeItems={bulkMoveVaultTreeItemsStable}
     />
-  );
-
-  const shellEndColumnContent = shellEndColumnVisible ? (
-    <DesktopVerticalSplit
-      className="split-inner"
-      topCollapsed={!notificationsPanelVisible}
-      bottomCollapsed={!inboxPaneVisible}
-      topHeightPx={notificationsInboxStackTopHeightPx}
-      minTopPx={NOTIFICATIONS_INBOX_STACK_TOP.minPx}
-      maxTopPx={NOTIFICATIONS_INBOX_STACK_TOP.maxPx}
-      minBottomPx={MIN_RESIZABLE_PANE_PX}
-      onTopHeightPxChanged={onNotificationsInboxStackTopHeightPxChanged}
-      top={notificationsPanelEl}
-      bottom={inboxTreePaneEl}
-    />
   ) : null;
-
   return (
     <Fragment>
       {titleBarTabsPortal}
