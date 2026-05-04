@@ -24,6 +24,7 @@ import {saveNoteMarkdown} from '../lib/vaultBootstrap';
 import type {TodayHubWorkspaceBridge} from '../lib/todayHub';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
+import {reportCrash} from '../observability/reportCrash';
 
 import type {
   DiskConflictState,
@@ -351,11 +352,10 @@ export function useWorkspacePersistence(args: {
   }, [flushInboxSave]);
 
   const onInboxSaveShortcut = useCallback(() => {
-    if (composingNewEntryRef.current) {
-      void submitNewEntryRef.current();
-    } else {
-      void flushInboxSave();
-    }
+    const save = composingNewEntryRef.current
+      ? submitNewEntryRef.current()
+      : flushInboxSave();
+    save.catch(e => reportCrash('unhandledrejection', e));
   }, [composingNewEntryRef, submitNewEntryRef, flushInboxSave]);
 
   useEffect(() => {

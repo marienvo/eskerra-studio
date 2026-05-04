@@ -24,7 +24,6 @@ import {
   type VaultWikiLinkRenamePlanResult,
 } from '../lib/vaultWikiLinkRenameMaintenance';
 import type {SubtreeMarkdownPresenceCache} from '@eskerra/core';
-import {loadVaultMarkdownBodiesWithSeed} from './inboxNoteBodyCache';
 
 import type {
   WorkspacePendingWikiLinkAmbiguityRename,

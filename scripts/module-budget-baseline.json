@@ -1,6 +1,6 @@
 {
   "maxLinesByPath": {
-    "apps/desktop/src/App.tsx": 1435,
+    "apps/desktop/src/App.tsx": 943,
     "apps/desktop/src/components/TodayHubCanvas.tsx": 1010,
     "apps/desktop/src/components/VaultPaneTree.tsx": 1115,
     "apps/desktop/src/components/VaultTab.tsx": 1580,
