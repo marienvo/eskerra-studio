@@ -1,12 +1,4 @@
-import {normalizeVaultBaseUri} from '@eskerra/core';
-
-function trimTrailingSlashes(value: string): string {
-  let out = value;
-  while (out.endsWith('/')) {
-    out = out.slice(0, -1);
-  }
-  return out;
-}
+import {normalizeVaultBaseUri, trimTrailingSlashes} from '@eskerra/core';
 
 function normSlashes(p: string): string {
   return p.trim().replace(/\\/g, '/');

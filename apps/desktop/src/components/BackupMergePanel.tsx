@@ -1,5 +1,9 @@
 import type {VaultFilesystem, VaultDirEntry} from '@eskerra/core';
-import {getAutosyncBackupRootUri, splitYamlFrontmatter} from '@eskerra/core';
+import {
+  getAutosyncBackupRootUri,
+  splitYamlFrontmatter,
+  trimTrailingSlashes,
+} from '@eskerra/core';
 import {
   useCallback,
   useEffect,
@@ -50,14 +54,6 @@ async function hasAnyFiles(fs: VaultFilesystem, dirUri: string): Promise<boolean
     }
   }
   return false;
-}
-
-function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) {
-    end -= 1;
-  }
-  return value.slice(0, end);
 }
 
 function pathRelativeToVault(vaultRoot: string, fileUri: string): string {

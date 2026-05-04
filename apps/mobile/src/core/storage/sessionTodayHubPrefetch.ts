@@ -1,6 +1,7 @@
 import {
   startOfLocalWeekMonday,
   todayHubRowUriFromTodayNoteUri,
+  trimTrailingSlashes,
 } from '@eskerra/core';
 
 import {loadPersistedActiveTodayHubUri} from '../../features/vault/storage/activeTodayHubStorage';
@@ -25,14 +26,6 @@ function extractSafDocumentId(uri: string): string | null {
   } catch {
     return raw;
   }
-}
-
-function trimTrailingSlashes(value: string): string {
-  let out = value;
-  while (out.endsWith('/')) {
-    out = out.slice(0, -1);
-  }
-  return out;
 }
 
 function vaultUriBelongsToBase(hubUri: string, baseUri: string): boolean {

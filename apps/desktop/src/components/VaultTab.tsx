@@ -3,8 +3,6 @@
  *
  * Ownership: UI composition + local dialog state; workspace policy lives in `useMainWindowWorkspace`.
  */
-import * as AlertDialog from '@radix-ui/react-alert-dialog';
-import * as Dialog from '@radix-ui/react-dialog';
 import type {
   MutableRefObject,
   RefObject,
@@ -28,6 +26,7 @@ import {resolveVaultImagePreviewUrl} from '../lib/resolveVaultImagePreviewUrl';
 import {
   getInboxDirectoryUri,
   normalizeVaultBaseUri,
+  trimTrailingSlashes,
   type EskerraSettings,
   type VaultFilesystem,
   type VaultMarkdownRef,
@@ -51,12 +50,9 @@ import {
 } from '../editor/noteEditor/NoteMarkdownEditor';
 
 import {renameDraftStemForMarkdownUri} from '../lib/renameDialogDraft';
-import {
-  planVaultTreeBulkTargets,
-  type VaultTreeBulkItem,
-} from '../lib/vaultTreeBulkPlan';
+import type {VaultTreeBulkItem} from '../lib/vaultTreeBulkPlan';
 
-import type {InboxEditorShellScrollDirective} from '../hooks/useMainWindowWorkspace';
+import type {InboxEditorShellScrollDirective} from '../hooks/workspaceEditorScrollMap';
 import {
   todayHubColumnCount,
   type TodayHubSettings,
@@ -73,6 +69,7 @@ import {MaterialIcon} from './MaterialIcon';
 import {TodayHubCanvas} from './TodayHubCanvas';
 import {InboxTreePane} from './InboxTreePane';
 import {VaultTreePane} from './VaultTreePane';
+import {VaultTabDialogs} from './VaultTabDialogs';
 import {shouldHandleDeleteNoteGlobalShortcut} from './vaultTabDeleteNoteShortcut';
 import {buildVaultTabBacklinkRows} from './vaultTabBacklinkRows';
 import {
@@ -95,14 +92,6 @@ import {BackupMergePanel} from './BackupMergePanel';
 import type {MergePanelSource} from './BackupMergePanel';
 
 type DiskConflictPayload = {uri: string};
-
-function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) {
-    end -= 1;
-  }
-  return value.slice(0, end);
-}
 
 type VaultTabProps = {
   environment: VaultTabEnvironment;
@@ -1096,6 +1085,19 @@ export function VaultTab({
     setRenameTargetUri(null);
   };
 
+  const onDeleteNoteDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setConfirmDeleteUri(null);
+    }
+  }, []);
+
+  const onConfirmDeleteNote = useCallback(() => {
+    const uri = confirmDeleteUri;
+    if (uri) {
+      void onDeleteNote(uri);
+    }
+  }, [confirmDeleteUri, onDeleteNote]);
+
   const openRenameFolderDialog = useCallback((uri: string) => {
     const tail = uri.split(/[/\\]/).filter(Boolean).pop();
     if (!tail) {
@@ -1115,6 +1117,62 @@ export function VaultTab({
 
   const openBulkDeleteDialog = useCallback((items: VaultTreeBulkItem[]) => {
     setConfirmBulkDeleteItems(items);
+  }, []);
+
+  const onDeleteFolderDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setConfirmDeleteFolderUri(null);
+    }
+  }, []);
+
+  const onConfirmDeleteFolder = useCallback(() => {
+    const uri = confirmDeleteFolderUri;
+    if (uri) {
+      void onDeleteFolder(uri);
+    }
+  }, [confirmDeleteFolderUri, onDeleteFolder]);
+
+  const onBulkDeleteDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setConfirmBulkDeleteItems(null);
+    }
+  }, []);
+
+  const onConfirmBulkDelete = useCallback(() => {
+    const items = confirmBulkDeleteItems;
+    setConfirmBulkDeleteItems(null);
+    if (items) {
+      void onBulkDeleteVaultTreeItems(items);
+    }
+  }, [confirmBulkDeleteItems, onBulkDeleteVaultTreeItems]);
+
+  const onWikiLinkAmbiguityRenameDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        onCancelWikiLinkAmbiguityRename();
+      }
+    },
+    [onCancelWikiLinkAmbiguityRename],
+  );
+
+  const onRenameNoteDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setRenameTargetUri(null);
+    }
+  }, []);
+
+  const onRenameDraftChange = useCallback((next: string) => {
+    setRenameDraft(next);
+  }, []);
+
+  const onRenameFolderDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setRenameFolderUri(null);
+    }
+  }, []);
+
+  const onRenameFolderDraftChange = useCallback((next: string) => {
+    setRenameFolderDraft(next);
   }, []);
 
   const moveVaultTreeItemStable = useCallback(
@@ -1329,319 +1387,39 @@ export function VaultTab({
     <Fragment>
       {titleBarTabsPortal}
       <div className="inbox-root" data-app-surface="capture">
-      <AlertDialog.Root
-        open={confirmDeleteUri !== null}
-        onOpenChange={open => {
-          if (!open) {
-            setConfirmDeleteUri(null);
-          }
-        }}
-      >
-        <AlertDialog.Portal>
-          <AlertDialog.Overlay className="alert-dialog-overlay" />
-          <AlertDialog.Content
-            className="alert-dialog-content"
-            onOpenAutoFocus={event => {
-              event.preventDefault();
-              queueMicrotask(() => {
-                confirmDeleteNoteActionRef.current?.focus();
-              });
-            }}
-          >
-            <AlertDialog.Title className="alert-dialog-title">Delete note</AlertDialog.Title>
-            <AlertDialog.Description className="alert-dialog-description">
-              Delete this note? This cannot be undone.
-            </AlertDialog.Description>
-            <div className="alert-dialog-actions">
-              <AlertDialog.Cancel asChild>
-                <button type="button" className="ghost" disabled={busy}>
-                  Cancel
-                </button>
-              </AlertDialog.Cancel>
-              <AlertDialog.Action asChild>
-                <button
-                  ref={confirmDeleteNoteActionRef}
-                  type="button"
-                  className="primary destructive"
-                  disabled={busy}
-                  onClick={() => {
-                    const uri = confirmDeleteUri;
-                    if (uri) {
-                      void onDeleteNote(uri);
-                    }
-                  }}
-                >
-                  Delete
-                </button>
-              </AlertDialog.Action>
-            </div>
-          </AlertDialog.Content>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
-      <AlertDialog.Root
-        open={confirmDeleteFolderUri !== null}
-        onOpenChange={open => {
-          if (!open) {
-            setConfirmDeleteFolderUri(null);
-          }
-        }}
-      >
-        <AlertDialog.Portal>
-          <AlertDialog.Overlay className="alert-dialog-overlay" />
-          <AlertDialog.Content
-            className="alert-dialog-content"
-            onOpenAutoFocus={event => {
-              event.preventDefault();
-              queueMicrotask(() => {
-                confirmDeleteFolderActionRef.current?.focus();
-              });
-            }}
-          >
-            <AlertDialog.Title className="alert-dialog-title">Delete folder</AlertDialog.Title>
-            <AlertDialog.Description className="alert-dialog-description">
-              Delete this folder and everything inside it? This cannot be undone.
-            </AlertDialog.Description>
-            <div className="alert-dialog-actions">
-              <AlertDialog.Cancel asChild>
-                <button type="button" className="ghost" disabled={busy}>
-                  Cancel
-                </button>
-              </AlertDialog.Cancel>
-              <AlertDialog.Action asChild>
-                <button
-                  ref={confirmDeleteFolderActionRef}
-                  type="button"
-                  className="primary destructive"
-                  disabled={busy}
-                  onClick={() => {
-                    const uri = confirmDeleteFolderUri;
-                    if (uri) {
-                      void onDeleteFolder(uri);
-                    }
-                  }}
-                >
-                  Delete
-                </button>
-              </AlertDialog.Action>
-            </div>
-          </AlertDialog.Content>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
-      <AlertDialog.Root
-        open={confirmBulkDeleteItems !== null}
-        onOpenChange={open => {
-          if (!open) {
-            setConfirmBulkDeleteItems(null);
-          }
-        }}
-      >
-        <AlertDialog.Portal>
-          <AlertDialog.Overlay className="alert-dialog-overlay" />
-          <AlertDialog.Content
-            className="alert-dialog-content"
-            onOpenAutoFocus={event => {
-              event.preventDefault();
-              queueMicrotask(() => {
-                confirmBulkDeleteActionRef.current?.focus();
-              });
-            }}
-          >
-            <AlertDialog.Title className="alert-dialog-title">
-              Delete multiple items
-            </AlertDialog.Title>
-            <AlertDialog.Description className="alert-dialog-description">
-              {confirmBulkDeleteItems ? (
-                <>
-                  Delete{' '}
-                  {
-                    planVaultTreeBulkTargets(
-                      confirmBulkDeleteItems,
-                      trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/')),
-                    ).length
-                  }{' '}
-                  vault item(s) including any files inside selected folders? This cannot be
-                  undone.
-                </>
-              ) : null}
-            </AlertDialog.Description>
-            <div className="alert-dialog-actions">
-              <AlertDialog.Cancel asChild>
-                <button type="button" className="ghost" disabled={busy}>
-                  Cancel
-                </button>
-              </AlertDialog.Cancel>
-              <AlertDialog.Action asChild>
-                <button
-                  ref={confirmBulkDeleteActionRef}
-                  type="button"
-                  className="primary destructive"
-                  disabled={busy}
-                  onClick={() => {
-                    const items = confirmBulkDeleteItems;
-                    setConfirmBulkDeleteItems(null);
-                    if (items) {
-                      void onBulkDeleteVaultTreeItems(items);
-                    }
-                  }}
-                >
-                  Delete
-                </button>
-              </AlertDialog.Action>
-            </div>
-          </AlertDialog.Content>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
-      <AlertDialog.Root
-        open={wikiLinkAmbiguityRenamePrompt !== null}
-        onOpenChange={open => {
-          if (!open) {
-            onCancelWikiLinkAmbiguityRename();
-          }
-        }}
-      >
-        <AlertDialog.Portal>
-          <AlertDialog.Overlay className="alert-dialog-overlay" />
-          <AlertDialog.Content className="alert-dialog-content">
-            <AlertDialog.Title className="alert-dialog-title">
-              Ambiguous links found
-            </AlertDialog.Title>
-            <AlertDialog.Description className="alert-dialog-description">
-              {wikiLinkAmbiguityRenamePrompt ? (
-                <>
-                  This rename can safely update{' '}
-                  {wikiLinkAmbiguityRenamePrompt.updatedLinkCount} link(s) across{' '}
-                  {wikiLinkAmbiguityRenamePrompt.touchedFileCount} note(s), but{' '}
-                  {wikiLinkAmbiguityRenamePrompt.skippedAmbiguousLinkCount} wiki link(s)
-                  are ambiguous and will be skipped.
-                </>
-              ) : null}
-            </AlertDialog.Description>
-            <div className="alert-dialog-actions">
-              <AlertDialog.Cancel asChild>
-                <button type="button" className="ghost" disabled={busy}>
-                  Cancel
-                </button>
-              </AlertDialog.Cancel>
-              <AlertDialog.Action asChild>
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={busy}
-                  onClick={() => {
-                    void onConfirmWikiLinkAmbiguityRename();
-                  }}
-                >
-                  Continue
-                </button>
-              </AlertDialog.Action>
-            </div>
-          </AlertDialog.Content>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
-      <Dialog.Root
-        open={renameTargetUri !== null}
-        onOpenChange={open => {
-          if (!open) {
-            setRenameTargetUri(null);
-          }
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="alert-dialog-overlay" />
-          <Dialog.Content className="alert-dialog-content">
-            <Dialog.Title className="alert-dialog-title">Rename note</Dialog.Title>
-            <Dialog.Description className="alert-dialog-description">
-              Choose a new name for this note.
-            </Dialog.Description>
-            <label className="rename-note-field">
-              <span className="rename-note-field__label">File name</span>
-              <input
-                ref={renameInputRef}
-                type="text"
-                className="rename-note-field__input"
-                value={renameDraft}
-                disabled={busy}
-                onChange={event => setRenameDraft(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    submitRename();
-                  }
-                }}
-              />
-            </label>
-            <div className="alert-dialog-actions">
-              <Dialog.Close asChild>
-                <button type="button" className="ghost" disabled={busy}>
-                  Cancel
-                </button>
-              </Dialog.Close>
-              <button
-                type="button"
-                className="primary"
-                disabled={busy}
-                onClick={() => {
-                  submitRename();
-                }}
-              >
-                Rename
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-      <Dialog.Root
-        open={renameFolderUri !== null}
-        onOpenChange={open => {
-          if (!open) {
-            setRenameFolderUri(null);
-          }
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="alert-dialog-overlay" />
-          <Dialog.Content className="alert-dialog-content">
-            <Dialog.Title className="alert-dialog-title">Rename folder</Dialog.Title>
-            <Dialog.Description className="alert-dialog-description">
-              Choose a new name for this folder.
-            </Dialog.Description>
-            <label className="rename-note-field">
-              <span className="rename-note-field__label">Folder name</span>
-              <input
-                ref={renameFolderInputRef}
-                type="text"
-                className="rename-note-field__input"
-                value={renameFolderDraft}
-                disabled={busy}
-                onChange={event => setRenameFolderDraft(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    submitFolderRename();
-                  }
-                }}
-              />
-            </label>
-            <div className="alert-dialog-actions">
-              <Dialog.Close asChild>
-                <button type="button" className="ghost" disabled={busy}>
-                  Cancel
-                </button>
-              </Dialog.Close>
-              <button
-                type="button"
-                className="primary"
-                disabled={busy}
-                onClick={() => {
-                  submitFolderRename();
-                }}
-              >
-                Rename
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <VaultTabDialogs
+        busy={busy}
+        vaultRoot={vaultRoot}
+        confirmDeleteUri={confirmDeleteUri}
+        onDeleteNoteDialogOpenChange={onDeleteNoteDialogOpenChange}
+        confirmDeleteNoteActionRef={confirmDeleteNoteActionRef}
+        onConfirmDeleteNote={onConfirmDeleteNote}
+        confirmDeleteFolderUri={confirmDeleteFolderUri}
+        onDeleteFolderDialogOpenChange={onDeleteFolderDialogOpenChange}
+        confirmDeleteFolderActionRef={confirmDeleteFolderActionRef}
+        onConfirmDeleteFolder={onConfirmDeleteFolder}
+        confirmBulkDeleteItems={confirmBulkDeleteItems}
+        onBulkDeleteDialogOpenChange={onBulkDeleteDialogOpenChange}
+        confirmBulkDeleteActionRef={confirmBulkDeleteActionRef}
+        onConfirmBulkDelete={onConfirmBulkDelete}
+        wikiLinkAmbiguityRenamePrompt={wikiLinkAmbiguityRenamePrompt}
+        onWikiLinkAmbiguityRenameDialogOpenChange={
+          onWikiLinkAmbiguityRenameDialogOpenChange
+        }
+        onConfirmWikiLinkAmbiguityRename={onConfirmWikiLinkAmbiguityRename}
+        renameTargetUri={renameTargetUri}
+        onRenameNoteDialogOpenChange={onRenameNoteDialogOpenChange}
+        renameInputRef={renameInputRef}
+        renameDraft={renameDraft}
+        onRenameDraftChange={onRenameDraftChange}
+        onSubmitRename={submitRename}
+        renameFolderUri={renameFolderUri}
+        onRenameFolderDialogOpenChange={onRenameFolderDialogOpenChange}
+        renameFolderInputRef={renameFolderInputRef}
+        renameFolderDraft={renameFolderDraft}
+        onRenameFolderDraftChange={onRenameFolderDraftChange}
+        onSubmitFolderRename={submitFolderRename}
+      />
 
       <div className="main-workspace-canvas">
       <EditorWorkspaceToolbar

@@ -15,7 +15,7 @@ import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,
 } from '../editor/noteEditor/vaultLinkActivatePayload';
-import type {InboxEditorShellScrollDirective} from '../hooks/useMainWindowWorkspace';
+import type {InboxEditorShellScrollDirective} from '../hooks/workspaceEditorScrollMap';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {SessionNotification} from '../lib/sessionNotifications';
 import type {

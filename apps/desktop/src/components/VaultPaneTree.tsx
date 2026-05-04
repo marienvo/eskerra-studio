@@ -10,6 +10,7 @@ import {AssistiveTreeDescription, useTree} from '@headless-tree/react';
 import {
   getInboxDirectoryUri,
   normalizeVaultBaseUri,
+  trimTrailingSlashes,
   type VaultFilesystem,
 } from '@eskerra/core';
 import * as ContextMenu from '@radix-ui/react-context-menu';
@@ -123,14 +124,6 @@ function vaultTreeMiddleClickApplies(
 }
 
 type VaultTreeDragGhostIcon = 'folder' | 'article' | 'today';
-
-function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) {
-    end -= 1;
-  }
-  return value.slice(0, end);
-}
 
 function vaultTreeDragGhostIconMarkup(kind: VaultTreeDragGhostIcon): string {
   const p = {

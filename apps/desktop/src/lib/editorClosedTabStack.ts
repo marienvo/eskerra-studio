@@ -5,7 +5,7 @@
  * return the most recently user-relevant closed tab first.
  */
 
-import {normalizeVaultBaseUri} from '@eskerra/core';
+import {normalizeVaultBaseUri, trimTrailingSlashes} from '@eskerra/core';
 
 import {normalizeEditorDocUri} from './editorDocumentHistory';
 import {normalizeOpenTabList} from './editorOpenTabs';
@@ -15,14 +15,6 @@ export type ClosedEditorTabRecord = {
   uri: string;
   index: number;
 };
-
-function trimTrailingSlashes(value: string): string {
-  let out = value;
-  while (out.endsWith('/')) {
-    out = out.slice(0, -1);
-  }
-  return out;
-}
 
 export function isEditorClosedTabReopenable(
   uri: string,

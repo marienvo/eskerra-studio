@@ -29,6 +29,7 @@ import {
   sanitizeInboxNoteStem,
   serializeEskerraLocalSettings,
   serializeEskerraSettings,
+  trimTrailingSlashes,
   vaultPathDirname,
   type EskerraLocalSettings,
   type EskerraSettings,
@@ -38,14 +39,6 @@ import {
 } from '@eskerra/core';
 
 const DESKTOP_R2_HTTP = {transport: desktopR2SignedTransport} as const;
-
-function trimTrailingSlashes(value: string): string {
-  let out = value;
-  while (out.endsWith('/')) {
-    out = out.slice(0, -1);
-  }
-  return out;
-}
 
 export async function bootstrapVaultLayout(
   root: string,

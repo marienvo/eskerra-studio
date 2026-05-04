@@ -7,6 +7,7 @@ import {
   resolveInboxWikiLinkTarget,
   resolveVaultRelativeMarkdownHref,
   stemFromMarkdownFileName,
+  trimTrailingSlashes,
   vaultPathDirname,
   wikiLinkInnerBrowserOpenableHref,
   wikiLinkInnerPathResolutionSourceDirectoryUri,
@@ -17,14 +18,6 @@ import {
 } from '@eskerra/core';
 
 import {createVaultMarkdownNoteInDirectory} from './vaultBootstrap';
-
-function trimTrailingSlashes(value: string): string {
-  let out = value;
-  while (out.endsWith('/')) {
-    out = out.slice(0, -1);
-  }
-  return out;
-}
 
 export type InboxWikiLinkNavigationResult =
   | {kind: 'open'; uri: string; canonicalInner?: string}

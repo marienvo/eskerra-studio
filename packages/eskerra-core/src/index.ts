@@ -1,4 +1,5 @@
 export type {AudioPlayer, AudioTrack, PlayerProgress, PlayerState, Unsubscribe} from './audioPlayerTypes';
+export {trimTrailingSlashes} from './trimTrailingSlashes';
 export {
   ATTACHMENT_IMAGE_EXTENSIONS,
   buildAttachmentFileName,
