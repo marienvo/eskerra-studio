@@ -765,11 +765,31 @@ export default function App() {
                         applyFrontmatterInnerChange,
                         diskConflict,
                       }}
-                      inboxEditorRef={inboxEditorRef}
-                      inboxEditorShellScrollRef={inboxEditorShellScrollRef}
-                      inboxEditorShellScrollDirectiveRef={
-                        inboxEditorShellScrollDirectiveRef
-                      }
+                      editorController={{
+                        inboxEditorRef,
+                        inboxEditorShellScrollRef,
+                        inboxEditorShellScrollDirectiveRef,
+                        inboxContentByUri,
+                        backlinkUris: selectedNoteBacklinkUris,
+                        selectedUri,
+                        onSelectNote: selectNote,
+                        onSelectNoteInNewActiveTab: selectNoteInNewActiveTab,
+                        onAddEntry: startNewEntry,
+                        composingNewEntry,
+                        onCancelNewEntry: cancelNewEntry,
+                        onCreateNewEntry: () => void submitNewEntry(),
+                        editorBody,
+                        onEditorChange: setEditorBody,
+                        inboxEditorResetNonce,
+                        onEditorError: setErr,
+                        onSaveShortcut: onInboxSaveShortcut,
+                        onCleanNote:
+                          !composingNewEntry && selectedUri
+                            ? onCleanNoteInbox
+                            : undefined,
+                        busy,
+                        inboxBacklinksDeferNonce,
+                      }}
                       vaultPaneVisible={vaultPaneVisible}
                       onToggleVault={() => setVaultPaneVisible(v => !v)}
                       episodesPaneVisible={episodesPaneVisible}
@@ -813,19 +833,6 @@ export default function App() {
                       onEpisodesWidthPxChanged={persistMainLeftWidthPx}
                       stackTopHeightPx={layouts.vaultEpisodesStack.topHeightPx}
                       onStackTopHeightPxChanged={persistVaultEpisodesStackTopHeightPx}
-                      inboxContentByUri={inboxContentByUri}
-                      backlinkUris={selectedNoteBacklinkUris}
-                      selectedUri={selectedUri}
-                      onSelectNote={selectNote}
-                      onSelectNoteInNewActiveTab={selectNoteInNewActiveTab}
-                      onAddEntry={startNewEntry}
-                      composingNewEntry={composingNewEntry}
-                      onCancelNewEntry={cancelNewEntry}
-                      onCreateNewEntry={() => void submitNewEntry()}
-                      editorBody={editorBody}
-                      onEditorChange={setEditorBody}
-                      inboxEditorResetNonce={inboxEditorResetNonce}
-                      onEditorError={setErr}
                       linkController={{
                         onWikiLinkActivate: workspaceLinkController.onWikiLinkActivate,
                         onMarkdownRelativeLinkActivate: workspaceLinkController.onMarkdownRelativeLinkActivate,
@@ -833,13 +840,6 @@ export default function App() {
                         linkSnippetBlockedDomains: vaultSettings?.linkSnippetBlockedDomains,
                         onMuteLinkSnippetDomain: handleMuteLinkSnippetDomain,
                       }}
-                      onSaveShortcut={onInboxSaveShortcut}
-                      onCleanNote={
-                        !composingNewEntry && selectedUri
-                          ? onCleanNoteInbox
-                          : undefined
-                      }
-                      busy={busy}
                       treeController={{
                         notes,
                         onDeleteNote: uri => { void deleteNote(uri); },
