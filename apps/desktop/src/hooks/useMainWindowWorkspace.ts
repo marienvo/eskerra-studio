@@ -153,7 +153,6 @@ import {
   useWorkspaceVaultWatchEffects,
 } from './workspaceVaultWatchEffects';
 import {
-  loadMarkdownBodiesForWikiMaintenance,
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
   type WorkspaceRenameMaintenanceSnapshot,
@@ -172,6 +171,7 @@ import {
   inboxEditorSliceToFullMarkdown,
 } from '../lib/inboxYamlFrontmatterEditor';
 import {
+  loadVaultMarkdownBodiesWithSeed,
   mergeInboxNoteBodyIntoCache,
   resolveInboxCachedBodyForEditor,
   normalizeVaultMarkdownDiskRead,
@@ -640,7 +640,7 @@ export function useMainWindowWorkspace(options: {
               inboxEditorYamlLeadingBeforeFrontmatterRef.current,
             )
           : '';
-      const expandedContent = await loadMarkdownBodiesForWikiMaintenance(
+      const expandedContent = await loadVaultMarkdownBodiesWithSeed(
         fs,
         wikiRefs,
         inboxContentByUriRef.current,

@@ -14,7 +14,7 @@ import type {VaultFilesystem, VaultMarkdownRef} from '@eskerra/core';
 import {listInboxAllBacklinkReferrersForTarget} from '../lib/inboxAllBacklinkIndex';
 import {mergeVaultBacklinkBodySeed} from '../lib/vaultBacklinkBodySeed';
 
-import {normalizeVaultMarkdownDiskRead} from './inboxNoteBodyCache';
+import {loadVaultMarkdownBodiesWithSeed} from './inboxNoteBodyCache';
 
 /** Debounce vault-wide backlink computation after selection / ref list changes (reads note bodies from disk). */
 const VAULT_BACKLINK_COMPUTE_DEBOUNCE_MS = 320;
@@ -35,32 +35,6 @@ function equalReadonlyStringArrays(
     }
   }
   return true;
-}
-
-async function loadMarkdownBodiesForBacklinkScan(
-  fs: VaultFilesystem,
-  refs: ReadonlyArray<{uri: string}>,
-  seed: Readonly<Record<string, string>>,
-  activeUri: string | null,
-  activeBody: string,
-): Promise<Record<string, string>> {
-  const out: Record<string, string> = {...seed};
-  for (const {uri} of refs) {
-    if (activeUri != null && uri === activeUri) {
-      out[uri] = activeBody;
-      continue;
-    }
-    if (Object.prototype.hasOwnProperty.call(out, uri)) {
-      continue;
-    }
-    try {
-      const raw = await fs.readFile(uri, {encoding: 'utf8'});
-      out[uri] = normalizeVaultMarkdownDiskRead(raw);
-    } catch {
-      out[uri] = '';
-    }
-  }
-  return out;
 }
 
 function refToNameAndUri(ref: {name: string; uri: string}): {name: string; uri: string} {
@@ -94,7 +68,7 @@ export async function computeSelectedNoteBacklinkUris(args: {
     activeBody,
   } = args;
   const seed = mergeVaultBacklinkBodySeed(diskBodyCache, inboxContentByUri);
-  const expanded = await loadMarkdownBodiesForBacklinkScan(
+  const expanded = await loadVaultMarkdownBodiesWithSeed(
     fs,
     refs,
     seed,

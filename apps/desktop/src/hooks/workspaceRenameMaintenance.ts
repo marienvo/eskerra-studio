@@ -24,7 +24,7 @@ import {
   type VaultWikiLinkRenamePlanResult,
 } from '../lib/vaultWikiLinkRenameMaintenance';
 import type {SubtreeMarkdownPresenceCache} from '@eskerra/core';
-import {normalizeVaultMarkdownDiskRead} from './inboxNoteBodyCache';
+import {loadVaultMarkdownBodiesWithSeed} from './inboxNoteBodyCache';
 
 import type {
   WorkspacePendingWikiLinkAmbiguityRename,
@@ -36,32 +36,6 @@ const LARGE_RENAME_MIN_TOUCHED_FILES = 60;
 const LARGE_RENAME_MIN_TOUCHED_BYTES = 768 * 1024;
 const RENAME_APPLY_YIELD_EVERY_WRITES = 24;
 const RENAME_NOTICE_TTL_MS = 5000;
-
-export async function loadMarkdownBodiesForWikiMaintenance(
-  fs: VaultFilesystem,
-  refs: ReadonlyArray<{uri: string}>,
-  seed: Readonly<Record<string, string>>,
-  activeUri: string | null,
-  activeBody: string,
-): Promise<Record<string, string>> {
-  const out: Record<string, string> = {...seed};
-  for (const {uri} of refs) {
-    if (activeUri != null && uri === activeUri) {
-      out[uri] = activeBody;
-      continue;
-    }
-    if (Object.prototype.hasOwnProperty.call(out, uri)) {
-      continue;
-    }
-    try {
-      const raw = await fs.readFile(uri, {encoding: 'utf8'});
-      out[uri] = normalizeVaultMarkdownDiskRead(raw);
-    } catch {
-      out[uri] = '';
-    }
-  }
-  return out;
-}
 
 export type WorkspaceRenameMaintenanceSnapshot = {
   wikiRefs: ReadonlyArray<{name: string; uri: string}>;

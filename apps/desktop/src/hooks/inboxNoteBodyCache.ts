@@ -150,6 +150,37 @@ export function fsChangePathsMayAffectUri(
   return false;
 }
 
+/**
+ * Loads markdown bodies for all refs into a new map, seeded from `seed`.
+ * If the active note is in the list, uses `activeBody` instead of reading disk.
+ * Entries already present in `seed` are preserved without re-reading.
+ */
+export async function loadVaultMarkdownBodiesWithSeed(
+  fs: {readFile(uri: string, opts: {encoding: 'utf8'}): Promise<string>},
+  refs: ReadonlyArray<{uri: string}>,
+  seed: Readonly<Record<string, string>>,
+  activeUri: string | null,
+  activeBody: string,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {...seed};
+  for (const {uri} of refs) {
+    if (activeUri != null && uri === activeUri) {
+      out[uri] = activeBody;
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(out, uri)) {
+      continue;
+    }
+    try {
+      const raw = await fs.readFile(uri, {encoding: 'utf8'});
+      out[uri] = normalizeVaultMarkdownDiskRead(raw);
+    } catch {
+      out[uri] = '';
+    }
+  }
+  return out;
+}
+
 export function removeInboxNoteBodyFromCache(
   prev: Record<string, string>,
   uri: string,
