@@ -790,20 +790,31 @@ export default function App() {
                         busy,
                         inboxBacklinksDeferNonce,
                       }}
-                      vaultPaneVisible={vaultPaneVisible}
-                      onToggleVault={() => setVaultPaneVisible(v => !v)}
-                      episodesPaneVisible={episodesPaneVisible}
-                      onToggleEpisodes={() => setEpisodesPaneVisible(v => !v)}
-                      inboxPaneVisible={inboxPaneVisible}
-                      onToggleInboxPane={() => setInboxPaneVisible(v => !v)}
-                      onOpenInboxPane={() => setInboxPaneVisible(true)}
-                      onCloseInboxPane={() => setInboxPaneVisible(false)}
-                      notificationsInboxStackTopHeightPx={
-                        layouts.notificationsInboxStack.topHeightPx
-                      }
-                      onNotificationsInboxStackTopHeightPxChanged={
-                        persistNotificationsInboxStackTopHeightPx
-                      }
+                      layoutController={{
+                        vaultPaneVisible,
+                        onToggleVault: () => setVaultPaneVisible(v => !v),
+                        episodesPaneVisible,
+                        onToggleEpisodes: () => setEpisodesPaneVisible(v => !v),
+                        inboxPaneVisible,
+                        onToggleInboxPane: () => setInboxPaneVisible(v => !v),
+                        onOpenInboxPane: () => setInboxPaneVisible(true),
+                        onCloseInboxPane: () => setInboxPaneVisible(false),
+                        notificationsInboxStackTopHeightPx:
+                          layouts.notificationsInboxStack.topHeightPx,
+                        onNotificationsInboxStackTopHeightPxChanged:
+                          persistNotificationsInboxStackTopHeightPx,
+                        vaultWidthPx: layouts.inbox.leftWidthPx,
+                        episodesWidthPx: layouts.inbox.leftWidthPx,
+                        onVaultWidthPxChanged: persistMainLeftWidthPx,
+                        onEpisodesWidthPxChanged: persistMainLeftWidthPx,
+                        stackTopHeightPx: layouts.vaultEpisodesStack.topHeightPx,
+                        onStackTopHeightPxChanged:
+                          persistVaultEpisodesStackTopHeightPx,
+                        notificationsWidthPx: layouts.notifications.widthPx,
+                        onNotificationsWidthPxChanged:
+                          persistNotificationsWidthPx,
+                        titleBarEditorTabsHost,
+                      }}
                       playbackController={{
                         playbackTransport,
                         toolbarNowPlaying,
@@ -827,12 +838,6 @@ export default function App() {
                           />
                         ) : null,
                       }}
-                      vaultWidthPx={layouts.inbox.leftWidthPx}
-                      episodesWidthPx={layouts.inbox.leftWidthPx}
-                      onVaultWidthPxChanged={persistMainLeftWidthPx}
-                      onEpisodesWidthPxChanged={persistMainLeftWidthPx}
-                      stackTopHeightPx={layouts.vaultEpisodesStack.topHeightPx}
-                      onStackTopHeightPxChanged={persistVaultEpisodesStackTopHeightPx}
                       linkController={{
                         onWikiLinkActivate: workspaceLinkController.onWikiLinkActivate,
                         onMarkdownRelativeLinkActivate: workspaceLinkController.onMarkdownRelativeLinkActivate,
@@ -861,7 +866,6 @@ export default function App() {
                         onApplyMergedBodyFromMerge: applyMergedBodyFromMerge,
                         onKeepMyEditsFromMerge: keepMyEditsFromMerge,
                       }}
-                      inboxBacklinksDeferNonce={inboxBacklinksDeferNonce}
                       tabsController={{
                         editorHistoryCanGoBack: workspaceTabsController.editorHistoryCanGoBack,
                         editorHistoryCanGoForward: workspaceTabsController.editorHistoryCanGoForward,
@@ -882,8 +886,6 @@ export default function App() {
                         onDismissNotification: dismissNotification,
                         onClearAllNotifications: clearAllNotifications,
                       }}
-                      notificationsWidthPx={layouts.notifications.widthPx}
-                      onNotificationsWidthPxChanged={persistNotificationsWidthPx}
                       todayHubController={{
                         showTodayHubCanvas,
                         todayHubSettings,
@@ -894,7 +896,6 @@ export default function App() {
                         persistTodayHubRow,
                         todayHubCleanRowBlocked,
                       }}
-                      titleBarEditorTabsHost={titleBarEditorTabsHost}
                     />
                   )}
                 </main>

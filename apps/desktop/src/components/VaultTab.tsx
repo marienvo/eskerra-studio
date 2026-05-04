@@ -80,6 +80,7 @@ import type {
   VaultTabEnvironment,
   VaultTabEditorController,
   VaultTabFrontmatterController,
+  VaultTabLayoutController,
   VaultTabLinkController,
   VaultTabMergeController,
   VaultTabNotificationsController,
@@ -97,34 +98,14 @@ type VaultTabProps = {
   environment: VaultTabEnvironment;
   frontmatterController: VaultTabFrontmatterController;
   editorController: VaultTabEditorController;
-  vaultPaneVisible: boolean;
-  onToggleVault: () => void;
-  episodesPaneVisible: boolean;
-  onToggleEpisodes: () => void;
-  inboxPaneVisible: boolean;
-  onToggleInboxPane: () => void;
-  /** Ensures the Inbox tree pane is shown (e.g. before reveal when the active note is under Inbox). */
-  onOpenInboxPane: () => void;
-  onCloseInboxPane: () => void;
-  notificationsInboxStackTopHeightPx: number;
-  onNotificationsInboxStackTopHeightPxChanged: (px: number) => void;
+  layoutController: VaultTabLayoutController;
   playbackController: VaultTabPlaybackController;
-  vaultWidthPx: number;
-  episodesWidthPx: number;
-  onVaultWidthPxChanged: (px: number) => void;
-  onEpisodesWidthPxChanged: (px: number) => void;
-  stackTopHeightPx: number;
-  onStackTopHeightPxChanged: (px: number) => void;
   linkController: VaultTabLinkController;
   treeController: VaultTabTreeController;
   mergeController: VaultTabMergeController;
   tabsController: VaultTabTabsController;
   notificationsController: VaultTabNotificationsController;
-  notificationsWidthPx: number;
-  onNotificationsWidthPxChanged: (px: number) => void;
   todayHubController: VaultTabTodayHubController;
-  /** Mount node in `WindowTitleBar` for editor open-note tabs (portal). */
-  titleBarEditorTabsHost?: HTMLElement | null;
 };
 
 type InboxBacklinksSectionProps = {
@@ -798,32 +779,14 @@ export function VaultTab({
   environment,
   frontmatterController,
   editorController,
-  vaultPaneVisible,
-  onToggleVault,
-  episodesPaneVisible,
-  onToggleEpisodes,
-  inboxPaneVisible,
-  onToggleInboxPane,
-  onOpenInboxPane,
-  onCloseInboxPane,
-  notificationsInboxStackTopHeightPx,
-  onNotificationsInboxStackTopHeightPxChanged,
+  layoutController,
   playbackController,
-  vaultWidthPx,
-  episodesWidthPx,
-  onVaultWidthPxChanged,
-  onEpisodesWidthPxChanged,
-  stackTopHeightPx,
-  onStackTopHeightPxChanged,
   linkController,
   treeController,
   mergeController,
   tabsController,
   notificationsController,
-  notificationsWidthPx,
-  onNotificationsWidthPxChanged,
   todayHubController,
-  titleBarEditorTabsHost = null,
 }: VaultTabProps) {
   const {
     vaultRoot,
@@ -837,6 +800,27 @@ export function VaultTab({
     applyFrontmatterInnerChange,
     diskConflict,
   } = frontmatterController;
+  const {
+    vaultPaneVisible,
+    onToggleVault,
+    episodesPaneVisible,
+    onToggleEpisodes,
+    inboxPaneVisible,
+    onToggleInboxPane,
+    onOpenInboxPane,
+    onCloseInboxPane,
+    notificationsInboxStackTopHeightPx,
+    onNotificationsInboxStackTopHeightPxChanged,
+    vaultWidthPx,
+    episodesWidthPx,
+    onVaultWidthPxChanged,
+    onEpisodesWidthPxChanged,
+    stackTopHeightPx,
+    onStackTopHeightPxChanged,
+    notificationsWidthPx,
+    onNotificationsWidthPxChanged,
+    titleBarEditorTabsHost = null,
+  } = layoutController;
   const {
     inboxEditorRef,
     inboxEditorShellScrollRef,
