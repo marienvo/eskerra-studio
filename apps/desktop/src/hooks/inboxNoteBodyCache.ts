@@ -3,17 +3,9 @@
  * See specs/architecture/desktop-editor.md (cache consistency invariant).
  */
 
-import {normalizeVaultBaseUri} from '@eskerra/core';
+import {normalizeVaultBaseUri, trimTrailingSlashes} from '@eskerra/core';
 
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-
-function trimTrailingSlashes(value: string): string {
-  let out = value;
-  while (out.endsWith('/')) {
-    out = out.slice(0, -1);
-  }
-  return out;
-}
 
 function normalizeMarkdownLineEndingsToLf(markdown: string): string {
   return markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');

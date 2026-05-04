@@ -3,6 +3,8 @@
  * URIs are normalized (trim, backslashes to slashes) for comparisons.
  */
 
+import {trimTrailingSlashes} from '@eskerra/core';
+
 export type EditorDocumentHistoryState = {
   entries: string[];
   /** Position of the current slot; -1 when `entries` is empty. */
@@ -15,14 +17,6 @@ export function emptyEditorDocumentHistory(): EditorDocumentHistoryState {
 
 export function normalizeEditorDocUri(uri: string): string {
   return uri.trim().replace(/\\/g, '/');
-}
-
-function trimTrailingSlashes(value: string): string {
-  let out = value;
-  while (out.endsWith('/')) {
-    out = out.slice(0, -1);
-  }
-  return out;
 }
 
 /** Same path-prefix rules as vault rename/move in the main window workspace. */

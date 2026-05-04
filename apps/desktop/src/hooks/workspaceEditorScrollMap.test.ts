@@ -4,37 +4,7 @@ import {
   remapEditorShellScrollMapExact,
   remapEditorShellScrollMapTreePrefix,
   snapshotEditorShellScrollForOpenNote,
-  trimTrailingSlashes,
 } from './workspaceEditorScrollMap';
-
-describe('trimTrailingSlashes', () => {
-  it('returns empty string unchanged', () => {
-    expect(trimTrailingSlashes('')).toBe('');
-  });
-
-  it('returns string without trailing slash unchanged', () => {
-    expect(trimTrailingSlashes('hello')).toBe('hello');
-    expect(trimTrailingSlashes('a/b/c')).toBe('a/b/c');
-  });
-
-  it('strips single trailing slash', () => {
-    expect(trimTrailingSlashes('hello/')).toBe('hello');
-  });
-
-  it('strips multiple trailing slashes', () => {
-    expect(trimTrailingSlashes('hello//')).toBe('hello');
-    expect(trimTrailingSlashes('hello///')).toBe('hello');
-  });
-
-  it('returns empty string for slash-only input', () => {
-    expect(trimTrailingSlashes('/')).toBe('');
-    expect(trimTrailingSlashes('//')).toBe('');
-  });
-
-  it('preserves internal slashes', () => {
-    expect(trimTrailingSlashes('a/b/')).toBe('a/b');
-  });
-});
 
 describe('snapshotEditorShellScrollForOpenNote', () => {
   function makeScrollEl(top: number, left: number): HTMLDivElement {

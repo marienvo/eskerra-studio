@@ -33,6 +33,7 @@ import {
   splitYamlFrontmatter,
   SubtreeMarkdownPresenceCache,
   isVaultPathUnderAutosyncBackup,
+  trimTrailingSlashes,
   type EskerraSettings,
   type VaultFilesystem,
   type VaultMarkdownRef,
@@ -159,7 +160,6 @@ import {
 } from './workspaceRenameMaintenance';
 import {
   type InboxEditorShellScrollDirective,
-  trimTrailingSlashes,
   snapshotEditorShellScrollForOpenNote,
   remapEditorShellScrollMapExact,
   remapEditorShellScrollMapTreePrefix,

@@ -2,7 +2,7 @@ import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import * as Dialog from '@radix-ui/react-dialog';
 import type {RefObject} from 'react';
 
-import {normalizeVaultBaseUri} from '@eskerra/core';
+import {normalizeVaultBaseUri, trimTrailingSlashes} from '@eskerra/core';
 
 import {
   planVaultTreeBulkTargets,
@@ -10,14 +10,6 @@ import {
 } from '../lib/vaultTreeBulkPlan';
 
 import type {VaultTabWikiLinkAmbiguityRenamePrompt} from './vaultTabTypes';
-
-function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) {
-    end -= 1;
-  }
-  return value.slice(0, end);
-}
 
 export type VaultTabDialogsProps = {
   busy: boolean;

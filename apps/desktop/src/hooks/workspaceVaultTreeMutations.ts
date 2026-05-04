@@ -4,6 +4,8 @@
  * Ownership: pure tab/scroll pruning from a resolved bulk-delete plan; I/O stays in workspace hook.
  */
 
+import {trimTrailingSlashes} from '@eskerra/core';
+
 import {normalizeEditorDocUri, vaultUriDeletedByTreeChange} from '../lib/editorDocumentHistory';
 import {
   ensureActiveTabId,
@@ -11,14 +13,6 @@ import {
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import type {VaultTreeBulkItem} from '../lib/vaultTreeBulkPlan';
-
-function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) {
-    end -= 1;
-  }
-  return value.slice(0, end);
-}
 
 export function collectDeletedPathsFromBulkPlan(plan: readonly VaultTreeBulkItem[]): {
   deletedFiles: Set<string>;

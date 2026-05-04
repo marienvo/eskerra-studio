@@ -1,3 +1,5 @@
+import {trimTrailingSlashes} from '@eskerra/core';
+
 import {
   normalizeEditorDocUri,
   remapVaultUriPrefix,
@@ -6,14 +8,6 @@ import {
 export type InboxEditorShellScrollDirective =
   | {kind: 'snapTop'}
   | {kind: 'restore'; top: number; left: number};
-
-export function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) {
-    end -= 1;
-  }
-  return value.slice(0, end);
-}
 
 export function snapshotEditorShellScrollForOpenNote(
   scrollEl: HTMLDivElement | null,

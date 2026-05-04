@@ -26,6 +26,7 @@ import {resolveVaultImagePreviewUrl} from '../lib/resolveVaultImagePreviewUrl';
 import {
   getInboxDirectoryUri,
   normalizeVaultBaseUri,
+  trimTrailingSlashes,
   type EskerraSettings,
   type VaultFilesystem,
   type VaultMarkdownRef,
@@ -91,14 +92,6 @@ import {BackupMergePanel} from './BackupMergePanel';
 import type {MergePanelSource} from './BackupMergePanel';
 
 type DiskConflictPayload = {uri: string};
-
-function trimTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) {
-    end -= 1;
-  }
-  return value.slice(0, end);
-}
 
 type VaultTabProps = {
   environment: VaultTabEnvironment;
