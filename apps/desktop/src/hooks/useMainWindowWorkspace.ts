@@ -102,7 +102,6 @@ import {
   removeUriFromAllTabs,
   reorderEditorWorkspaceTabsInArray,
   tabCurrentUri,
-  tabsFromStored,
   tabsToStored,
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
@@ -112,6 +111,7 @@ import {
   deriveTodayHubSelectorItems,
   deriveTodayHubWorkspacesPersistFiltered,
 } from './workspaceTodayHubDerived';
+import {useWorkspaceTodayHubSwitch} from './workspaceTodayHubSwitch';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {sortedTodayHubNoteUrisFromRefs} from '@eskerra/core';
 import {pickDefaultActiveTodayHubUri} from '../lib/todayHubWorkspaceRestore';
@@ -146,7 +146,6 @@ import {
 } from './workspaceFsWatchReconcile';
 import {
   applyForegroundOpenTabPlacement,
-  cloneEditorWorkspaceTabs,
   decideWorkspaceShellMode,
 } from './workspaceEditorTabs';
 import {pruneEditorTabsAfterBulkTreeDelete} from './workspaceVaultTreeMutations';
@@ -2082,88 +2081,32 @@ export function useMainWindowWorkspace(options: {
     [activateOpenTab, openMarkdownInEditor],
   );
 
-  const switchTodayHubWorkspace = useCallback(
-    async (todayNoteUri: string) => {
-      const norm = normalizeEditorDocUri(todayNoteUri);
-      if (!norm) {
-        return;
-      }
-      const hubs = sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefsRef.current);
-      if (!hubs.includes(norm)) {
-        return;
-      }
-      if (norm === activeTodayHubUriRef.current) {
-        selectNote(norm);
-        return;
-      }
-
-      await flushInboxSaveRef.current();
-      if (composingNewEntryRef.current) {
-        composingNewEntryRef.current = false;
-        setComposingNewEntry(false);
-        clearInboxYamlFrontmatterEditorRefs({
-          inner: inboxYamlFrontmatterInnerRef,
-          leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-          setInner: setInboxYamlFrontmatterInner,
-          setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-        });
-        setEditorBody('');
-        setInboxEditorResetNonce(n => n + 1);
-      }
-
-      const old = activeTodayHubUriRef.current;
-      let snapForTarget: TodayHubWorkspaceSnapshot | undefined;
-      setTodayHubWorkspacesForSave(prev => {
-        const next: Record<string, TodayHubWorkspaceSnapshot> = {...prev};
-        if (old != null && old !== norm) {
-          next[old] = {
-            editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
-            activeEditorTabId: activeEditorTabIdRef.current,
-          };
-        }
-        snapForTarget = next[norm];
-        return next;
-      });
-
-      const snapTabs = snapForTarget?.editorWorkspaceTabs;
-      let nextTabs: EditorWorkspaceTab[];
-      let nextActive: string | null;
-      if (snapTabs != null && snapTabs.length > 0) {
-        nextTabs = cloneEditorWorkspaceTabs(tabsFromStored(snapTabs));
-        nextActive = ensureActiveTabId(
-          nextTabs,
-          snapForTarget?.activeEditorTabId ?? null,
-        );
-      } else {
-        nextTabs = [];
-        nextActive = null;
-      }
-
-      editorWorkspaceTabsRef.current = nextTabs;
-      activeEditorTabIdRef.current = nextActive;
-      setEditorWorkspaceTabs(nextTabs);
-      setActiveEditorTabId(nextActive);
-      activeTodayHubUriRef.current = norm;
-      setActiveTodayHubUri(norm);
-      // Do not `selectNote(norm)` when B has restored tabs: that would navigate the
-      // active tab to B's Today and overwrite e.g. a tab that was still showing A's hub note.
-      if (nextTabs.length === 0) {
-        selectNote(norm);
-      } else if (nextActive) {
-        activateOpenTab(nextActive);
-      } else {
-        selectNote(norm);
-      }
-    },
-    [selectNote, activateOpenTab],
-  );
-
-  const focusActiveTodayHubNote = useCallback(() => {
-    const u = activeTodayHubUriRef.current;
-    if (u) {
-      selectNote(u);
-    }
-  }, [selectNote]);
+  const {switchTodayHubWorkspace, focusActiveTodayHubNote} =
+    useWorkspaceTodayHubSwitch({
+      state: {todayHubWorkspacesForSave},
+      refs: {
+        vaultMarkdownRefsRef,
+        activeTodayHubUriRef,
+        flushInboxSaveRef,
+        composingNewEntryRef,
+        inboxYamlFrontmatterInnerRef,
+        inboxEditorYamlLeadingBeforeFrontmatterRef,
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef,
+      },
+      setters: {
+        setComposingNewEntry,
+        setInboxYamlFrontmatterInner,
+        setInboxEditorYamlLeadingBeforeFrontmatter,
+        setEditorBody,
+        setInboxEditorResetNonce,
+        setTodayHubWorkspacesForSave,
+        setEditorWorkspaceTabs,
+        setActiveEditorTabId,
+        setActiveTodayHubUri,
+      },
+      callbacks: {selectNote, activateOpenTab},
+    });
 
   const submitNewEntry = useCallback(async () => {
     if (!vaultRoot) {
