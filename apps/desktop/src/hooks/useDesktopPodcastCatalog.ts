@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {VaultFilesystem} from '@eskerra/core';
 
 import {runPodcastPhase1Desktop} from '../lib/podcasts/podcastPhase1Desktop';
@@ -31,28 +31,41 @@ export function useDesktopPodcastCatalog({
 }: UseDesktopPodcastCatalogOptions): UseDesktopPodcastCatalogResult {
   const [sections, setSections] = useState<PodcastSection[]>([]);
   const [loading, setLoading] = useState(true);
+  const refreshGenerationRef = useRef(0);
 
   const episodes = useMemo(() => sections.flatMap(s => s.episodes), [sections]);
 
   const refreshPodcasts = useCallback(
     async (forceFullScan: boolean) => {
+      const refreshGeneration = refreshGenerationRef.current + 1;
+      refreshGenerationRef.current = refreshGeneration;
+      const isLatestRefresh = () => refreshGenerationRef.current === refreshGeneration;
       if (!vaultRoot) {
-        setSections([]);
-        setLoading(false);
+        if (isLatestRefresh()) {
+          setSections([]);
+          setLoading(false);
+        }
         return;
       }
       setLoading(true);
       onError(null);
       try {
         const result = await runPodcastPhase1Desktop(vaultRoot, fs, {forceFullScan});
+        if (!isLatestRefresh()) {
+          return;
+        }
         if (result.error) {
           onError(result.error);
         }
         setSections(result.sections);
       } catch (e) {
-        onError(e instanceof Error ? e.message : String(e));
+        if (isLatestRefresh()) {
+          onError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
-        setLoading(false);
+        if (isLatestRefresh()) {
+          setLoading(false);
+        }
       }
     },
     [vaultRoot, fs, onError],

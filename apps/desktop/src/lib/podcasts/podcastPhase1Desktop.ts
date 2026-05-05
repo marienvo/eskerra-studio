@@ -178,6 +178,20 @@ export type PodcastPhase1DesktopResult = {
   sections: PodcastSection[];
 };
 
+async function loadPodcastRelevantFiles(
+  baseUri: string,
+  fs: VaultFilesystem,
+): Promise<{files: RootMarkdownFile[]; didFullVaultListingThisRefresh: boolean}> {
+  const full = await listGeneralMarkdownFiles(baseUri, fs);
+  const files = filterPodcastRelevantGeneralMarkdownFiles(full);
+  try {
+    await savePersistedPodcastMarkdownIndex(baseUri, files);
+  } catch {
+    // The persisted index is a startup optimization; vault markdown is the source of truth.
+  }
+  return {didFullVaultListingThisRefresh: true, files};
+}
+
 async function runRssMarkdownEnrichment(
   baseUri: string,
   renderedEpisodes: PodcastEpisode[],
@@ -219,46 +233,68 @@ export async function runPodcastPhase1Desktop(
   let rssFeedFiles: RootMarkdownFile[] = [];
 
   try {
-    await hydrateRssFeedUrlCacheFromStore(baseUri);
+    try {
+      await hydrateRssFeedUrlCacheFromStore(baseUri);
+    } catch {
+      // RSS URL cache hydration should not block loading episodes from vault markdown.
+    }
 
     let podcastRelevantFiles: RootMarkdownFile[];
     let didFullVaultListingThisRefresh = false;
 
     if (!forceFullScan) {
-      const persisted = await loadPersistedPodcastMarkdownIndex(baseUri);
+      let persisted: RootMarkdownFile[] | null;
+      try {
+        persisted = await loadPersistedPodcastMarkdownIndex(baseUri);
+      } catch {
+        persisted = null;
+      }
       if (persisted !== null) {
         podcastRelevantFiles = persisted;
       } else {
-        const full = await listGeneralMarkdownFiles(baseUri, fs);
-        podcastRelevantFiles = filterPodcastRelevantGeneralMarkdownFiles(full);
-        await savePersistedPodcastMarkdownIndex(baseUri, podcastRelevantFiles);
-        didFullVaultListingThisRefresh = true;
+        const loaded = await loadPodcastRelevantFiles(baseUri, fs);
+        podcastRelevantFiles = loaded.files;
+        didFullVaultListingThisRefresh = loaded.didFullVaultListingThisRefresh;
       }
     } else {
-      const full = await listGeneralMarkdownFiles(baseUri, fs);
-      podcastRelevantFiles = filterPodcastRelevantGeneralMarkdownFiles(full);
-      await savePersistedPodcastMarkdownIndex(baseUri, podcastRelevantFiles);
-      didFullVaultListingThisRefresh = true;
+      const loaded = await loadPodcastRelevantFiles(baseUri, fs);
+      podcastRelevantFiles = loaded.files;
+      didFullVaultListingThisRefresh = loaded.didFullVaultListingThisRefresh;
     }
 
-    const {podcastFiles, rssFeedFiles: rssMarkdownFiles} =
-      splitPodcastAndRssMarkdownFiles(podcastRelevantFiles);
-    rssFeedFiles = rssMarkdownFiles;
+    const buildFromRelevantFiles = async (files: RootMarkdownFile[]) => {
+      const {podcastFiles, rssFeedFiles: rssMarkdownFiles} =
+        splitPodcastAndRssMarkdownFiles(files);
+      rssFeedFiles = rssMarkdownFiles;
 
-    clearPodcastNoteUriCacheForVault(baseUri);
+      clearPodcastNoteUriCacheForVault(baseUri);
 
-    const {nextAllEpisodes} = await buildPodcastSectionsFromPodcastMarkdownFiles(
-      baseUri,
-      podcastFiles,
-      fs,
-    );
+      const {nextAllEpisodes} = await buildPodcastSectionsFromPodcastMarkdownFiles(
+        baseUri,
+        podcastFiles,
+        fs,
+      );
 
-    const enriched = await runRssMarkdownEnrichment(
-      baseUri,
-      nextAllEpisodes,
-      rssFeedFiles,
-      fs,
-    );
+      return runRssMarkdownEnrichment(
+        baseUri,
+        nextAllEpisodes,
+        rssFeedFiles,
+        fs,
+      );
+    };
+
+    let enriched: {episodes: PodcastEpisode[]; sections: PodcastSection[]};
+    try {
+      enriched = await buildFromRelevantFiles(podcastRelevantFiles);
+    } catch (loadFromIndexError) {
+      if (forceFullScan || didFullVaultListingThisRefresh) {
+        throw loadFromIndexError;
+      }
+      const loaded = await loadPodcastRelevantFiles(baseUri, fs);
+      podcastRelevantFiles = loaded.files;
+      didFullVaultListingThisRefresh = loaded.didFullVaultListingThisRefresh;
+      enriched = await buildFromRelevantFiles(podcastRelevantFiles);
+    }
 
     return {
       allEpisodes: enriched.episodes,

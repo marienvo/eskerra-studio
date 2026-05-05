@@ -61,7 +61,6 @@ import {
   type VaultTreeBulkItem,
 } from '../lib/vaultTreeBulkPlan';
 import {
-  parseTodayHubFrontmatter,
   normalizeTodayHubRowForDisk,
   splitTodayRowIntoColumns,
   todayHubRowSectionsAllBlank,
@@ -107,7 +106,12 @@ import {
   tabsToStored,
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
-import {editorOpenTabPillLabel} from '../lib/editorOpenTabPillLabel';
+import {
+  deriveTodayHubShowCanvas,
+  deriveTodayHubSettings,
+  deriveTodayHubSelectorItems,
+  deriveTodayHubWorkspacesPersistFiltered,
+} from './workspaceTodayHubDerived';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {sortedTodayHubNoteUrisFromRefs} from '@eskerra/core';
 import {pickDefaultActiveTodayHubUri} from '../lib/todayHubWorkspaceRestore';
@@ -500,24 +504,15 @@ export function useMainWindowWorkspace(options: {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- editorClosedStackVersion syncs ref stack mutations to UI
   }, [vaultRoot, notes, editorClosedStackVersion, editorClosedTabsStackSnapshot]);
 
-  const todayHubSelectorItems = useMemo(() => {
-    const hubs = sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs);
-    return hubs.map(todayNoteUri => ({
-      todayNoteUri,
-      label: editorOpenTabPillLabel(notes, todayNoteUri),
-    }));
-  }, [vaultMarkdownRefs, notes]);
+  const todayHubSelectorItems = useMemo(
+    () => deriveTodayHubSelectorItems(vaultMarkdownRefs, notes),
+    [vaultMarkdownRefs, notes],
+  );
 
-  const todayHubWorkspacesPersistFiltered = useMemo(() => {
-    const hubs = new Set(sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs));
-    const out: Record<string, TodayHubWorkspaceSnapshot> = {};
-    for (const [k, v] of Object.entries(todayHubWorkspacesForSave)) {
-      if (hubs.has(k)) {
-        out[k] = v;
-      }
-    }
-    return out;
-  }, [todayHubWorkspacesForSave, vaultMarkdownRefs]);
+  const todayHubWorkspacesPersistFiltered = useMemo(
+    () => deriveTodayHubWorkspacesPersistFiltered(vaultMarkdownRefs, todayHubWorkspacesForSave),
+    [vaultMarkdownRefs, todayHubWorkspacesForSave],
+  );
 
   const workspaceSelectShowsActiveTabPill = useMemo(
     () =>
@@ -534,17 +529,10 @@ export function useMainWindowWorkspace(options: {
     vaultMarkdownRefsRef.current = vaultMarkdownRefs;
   }, [vaultMarkdownRefs]);
 
-  const showTodayHubCanvas = useMemo(() => {
-    if (!vaultRoot || !selectedUri || composingNewEntry) {
-      return false;
-    }
-    const normRoot = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-    const normSel = selectedUri.replace(/\\/g, '/');
-    if (!normSel.startsWith(`${normRoot}/`)) {
-      return false;
-    }
-    return vaultUriIsTodayMarkdownFile(normSel);
-  }, [vaultRoot, selectedUri, composingNewEntry]);
+  const showTodayHubCanvas = useMemo(
+    () => deriveTodayHubShowCanvas(vaultRoot, selectedUri, composingNewEntry),
+    [vaultRoot, selectedUri, composingNewEntry],
+  );
 
   useLayoutEffect(() => {
     showTodayHubCanvasRef.current = showTodayHubCanvas;
@@ -552,26 +540,25 @@ export function useMainWindowWorkspace(options: {
 
   // Use `inboxYamlFrontmatterInner` state in the merge (not only the ref) so deps match and Today hub
   // refreshes on frontmatter-only edits. Leading still comes from the ref (updated with inner on disk sync).
-  const todayHubSettings = useMemo((): TodayHubSettings | null => {
-    if (!showTodayHubCanvas || !selectedUri) {
-      return null;
-    }
-    const full = inboxEditorSliceToFullMarkdown(
-      editorBody,
+  const todayHubSettings = useMemo(
+    (): TodayHubSettings | null =>
+      deriveTodayHubSettings({
+        showTodayHubCanvas,
+        selectedUri,
+        editorBody,
+        composingNewEntry,
+        inboxYamlFrontmatterInner,
+        inboxEditorYamlLeadingBeforeFrontmatter,
+      }),
+    [
+      showTodayHubCanvas,
       selectedUri,
+      editorBody,
       composingNewEntry,
       inboxYamlFrontmatterInner,
       inboxEditorYamlLeadingBeforeFrontmatter,
-    );
-    return parseTodayHubFrontmatter(full);
-  }, [
-    showTodayHubCanvas,
-    selectedUri,
-    editorBody,
-    composingNewEntry,
-    inboxYamlFrontmatterInner,
-    inboxEditorYamlLeadingBeforeFrontmatter,
-  ]);
+    ],
+  );
 
   useLayoutEffect(() => {
     todayHubSettingsRef.current = todayHubSettings;
