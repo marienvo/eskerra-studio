@@ -155,16 +155,20 @@ await writeNote(path, nextMarkdown);
 // ✅ Update only the owned region
 const updatedMarkdown = replaceTodaySection(markdown, nextTodaySection);
 
-// ✅ Guard async save against switching
+// ✅ Guard UI-driven async save before writing
+let currentSaveRequestId = 0;
+
 const saveNote = async (path, body) => {
+  const requestId = ++currentSaveRequestId;
   const savePath = path;
 
-  await writeNote(savePath, body);
+  await delay(100);
 
-  if (savePath !== getActiveNotePath()) {
+  if (requestId !== currentSaveRequestId || savePath !== getActiveNotePath()) {
     return;
   }
 
+  await writeNote(savePath, body);
   markSaved(savePath);
 };
 
