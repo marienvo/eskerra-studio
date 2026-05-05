@@ -34,7 +34,6 @@ import {
 
 import {
   MIN_RESIZABLE_PANE_PX,
-  NOTIFICATIONS_INBOX_STACK_TOP,
   NOTIFICATIONS_PANEL,
 } from '../lib/layoutStore';
 
@@ -52,7 +51,6 @@ import {
 import {renameDraftStemForMarkdownUri} from '../lib/renameDialogDraft';
 import type {VaultTreeBulkItem} from '../lib/vaultTreeBulkPlan';
 
-import type {InboxEditorShellScrollDirective} from '../hooks/workspaceEditorScrollMap';
 import {
   todayHubColumnCount,
   type TodayHubSettings,
@@ -60,16 +58,14 @@ import {
 } from '../lib/todayHub';
 
 import {DesktopHorizontalSplitEnd} from './DesktopHorizontalSplitEnd';
-import {DesktopVerticalSplit} from './DesktopVerticalSplit';
 import {EditorPaneOpenNoteTabs} from './EditorPaneOpenNoteTabs';
 import {EditorWorkspaceToolbar} from './EditorWorkspaceToolbar';
 import {MainWorkspaceSplit} from './MainWorkspaceSplit';
-import {NotificationsPanel} from './NotificationsPanel';
 import {MaterialIcon} from './MaterialIcon';
 import {TodayHubCanvas} from './TodayHubCanvas';
-import {InboxTreePane} from './InboxTreePane';
 import {VaultTreePane} from './VaultTreePane';
 import {VaultTabDialogs} from './VaultTabDialogs';
+import {VaultTabSideColumn} from './VaultTabSideColumn';
 import {shouldHandleDeleteNoteGlobalShortcut} from './vaultTabDeleteNoteShortcut';
 import {buildVaultTabBacklinkRows} from './vaultTabBacklinkRows';
 import {
@@ -79,7 +75,9 @@ import {
 import {buildVaultTabEditorPaneDerived} from './vaultTabEditorPaneDerived';
 import type {
   VaultTabEnvironment,
+  VaultTabEditorController,
   VaultTabFrontmatterController,
+  VaultTabLayoutController,
   VaultTabLinkController,
   VaultTabMergeController,
   VaultTabNotificationsController,
@@ -96,56 +94,15 @@ type DiskConflictPayload = {uri: string};
 type VaultTabProps = {
   environment: VaultTabEnvironment;
   frontmatterController: VaultTabFrontmatterController;
-  inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
-  inboxEditorShellScrollRef: RefObject<HTMLDivElement | null>;
-  inboxEditorShellScrollDirectiveRef: MutableRefObject<InboxEditorShellScrollDirective | null>;
-  vaultPaneVisible: boolean;
-  onToggleVault: () => void;
-  episodesPaneVisible: boolean;
-  onToggleEpisodes: () => void;
-  inboxPaneVisible: boolean;
-  onToggleInboxPane: () => void;
-  /** Ensures the Inbox tree pane is shown (e.g. before reveal when the active note is under Inbox). */
-  onOpenInboxPane: () => void;
-  onCloseInboxPane: () => void;
-  notificationsInboxStackTopHeightPx: number;
-  onNotificationsInboxStackTopHeightPxChanged: (px: number) => void;
+  editorController: VaultTabEditorController;
+  layoutController: VaultTabLayoutController;
   playbackController: VaultTabPlaybackController;
-  vaultWidthPx: number;
-  episodesWidthPx: number;
-  onVaultWidthPxChanged: (px: number) => void;
-  onEpisodesWidthPxChanged: (px: number) => void;
-  stackTopHeightPx: number;
-  onStackTopHeightPxChanged: (px: number) => void;
-  inboxContentByUri: Record<string, string>;
-  backlinkUris: readonly string[];
-  selectedUri: string | null;
-  onSelectNote: (uri: string) => void;
-  onSelectNoteInNewActiveTab: (uri: string) => void;
-  onAddEntry: () => void;
-  composingNewEntry: boolean;
-  onCancelNewEntry: () => void;
-  onCreateNewEntry: () => void;
-  editorBody: string;
-  onEditorChange: (body: string) => void;
-  inboxEditorResetNonce: number;
-  onEditorError: (message: string) => void;
   linkController: VaultTabLinkController;
-  onSaveShortcut: () => void;
-  /** Normalize markdown for the open note (body only); omitted while composing or no selection. */
-  onCleanNote?: () => void;
-  busy: boolean;
   treeController: VaultTabTreeController;
   mergeController: VaultTabMergeController;
-  /** Workspace: bumped after `loadMarkdown`; backlinks defer is handled locally. */
-  inboxBacklinksDeferNonce: number;
   tabsController: VaultTabTabsController;
   notificationsController: VaultTabNotificationsController;
-  notificationsWidthPx: number;
-  onNotificationsWidthPxChanged: (px: number) => void;
   todayHubController: VaultTabTodayHubController;
-  /** Mount node in `WindowTitleBar` for editor open-note tabs (portal). */
-  titleBarEditorTabsHost?: HTMLElement | null;
 };
 
 type InboxBacklinksSectionProps = {
@@ -180,20 +137,20 @@ type EditorPaneBodyProps = {
   diskConflict: DiskConflictPayload | null;
   editorBody: string;
   inboxEditorResetNonce: number;
-  onEditorChange: VaultTabProps['onEditorChange'];
-  onEditorError: VaultTabProps['onEditorError'];
+  onEditorChange: VaultTabEditorController['onEditorChange'];
+  onEditorError: VaultTabEditorController['onEditorError'];
   onWikiLinkActivate: VaultTabLinkController['onWikiLinkActivate'];
   onMarkdownRelativeLinkActivate: VaultTabLinkController['onMarkdownRelativeLinkActivate'];
   onMarkdownExternalLinkOpen: VaultTabLinkController['onMarkdownExternalLinkOpen'];
   relativeMarkdownLinkHrefIsResolved: (href: string) => boolean;
   wikiLinkTargetIsResolved: (inner: string) => boolean;
   wikiLinkCompletionCandidates: VaultTabWikiLinkCompletionCandidates;
-  onSaveShortcut: VaultTabProps['onSaveShortcut'];
-  onCleanNote?: VaultTabProps['onCleanNote'];
+  onSaveShortcut: VaultTabEditorController['onSaveShortcut'];
+  onCleanNote?: VaultTabEditorController['onCleanNote'];
   onDeleteNoteShortcut: () => void;
   busy: boolean;
   backlinkRows: readonly {uri: string; fileName: string; title: string}[];
-  onSelectNote: VaultTabProps['onSelectNote'];
+  onSelectNote: VaultTabEditorController['onSelectNote'];
   inboxBacklinksDeferNonce: number;
   showTodayHubCanvas: boolean;
   todayHubSettings: TodayHubSettings | null;
@@ -818,52 +775,15 @@ function EditorPaneBody({
 export function VaultTab({
   environment,
   frontmatterController,
-  inboxEditorRef,
-  inboxEditorShellScrollRef,
-  inboxEditorShellScrollDirectiveRef,
-  vaultPaneVisible,
-  onToggleVault,
-  episodesPaneVisible,
-  onToggleEpisodes,
-  inboxPaneVisible,
-  onToggleInboxPane,
-  onOpenInboxPane,
-  onCloseInboxPane,
-  notificationsInboxStackTopHeightPx,
-  onNotificationsInboxStackTopHeightPxChanged,
+  editorController,
+  layoutController,
   playbackController,
-  vaultWidthPx,
-  episodesWidthPx,
-  onVaultWidthPxChanged,
-  onEpisodesWidthPxChanged,
-  stackTopHeightPx,
-  onStackTopHeightPxChanged,
-  inboxContentByUri,
-  backlinkUris,
-  selectedUri,
-  onSelectNote,
-  onSelectNoteInNewActiveTab,
-  onAddEntry,
-  composingNewEntry,
-  onCancelNewEntry,
-  onCreateNewEntry,
-  editorBody,
-  onEditorChange,
-  inboxEditorResetNonce,
-  onEditorError,
   linkController,
-  onSaveShortcut,
-  onCleanNote,
-  busy,
   treeController,
   mergeController,
-  inboxBacklinksDeferNonce,
   tabsController,
   notificationsController,
-  notificationsWidthPx,
-  onNotificationsWidthPxChanged,
   todayHubController,
-  titleBarEditorTabsHost = null,
 }: VaultTabProps) {
   const {
     vaultRoot,
@@ -877,6 +797,47 @@ export function VaultTab({
     applyFrontmatterInnerChange,
     diskConflict,
   } = frontmatterController;
+  const {
+    vaultPaneVisible,
+    onToggleVault,
+    episodesPaneVisible,
+    onToggleEpisodes,
+    inboxPaneVisible,
+    onToggleInboxPane,
+    onOpenInboxPane,
+    onCloseInboxPane,
+    vaultWidthPx,
+    episodesWidthPx,
+    onVaultWidthPxChanged,
+    onEpisodesWidthPxChanged,
+    stackTopHeightPx,
+    onStackTopHeightPxChanged,
+    notificationsWidthPx,
+    onNotificationsWidthPxChanged,
+    titleBarEditorTabsHost = null,
+  } = layoutController;
+  const {
+    inboxEditorRef,
+    inboxEditorShellScrollRef,
+    inboxEditorShellScrollDirectiveRef,
+    inboxContentByUri,
+    backlinkUris,
+    selectedUri,
+    onSelectNote,
+    onSelectNoteInNewActiveTab,
+    onAddEntry,
+    composingNewEntry,
+    onCancelNewEntry,
+    onCreateNewEntry,
+    editorBody,
+    onEditorChange,
+    inboxEditorResetNonce,
+    onEditorError,
+    onSaveShortcut,
+    onCleanNote,
+    busy,
+    inboxBacklinksDeferNonce,
+  } = editorController;
   const {
     onWikiLinkActivate,
     onMarkdownRelativeLinkActivate,
@@ -900,9 +861,6 @@ export function VaultTab({
     notificationsPanelVisible,
     onToggleNotificationsPanel,
     notificationItems,
-    notificationHighlightId,
-    onDismissNotification,
-    onClearAllNotifications,
   } = notificationsController;
   const {
     notes,
@@ -1331,33 +1289,17 @@ export function VaultTab({
           titleBarEditorTabsHost,
         )
       : null;
-
   const shellEndColumnVisible = notificationsPanelVisible || inboxPaneVisible;
-
-  const notificationsPanelEl = (
-    <NotificationsPanel
-      appSurface={vaultPaneVisible ? 'capture' : 'consume'}
-      items={notificationItems}
-      highlightId={notificationHighlightId}
-      onDismiss={onDismissNotification}
-      onClearAll={onClearAllNotifications}
-    />
-  );
-
-  const inboxTreePaneEl = (
-    <InboxTreePane
-      vaultRoot={vaultRoot}
-      fs={fs}
-      fsRefreshNonce={fsRefreshNonce}
-      vaultTreeSelectionClearNonce={vaultTreeSelectionClearNonce}
-      editorActiveMarkdownUri={composingNewEntry ? null : selectedUri}
-      revealActiveNoteNonce={revealTreeNonce}
+  const shellEndColumnContent = shellEndColumnVisible ? (
+    <VaultTabSideColumn
+      environment={environment}
+      layoutController={layoutController}
+      editorController={editorController}
+      treeController={treeController}
+      notificationsController={notificationsController}
+      revealTreeNonce={revealTreeNonce}
       onRevealActiveNoteInTree={bumpRevealActiveNoteInTree}
-      revealActiveNoteDisabled={revealInInboxTreeDisabled || busy}
-      busy={busy}
-      onAddEntry={onAddEntry}
-      onOpenMarkdownNote={onSelectNote}
-      onOpenMarkdownNoteInNewActiveTab={onSelectNoteInNewActiveTab}
+      revealInInboxTreeDisabled={revealInInboxTreeDisabled}
       onRenameMarkdownRequest={openRenameDialog}
       onDeleteMarkdownRequest={openTreeDeleteNoteDialog}
       onRenameFolderRequest={openRenameFolderDialog}
@@ -1366,23 +1308,7 @@ export function VaultTab({
       onMoveVaultTreeItem={moveVaultTreeItemStable}
       onBulkMoveVaultTreeItems={bulkMoveVaultTreeItemsStable}
     />
-  );
-
-  const shellEndColumnContent = shellEndColumnVisible ? (
-    <DesktopVerticalSplit
-      className="split-inner"
-      topCollapsed={!notificationsPanelVisible}
-      bottomCollapsed={!inboxPaneVisible}
-      topHeightPx={notificationsInboxStackTopHeightPx}
-      minTopPx={NOTIFICATIONS_INBOX_STACK_TOP.minPx}
-      maxTopPx={NOTIFICATIONS_INBOX_STACK_TOP.maxPx}
-      minBottomPx={MIN_RESIZABLE_PANE_PX}
-      onTopHeightPxChanged={onNotificationsInboxStackTopHeightPxChanged}
-      top={notificationsPanelEl}
-      bottom={inboxTreePaneEl}
-    />
   ) : null;
-
   return (
     <Fragment>
       {titleBarTabsPortal}

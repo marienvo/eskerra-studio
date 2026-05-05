@@ -765,25 +765,56 @@ export default function App() {
                         applyFrontmatterInnerChange,
                         diskConflict,
                       }}
-                      inboxEditorRef={inboxEditorRef}
-                      inboxEditorShellScrollRef={inboxEditorShellScrollRef}
-                      inboxEditorShellScrollDirectiveRef={
-                        inboxEditorShellScrollDirectiveRef
-                      }
-                      vaultPaneVisible={vaultPaneVisible}
-                      onToggleVault={() => setVaultPaneVisible(v => !v)}
-                      episodesPaneVisible={episodesPaneVisible}
-                      onToggleEpisodes={() => setEpisodesPaneVisible(v => !v)}
-                      inboxPaneVisible={inboxPaneVisible}
-                      onToggleInboxPane={() => setInboxPaneVisible(v => !v)}
-                      onOpenInboxPane={() => setInboxPaneVisible(true)}
-                      onCloseInboxPane={() => setInboxPaneVisible(false)}
-                      notificationsInboxStackTopHeightPx={
-                        layouts.notificationsInboxStack.topHeightPx
-                      }
-                      onNotificationsInboxStackTopHeightPxChanged={
-                        persistNotificationsInboxStackTopHeightPx
-                      }
+                      editorController={{
+                        inboxEditorRef,
+                        inboxEditorShellScrollRef,
+                        inboxEditorShellScrollDirectiveRef,
+                        inboxContentByUri,
+                        backlinkUris: selectedNoteBacklinkUris,
+                        selectedUri,
+                        onSelectNote: selectNote,
+                        onSelectNoteInNewActiveTab: selectNoteInNewActiveTab,
+                        onAddEntry: startNewEntry,
+                        composingNewEntry,
+                        onCancelNewEntry: cancelNewEntry,
+                        onCreateNewEntry: () => void submitNewEntry(),
+                        editorBody,
+                        onEditorChange: setEditorBody,
+                        inboxEditorResetNonce,
+                        onEditorError: setErr,
+                        onSaveShortcut: onInboxSaveShortcut,
+                        onCleanNote:
+                          !composingNewEntry && selectedUri
+                            ? onCleanNoteInbox
+                            : undefined,
+                        busy,
+                        inboxBacklinksDeferNonce,
+                      }}
+                      layoutController={{
+                        vaultPaneVisible,
+                        onToggleVault: () => setVaultPaneVisible(v => !v),
+                        episodesPaneVisible,
+                        onToggleEpisodes: () => setEpisodesPaneVisible(v => !v),
+                        inboxPaneVisible,
+                        onToggleInboxPane: () => setInboxPaneVisible(v => !v),
+                        onOpenInboxPane: () => setInboxPaneVisible(true),
+                        onCloseInboxPane: () => setInboxPaneVisible(false),
+                        notificationsInboxStackTopHeightPx:
+                          layouts.notificationsInboxStack.topHeightPx,
+                        onNotificationsInboxStackTopHeightPxChanged:
+                          persistNotificationsInboxStackTopHeightPx,
+                        vaultWidthPx: layouts.inbox.leftWidthPx,
+                        episodesWidthPx: layouts.inbox.leftWidthPx,
+                        onVaultWidthPxChanged: persistMainLeftWidthPx,
+                        onEpisodesWidthPxChanged: persistMainLeftWidthPx,
+                        stackTopHeightPx: layouts.vaultEpisodesStack.topHeightPx,
+                        onStackTopHeightPxChanged:
+                          persistVaultEpisodesStackTopHeightPx,
+                        notificationsWidthPx: layouts.notifications.widthPx,
+                        onNotificationsWidthPxChanged:
+                          persistNotificationsWidthPx,
+                        titleBarEditorTabsHost,
+                      }}
                       playbackController={{
                         playbackTransport,
                         toolbarNowPlaying,
@@ -807,25 +838,6 @@ export default function App() {
                           />
                         ) : null,
                       }}
-                      vaultWidthPx={layouts.inbox.leftWidthPx}
-                      episodesWidthPx={layouts.inbox.leftWidthPx}
-                      onVaultWidthPxChanged={persistMainLeftWidthPx}
-                      onEpisodesWidthPxChanged={persistMainLeftWidthPx}
-                      stackTopHeightPx={layouts.vaultEpisodesStack.topHeightPx}
-                      onStackTopHeightPxChanged={persistVaultEpisodesStackTopHeightPx}
-                      inboxContentByUri={inboxContentByUri}
-                      backlinkUris={selectedNoteBacklinkUris}
-                      selectedUri={selectedUri}
-                      onSelectNote={selectNote}
-                      onSelectNoteInNewActiveTab={selectNoteInNewActiveTab}
-                      onAddEntry={startNewEntry}
-                      composingNewEntry={composingNewEntry}
-                      onCancelNewEntry={cancelNewEntry}
-                      onCreateNewEntry={() => void submitNewEntry()}
-                      editorBody={editorBody}
-                      onEditorChange={setEditorBody}
-                      inboxEditorResetNonce={inboxEditorResetNonce}
-                      onEditorError={setErr}
                       linkController={{
                         onWikiLinkActivate: workspaceLinkController.onWikiLinkActivate,
                         onMarkdownRelativeLinkActivate: workspaceLinkController.onMarkdownRelativeLinkActivate,
@@ -833,13 +845,6 @@ export default function App() {
                         linkSnippetBlockedDomains: vaultSettings?.linkSnippetBlockedDomains,
                         onMuteLinkSnippetDomain: handleMuteLinkSnippetDomain,
                       }}
-                      onSaveShortcut={onInboxSaveShortcut}
-                      onCleanNote={
-                        !composingNewEntry && selectedUri
-                          ? onCleanNoteInbox
-                          : undefined
-                      }
-                      busy={busy}
                       treeController={{
                         notes,
                         onDeleteNote: uri => { void deleteNote(uri); },
@@ -861,7 +866,6 @@ export default function App() {
                         onApplyMergedBodyFromMerge: applyMergedBodyFromMerge,
                         onKeepMyEditsFromMerge: keepMyEditsFromMerge,
                       }}
-                      inboxBacklinksDeferNonce={inboxBacklinksDeferNonce}
                       tabsController={{
                         editorHistoryCanGoBack: workspaceTabsController.editorHistoryCanGoBack,
                         editorHistoryCanGoForward: workspaceTabsController.editorHistoryCanGoForward,
@@ -882,8 +886,6 @@ export default function App() {
                         onDismissNotification: dismissNotification,
                         onClearAllNotifications: clearAllNotifications,
                       }}
-                      notificationsWidthPx={layouts.notifications.widthPx}
-                      onNotificationsWidthPxChanged={persistNotificationsWidthPx}
                       todayHubController={{
                         showTodayHubCanvas,
                         todayHubSettings,
@@ -894,7 +896,6 @@ export default function App() {
                         persistTodayHubRow,
                         todayHubCleanRowBlocked,
                       }}
-                      titleBarEditorTabsHost={titleBarEditorTabsHost}
                     />
                   )}
                 </main>

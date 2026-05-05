@@ -8,13 +8,14 @@ import {
   runPodcastPhase1Desktop,
 } from './podcastPhase1Desktop';
 
+const storeMocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  save: vi.fn(),
+  set: vi.fn(),
+}));
+
 vi.mock('@tauri-apps/plugin-store', () => ({
-  load: vi.fn(async () => ({
-    get: vi.fn(async () => undefined),
-    save: vi.fn(async () => {}),
-    set: vi.fn(async () => {}),
-    delete: vi.fn(async () => {}),
-  })),
+  load: vi.fn(async () => storeMocks),
 }));
 
 const VAULT_ROOT = '/v';
@@ -107,6 +108,12 @@ function createPhase1MemoryFs(opts: {
 describe('runPodcastPhase1Desktop podcastNoteUri', () => {
   beforeEach(() => {
     clearPodcastMarkdownFileContentCache();
+    storeMocks.get.mockReset();
+    storeMocks.get.mockResolvedValue(undefined);
+    storeMocks.save.mockReset();
+    storeMocks.save.mockResolvedValue(undefined);
+    storeMocks.set.mockReset();
+    storeMocks.set.mockResolvedValue(undefined);
   });
 
   it('sets podcastNoteUri on episodes when a matching 📻 note exists', async () => {
@@ -149,5 +156,50 @@ describe('runPodcastPhase1Desktop podcastNoteUri', () => {
     expect(result.error).toBeNull();
     const ep = result.allEpisodes.find(e => e.mp3Url === MP3);
     expect(ep?.podcastNoteUri).toBeUndefined();
+  });
+
+  it('falls back to a full scan when the persisted markdown index is stale', async () => {
+    const staleIndex = JSON.stringify({
+      entries: [
+        {
+          lastModified: 1,
+          name: PODCAST_FILE_NAME,
+          uri: `${GENERAL_URI}/missing.md`,
+        },
+      ],
+      snapshottedAt: '2026-01-01T00:00:00.000Z',
+      v: 1,
+    });
+    storeMocks.get.mockImplementation(async (key: string) =>
+      key.startsWith('podcastMarkdownIndex:') ? staleIndex : undefined,
+    );
+    const fs = createPhase1MemoryFs({
+      podcastBody: PODCAST_BODY,
+      includeRssFile: false,
+      lastModified: 1000,
+    });
+
+    const result = await runPodcastPhase1Desktop(VAULT_ROOT, fs, {forceFullScan: false});
+
+    expect(result.error).toBeNull();
+    expect(result.didFullVaultListingThisRefresh).toBe(true);
+    expect(result.sections).toHaveLength(1);
+    expect(result.allEpisodes[0]?.mp3Url).toBe(MP3);
+    expect(storeMocks.set).toHaveBeenCalled();
+  });
+
+  it('loads episodes when persisting the markdown index cache fails', async () => {
+    storeMocks.save.mockRejectedValueOnce(new Error('store unavailable'));
+    const fs = createPhase1MemoryFs({
+      podcastBody: PODCAST_BODY,
+      includeRssFile: false,
+      lastModified: 1000,
+    });
+
+    const result = await runPodcastPhase1Desktop(VAULT_ROOT, fs, {forceFullScan: true});
+
+    expect(result.error).toBeNull();
+    expect(result.sections).toHaveLength(1);
+    expect(result.allEpisodes[0]?.mp3Url).toBe(MP3);
   });
 });
