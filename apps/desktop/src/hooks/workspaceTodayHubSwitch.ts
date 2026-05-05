@@ -123,16 +123,32 @@ export function useWorkspaceTodayHubSwitch(
       }
 
       const old = activeTodayHubUriRef.current;
-      const snapForTarget = todayHubWorkspacesForSaveRef.current[norm];
+      let snapForTarget: TodayHubWorkspaceSnapshot | undefined;
       if (old != null && old !== norm) {
-        setTodayHubWorkspacesForSave(prev => ({
-          ...prev,
-          [old]: {
-            editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
-            activeEditorTabId: activeEditorTabIdRef.current,
-          },
-        }));
+        const outgoingSnap: TodayHubWorkspaceSnapshot = {
+          editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
+          activeEditorTabId: activeEditorTabIdRef.current,
+        };
+        // Merge outgoing hub into the ref immediately so a second hub switch in the same
+        // outer task (before React commits / before useLayoutEffect syncs props) still sees
+        // the just-saved workspace. The functional updater reads `snapForTarget` from latest
+        // queued `prev` when React runs it; we also mirror `next` into the ref there.
+        todayHubWorkspacesForSaveRef.current = {
+          ...todayHubWorkspacesForSaveRef.current,
+          [old]: outgoingSnap,
+        };
+        setTodayHubWorkspacesForSave(prev => {
+          snapForTarget = prev[norm];
+          const next: Record<string, TodayHubWorkspaceSnapshot> = {
+            ...prev,
+            [old]: outgoingSnap,
+          };
+          todayHubWorkspacesForSaveRef.current = next;
+          return next;
+        });
       }
+      snapForTarget =
+        snapForTarget ?? todayHubWorkspacesForSaveRef.current[norm];
 
       const snapTabs = snapForTarget?.editorWorkspaceTabs;
       let nextTabs: EditorWorkspaceTab[];
