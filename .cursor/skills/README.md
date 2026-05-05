@@ -7,6 +7,9 @@ files. **Edit only this tree**; do not restore a second copy under `.claude/`.
 Also in this repo (not from upstream):
 
 - `desktop-performance-debug-loop`
+- `review-state-consistency-closure-safety`
+
+**Review skills:** use the `review-` prefix on the directory and YAML `name` field (e.g. `review-state-consistency-closure-safety`).
 
 Imported from `mattpocock/skills`:
 
