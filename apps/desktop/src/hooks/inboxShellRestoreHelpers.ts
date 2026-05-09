@@ -99,6 +99,17 @@ export function sanitizeStoredWorkspaceRows(
   return out;
 }
 
+function dropHubTodayEchoRows(
+  hubUri: string,
+  rows: readonly StoredWorkspaceRow[],
+): StoredWorkspaceRow[] {
+  const hub = normalizeHubKey(hubUri);
+  return rows.filter(row => {
+    const current = row.entries[row.index];
+    return current == null || normalizeHubKey(current) !== hub;
+  });
+}
+
 function readActiveTabId(raw: unknown): string | null {
   if (raw === null) return null;
   if (typeof raw !== 'string') return null;
@@ -173,7 +184,7 @@ export function resolveActiveHubAndTabsSource(args: {
   if (fromSnap == null) {
     return result;
   }
-  result.chosenTabsSource = fromSnap;
+  result.chosenTabsSource = dropHubTodayEchoRows(resolved, fromSnap);
   result.chosenActiveEditorTabId = readActiveTabId(snap.activeEditorTabId);
   return result;
 }
@@ -203,9 +214,8 @@ export function buildRestoredEditorWorkspace(args: {
   const tabs = tabsFromStored(sanitized);
   let nextActive = readActiveTabId(chosenActiveEditorTabId);
   if (nextActive && !tabs.some(t => t.id === nextActive)) {
-    nextActive = null;
+    nextActive = ensureActiveTabId(tabs, nextActive);
   }
-  nextActive = ensureActiveTabId(tabs, nextActive);
   const uris = tabs
     .map(tabCurrentUri)
     .filter((u): u is string => u != null);
@@ -233,9 +243,15 @@ export function mergeStoredHubWorkspaces(args: {
       if (rows == null) {
         continue;
       }
+      const filteredRows = dropHubTodayEchoRows(h, rows);
+      const activeId = readActiveTabId(snap.activeEditorTabId);
+      const filteredTabs = tabsFromStored(filteredRows);
       mergedWs[h] = {
-        editorWorkspaceTabs: rows,
-        activeEditorTabId: readActiveTabId(snap.activeEditorTabId),
+        editorWorkspaceTabs: filteredRows,
+        activeEditorTabId:
+          activeId == null || filteredRows.some(row => row.id === activeId)
+            ? activeId
+            : ensureActiveTabId(filteredTabs, activeId),
       };
     }
   }

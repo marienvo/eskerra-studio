@@ -134,6 +134,49 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     unmount();
   });
 
+  it('preserves Home as active surface when restored hub snapshot has tabs but active tab is null', async () => {
+    const snapshotA: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [
+        {id: 'tab-a1', entries: [`${VAULT_ROOT}/Inbox/A.md`], index: 0},
+      ],
+      activeEditorTabId: null,
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [`${VAULT_ROOT}/Inbox/A.md`]: 'a\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: snapshotA.editorWorkspaceTabs,
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: snapshotA,
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+      expect(result.current.selectionController.selectedUri).toBe(HUB_A);
+      expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toEqual([
+        'tab-a1',
+      ]);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+    });
+
+    unmount();
+  });
+
   it('restores another hub tabs when switching immediately after hydrate', async () => {
     const snapshotA: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [
