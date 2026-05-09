@@ -134,6 +134,7 @@ import {
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
+  normalizeWorkspaceUri,
   reorderTabsAction,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
@@ -204,7 +205,10 @@ import {
   resolveTodayHubWorkspacesForProjection,
   scheduleDevWorkspaceShadowModelDivergenceCheck,
 } from './workspaceShadowBridge';
-import {projectWorkspaceRuntimeToModel} from './workspaceRuntimeProjection';
+import {
+  activeSurfaceTabIdFromWorkspaceModel,
+  projectWorkspaceRuntimeToModel,
+} from './workspaceRuntimeProjection';
 import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
@@ -233,6 +237,16 @@ import {resolveVaultLinkBaseMarkdownUri} from '../lib/resolveVaultLinkBaseMarkdo
 
 const STORE_PATH = 'eskerra-desktop.json';
 const STORE_KEY_VAULT = 'vaultRoot';
+
+function workspaceHubUriEqual(a: string | null, b: string | null): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  return normalizeWorkspaceUri(a) === normalizeWorkspaceUri(b);
+}
 
 /** Debounce scan of the active note body for backlinks (full vault scan is too heavy per keystroke). */
 const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
@@ -356,9 +370,11 @@ export function useMainWindowWorkspace(options: {
   );
   /**
    * Per-hub workspace snapshots for inactive hubs (last switch-out / restore).
-   * Active-hub editor tabs are **not** mirrored here continuously; runtime `editorWorkspaceTabs`
-   * plus `projectWorkspaceRuntimeToModel` are authoritative for the active hub. Disk persistence
-   * uses model-derived payload (`serializeWorkspaceModelToPersistence`).
+   * Active-hub **tab list** remains legacy-authoritative via runtime `editorWorkspaceTabs`.
+   * After inbox shell restore, the shadow `WorkspaceModel` is authoritative for which hub is
+   * active and whether the surface is Home vs a tab; runtime hub/tab state mirrors the model
+   * after each projection replace. Disk persistence uses model-derived payload
+   * (`serializeWorkspaceModelToPersistence`).
    */
   const [todayHubWorkspacesForSave, setTodayHubWorkspacesForSave] = useState<
     Record<string, TodayHubWorkspaceSnapshot>
@@ -696,20 +712,33 @@ export function useMainWindowWorkspace(options: {
     restoredActiveTodayHubUri: restoredInboxState?.activeTodayHubUri as string | null | undefined,
   });
 
+  const hubForProjection = inboxShellRestored
+    ? workspaceShadowModel.activeHub ?? projectionActiveHubUri
+    : projectionActiveHubUri;
+
+  const activeShadowWorkspace =
+    workspaceShadowModel.activeHub != null
+      ? workspaceShadowModel.workspaces[workspaceShadowModel.activeHub]
+      : undefined;
+  const tabForProjection =
+    inboxShellRestored && activeShadowWorkspace !== undefined
+      ? activeSurfaceTabIdFromWorkspaceModel(workspaceShadowModel)
+      : activeEditorTabId;
+
   const projectedWorkspaceModel = useMemo(
     () =>
       projectWorkspaceRuntimeToModel({
-        activeTodayHubUri: projectionActiveHubUri,
+        activeTodayHubUri: hubForProjection,
         editorWorkspaceTabs,
-        activeEditorTabId,
+        activeEditorTabId: tabForProjection,
         legacyHubWorkspaceSnapshots: todayHubWorkspacesForProjection,
         homeStatesByHub,
         hubUris: projectionHubUris,
       }),
     [
-      projectionActiveHubUri,
+      hubForProjection,
+      tabForProjection,
       editorWorkspaceTabs,
-      activeEditorTabId,
       todayHubWorkspacesForProjection,
       homeStatesByHub,
       projectionHubUris,
@@ -726,6 +755,17 @@ export function useMainWindowWorkspace(options: {
       return;
     }
     replaceWorkspaceShadowModel(projectedWorkspaceModel, 'runtime projection');
+    const m = workspaceShadowModelRef.current;
+    const hub = m.activeHub;
+    const tab = activeSurfaceTabIdFromWorkspaceModel(m);
+    if (!workspaceHubUriEqual(hub, activeTodayHubUri)) {
+      setActiveTodayHubUri(hub);
+    }
+    if (tab !== activeEditorTabId) {
+      setActiveEditorTabId(tab);
+    }
+    activeTodayHubUriRef.current = hub;
+    activeEditorTabIdRef.current = tab;
     scheduleDevWorkspaceShadowModelDivergenceCheck({
       devOrTest: import.meta.env.DEV || import.meta.env.MODE === 'test',
       projected: projectedWorkspaceModel,
@@ -736,6 +776,8 @@ export function useMainWindowWorkspace(options: {
     projectedWorkspaceModel,
     replaceWorkspaceShadowModel,
     workspaceShadowModelRef,
+    activeTodayHubUri,
+    activeEditorTabId,
   ]);
 
   const legacyTodayHubWorkspacesPersistFiltered = useMemo(() => {
@@ -811,7 +853,7 @@ export function useMainWindowWorkspace(options: {
       {
         activeHub: workspaceShadowModel.activeHub,
         runtimeActiveHub: activeTodayHubUri,
-        projectionActiveHub: projectionActiveHubUri,
+        projectionActiveHub: hubForProjection,
         restoredActiveHub:
           typeof restoredInboxState?.activeTodayHubUri === 'string'
             ? restoredInboxState.activeTodayHubUri
@@ -829,7 +871,7 @@ export function useMainWindowWorkspace(options: {
     workspaceShadowModel,
     modelDerivedPersistence,
     activeTodayHubUri,
-    projectionActiveHubUri,
+    hubForProjection,
     restoredInboxState,
     legacyTodayHubWorkspacesPersistFiltered,
     todayHubWorkspacesForProjection,

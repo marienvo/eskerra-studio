@@ -96,6 +96,21 @@ function activeSurfaceForTabs(
   return {kind: 'home'};
 }
 
+/**
+ * Active editor tab id when the shadow workspace model's active surface is a tab; otherwise null (Home).
+ */
+export function activeSurfaceTabIdFromWorkspaceModel(m: WorkspaceModel): string | null {
+  const h = m.activeHub;
+  if (h == null) {
+    return null;
+  }
+  const ws = m.workspaces[h];
+  if (ws == null) {
+    return null;
+  }
+  return ws.active.kind === 'tab' ? ws.active.id : null;
+}
+
 export function projectWorkspaceRuntimeToModel(
   args: ProjectWorkspaceRuntimeToModelArgs,
 ): WorkspaceModel {

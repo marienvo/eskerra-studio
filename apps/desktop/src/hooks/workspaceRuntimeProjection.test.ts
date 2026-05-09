@@ -2,7 +2,10 @@ import {describe, expect, it} from 'vitest';
 
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
-import {projectWorkspaceRuntimeToModel} from './workspaceRuntimeProjection';
+import {
+  activeSurfaceTabIdFromWorkspaceModel,
+  projectWorkspaceRuntimeToModel,
+} from './workspaceRuntimeProjection';
 
 const HUB_A = '/vault/A/Today.md';
 const HUB_B = '/vault/B/Today.md';
@@ -13,6 +16,48 @@ const NOTE_HOME = '/vault/Inbox/Home.md';
 function runtimeTab(id: string, entries: string[], index = entries.length - 1) {
   return {id, history: {entries, index}};
 }
+
+describe('activeSurfaceTabIdFromWorkspaceModel', () => {
+  it('returns null when active hub is Home', () => {
+    expect(
+      activeSurfaceTabIdFromWorkspaceModel({
+        activeHub: HUB_A,
+        workspaces: {
+          [HUB_A]: {
+            tabs: [{id: 'tab-a', history: {entries: [NOTE_A], index: 0}}],
+            active: {kind: 'home'},
+            homeHistory: {entries: [HUB_A], index: 0},
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('returns tab id when active hub surface is a tab', () => {
+    expect(
+      activeSurfaceTabIdFromWorkspaceModel({
+        activeHub: HUB_A,
+        workspaces: {
+          [HUB_A]: {
+            tabs: [{id: 'tab-a', history: {entries: [NOTE_A], index: 0}}],
+            active: {kind: 'tab', id: 'tab-a'},
+            homeHistory: {entries: [HUB_A], index: 0},
+          },
+        },
+      }),
+    ).toBe('tab-a');
+  });
+
+  it('returns null when activeHub or workspace entry is missing', () => {
+    expect(activeSurfaceTabIdFromWorkspaceModel({activeHub: null, workspaces: {}})).toBeNull();
+    expect(
+      activeSurfaceTabIdFromWorkspaceModel({
+        activeHub: HUB_A,
+        workspaces: {},
+      }),
+    ).toBeNull();
+  });
+});
 
 describe('projectWorkspaceRuntimeToModel', () => {
   it('projects active hub with tabs while Home remains active', () => {
