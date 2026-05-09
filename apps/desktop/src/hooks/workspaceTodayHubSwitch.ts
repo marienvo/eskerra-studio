@@ -67,7 +67,6 @@ export function useWorkspaceTodayHubSwitch(
   args: UseWorkspaceTodayHubSwitchArgs,
 ): UseWorkspaceTodayHubSwitchResult {
   const {
-    selectNote,
     selectHomeCurrentNote,
     activateOpenTab,
     activateWorkspaceHomeSelector,
@@ -115,7 +114,7 @@ export function useWorkspaceTodayHubSwitch(
         return;
       }
       if (norm === activeTodayHubUriRef.current) {
-        selectNote(norm);
+        activateWorkspaceHomeSelector();
         return;
       }
 
@@ -202,6 +201,7 @@ export function useWorkspaceTodayHubSwitch(
     },
     [
       activateOpenTab,
+      activateWorkspaceHomeSelector,
       activeEditorTabIdRef,
       activeTodayHubUriRef,
       composingNewEntryRef,
@@ -210,7 +210,6 @@ export function useWorkspaceTodayHubSwitch(
       homeStatesByHubRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       inboxYamlFrontmatterInnerRef,
-      selectNote,
       selectHomeCurrentNote,
       setActiveEditorTabId,
       setActiveTodayHubUri,

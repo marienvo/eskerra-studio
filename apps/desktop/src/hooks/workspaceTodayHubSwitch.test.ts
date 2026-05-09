@@ -162,7 +162,7 @@ describe('switchTodayHubWorkspace', () => {
     expect(mocks.selectNote).not.toHaveBeenCalled();
   });
 
-  it('same-hub re-select: only calls selectNote(norm), no setters', async () => {
+  it('same-hub re-select: delegates to activateWorkspaceHomeSelector, no hub/tab setters', async () => {
     // activeTodayHubUriRef already points to HUB_A
     const {args, mocks} = makeArgs({activeTodayHubUri: HUB_A});
     const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
@@ -171,8 +171,8 @@ describe('switchTodayHubWorkspace', () => {
       await result.current.switchTodayHubWorkspace(HUB_A);
     });
 
-    expect(mocks.selectNote).toHaveBeenCalledOnce();
-    expect(mocks.selectNote).toHaveBeenCalledWith(HUB_A);
+    expect(mocks.activateWorkspaceHomeSelector).toHaveBeenCalledTimes(1);
+    expect(mocks.selectNote).not.toHaveBeenCalled();
     expect(mocks.setActiveTodayHubUri).not.toHaveBeenCalled();
     expect(mocks.setEditorWorkspaceTabs).not.toHaveBeenCalled();
   });

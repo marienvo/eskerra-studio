@@ -439,6 +439,165 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     unmount();
   });
 
+  it('same-hub workspace dropdown with an active tab activates Home at the current Home URI (no Home history push)', async () => {
+    const TAB_NOTE = `${VAULT_ROOT}/Inbox/TabOnly.md`;
+    const HOME_SUB = `${VAULT_ROOT}/Inbox/HomeSubPage.md`;
+    const snapshot: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [{id: 't1', entries: [TAB_NOTE], index: 0}],
+      activeEditorTabId: 't1',
+      homeHistory: {
+        entries: [HUB_A, HOME_SUB],
+        index: 1,
+      },
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [TAB_NOTE]: 'tab\n',
+          [HOME_SUB]: 'home sub\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: TAB_NOTE,
+          editorWorkspaceTabs: snapshot.editorWorkspaceTabs,
+          activeEditorTabId: 't1',
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: snapshot,
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.todayHubController.switchTodayHubWorkspace(HUB_A);
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(HOME_SUB);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+      ).toEqual({
+        entries: [HUB_A, HOME_SUB],
+        index: 1,
+      });
+    });
+
+    unmount();
+  });
+
+  it('same-hub workspace dropdown with Home sub-page active resets Home stack to hub Today', async () => {
+    const HOME_SUB = `${VAULT_ROOT}/Inbox/HomeSubReset.md`;
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [HOME_SUB]: 'sub\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(HOME_SUB);
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(HOME_SUB);
+      expect(result.current.tabsController.editorHistoryCanGoBack).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.todayHubController.switchTodayHubWorkspace(HUB_A);
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(HUB_A);
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+      ).toEqual({
+        entries: [HUB_A, HOME_SUB],
+        index: 0,
+      });
+    });
+
+    unmount();
+  });
+
+  it('same-hub workspace dropdown with Home on hub Today is a no-op', async () => {
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`],
+        files: {
+          [HUB_A]: 'today\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {
+              editorWorkspaceTabs: [],
+              activeEditorTabId: null,
+              homeHistory: {entries: [HUB_A], index: 0},
+            },
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    const beforeHome = result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory;
+
+    await act(async () => {
+      await result.current.todayHubController.switchTodayHubWorkspace(HUB_A);
+    });
+
+    expect(result.current.selectionController.selectedUri).toBe(HUB_A);
+    expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual(
+      beforeHome,
+    );
+
+    unmount();
+  });
+
   it('restores workspace Home navigation stack from persisted homeHistory', async () => {
     const NOTE = `${VAULT_ROOT}/Inbox/WikiNav.md`;
     const {result, unmount} = await mountHydratedMainWindowWorkspace(
