@@ -3477,7 +3477,7 @@ export function useMainWindowWorkspace(options: {
       editorWorkspaceTabsRef,
       composingNewEntryRef,
       flushInboxSave: () => flushInboxSaveRef.current(),
-      dispatchWorkspaceAction,
+      dispatchWorkspaceActionSync,
       openMarkdownInEditor,
       openCurrentHomeAfterComposing,
       moveHomeHistory,
@@ -3494,7 +3494,7 @@ export function useMainWindowWorkspace(options: {
         }),
     });
   }, [
-    dispatchWorkspaceAction,
+    dispatchWorkspaceActionSync,
     openMarkdownInEditor,
     openCurrentHomeAfterComposing,
     moveHomeHistory,
@@ -3508,12 +3508,12 @@ export function useMainWindowWorkspace(options: {
       editorWorkspaceTabsRef,
       composingNewEntryRef,
       flushInboxSave: () => flushInboxSaveRef.current(),
-      dispatchWorkspaceAction,
+      dispatchWorkspaceActionSync,
       openMarkdownInEditor,
       moveHomeHistory,
       setEditorWorkspaceTabs,
     });
-  }, [dispatchWorkspaceAction, openMarkdownInEditor, moveHomeHistory]);
+  }, [dispatchWorkspaceActionSync, openMarkdownInEditor, moveHomeHistory]);
 
   useEffect(() => {
     if (!inboxRestoreEnabled) {

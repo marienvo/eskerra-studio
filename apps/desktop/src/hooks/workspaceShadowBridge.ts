@@ -24,6 +24,11 @@ export type DispatchWorkspaceModelAction = (
   updater: (current: WorkspaceModel) => WorkspaceModel,
 ) => void;
 
+export type DispatchWorkspaceModelActionSync = (
+  actionDescription: string,
+  updater: (current: WorkspaceModel) => WorkspaceModel,
+) => WorkspaceModel;
+
 export function createWorkspaceShadowMirrorCallbacks(
   dispatchWorkspaceAction: DispatchWorkspaceModelAction,
 ) {

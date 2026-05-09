@@ -15,13 +15,59 @@ import {
   homeGoForward,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
-import {goBackAction, goForwardAction} from '../lib/workspaceModel';
-import type {DispatchWorkspaceModelAction} from './workspaceShadowBridge';
+import {goBackAction, goForwardAction, normalizeWorkspaceUri, type WorkspaceModel} from '../lib/workspaceModel';
+import type {DispatchWorkspaceModelActionSync} from './workspaceShadowBridge';
+import {assignLegacyEditorWorkspaceTabs} from './workspaceRuntimeTabsLegacyBridge';
+import {editorWorkspaceTabsFromModelTabEntries} from './workspaceRuntimeProjection';
 
 export type OpenMarkdownInEditorFn = (
   uri: string,
   opts?: {home?: boolean; skipHistory?: boolean},
 ) => void | Promise<void>;
+
+function normalizeTabStripSignature(tabs: readonly EditorWorkspaceTab[]): string {
+  return JSON.stringify(
+    tabs.map(t => ({
+      id: t.id,
+      entries: t.history.entries.map(e => normalizeWorkspaceUri(e)),
+      index: t.history.index,
+    })),
+  );
+}
+
+function assignLegacyEditorTabsFromTabHistoryModel(args: {
+  nextModel: WorkspaceModel;
+  nextTabsLegacy: EditorWorkspaceTab[];
+  editorWorkspaceTabsRef: RefObject<EditorWorkspaceTab[]>;
+  setEditorWorkspaceTabs: Dispatch<SetStateAction<EditorWorkspaceTab[]>>;
+  mismatchWarnMessage: string;
+}): void {
+  const hub = args.nextModel.activeHub;
+  const derived =
+    hub != null && args.nextModel.workspaces[hub] != null
+      ? editorWorkspaceTabsFromModelTabEntries(args.nextModel.workspaces[hub].tabs)
+      : null;
+
+  const legacySig = normalizeTabStripSignature(args.nextTabsLegacy);
+  const derivedSig =
+    derived != null ? normalizeTabStripSignature(derived) : null;
+  const derivedMatchesLegacy = derivedSig === legacySig && derived != null;
+
+  const nextTabs = derivedMatchesLegacy ? derived : args.nextTabsLegacy;
+  if (!derivedMatchesLegacy && derived != null) {
+    const warn =
+      typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+    if (warn) {
+      console.warn(args.mismatchWarnMessage, {legacySig, derivedSig});
+    }
+  }
+
+  assignLegacyEditorWorkspaceTabs({
+    nextTabs,
+    editorWorkspaceTabsRef: args.editorWorkspaceTabsRef,
+    setEditorWorkspaceTabs: args.setEditorWorkspaceTabs,
+  });
+}
 
 export function deriveActiveTabHistorySnapshot(args: {
   activeEditorTabId: string | null;
@@ -140,7 +186,7 @@ export type EditorHistoryNavigationRefs = {
 
 export type RunEditorHistoryGoBackDeps = EditorHistoryNavigationRefs & {
   flushInboxSave: () => Promise<void>;
-  dispatchWorkspaceAction: DispatchWorkspaceModelAction;
+  dispatchWorkspaceActionSync: DispatchWorkspaceModelActionSync;
   openMarkdownInEditor: OpenMarkdownInEditorFn;
   openCurrentHomeAfterComposing: (state: WorkspaceHomeState) => Promise<boolean>;
   moveHomeHistory: (
@@ -195,18 +241,24 @@ export async function runEditorHistoryGoBack(
   }
   const nextIndex = snap.index - 1;
   const uri = snap.entries[nextIndex]!;
-  const nextTabs = tabs.map(t =>
+  const nextTabsLegacy = tabs.map(t =>
     t.id === id ? {...t, history: {...t.history, index: nextIndex}} : t,
   );
-  deps.editorWorkspaceTabsRef.current = nextTabs;
-  deps.setEditorWorkspaceTabs(nextTabs);
-  deps.dispatchWorkspaceAction('tab go back', goBackAction);
+  const nextModel = deps.dispatchWorkspaceActionSync('tab go back', goBackAction);
+  assignLegacyEditorTabsFromTabHistoryModel({
+    nextModel,
+    nextTabsLegacy,
+    editorWorkspaceTabsRef: deps.editorWorkspaceTabsRef,
+    setEditorWorkspaceTabs: deps.setEditorWorkspaceTabs,
+    mismatchWarnMessage:
+      '[workspaceModel] runEditorHistoryGoBack: model strip mismatch vs legacy tab history; using legacy strip',
+  });
   await deps.openMarkdownInEditor(uri, {skipHistory: true});
 }
 
 export type RunEditorHistoryGoForwardDeps = EditorHistoryNavigationRefs & {
   flushInboxSave: () => Promise<void>;
-  dispatchWorkspaceAction: DispatchWorkspaceModelAction;
+  dispatchWorkspaceActionSync: DispatchWorkspaceModelActionSync;
   openMarkdownInEditor: OpenMarkdownInEditorFn;
   moveHomeHistory: (
     hubUri: string,
@@ -243,11 +295,17 @@ export async function runEditorHistoryGoForward(
   }
   const nextIndex = snap.index + 1;
   const uri = snap.entries[nextIndex]!;
-  const nextTabs = tabs.map(t =>
+  const nextTabsLegacy = tabs.map(t =>
     t.id === id ? {...t, history: {...t.history, index: nextIndex}} : t,
   );
-  deps.editorWorkspaceTabsRef.current = nextTabs;
-  deps.setEditorWorkspaceTabs(nextTabs);
-  deps.dispatchWorkspaceAction('tab go forward', goForwardAction);
+  const nextModel = deps.dispatchWorkspaceActionSync('tab go forward', goForwardAction);
+  assignLegacyEditorTabsFromTabHistoryModel({
+    nextModel,
+    nextTabsLegacy,
+    editorWorkspaceTabsRef: deps.editorWorkspaceTabsRef,
+    setEditorWorkspaceTabs: deps.setEditorWorkspaceTabs,
+    mismatchWarnMessage:
+      '[workspaceModel] runEditorHistoryGoForward: model strip mismatch vs legacy tab history; using legacy strip',
+  });
   await deps.openMarkdownInEditor(uri, {skipHistory: true});
 }

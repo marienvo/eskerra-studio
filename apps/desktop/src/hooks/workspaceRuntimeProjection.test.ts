@@ -7,6 +7,8 @@ import {
   closeOtherTabsAction,
   closeTabAction,
   createDefaultWorkspaceState,
+  goBackAction,
+  goForwardAction,
   normalizeWorkspaceUri,
   reorderTabsAction,
   serializeWorkspaceModelToPersistence,
@@ -261,6 +263,126 @@ describe('editorWorkspaceTabsFromModelTabEntries', () => {
     expect(editorWorkspaceTabsFromModelTabEntries(ws!.tabs)).toEqual([]);
     const persisted = serializeWorkspaceModelToPersistence(closed);
     expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs ?? []).toEqual([]);
+  });
+
+  it('goBackAction moves active tab history to the previous entry and persists index', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const noteA = normalizeWorkspaceUri(NOTE_A);
+    const noteB = normalizeWorkspaceUri(NOTE_B);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [
+            {
+              id: 't1',
+              history: {entries: [noteA, noteB], index: 1},
+            },
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const after = goBackAction(model);
+    const ws = after.workspaces[hubNorm];
+    expect(ws?.tabs[0]?.history.index).toBe(0);
+    expect(ws?.tabs[0]?.history.entries.map(normalizeWorkspaceUri)).toEqual([noteA, noteB]);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+    expect(activeSurfaceTabIdFromWorkspaceModel(after)).toBe('t1');
+    const legacy = editorWorkspaceTabsFromModelTabEntries(ws!.tabs);
+    expect(legacy[0]?.history.index).toBe(0);
+    const persisted = serializeWorkspaceModelToPersistence(after);
+    const row = persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs?.[0];
+    expect(row?.index).toBe(0);
+    expect(row?.entries.map(normalizeWorkspaceUri)).toEqual([noteA, noteB]);
+  });
+
+  it('goForwardAction advances active tab history and persists index', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const noteA = normalizeWorkspaceUri(NOTE_A);
+    const noteB = normalizeWorkspaceUri(NOTE_B);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [
+            {
+              id: 't1',
+              history: {entries: [noteA, noteB], index: 0},
+            },
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const after = goForwardAction(model);
+    const ws = after.workspaces[hubNorm];
+    expect(ws?.tabs[0]?.history.index).toBe(1);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+    const persisted = serializeWorkspaceModelToPersistence(after);
+    expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs?.[0]?.index).toBe(1);
+  });
+
+  it('goBackAction does not change inactive tabs or active tab id', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const noteA = normalizeWorkspaceUri(NOTE_A);
+    const noteB = normalizeWorkspaceUri(NOTE_B);
+    const noteHome = normalizeWorkspaceUri(NOTE_HOME);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [
+            {
+              id: 't1',
+              history: {entries: [noteA, noteB], index: 1},
+            },
+            {
+              id: 't2',
+              history: {entries: [noteHome], index: 0},
+            },
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const after = goBackAction(model);
+    const ws = after.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1', 't2']);
+    expect(ws?.tabs[1]?.history).toEqual({entries: [noteHome], index: 0});
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+  });
+
+  it('goBackAction does not mutate tabs when Home surface is active', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const noteA = normalizeWorkspaceUri(NOTE_A);
+    const tabsBefore = [
+      {
+        id: 't1',
+        history: {entries: [noteA], index: 0},
+      },
+    ];
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: tabsBefore,
+          active: {kind: 'home'},
+          homeHistory: {entries: [HUB_A, NOTE_A].map(normalizeWorkspaceUri), index: 1},
+        },
+      },
+    };
+    const after = goBackAction(model);
+    const ws = after.workspaces[hubNorm];
+    expect(ws?.tabs).toEqual(tabsBefore);
   });
 });
 
