@@ -24,6 +24,21 @@ describe('createDesktopTestVaultFilesystem', () => {
     expect(inboxNames).toEqual(['Nested', 'a.md']);
   });
 
+  it('listFiles handles the root directory', async () => {
+    const {fs} = createDesktopTestVaultFilesystem({
+      dirs: ['/Inbox', '/Inbox/Nested', '/Projects'],
+      files: {
+        '/root.md': 'root',
+        '/Inbox/a.md': 'a',
+        '/Inbox/Nested/deep.md': 'd',
+      },
+    });
+
+    const root = await fs.listFiles('/');
+    const names = root.map(e => e.name).sort();
+    expect(names).toEqual(['Inbox', 'Projects', 'root.md']);
+  });
+
   it('read/write roundtrip for utf8', async () => {
     const {fs} = createDesktopTestVaultFilesystem({dirs: ['/vault', '/vault/Inbox']});
     await fs.writeFile('/vault/Inbox/hello.md', 'hello body', {encoding: 'utf8'});
@@ -106,6 +121,22 @@ describe('createDesktopTestVaultFilesystem', () => {
     const uris = refs.map(r => r.uri).sort();
     expect(uris).toEqual(['/vault/Inbox/a.md', '/vault/Proj/p.md', '/vault/root.md']);
     expect(refs.find(r => r.uri === '/vault/Inbox/a.md')?.name).toBe('a');
+  });
+
+  it('collectVaultMarkdownRefs works from root', async () => {
+    const {fs} = createDesktopTestVaultFilesystem({
+      dirs: ['/Inbox', '/Inbox/Nested', '/Proj'],
+      files: {
+        '/root.md': 'root',
+        '/Inbox/a.md': 'a',
+        '/Inbox/Nested/deep.md': 'd',
+        '/Proj/p.md': 'p',
+      },
+    });
+
+    const refs = await collectVaultMarkdownRefs('/', fs);
+    const uris = refs.map(r => r.uri).sort();
+    expect(uris).toEqual(['/Inbox/Nested/deep.md', '/Inbox/a.md', '/Proj/p.md', '/root.md']);
   });
 
   it('writeLog records mutating operations but not reads', async () => {

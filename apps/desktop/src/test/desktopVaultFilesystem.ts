@@ -71,10 +71,11 @@ function isImmediateChildOfDirectory(
 ): {name: string} | null {
   const child = normalizeVaultUri(childUri);
   const base = normalizeVaultUri(directoryUri);
-  if (!child.startsWith(`${base}/`)) {
+  const prefix = base === '/' ? '/' : `${base}/`;
+  if (!child.startsWith(prefix)) {
     return null;
   }
-  const rest = child.slice(base.length + 1);
+  const rest = child.slice(prefix.length);
   if (!rest || rest.includes('/')) {
     return null;
   }
