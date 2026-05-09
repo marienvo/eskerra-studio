@@ -2,7 +2,8 @@
  * Main-window vault workspace: orchestration hook (Tauri FS, editor tabs, Today hub, wiki rename).
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
- * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceVaultTreeMutations`, `inboxShellRestoreHelpers`).
+ * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceVaultTreeMutations`, `inboxShellRestoreHelpers`,
+ * `workspaceShadowBridge`, `workspacePersistenceBridge`).
  *
  * Remaining split candidates: wiki-link routing, rename-with-maintenance, and vault bootstrap
  * side-effects → `hooks/workspace*.ts` helpers with tests for pure branches.
@@ -143,17 +144,14 @@ import {
   goBackAction,
   goForwardAction,
   normalizeWorkspaceUri,
-  sortedNormalizedHubs,
   activateTabAction,
   remapPrefixAction,
   removeUrisAction,
   reorderTabsAction,
   selectWorkspaceAction,
-  serializeWorkspaceModelToPersistence,
   type TabEntry,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
-import {describeWorkspacePersistenceDivergence} from '../lib/workspacePersistenceShadow';
 import type {
   WorkspaceConflictController,
   WorkspaceFrontmatterController,
@@ -193,7 +191,16 @@ import {
 } from './workspaceVaultWatchEffects';
 import {useWorkspaceController} from './useWorkspaceController';
 import {
-  describeWorkspaceModelDivergence,
+  deriveModelDerivedPersistencePayload,
+  describeFilteredLegacyVsModelPersistenceDivergence,
+} from './workspacePersistenceBridge';
+import {
+  computeProjectionHubUris,
+  resolveProjectionActiveHubUri,
+  resolveTodayHubWorkspacesForProjection,
+  scheduleDevWorkspaceShadowModelDivergenceCheck,
+} from './workspaceShadowBridge';
+import {
   projectWorkspaceRuntimeToModel,
   workspaceHomeStateToHistoryStack,
 } from './workspaceRuntimeProjection';
@@ -302,62 +309,6 @@ export type UseMainWindowWorkspaceResult = {
   /** Test-only shadow model for the workspaceModel migration bridge. */
   workspaceShadowModelForTests?: WorkspaceModel;
 };
-
-type PersistenceDivergenceFilterArgs = {
-  diff: string;
-  activeHub: string | null;
-  runtimeActiveHub: string | null;
-  projectionActiveHub: string | null;
-  restoredActiveHub: string | null;
-  modelHubKeys: ReadonlySet<string>;
-  legacyHubKeys: ReadonlySet<string>;
-  hasPendingProjectionHubs: boolean;
-};
-
-function diffIsForHub(diff: string, hub: string | null): boolean {
-  return hub != null && diff.startsWith(`hub ${hub} `);
-}
-
-function isKnownPersistenceTimingDivergence({
-  diff,
-  activeHub,
-  runtimeActiveHub,
-  projectionActiveHub,
-  restoredActiveHub,
-  modelHubKeys,
-  legacyHubKeys,
-  hasPendingProjectionHubs,
-}: PersistenceDivergenceFilterArgs): boolean {
-  if (hasPendingProjectionHubs && diff.includes('presence model=no runtime=yes')) {
-    return true;
-  }
-  if (legacyHubKeys.size === 0 && diff.includes('presence model=yes runtime=no')) {
-    return true;
-  }
-  const activeHubMatch =
-    diffIsForHub(diff, activeHub)
-    || diffIsForHub(diff, runtimeActiveHub)
-    || diffIsForHub(diff, projectionActiveHub)
-    || diffIsForHub(diff, restoredActiveHub);
-  if (diff.includes('presence model=yes runtime=no') && activeHubMatch) {
-    return true;
-  }
-  if (
-    diff.startsWith('activeTodayHubUri ')
-    && (projectionActiveHub === null || runtimeActiveHub === null)
-  ) {
-    return true;
-  }
-  const isTabTimingDiff =
-    activeHubMatch
-    && (diff.includes('editorWorkspaceTabs') || diff.includes('activeEditorTabId'));
-  if (!isTabTimingDiff) {
-    return false;
-  }
-  return [activeHub, runtimeActiveHub, projectionActiveHub, restoredActiveHub].some(
-    hub => hub != null && modelHubKeys.has(hub) && legacyHubKeys.has(hub),
-  );
-}
 
 export function useMainWindowWorkspace(options: {
   fs: VaultFilesystem;
@@ -855,27 +806,32 @@ export function useMainWindowWorkspace(options: {
   // When todayHubWorkspacesForSave hasn't been populated yet (restore pending), fall back to
   // restoredInboxState so inactive-hub snapshots are available immediately. Mirrors the same
   // fallback used by legacyTodayHubWorkspacesPersistFiltered.
-  const todayHubWorkspacesForProjection: Record<string, TodayHubWorkspaceSnapshot> =
-    Object.keys(todayHubWorkspacesForSave).length === 0
-      ? (restoredInboxState?.todayHubWorkspaces as Record<string, TodayHubWorkspaceSnapshot> | null | undefined) ?? todayHubWorkspacesForSave
-      : todayHubWorkspacesForSave;
+  const todayHubWorkspacesForProjection = resolveTodayHubWorkspacesForProjection({
+    todayHubWorkspacesForSave,
+    restoredTodayHubWorkspaces:
+      restoredInboxState?.todayHubWorkspaces as
+        | Record<string, TodayHubWorkspaceSnapshot>
+        | null
+        | undefined,
+  });
 
   // Before vaultMarkdownRefs is populated by the async collectVaultMarkdownRefs, also include
   // hubs from the restored state so the model has all hubs immediately after restore.
-  const projectionHubUris = useMemo(() => {
-    const restoredHubs = restoredInboxState
-      ? Object.keys(restoredInboxState.todayHubWorkspaces)
-      : [];
-    if (restoredHubs.length === 0 || workspaceModelHubUris.length >= restoredHubs.length) {
-      return workspaceModelHubUris;
-    }
-    return sortedNormalizedHubs([...workspaceModelHubUris, ...restoredHubs]);
-  }, [workspaceModelHubUris, restoredInboxState]);
+  const projectionHubUris = useMemo(
+    () =>
+      computeProjectionHubUris({
+        workspaceModelHubUris,
+        restoredInboxState,
+      }),
+    [workspaceModelHubUris, restoredInboxState],
+  );
 
   // When activeTodayHubUri is null (not yet restored), use the persisted value so the model
   // doesn't fall back to hubs[0] as active with live editorWorkspaceTabs=[].
-  const projectionActiveHubUri =
-    activeTodayHubUri ?? (restoredInboxState?.activeTodayHubUri as string | null | undefined) ?? null;
+  const projectionActiveHubUri = resolveProjectionActiveHubUri({
+    activeTodayHubUri,
+    restoredActiveTodayHubUri: restoredInboxState?.activeTodayHubUri as string | null | undefined,
+  });
 
   const projectedWorkspaceModel = useMemo(
     () =>
@@ -898,7 +854,7 @@ export function useMainWindowWorkspace(options: {
   );
 
   const modelDerivedPersistence = useMemo(
-    () => serializeWorkspaceModelToPersistence(workspaceShadowModel),
+    () => deriveModelDerivedPersistencePayload(workspaceShadowModel),
     [workspaceShadowModel],
   );
 
@@ -907,17 +863,11 @@ export function useMainWindowWorkspace(options: {
       return;
     }
     replaceWorkspaceShadowModel(projectedWorkspaceModel, 'runtime projection');
-    if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
-      queueMicrotask(() => {
-        const diffs = describeWorkspaceModelDivergence(
-          projectedWorkspaceModel,
-          workspaceShadowModelRef.current,
-        );
-        if (diffs.length > 0) {
-          console.warn('[workspaceModel] shadow divergence', diffs);
-        }
-      });
-    }
+    scheduleDevWorkspaceShadowModelDivergenceCheck({
+      devOrTest: import.meta.env.DEV || import.meta.env.MODE === 'test',
+      projected: projectedWorkspaceModel,
+      readShadowModel: () => workspaceShadowModelRef.current,
+    });
   }, [
     inboxShellRestored,
     projectedWorkspaceModel,
@@ -953,28 +903,25 @@ export function useMainWindowWorkspace(options: {
     const hasPendingProjectionHubs = Object.keys(todayHubWorkspacesForProjection).some(
       hub => !modelHubKeys.has(hub),
     );
-    const diffs = describeWorkspacePersistenceDivergence(modelDerivedPersistence, {
-      activeTodayHubUri,
-      todayHubWorkspaces: legacyTodayHubWorkspacesPersistFiltered,
-    }).filter(diff => {
-      const activeHub = workspaceShadowModel.activeHub;
-      const runtimeActiveHub = activeTodayHubUri;
-      const projectionActiveHub = projectionActiveHubUri;
-      const restoredActiveHub =
-        typeof restoredInboxState?.activeTodayHubUri === 'string'
-          ? restoredInboxState.activeTodayHubUri
-          : null;
-      return !isKnownPersistenceTimingDivergence({
-        diff,
-        activeHub,
-        runtimeActiveHub,
-        projectionActiveHub,
-        restoredActiveHub,
+    const diffs = describeFilteredLegacyVsModelPersistenceDivergence(
+      modelDerivedPersistence,
+      {
+        activeTodayHubUri,
+        todayHubWorkspaces: legacyTodayHubWorkspacesPersistFiltered,
+      },
+      {
+        activeHub: workspaceShadowModel.activeHub,
+        runtimeActiveHub: activeTodayHubUri,
+        projectionActiveHub: projectionActiveHubUri,
+        restoredActiveHub:
+          typeof restoredInboxState?.activeTodayHubUri === 'string'
+            ? restoredInboxState.activeTodayHubUri
+            : null,
         modelHubKeys,
         legacyHubKeys,
         hasPendingProjectionHubs,
-      });
-    });
+      },
+    );
     if (diffs.length > 0) {
       console.warn('[workspaceModel] persistence legacy divergence', diffs);
     }

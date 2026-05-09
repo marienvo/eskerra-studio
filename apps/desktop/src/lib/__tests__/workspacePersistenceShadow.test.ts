@@ -8,6 +8,9 @@ import type {TodayHubWorkspaceSnapshot} from '../mainWindowUiStore';
 import {serializeWorkspaceModelToPersistence} from '../workspaceModel';
 import {
   describeWorkspacePersistenceDivergence,
+  diffIsForHub,
+  filterPersistenceDivergenceDiffsExcludingKnownTiming,
+  isKnownPersistenceTimingDivergence,
   type RuntimePersistencePayload,
 } from '../workspacePersistenceShadow';
 
@@ -559,5 +562,124 @@ describe('workspacePersistenceShadow integration', () => {
     const modelDerived = serializeWorkspaceModelToPersistence(projectedModel);
     const runtime = runtimePayload(HUB_A, filteredWithHome);
     expect(describeWorkspacePersistenceDivergence(modelDerived, runtime)).toHaveLength(0);
+  });
+});
+
+describe('isKnownPersistenceTimingDivergence', () => {
+  const keys = (xs: string[]) => new Set(xs);
+
+  it('treats pending projection hub presence mismatch as known timing noise', () => {
+    expect(
+      isKnownPersistenceTimingDivergence({
+        diff: 'hub /vault/X.md presence model=no runtime=yes',
+        activeHub: '/vault/X.md',
+        runtimeActiveHub: null,
+        projectionActiveHub: null,
+        restoredActiveHub: null,
+        modelHubKeys: keys([]),
+        legacyHubKeys: keys([]),
+        hasPendingProjectionHubs: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('treats empty legacy keys with model-only hub presence as known', () => {
+    expect(
+      isKnownPersistenceTimingDivergence({
+        diff: 'hub /vault/A.md presence model=yes runtime=no',
+        activeHub: '/vault/A.md',
+        runtimeActiveHub: '/vault/A.md',
+        projectionActiveHub: '/vault/A.md',
+        restoredActiveHub: null,
+        modelHubKeys: keys(['/vault/A.md']),
+        legacyHubKeys: keys([]),
+        hasPendingProjectionHubs: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('treats active-hub presence mismatch as known when diff targets active hub', () => {
+    expect(
+      isKnownPersistenceTimingDivergence({
+        diff: 'hub /vault/A.md presence model=yes runtime=no',
+        activeHub: '/vault/A.md',
+        runtimeActiveHub: '/vault/A.md',
+        projectionActiveHub: '/vault/A.md',
+        restoredActiveHub: null,
+        modelHubKeys: keys(['/vault/A.md']),
+        legacyHubKeys: keys(['/vault/A.md']),
+        hasPendingProjectionHubs: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('treats activeTodayHubUri row when projection or runtime hub unset as known', () => {
+    expect(
+      isKnownPersistenceTimingDivergence({
+        diff: 'activeTodayHubUri model=/a runtime=/b',
+        activeHub: '/a',
+        runtimeActiveHub: null,
+        projectionActiveHub: '/x',
+        restoredActiveHub: null,
+        modelHubKeys: keys([]),
+        legacyHubKeys: keys([]),
+        hasPendingProjectionHubs: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('treats tab timing diff as known when hub exists in both model and legacy', () => {
+    expect(
+      isKnownPersistenceTimingDivergence({
+        diff: 'hub /vault/A.md editorWorkspaceTabs model=[] runtime=[]',
+        activeHub: '/vault/A.md',
+        runtimeActiveHub: '/vault/A.md',
+        projectionActiveHub: '/vault/A.md',
+        restoredActiveHub: null,
+        modelHubKeys: keys(['/vault/A.md']),
+        legacyHubKeys: keys(['/vault/A.md']),
+        hasPendingProjectionHubs: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not suppress tab timing diff when hub is missing from legacy keys', () => {
+    expect(
+      isKnownPersistenceTimingDivergence({
+        diff: 'hub /vault/A.md editorWorkspaceTabs model=[] runtime=[]',
+        activeHub: '/vault/A.md',
+        runtimeActiveHub: '/vault/A.md',
+        projectionActiveHub: '/vault/A.md',
+        restoredActiveHub: null,
+        modelHubKeys: keys(['/vault/A.md']),
+        legacyHubKeys: keys([]),
+        hasPendingProjectionHubs: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('diffIsForHub', () => {
+  it('matches hub-prefixed divergence lines', () => {
+    expect(diffIsForHub('hub /x.md foo', '/x.md')).toBe(true);
+    expect(diffIsForHub('activeTodayHubUri model=a runtime=b', '/x.md')).toBe(false);
+  });
+});
+
+describe('filterPersistenceDivergenceDiffsExcludingKnownTiming', () => {
+  it('removes diffs classified as known timing noise', () => {
+    const out = filterPersistenceDivergenceDiffsExcludingKnownTiming(
+      ['hub /a presence model=no runtime=yes', 'hub /a editorWorkspaceTabs model=x runtime=y'],
+      {
+        activeHub: '/a',
+        runtimeActiveHub: '/a',
+        projectionActiveHub: '/a',
+        restoredActiveHub: null,
+        modelHubKeys: new Set(['/a']),
+        legacyHubKeys: new Set(['/a']),
+        hasPendingProjectionHubs: true,
+      },
+    );
+    expect(out).toEqual([]);
   });
 });

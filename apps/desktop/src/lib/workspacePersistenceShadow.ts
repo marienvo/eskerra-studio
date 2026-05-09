@@ -116,3 +116,84 @@ export function describeWorkspacePersistenceDivergence(
 
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Known timing / ordering divergences (DEV-only noise suppression)
+// ---------------------------------------------------------------------------
+
+export type PersistenceTimingDivergenceFilterArgs = {
+  diff: string;
+  activeHub: string | null;
+  runtimeActiveHub: string | null;
+  projectionActiveHub: string | null;
+  restoredActiveHub: string | null;
+  modelHubKeys: ReadonlySet<string>;
+  legacyHubKeys: ReadonlySet<string>;
+  hasPendingProjectionHubs: boolean;
+};
+
+export type PersistenceTimingDivergenceContext = Omit<
+  PersistenceTimingDivergenceFilterArgs,
+  'diff'
+>;
+
+export function diffIsForHub(diff: string, hub: string | null): boolean {
+  return hub != null && diff.startsWith(`hub ${hub} `);
+}
+
+export function isKnownPersistenceTimingDivergence(
+  args: PersistenceTimingDivergenceFilterArgs,
+): boolean {
+  const {
+    diff,
+    activeHub,
+    runtimeActiveHub,
+    projectionActiveHub,
+    restoredActiveHub,
+    modelHubKeys,
+    legacyHubKeys,
+    hasPendingProjectionHubs,
+  } = args;
+  if (hasPendingProjectionHubs && diff.includes('presence model=no runtime=yes')) {
+    return true;
+  }
+  if (legacyHubKeys.size === 0 && diff.includes('presence model=yes runtime=no')) {
+    return true;
+  }
+  const activeHubMatch =
+    diffIsForHub(diff, activeHub)
+    || diffIsForHub(diff, runtimeActiveHub)
+    || diffIsForHub(diff, projectionActiveHub)
+    || diffIsForHub(diff, restoredActiveHub);
+  if (diff.includes('presence model=yes runtime=no') && activeHubMatch) {
+    return true;
+  }
+  if (
+    diff.startsWith('activeTodayHubUri ')
+    && (projectionActiveHub === null || runtimeActiveHub === null)
+  ) {
+    return true;
+  }
+  const isTabTimingDiff =
+    activeHubMatch
+    && (diff.includes('editorWorkspaceTabs') || diff.includes('activeEditorTabId'));
+  if (!isTabTimingDiff) {
+    return false;
+  }
+  return [activeHub, runtimeActiveHub, projectionActiveHub, restoredActiveHub].some(
+    hub => hub != null && modelHubKeys.has(hub) && legacyHubKeys.has(hub),
+  );
+}
+
+export function filterPersistenceDivergenceDiffsExcludingKnownTiming(
+  diffs: readonly string[],
+  context: PersistenceTimingDivergenceContext,
+): string[] {
+  return diffs.filter(
+    diff =>
+      !isKnownPersistenceTimingDivergence({
+        ...context,
+        diff,
+      }),
+  );
+}
