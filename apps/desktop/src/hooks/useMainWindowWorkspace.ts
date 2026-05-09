@@ -3,7 +3,7 @@
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
  * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceVaultTreeMutations`, `inboxShellRestoreHelpers`,
- * `workspaceShadowBridge`, `workspacePersistenceBridge`).
+ * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`).
  *
  * Remaining split candidates: wiki-link routing, rename-with-maintenance, and vault bootstrap
  * side-effects → `hooks/workspace*.ts` helpers with tests for pure branches.
@@ -95,7 +95,6 @@ import {
   firstSurvivorUriFromTabs,
   insertTabAfterActive,
   insertTabAtIndex,
-  migrateOpenTabUrisToWorkspaceTabs,
   pickNeighborTabIdAfterRemovingTab,
   pushClosedWorkspaceTabsFromCloseAll,
   pushClosedWorkspaceTabsFromCloseOther,
@@ -159,13 +158,17 @@ import type {
   WorkspaceTreeController,
 } from './workspaceReturnShape';
 import {
-  buildRestoredEditorWorkspace,
-  isUriValidVaultMarkdown,
   makeStoredTabFilter,
   mergeStoredHubWorkspaces,
   pickFinalActiveHub,
   resolveActiveHubAndTabsSource,
+  restoredTodayHubWorkspaceUrisForRestore,
 } from './inboxShellRestoreHelpers';
+import {
+  applyRestoredEditorWorkspaceTabsBridge,
+  migrateLegacyOpenTabsIfNeededBridge,
+  restoreInboxSelectionAfterShellRestoreBridge,
+} from './workspaceInboxShellRestoreBridge';
 import {
   type DiskConflictSoftState,
   type DiskConflictState,
@@ -253,27 +256,6 @@ type OpenMarkdownInEditorOptions = {
   /** @deprecated Use `home`. */
   workspaceShellPreserveTabs?: boolean;
 };
-
-function restoredTodayHubWorkspaceUrisForRestore(args: {
-  currentHubUris: readonly string[];
-  restored: Record<string, TodayHubWorkspaceSnapshot> | null | undefined;
-  root: string;
-}): string[] {
-  const out = [...args.currentHubUris];
-  const seen = new Set(out);
-  const root = args.root.replace(/\\/g, '/');
-  for (const raw of Object.keys(args.restored ?? {})) {
-    const hub = raw.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
-    if (!hub || seen.has(hub)) {
-      continue;
-    }
-    if ((hub === root || hub.startsWith(`${root}/`)) && vaultUriIsTodayMarkdownFile(hub)) {
-      seen.add(hub);
-      out.push(hub);
-    }
-  }
-  return out.sort((a, b) => a.localeCompare(b));
-}
 
 export type UseMainWindowWorkspaceResult = {
   vaultRoot: string | null;
@@ -3452,39 +3434,21 @@ export function useMainWindowWorkspace(options: {
         | undefined,
       chosenActiveEditorTabId: string | null,
       filter: (raw: string) => boolean,
-    ): string[] => {
-      if (chosenTabsSource == null) {
-        return [];
-      }
-      const built = buildRestoredEditorWorkspace({
+    ): string[] =>
+      applyRestoredEditorWorkspaceTabsBridge(
+        {
+          editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
+          setEditorWorkspaceTabs,
+          setActiveEditorTabId,
+          mirrorShadowActiveWorkspaceTabs,
+          mirrorShadowActiveTab,
+          mirrorShadowHomeSurface,
+        },
         chosenTabsSource,
         chosenActiveEditorTabId,
         filter,
-      });
-      if (built == null) {
-        return [];
-      }
-      editorWorkspaceTabsRef.current = built.tabs;
-      activeEditorTabIdRef.current = built.activeEditorTabId;
-      queueMicrotask(() => {
-        setEditorWorkspaceTabs(built.tabs);
-        setActiveEditorTabId(built.activeEditorTabId);
-        mirrorShadowActiveWorkspaceTabs(
-          built.tabs,
-          built.activeEditorTabId,
-          'restore editor workspace tabs',
-        );
-        if (built.activeEditorTabId == null) {
-          mirrorShadowHomeSurface('restore editor workspace home surface');
-        } else {
-          mirrorShadowActiveTab(
-            built.activeEditorTabId,
-            'restore editor workspace active tab',
-          );
-        }
-      });
-      return built.uris;
-    },
+      ),
     [
       mirrorShadowActiveWorkspaceTabs,
       mirrorShadowActiveTab,
@@ -3496,69 +3460,37 @@ export function useMainWindowWorkspace(options: {
     (
       rawTabs: readonly string[] | null | undefined,
       filter: (raw: string) => boolean,
-    ): string[] => {
-      if (
-        editorWorkspaceTabsRef.current.length > 0
-        || rawTabs == null
-        || rawTabs.length === 0
-      ) {
-        return [];
-      }
-      const filtered = rawTabs.filter(filter);
-      const migrated = migrateOpenTabUrisToWorkspaceTabs(filtered);
-      if (migrated.length === 0) {
-        return [];
-      }
-      const nextActive = migrated[0]!.id;
-      editorWorkspaceTabsRef.current = migrated;
-      activeEditorTabIdRef.current = nextActive;
-      queueMicrotask(() => {
-        setEditorWorkspaceTabs(migrated);
-        setActiveEditorTabId(nextActive);
-        mirrorShadowActiveWorkspaceTabs(migrated, nextActive, 'restore legacy tabs');
-        mirrorShadowActiveTab(nextActive, 'restore legacy open tab');
-      });
-      return migrated
-        .map(t => tabCurrentUri(t))
-        .filter((u): u is string => u != null);
-    },
+    ): string[] =>
+      migrateLegacyOpenTabsIfNeededBridge(
+        {
+          editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
+          setEditorWorkspaceTabs,
+          setActiveEditorTabId,
+          mirrorShadowActiveWorkspaceTabs,
+          mirrorShadowActiveTab,
+        },
+        rawTabs,
+        filter,
+      ),
     [mirrorShadowActiveWorkspaceTabs, mirrorShadowActiveTab],
   );
 
   const restoreInboxSelectionAfterShellRestore = useCallback(
-    (root: string, restoredTabs: readonly string[], hubUrisLength: number) => {
-      const knownNoteUris = new Set(notesRef.current.map(n => n.uri));
-      if (restoredInboxState!.composingNewEntry) {
-        startNewEntry();
-        return;
-      }
-      if (restoredInboxState!.selectedUri) {
-        const selectedOk = isUriValidVaultMarkdown({
-          uri: restoredInboxState!.selectedUri,
-          root,
-          knownNoteUris,
-        });
-        if (selectedOk) {
-          selectNote(restoredInboxState!.selectedUri);
-          return;
-        }
-        if (restoredTabs.length > 0) {
-          selectNote(restoredTabs[0]!);
-        }
-        return;
-      }
-      if (restoredTabs.length > 0) {
-        selectNote(restoredTabs[0]!);
-        return;
-      }
-      if (
-        hubUrisLength > 0
-        && editorWorkspaceTabsRef.current.length === 0
-        && activeTodayHubUriRef.current
-      ) {
-        selectNote(activeTodayHubUriRef.current);
-      }
-    },
+    (root: string, restoredTabs: readonly string[], hubUrisLength: number) =>
+      restoreInboxSelectionAfterShellRestoreBridge(
+        {
+          editorWorkspaceTabsRef,
+          activeTodayHubUriRef,
+          notesRef,
+          getRestoredInboxState: () => restoredInboxState,
+          startNewEntry,
+          selectNote,
+        },
+        root,
+        restoredTabs,
+        hubUrisLength,
+      ),
     [restoredInboxState, startNewEntry, selectNote],
   );
 

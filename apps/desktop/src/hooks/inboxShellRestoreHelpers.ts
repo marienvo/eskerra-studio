@@ -11,6 +11,7 @@ import {
 } from '../lib/editorWorkspaceTabs';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
 import {parseWorkspaceModelFromPersistence} from '../lib/workspaceModel/persistence';
 import {pickDefaultActiveTodayHubUri} from '../lib/todayHubWorkspaceRestore';
 
@@ -325,4 +326,28 @@ export function isUriValidVaultMarkdown(args: {
   const u = normalizeVaultPath(uri);
   const inVault = u === root || u.startsWith(`${root}/`);
   return inVault && (knownNoteUris.has(u) || u.toLowerCase().endsWith('.md'));
+}
+
+/**
+ * Merge refs-derived hub URIs with persisted hub keys so restore sees inactive hubs before refs refresh.
+ */
+export function restoredTodayHubWorkspaceUrisForRestore(args: {
+  currentHubUris: readonly string[];
+  restored: Record<string, TodayHubWorkspaceSnapshot> | null | undefined;
+  root: string;
+}): string[] {
+  const out = [...args.currentHubUris];
+  const seen = new Set(out);
+  const root = args.root.replace(/\\/g, '/');
+  for (const raw of Object.keys(args.restored ?? {})) {
+    const hub = raw.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
+    if (!hub || seen.has(hub)) {
+      continue;
+    }
+    if ((hub === root || hub.startsWith(`${root}/`)) && vaultUriIsTodayMarkdownFile(hub)) {
+      seen.add(hub);
+      out.push(hub);
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b));
 }
