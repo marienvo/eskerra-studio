@@ -3,7 +3,8 @@
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
  * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceVaultTreeMutations`, `inboxShellRestoreHelpers`,
- * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`).
+ * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`,
+ * `workspaceHomeHistoryShadowSync`).
  *
  * Remaining split candidates: wiki-link routing, rename-with-maintenance, and vault bootstrap
  * side-effects → `hooks/workspace*.ts` helpers with tests for pure branches.
@@ -129,8 +130,6 @@ import {
   homeCurrentUri,
   homeGoBack,
   homeGoForward,
-  homeRemapPrefix,
-  homeRemoveUris,
   pushHomeNavigate,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
@@ -141,8 +140,6 @@ import {
   closeTabAction,
   goBackAction,
   goForwardAction,
-  remapPrefixAction,
-  removeUrisAction,
   reorderTabsAction,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
@@ -169,6 +166,10 @@ import {
   migrateLegacyOpenTabsIfNeededBridge,
   restoreInboxSelectionAfterShellRestoreBridge,
 } from './workspaceInboxShellRestoreBridge';
+import {
+  remapHomeStatesPrefixBridge,
+  removeHomeHistoryUrisBridge,
+} from './workspaceHomeHistoryShadowSync';
 import {
   type DiskConflictSoftState,
   type DiskConflictState,
@@ -547,53 +548,29 @@ export function useMainWindowWorkspace(options: {
   }, [homeStatesByHub]);
 
   const remapHomeStatesPrefix = useCallback(
-    (oldPrefix: string, newPrefix: string) => {
-      const current = homeStatesByHubRef.current;
-      const next: Record<string, WorkspaceHomeState> = {};
-      let changed = false;
-      for (const [hubUri, state] of Object.entries(current)) {
-        const mappedHub = remapVaultUriPrefix(hubUri, oldPrefix, newPrefix) ?? hubUri;
-        const mappedState = homeRemapPrefix(state, oldPrefix, newPrefix);
-        next[mappedHub] = mappedState;
-        changed = changed || mappedHub !== hubUri || mappedState !== state;
-      }
-      if (!changed) {
-        return;
-      }
-      homeStatesByHubRef.current = next;
-      setHomeStatesByHub(next);
-      dispatchWorkspaceAction(
-        `homeHistory remap ${oldPrefix} -> ${newPrefix}`,
-        model => remapPrefixAction(model, oldPrefix, newPrefix),
-      );
-    },
+    (oldPrefix: string, newPrefix: string) =>
+      remapHomeStatesPrefixBridge(
+        {
+          homeStatesByHubRef,
+          setHomeStatesByHub,
+          dispatchWorkspaceAction,
+        },
+        oldPrefix,
+        newPrefix,
+      ),
     [dispatchWorkspaceAction],
   );
 
   const removeHomeHistoryUris = useCallback(
-    (shouldRemove: (normalizedUri: string) => boolean) => {
-      const current = homeStatesByHubRef.current;
-      const next: Record<string, WorkspaceHomeState> = {};
-      let changed = false;
-      for (const [hubUri, state] of Object.entries(current)) {
-        const pruned = homeRemoveUris(state, shouldRemove);
-        if (pruned == null) {
-          changed = true;
-          continue;
-        }
-        next[hubUri] = pruned;
-        changed = changed || pruned !== state;
-      }
-      if (!changed) {
-        return;
-      }
-      homeStatesByHubRef.current = next;
-      setHomeStatesByHub(next);
-      dispatchWorkspaceAction(
-        'homeHistory remove uris',
-        model => removeUrisAction(model, shouldRemove),
-      );
-    },
+    (shouldRemove: (normalizedUri: string) => boolean) =>
+      removeHomeHistoryUrisBridge(
+        {
+          homeStatesByHubRef,
+          setHomeStatesByHub,
+          dispatchWorkspaceAction,
+        },
+        shouldRemove,
+      ),
     [dispatchWorkspaceAction],
   );
 
