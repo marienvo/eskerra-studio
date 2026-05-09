@@ -3,6 +3,7 @@ import {describe, expect, it} from 'vitest';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {
+  closeAllTabsAction,
   createDefaultWorkspaceState,
   normalizeWorkspaceUri,
   reorderTabsAction,
@@ -104,6 +105,29 @@ describe('editorWorkspaceTabsFromModelTabEntries', () => {
       't2',
       't1',
     ]);
+  });
+
+  it('closeAllTabsAction clears tabs, activates Home, and persists empty tab strip', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [{id: 't1', history: {entries: [NOTE_A], index: 0}}],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const closed = closeAllTabsAction(model);
+    const ws = closed.workspaces[hubNorm];
+    expect(ws?.tabs).toEqual([]);
+    expect(ws?.active).toEqual({kind: 'home'});
+    expect(activeSurfaceTabIdFromWorkspaceModel(closed)).toBeNull();
+    expect(editorWorkspaceTabsFromModelTabEntries(ws!.tabs)).toEqual([]);
+    const persisted = serializeWorkspaceModelToPersistence(closed);
+    expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs ?? []).toEqual([]);
   });
 });
 

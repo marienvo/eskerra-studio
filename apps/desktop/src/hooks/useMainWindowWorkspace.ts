@@ -2055,12 +2055,17 @@ export function useMainWindowWorkspace(options: {
           editorShellScrollByUriRef.current.delete(normalizeEditorDocUri(u));
         }
       }
+      const nextModel = dispatchWorkspaceActionSync('close all tabs', closeAllTabsAction);
+      const hub = nextModel.activeHub;
+      const nextTabs =
+        hub != null && nextModel.workspaces[hub] != null
+          ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
+          : [];
       assignLegacyEditorWorkspaceTabs({
-        nextTabs: [],
+        nextTabs,
         editorWorkspaceTabsRef,
         setEditorWorkspaceTabs,
       });
-      dispatchWorkspaceAction('close all tabs', closeAllTabsAction);
       assignLegacyRuntimeActiveSurfaceTab(null, {
         ref: activeEditorTabIdRef,
         setActiveEditorTabId,
@@ -2088,7 +2093,7 @@ export function useMainWindowWorkspace(options: {
     })();
   }, [
     bumpEditorClosedStack,
-    dispatchWorkspaceAction,
+    dispatchWorkspaceActionSync,
     openMarkdownInEditor,
     mirrorShadowHomeSurface,
     selectHomeCurrentNote,

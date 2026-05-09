@@ -49,8 +49,13 @@ export function useWorkspaceController(initialModel: WorkspaceModel = EMPTY_WORK
   }, []);
 
   /**
-   * Applies `updater(modelRef.current)` synchronously and updates React state + ref before return.
-   * Use when callers must read the next model immediately (same tick as legacy sync).
+   * Same validation as {@link dispatchWorkspaceAction}, but applies `updater(modelRef.current)`
+   * synchronously and assigns `modelRef.current` before `setModel(next)` so callers can mirror
+   * legacy UI state in the same synchronous turn (e.g. tab reorder → derive `editorWorkspaceTabs`).
+   *
+   * Prefer {@link dispatchWorkspaceAction} for ordinary updates. Use this only when the next model
+   * must be read immediately after the action; avoid mixing with a queued async dispatch in the
+   * same handler unless ordering is intentional.
    */
   const dispatchWorkspaceActionSync = useCallback((
     actionDescription: string,
