@@ -92,7 +92,7 @@ function makeArgs(overrides: {
     overrides.setTodayHubWorkspacesForSave ?? createMutatingWorkspaceSetter(hubWorkspaces);
 
   const args: UseWorkspaceTodayHubSwitchArgs = {
-    state: {todayHubWorkspacesForSave: hubWorkspaces},
+    state: {legacyTodayHubWorkspacesForSwitch: hubWorkspaces},
     refs: {
       vaultMarkdownRefsRef: {current: overrides.vaultMarkdownRefs ?? [{name: 'Today', uri: HUB_A}, {name: 'Today', uri: HUB_B}]},
       activeTodayHubUriRef: {current: overrides.activeTodayHubUri !== undefined ? overrides.activeTodayHubUri : HUB_A},

@@ -666,11 +666,11 @@ export function useMainWindowWorkspace(options: {
     [vaultMarkdownRefs],
   );
 
-  // When todayHubWorkspacesForSave hasn't been populated yet (restore pending), fall back to
+  // When the legacy map has not been populated yet (restore pending), fall back to
   // restoredInboxState so inactive-hub snapshots are available immediately. Mirrors the same
   // fallback used by legacyTodayHubWorkspacesPersistFiltered.
   const todayHubWorkspacesForProjection = resolveTodayHubWorkspacesForProjection({
-    todayHubWorkspacesForSave,
+    legacyTodayHubWorkspaces: todayHubWorkspacesForSave,
     restoredTodayHubWorkspaces:
       restoredInboxState?.todayHubWorkspaces as
         | Record<string, TodayHubWorkspaceSnapshot>
@@ -702,7 +702,7 @@ export function useMainWindowWorkspace(options: {
         activeTodayHubUri: projectionActiveHubUri,
         editorWorkspaceTabs,
         activeEditorTabId,
-        todayHubWorkspacesForSave: todayHubWorkspacesForProjection,
+        legacyHubWorkspaceSnapshots: todayHubWorkspacesForProjection,
         homeStatesByHub,
         hubUris: projectionHubUris,
       }),
@@ -2534,7 +2534,7 @@ export function useMainWindowWorkspace(options: {
 
   const {switchTodayHubWorkspace, focusActiveTodayHubNote} =
     useWorkspaceTodayHubSwitch({
-      state: {todayHubWorkspacesForSave: todayHubWorkspacesForSwitch},
+      state: {legacyTodayHubWorkspacesForSwitch: todayHubWorkspacesForSwitch},
       refs: {
         vaultMarkdownRefsRef,
         activeTodayHubUriRef,
@@ -3691,9 +3691,17 @@ export function useMainWindowWorkspace(options: {
       todayHubSelectorItems,
       activeTodayHubUri,
       persistenceActiveTodayHubUri: modelDerivedPersistence.activeTodayHubUri,
+      persistenceTodayHubWorkspaces: modelDerivedPersistence.todayHubWorkspaces as Record<
+        string,
+        TodayHubWorkspaceSnapshot
+      >,
+      legacyTodayHubWorkspacesForSwitch: todayHubWorkspacesForSwitch,
       // serializeWorkspaceModelToPersistence always writes a non-null homeHistory,
       // so the null branch of TodayHubWorkspaceSnapshotPersisted.homeHistory never fires here.
-      todayHubWorkspacesForSave: modelDerivedPersistence.todayHubWorkspaces as Record<string, TodayHubWorkspaceSnapshot>,
+      todayHubWorkspacesForSave: modelDerivedPersistence.todayHubWorkspaces as Record<
+        string,
+        TodayHubWorkspaceSnapshot
+      >,
       switchTodayHubWorkspace,
       focusActiveTodayHubNote,
       workspaceSelectorSubLabel,

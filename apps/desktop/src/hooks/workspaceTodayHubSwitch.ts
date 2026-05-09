@@ -56,7 +56,7 @@ function restoreTabsFromSnapshot(
 
 export type UseWorkspaceTodayHubSwitchArgs = {
   state: {
-    todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>;
+    legacyTodayHubWorkspacesForSwitch: Record<string, TodayHubWorkspaceSnapshot>;
   };
   refs: {
     vaultMarkdownRefsRef: MutableRefObject<readonly VaultMarkdownRef[]>;
@@ -141,12 +141,12 @@ export function useWorkspaceTodayHubSwitch(
     setActiveTodayHubUri,
   } = args.setters;
 
-  const {todayHubWorkspacesForSave} = args.state;
+  const {legacyTodayHubWorkspacesForSwitch} = args.state;
 
-  const todayHubWorkspacesForSaveRef = useRef(todayHubWorkspacesForSave);
+  const legacyTodayHubWorkspacesForSwitchRef = useRef(legacyTodayHubWorkspacesForSwitch);
   useLayoutEffect(() => {
-    todayHubWorkspacesForSaveRef.current = todayHubWorkspacesForSave;
-  }, [todayHubWorkspacesForSave]);
+    legacyTodayHubWorkspacesForSwitchRef.current = legacyTodayHubWorkspacesForSwitch;
+  }, [legacyTodayHubWorkspacesForSwitch]);
 
   const switchTodayHubWorkspace = useCallback(
     async (todayNoteUri: string) => {
@@ -189,8 +189,8 @@ export function useWorkspaceTodayHubSwitch(
         // outer task (before React commits / before useLayoutEffect syncs props) still sees
         // the just-saved workspace. The functional updater reads `snapForTarget` from latest
         // queued `prev` when React runs it; we also mirror `next` into the ref there.
-        todayHubWorkspacesForSaveRef.current = {
-          ...todayHubWorkspacesForSaveRef.current,
+        legacyTodayHubWorkspacesForSwitchRef.current = {
+          ...legacyTodayHubWorkspacesForSwitchRef.current,
           [old]: outgoingSnap,
         };
         setTodayHubWorkspacesForSave(prev => {
@@ -199,12 +199,12 @@ export function useWorkspaceTodayHubSwitch(
             ...prev,
             [old]: outgoingSnap,
           };
-          todayHubWorkspacesForSaveRef.current = next;
+          legacyTodayHubWorkspacesForSwitchRef.current = next;
           return next;
         });
       }
       snapForTarget =
-        snapForTarget ?? todayHubWorkspacesForSaveRef.current[norm];
+        snapForTarget ?? legacyTodayHubWorkspacesForSwitchRef.current[norm];
 
       const {nextTabs, nextActive} = restoreTabsFromSnapshot(snapForTarget);
 
@@ -260,7 +260,7 @@ export function useWorkspaceTodayHubSwitch(
       setInboxEditorYamlLeadingBeforeFrontmatter,
       setInboxYamlFrontmatterInner,
       setTodayHubWorkspacesForSave,
-      todayHubWorkspacesForSaveRef,
+      legacyTodayHubWorkspacesForSwitchRef,
       vaultMarkdownRefsRef,
     ],
   );

@@ -15,7 +15,8 @@ export type ProjectWorkspaceRuntimeToModelArgs = {
   activeTodayHubUri: string | null;
   editorWorkspaceTabs: readonly EditorWorkspaceTab[];
   activeEditorTabId: string | null;
-  todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>;
+  /** Inactive-hub tab snapshots; active hub uses live `editorWorkspaceTabs`. */
+  legacyHubWorkspaceSnapshots: Record<string, TodayHubWorkspaceSnapshot>;
   homeStatesByHub: Record<string, WorkspaceHomeState>;
   hubUris: readonly string[];
 };
@@ -108,7 +109,7 @@ export function projectWorkspaceRuntimeToModel(
     : hubs[0] ?? null;
 
   for (const hub of hubs) {
-    const snap = args.todayHubWorkspacesForSave[hub];
+    const snap = args.legacyHubWorkspaceSnapshots[hub];
     const isActiveHub = activeHub === hub;
     const tabs = isActiveHub
       ? tabEntriesFromRuntimeTabs(args.editorWorkspaceTabs)

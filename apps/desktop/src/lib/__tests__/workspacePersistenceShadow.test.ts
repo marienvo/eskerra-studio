@@ -305,7 +305,7 @@ describe('describeWorkspacePersistenceDivergence', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [runtimeTab('t1', NOTE_A)],
       activeEditorTabId: 't1',
-      todayHubWorkspacesForSave: hubWorkspaces,
+      legacyHubWorkspaceSnapshots: hubWorkspaces,
       homeStatesByHub,
       hubUris: [HUB_A, HUB_B],
     });
@@ -330,7 +330,7 @@ describe('describeWorkspacePersistenceDivergence', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [runtimeTab('t1', NOTE_A)],
       activeEditorTabId: 't1',
-      todayHubWorkspacesForSave: hubWorkspaces,
+      legacyHubWorkspaceSnapshots: hubWorkspaces,
       homeStatesByHub,
       hubUris: [HUB_A], // HUB_B pruned
     });
@@ -358,7 +358,7 @@ describe('model-derived persistence correctness', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [runtimeTab('a1', NOTE_A)],
       activeEditorTabId: 'a1',
-      todayHubWorkspacesForSave: hubWorkspaces,
+      legacyHubWorkspaceSnapshots: hubWorkspaces,
       homeStatesByHub: {
         [HUB_A]: {history: {entries: [HUB_A], index: 0}},
         [HUB_B]: {history: {entries: [HUB_B], index: 0}},
@@ -376,7 +376,7 @@ describe('model-derived persistence correctness', () => {
   });
 
   it('includes active workspace tabs immediately after tab mutations (no microtask lag)', () => {
-    // The runtime snapshot (todayHubWorkspacesForSave) is stale for the active hub —
+    // The legacy hub snapshot map is stale for the active hub —
     // simulating the microtask lag window where the snapshot has not yet been updated.
     const staleSnapshot: Record<string, TodayHubWorkspaceSnapshot> = {
       [HUB_A]: snap([{id: 'old-tab', uri: NOTE_A}], 'old-tab', [HUB_A], 0),
@@ -386,7 +386,7 @@ describe('model-derived persistence correctness', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [runtimeTab('new-tab', NOTE_B)], // current, ahead of snapshot
       activeEditorTabId: 'new-tab',
-      todayHubWorkspacesForSave: staleSnapshot, // stale
+      legacyHubWorkspaceSnapshots: staleSnapshot, // stale
       homeStatesByHub: {},
       hubUris: [HUB_A],
     });
@@ -408,7 +408,7 @@ describe('model-derived persistence correctness', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [],
       activeEditorTabId: null,
-      todayHubWorkspacesForSave: hubWorkspaces,
+      legacyHubWorkspaceSnapshots: hubWorkspaces,
       homeStatesByHub: {
         [HUB_A]: {history: {entries: [HUB_A, NOTE_A], index: 1}},
         [HUB_B]: {history: {entries: [HUB_B, NOTE_B, NOTE_C], index: 2}},
@@ -442,7 +442,7 @@ describe('model-derived persistence correctness', () => {
         runtimeTab('tab-new-2', NOTE_C),
       ],
       activeEditorTabId: 'tab-new-2',
-      todayHubWorkspacesForSave: staleSnapshot,
+      legacyHubWorkspaceSnapshots: staleSnapshot,
       homeStatesByHub: {[HUB_A]: {history: {entries: [HUB_A], index: 0}}},
       hubUris: [HUB_A],
     });
@@ -510,7 +510,7 @@ describe('workspacePersistenceShadow integration', () => {
       activeTodayHubUri: HUB_B,
       editorWorkspaceTabs: runtimeTabsB,
       activeEditorTabId: 'b1',
-      todayHubWorkspacesForSave: hubWorkspaces,
+      legacyHubWorkspaceSnapshots: hubWorkspaces,
       homeStatesByHub,
       hubUris: [HUB_A, HUB_B],
     });
@@ -554,7 +554,7 @@ describe('workspacePersistenceShadow integration', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: restoredRuntimeTabs,
       activeEditorTabId: 't1',
-      todayHubWorkspacesForSave: persistedHubWorkspaces,
+      legacyHubWorkspaceSnapshots: persistedHubWorkspaces,
       homeStatesByHub: restoredHomeStates,
       hubUris: [HUB_A, HUB_B],
     });

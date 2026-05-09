@@ -85,7 +85,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
       expect(result.current.tabsController.activeEditorTabId).toBeNull();
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.editorWorkspaceTabs,
       ).toEqual([]);
     });
@@ -127,7 +127,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
       expect(result.current.tabsController.activeEditorTabId).toBeNull();
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.editorWorkspaceTabs,
       ).toEqual([]);
     });
@@ -166,7 +166,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     await waitFor(() => {
       expect(result.current.inboxShellRestored).toBe(true);
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A],
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A],
       ).toEqual(
         expect.objectContaining({
           editorWorkspaceTabs: [],
@@ -335,11 +335,11 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
         id: tabId,
       });
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.editorWorkspaceTabs,
       ).toEqual([{id: tabId, entries: [NOTE_A1], index: 0}]);
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.activeEditorTabId,
       ).toBe(tabId);
     });
@@ -351,7 +351,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     await waitFor(() => {
       expect(result.current.todayHubController.activeTodayHubUri).toBe(HUB_B);
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.editorWorkspaceTabs[0]?.entries,
       ).toEqual([NOTE_A1]);
     });
@@ -365,13 +365,13 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
         NOTE_B1,
       ]);
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_B]
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_B]
           ?.editorWorkspaceTabs[0]?.entries,
       ).toEqual([NOTE_B1]);
     });
 
     const persistedTodayHubWorkspaces = structuredClone(
-      result.current.todayHubController.todayHubWorkspacesForSave,
+      result.current.todayHubController.persistenceTodayHubWorkspaces,
     );
     expect(persistedTodayHubWorkspaces[HUB_A]?.editorWorkspaceTabs[0]?.entries).toEqual([
       NOTE_A1,
@@ -412,7 +412,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
         expect.arrayContaining([HUB_A, HUB_B]),
       );
       expect(
-        restarted.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+        restarted.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.editorWorkspaceTabs[0]?.entries,
       ).toEqual([NOTE_A1]);
     });
@@ -612,7 +612,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
       expect(result.current.tabsController.activeEditorTabId).toBeNull();
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.editorWorkspaceTabs,
       ).toEqual([]);
     });
@@ -672,7 +672,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.selectionController.selectedUri).toBe(HOME_SUB);
       expect(result.current.tabsController.activeEditorTabId).toBeNull();
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory,
       ).toEqual({
         entries: [HUB_A, HOME_SUB],
         index: 1,
@@ -967,7 +967,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     await waitFor(() => {
       expect(result.current.selectionController.selectedUri).toBe(HUB_A);
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory,
       ).toEqual({
         entries: [HUB_A, HOME_SUB],
         index: 0,
@@ -1029,7 +1029,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
 
     await waitFor(() => {
       expect(result.current.selectionController.selectedUri).toBe(HUB_A);
-      expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual({
+      expect(result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory).toEqual({
         entries: [HUB_A],
         index: 0,
       });
@@ -1089,7 +1089,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
 
     await waitFor(() => {
       expect(result.current.selectionController.selectedUri).toBe(NEW_HOME_SUB);
-      expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual({
+      expect(result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory).toEqual({
         entries: [HUB_A, NEW_HOME_SUB],
         index: 1,
       });
@@ -1133,14 +1133,14 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.inboxShellRestored).toBe(true);
     });
 
-    const beforeHome = result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory;
+    const beforeHome = result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory;
 
     await act(async () => {
       await result.current.todayHubController.switchTodayHubWorkspace(HUB_A);
     });
 
     expect(result.current.selectionController.selectedUri).toBe(HUB_A);
-    expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual(
+    expect(result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory).toEqual(
       beforeHome,
     );
 
@@ -1183,7 +1183,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.inboxShellRestored).toBe(true);
       expect(result.current.selectionController.selectedUri).toBe(NOTE);
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory,
       ).toEqual({
         entries: [HUB_A, NOTE],
         index: 1,
@@ -1236,7 +1236,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
         'tab-x',
       ]);
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory,
       ).toEqual({
         entries: [HUB_A, NOTE],
         index: 1,
@@ -1293,10 +1293,10 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     );
 
     await waitFor(() => {
-      expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual(
+      expect(result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory).toEqual(
         snapshotA.homeHistory,
       );
-      expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_B]?.homeHistory).toEqual(
+      expect(result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_B]?.homeHistory).toEqual(
         snapshotB.homeHistory,
       );
     });
@@ -1363,10 +1363,10 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
       kind: 'home',
     });
-    expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual(
+    expect(result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory).toEqual(
       snapshotA.homeHistory,
     );
-    expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_B]?.homeHistory).toEqual(
+    expect(result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_B]?.homeHistory).toEqual(
       snapshotB.homeHistory,
     );
     expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.homeHistory).toEqual(
@@ -1406,7 +1406,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     await waitFor(() => {
       expect(result.current.tabsController.editorHistoryCanGoBack).toBe(false);
       expect(
-        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+        result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]?.homeHistory,
       ).toEqual({
         entries: [HUB_A],
         index: 0,

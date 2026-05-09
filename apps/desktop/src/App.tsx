@@ -260,7 +260,7 @@ type UseAppDebouncedPersistMainWindowUiArgs = {
   editorWorkspaceTabs: readonly EditorWorkspaceTab[];
   activeEditorTabId: string | null;
   activeTodayHubUri: string | null;
-  todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot> | null;
+  persistenceTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot> | null;
 };
 
 function useAppDebouncedPersistMainWindowUi({
@@ -275,7 +275,7 @@ function useAppDebouncedPersistMainWindowUi({
   editorWorkspaceTabs,
   activeEditorTabId,
   activeTodayHubUri,
-  todayHubWorkspacesForSave,
+  persistenceTodayHubWorkspaces,
 }: UseAppDebouncedPersistMainWindowUiArgs) {
   useEffect(() => {
     if (!vaultRoot || !inboxShellRestored) {
@@ -291,8 +291,8 @@ function useAppDebouncedPersistMainWindowUi({
       activeEditorTabId,
       activeTodayHubUri,
     };
-    if (todayHubWorkspacesForSave != null) {
-      inbox.todayHubWorkspaces = todayHubWorkspacesForSave;
+    if (persistenceTodayHubWorkspaces != null) {
+      inbox.todayHubWorkspaces = persistenceTodayHubWorkspaces;
     }
     const payload: StoredMainWindowUi = {
       vaultRoot,
@@ -319,7 +319,7 @@ function useAppDebouncedPersistMainWindowUi({
     editorWorkspaceTabs,
     activeEditorTabId,
     activeTodayHubUri,
-    todayHubWorkspacesForSave,
+    persistenceTodayHubWorkspaces,
     inboxShellRestored,
   ]);
 }
@@ -448,7 +448,7 @@ export default function App() {
     todayHubSelectorItems,
     activeTodayHubUri,
     persistenceActiveTodayHubUri,
-    todayHubWorkspacesForSave,
+    persistenceTodayHubWorkspaces,
     switchTodayHubWorkspace,
     focusActiveTodayHubNote,
     workspaceSelectorSubLabel,
@@ -622,7 +622,7 @@ export default function App() {
     editorWorkspaceTabs: workspaceTabsController.editorWorkspaceTabs,
     activeEditorTabId: workspaceTabsController.activeEditorTabId,
     activeTodayHubUri: persistenceActiveTodayHubUri,
-    todayHubWorkspacesForSave,
+    persistenceTodayHubWorkspaces,
   });
 
   useAppStartupSplashPhases({

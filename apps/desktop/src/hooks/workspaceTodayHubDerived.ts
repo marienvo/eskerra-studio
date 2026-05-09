@@ -75,11 +75,11 @@ export function deriveTodayHubSelectorItems(
 /** Hub workspace snapshots filtered to URIs that still exist as vault `Today.md` refs. */
 export function deriveTodayHubWorkspacesPersistFiltered(
   vaultMarkdownRefs: readonly VaultMarkdownRef[],
-  todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>,
+  legacyTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>,
 ): Record<string, TodayHubWorkspaceSnapshot> {
   const hubs = new Set(sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs));
   const out: Record<string, TodayHubWorkspaceSnapshot> = {};
-  for (const [k, v] of Object.entries(todayHubWorkspacesForSave)) {
+  for (const [k, v] of Object.entries(legacyTodayHubWorkspaces)) {
     if (hubs.has(k)) {
       out[k] = v;
     }

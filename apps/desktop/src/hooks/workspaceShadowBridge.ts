@@ -136,12 +136,12 @@ export function createWorkspaceShadowMirrorCallbacks(
 }
 
 export function resolveTodayHubWorkspacesForProjection(args: {
-  todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>;
+  legacyTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
   restoredTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot> | null | undefined;
 }): Record<string, TodayHubWorkspaceSnapshot> {
-  return Object.keys(args.todayHubWorkspacesForSave).length === 0
-    ? args.restoredTodayHubWorkspaces ?? args.todayHubWorkspacesForSave
-    : args.todayHubWorkspacesForSave;
+  return Object.keys(args.legacyTodayHubWorkspaces).length === 0
+    ? args.restoredTodayHubWorkspaces ?? args.legacyTodayHubWorkspaces
+    : args.legacyTodayHubWorkspaces;
 }
 
 export function computeProjectionHubUris(args: {

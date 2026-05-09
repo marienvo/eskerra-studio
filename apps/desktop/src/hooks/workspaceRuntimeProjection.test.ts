@@ -20,7 +20,7 @@ describe('projectWorkspaceRuntimeToModel', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [runtimeTab('tab-a', [NOTE_A])],
       activeEditorTabId: null,
-      todayHubWorkspacesForSave: {},
+      legacyHubWorkspaceSnapshots: {},
       homeStatesByHub: {},
       hubUris: [HUB_A],
     });
@@ -35,7 +35,7 @@ describe('projectWorkspaceRuntimeToModel', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [runtimeTab('tab-a', [NOTE_A])],
       activeEditorTabId: 'tab-a',
-      todayHubWorkspacesForSave: {},
+      legacyHubWorkspaceSnapshots: {},
       homeStatesByHub: {},
       hubUris: [HUB_A],
     });
@@ -53,7 +53,7 @@ describe('projectWorkspaceRuntimeToModel', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [runtimeTab('tab-a', [NOTE_A])],
       activeEditorTabId: 'tab-a',
-      todayHubWorkspacesForSave: {[HUB_B]: snapshotB},
+      legacyHubWorkspaceSnapshots: {[HUB_B]: snapshotB},
       homeStatesByHub: {},
       hubUris: [HUB_A, HUB_B],
     });
@@ -78,7 +78,7 @@ describe('projectWorkspaceRuntimeToModel', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [],
       activeEditorTabId: null,
-      todayHubWorkspacesForSave: {[HUB_A]: snapshotA},
+      legacyHubWorkspaceSnapshots: {[HUB_A]: snapshotA},
       homeStatesByHub,
       hubUris: [HUB_A],
     });
@@ -94,7 +94,7 @@ describe('projectWorkspaceRuntimeToModel', () => {
       activeTodayHubUri: HUB_A,
       editorWorkspaceTabs: [],
       activeEditorTabId: null,
-      todayHubWorkspacesForSave: {},
+      legacyHubWorkspaceSnapshots: {},
       homeStatesByHub: {},
       hubUris: [HUB_A, HUB_B],
     });
