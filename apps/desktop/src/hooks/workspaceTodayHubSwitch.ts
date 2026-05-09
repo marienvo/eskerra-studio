@@ -51,8 +51,10 @@ export type UseWorkspaceTodayHubSwitchArgs = {
   };
   callbacks: {
     selectNote: (uri: string) => void;
-    selectHomeCurrentNote: (todayNoteUri: string) => void;
+    selectHomeCurrentNote: (todayNoteUri: string) => void | Promise<void>;
     activateOpenTab: (tabId: string) => void;
+    /** Main workspace selector control (title bar): branch per active surface / home index. */
+    activateWorkspaceHomeSelector: () => void;
   };
 };
 
@@ -64,7 +66,12 @@ export type UseWorkspaceTodayHubSwitchResult = {
 export function useWorkspaceTodayHubSwitch(
   args: UseWorkspaceTodayHubSwitchArgs,
 ): UseWorkspaceTodayHubSwitchResult {
-  const {selectNote, selectHomeCurrentNote, activateOpenTab} = args.callbacks;
+  const {
+    selectNote,
+    selectHomeCurrentNote,
+    activateOpenTab,
+    activateWorkspaceHomeSelector,
+  } = args.callbacks;
 
   const {
     vaultMarkdownRefsRef,
@@ -186,11 +193,11 @@ export function useWorkspaceTodayHubSwitch(
       // Do not `selectNote(norm)` when B has restored tabs: that would navigate the
       // active tab to B's Today and overwrite e.g. a tab that was still showing A's hub note.
       if (nextTabs.length === 0) {
-        selectHomeCurrentNote(norm);
+        await selectHomeCurrentNote(norm);
       } else if (nextActive) {
         activateOpenTab(nextActive);
       } else {
-        selectHomeCurrentNote(norm);
+        await selectHomeCurrentNote(norm);
       }
     },
     [
@@ -220,11 +227,8 @@ export function useWorkspaceTodayHubSwitch(
   );
 
   const focusActiveTodayHubNote = useCallback(() => {
-    const u = activeTodayHubUriRef.current;
-    if (u) {
-      selectNote(u);
-    }
-  }, [activeTodayHubUriRef, selectNote]);
+    activateWorkspaceHomeSelector();
+  }, [activateWorkspaceHomeSelector]);
 
   return {switchTodayHubWorkspace, focusActiveTodayHubNote};
 }

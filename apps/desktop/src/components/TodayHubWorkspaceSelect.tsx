@@ -16,8 +16,10 @@ type TodayHubWorkspaceSelectProps = {
   mainShowsActiveTabPill?: boolean;
   onMainActivate: () => void;
   onPickHub: (todayNoteUri: string) => void;
-  /** Middle-click / aux click: open hub note in a new editor tab. */
+  /** Dropdown: middle-click opens that hub Today in a new editor tab. */
   onOpenHubInNewTab: (todayNoteUri: string) => void;
+  /** Main button: middle-click opens workspace Home current URI as a background tab. */
+  onOpenMainWorkspaceInNewTab: () => void;
 };
 
 const HUB_WORKSPACE_ICON_DIM = {width: 15, height: 15} as const;
@@ -31,6 +33,7 @@ export function TodayHubWorkspaceSelect({
   onMainActivate,
   onPickHub,
   onOpenHubInNewTab,
+  onOpenMainWorkspaceInNewTab,
 }: TodayHubWorkspaceSelectProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -81,7 +84,7 @@ export function TodayHubWorkspaceSelect({
         onAuxClick={e => {
           if (e.button === 1) {
             e.preventDefault();
-            onOpenHubInNewTab(activeTodayNoteUri);
+            onOpenMainWorkspaceInNewTab();
           }
         }}
       >

@@ -119,7 +119,8 @@ import {pickDefaultActiveTodayHubUri} from '../lib/todayHubWorkspaceRestore';
 import {
   selectNoteActiveHubTodayOpen,
   isOnWorkspaceHome,
-  workspaceSelectShowsActiveTabPillState,
+  workspaceSelectorMainShowsActiveTabPill,
+  workspaceSelectorSubLabelText,
 } from '../lib/workspaceShellToday';
 import {
   createWorkspaceHomeState,
@@ -629,13 +630,33 @@ export function useMainWindowWorkspace(options: {
 
   const workspaceSelectShowsActiveTabPill = useMemo(
     () =>
-      workspaceSelectShowsActiveTabPillState({
+      workspaceSelectorMainShowsActiveTabPill({
         composingNewEntry,
         activeTodayHubUri,
-        selectedUri,
-        editorWorkspaceTabs,
+        activeEditorTabId,
+        homeState:
+          activeTodayHubUri != null
+            ? homeStatesByHub[activeTodayHubUri]
+            : undefined,
       }),
-    [composingNewEntry, activeTodayHubUri, selectedUri, editorWorkspaceTabs],
+    [
+      composingNewEntry,
+      activeTodayHubUri,
+      activeEditorTabId,
+      homeStatesByHub,
+    ],
+  );
+
+  const workspaceSelectorSubLabel = useMemo(
+    () =>
+      workspaceSelectorSubLabelText({
+        activeTodayHubUri,
+        homeState:
+          activeTodayHubUri != null
+            ? homeStatesByHub[activeTodayHubUri]
+            : undefined,
+      }),
+    [activeTodayHubUri, homeStatesByHub],
   );
 
   useEffect(() => {
@@ -1276,6 +1297,64 @@ export function useMainWindowWorkspace(options: {
     ],
   );
 
+  const selectHomeCurrentNote = useCallback(
+    async (todayNoteUri: string) => {
+      const homeState =
+        homeStatesByHubRef.current[todayNoteUri] ?? createWorkspaceHomeState(todayNoteUri);
+      const uri = homeCurrentUri(homeState) ?? todayNoteUri;
+      await openMarkdownInEditor(uri, {home: true, skipHistory: true});
+    },
+    [openMarkdownInEditor],
+  );
+
+  const activateWorkspaceHomeSelector = useCallback(() => {
+    const hub = activeTodayHubUriRef.current;
+    if (!hub) {
+      return;
+    }
+    if (activeEditorTabIdRef.current != null) {
+      void selectHomeCurrentNote(hub);
+      return;
+    }
+    const home =
+      homeStatesByHubRef.current[hub] ?? createWorkspaceHomeState(hub);
+    if (home.history.index <= 0) {
+      if (selectedUriRef.current == null) {
+        void selectHomeCurrentNote(hub);
+      }
+      return;
+    }
+    const hubTodayUri = home.history.entries[0];
+    if (hubTodayUri == null) {
+      return;
+    }
+    const resetHome: WorkspaceHomeState = {
+      ...home,
+      history: {...home.history, index: 0},
+    };
+    setHomeStateForHub(hub, resetHome);
+    void openMarkdownInEditor(hubTodayUri, {home: true, skipHistory: true});
+  }, [
+    openMarkdownInEditor,
+    selectHomeCurrentNote,
+    setHomeStateForHub,
+  ]);
+
+  const openWorkspaceHomeCurrentInBackgroundTab = useCallback(() => {
+    const hub = activeTodayHubUriRef.current;
+    if (!hub) {
+      return;
+    }
+    const home =
+      homeStatesByHubRef.current[hub] ?? createWorkspaceHomeState(hub);
+    const uri = homeCurrentUri(home) ?? hub;
+    void openMarkdownInEditor(uri, {
+      newTab: true,
+      activateNewTab: false,
+      insertAfterActive: true,
+    });
+  }, [openMarkdownInEditor]);
+
   const closeMergeView = useCallback(() => {
     setMergeView(null);
   }, []);
@@ -1552,7 +1631,7 @@ export function useMainWindowWorkspace(options: {
       }
       const shellHub = activeTodayHubUriRef.current;
       if (shellHub) {
-        await openMarkdownInEditor(shellHub, {home: true});
+        await selectHomeCurrentNote(shellHub);
         return;
       }
       if (!nextTabId) {
@@ -1561,7 +1640,7 @@ export function useMainWindowWorkspace(options: {
       }
       clearInboxSelection();
     },
-    [openMarkdownInEditor, clearInboxSelection],
+    [openMarkdownInEditor, clearInboxSelection, selectHomeCurrentNote],
   );
 
   const closeEditorTab = useCallback(
@@ -1656,7 +1735,7 @@ export function useMainWindowWorkspace(options: {
       setActiveEditorTabId(null);
       const shellHubAll = activeTodayHubUriRef.current;
       if (shellHubAll) {
-        await openMarkdownInEditor(shellHubAll, {home: true});
+        await selectHomeCurrentNote(shellHubAll);
         return;
       }
       selectedUriRef.current = null;
@@ -1674,7 +1753,7 @@ export function useMainWindowWorkspace(options: {
       setEditorBody('');
       setInboxEditorResetNonce(n => n + 1);
     })();
-  }, [bumpEditorClosedStack, openMarkdownInEditor]);
+  }, [bumpEditorClosedStack, openMarkdownInEditor, selectHomeCurrentNote]);
 
   const reopenLastClosedEditorTab = useCallback(() => {
     void (async () => {
@@ -2136,12 +2215,12 @@ export function useMainWindowWorkspace(options: {
       }
       const shellHub = activeTodayHubUriRef.current;
       if (shellHub && shellHub !== closedNorm) {
-        await openMarkdownInEditor(shellHub, {home: true});
+        await selectHomeCurrentNote(shellHub);
         return;
       }
       clearInboxSelection();
     },
-    [openMarkdownInEditor, clearInboxSelection],
+    [openMarkdownInEditor, clearInboxSelection, selectHomeCurrentNote],
   );
 
   const selectNote = useCallback(
@@ -2194,16 +2273,6 @@ export function useMainWindowWorkspace(options: {
     [activateOpenTab, openMarkdownInEditor],
   );
 
-  const selectHomeCurrentNote = useCallback(
-    (todayNoteUri: string) => {
-      const homeState =
-        homeStatesByHubRef.current[todayNoteUri] ?? createWorkspaceHomeState(todayNoteUri);
-      const uri = homeCurrentUri(homeState) ?? todayNoteUri;
-      void openMarkdownInEditor(uri, {home: true, skipHistory: true});
-    },
-    [openMarkdownInEditor],
-  );
-
   const {switchTodayHubWorkspace, focusActiveTodayHubNote} =
     useWorkspaceTodayHubSwitch({
       state: {todayHubWorkspacesForSave},
@@ -2229,7 +2298,12 @@ export function useMainWindowWorkspace(options: {
         setActiveEditorTabId,
         setActiveTodayHubUri,
       },
-      callbacks: {selectNote, selectHomeCurrentNote, activateOpenTab},
+      callbacks: {
+        selectNote,
+        selectHomeCurrentNote,
+        activateOpenTab,
+        activateWorkspaceHomeSelector,
+      },
     });
 
   const submitNewEntry = useCallback(async () => {
@@ -3421,6 +3495,8 @@ export function useMainWindowWorkspace(options: {
       todayHubWorkspacesForSave: todayHubWorkspacesPersistFiltered,
       switchTodayHubWorkspace,
       focusActiveTodayHubNote,
+      workspaceSelectorSubLabel,
+      openWorkspaceHomeCurrentInBackgroundTab,
       workspaceSelectShowsActiveTabPill,
     },
     frontmatterController: {

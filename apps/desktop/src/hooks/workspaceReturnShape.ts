@@ -168,6 +168,8 @@ export type WorkspaceTodayHubController = {
   todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>;
   switchTodayHubWorkspace: (todayNoteUri: string) => Promise<void>;
   focusActiveTodayHubNote: () => void;
+  workspaceSelectorSubLabel?: string;
+  openWorkspaceHomeCurrentInBackgroundTab: () => void;
   workspaceSelectShowsActiveTabPill: boolean;
 };
 

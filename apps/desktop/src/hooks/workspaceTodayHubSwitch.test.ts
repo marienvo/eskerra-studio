@@ -48,6 +48,7 @@ function makeArgs(overrides: {
   hubWorkspaces?: StubWorkspaces;
   selectNote?: ReturnType<typeof vi.fn>;
   selectHomeCurrentNote?: ReturnType<typeof vi.fn>;
+  activateWorkspaceHomeSelector?: ReturnType<typeof vi.fn>;
   activateOpenTab?: ReturnType<typeof vi.fn>;
   setActiveTodayHubUri?: ReturnType<typeof vi.fn>;
   setEditorWorkspaceTabs?: ReturnType<typeof vi.fn>;
@@ -60,6 +61,7 @@ function makeArgs(overrides: {
   mocks: {
     selectNote: ReturnType<typeof vi.fn>;
     selectHomeCurrentNote: ReturnType<typeof vi.fn>;
+    activateWorkspaceHomeSelector: ReturnType<typeof vi.fn>;
     activateOpenTab: ReturnType<typeof vi.fn>;
     setActiveTodayHubUri: ReturnType<typeof vi.fn>;
     setEditorWorkspaceTabs: ReturnType<typeof vi.fn>;
@@ -76,6 +78,8 @@ function makeArgs(overrides: {
 
   const selectNote = overrides.selectNote ?? vi.fn();
   const selectHomeCurrentNote = overrides.selectHomeCurrentNote ?? vi.fn();
+  const activateWorkspaceHomeSelector =
+    overrides.activateWorkspaceHomeSelector ?? vi.fn();
   const activateOpenTab = overrides.activateOpenTab ?? vi.fn();
   const setActiveTodayHubUri = overrides.setActiveTodayHubUri ?? vi.fn();
   const setEditorWorkspaceTabs = overrides.setEditorWorkspaceTabs ?? vi.fn();
@@ -114,7 +118,12 @@ function makeArgs(overrides: {
       setActiveEditorTabId,
       setActiveTodayHubUri,
     },
-    callbacks: {selectNote, selectHomeCurrentNote, activateOpenTab},
+    callbacks: {
+      selectNote,
+      selectHomeCurrentNote,
+      activateOpenTab,
+      activateWorkspaceHomeSelector,
+    },
   };
 
   return {
@@ -123,6 +132,7 @@ function makeArgs(overrides: {
     mocks: {
       selectNote,
       selectHomeCurrentNote,
+      activateWorkspaceHomeSelector,
       activateOpenTab,
       setActiveTodayHubUri,
       setEditorWorkspaceTabs,
@@ -368,18 +378,7 @@ describe('switchTodayHubWorkspace', () => {
 // ---------------------------------------------------------------------------
 
 describe('focusActiveTodayHubNote', () => {
-  it('no-op when activeTodayHubUriRef is null: does not call selectNote', () => {
-    const {args, mocks} = makeArgs({activeTodayHubUri: null});
-    const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
-
-    act(() => {
-      result.current.focusActiveTodayHubNote();
-    });
-
-    expect(mocks.selectNote).not.toHaveBeenCalled();
-  });
-
-  it('calls selectNote with the active hub URI', () => {
+  it('delegates to activateWorkspaceHomeSelector (workspace title-bar main control)', () => {
     const {args, mocks} = makeArgs({activeTodayHubUri: HUB_A});
     const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
 
@@ -387,7 +386,18 @@ describe('focusActiveTodayHubNote', () => {
       result.current.focusActiveTodayHubNote();
     });
 
-    expect(mocks.selectNote).toHaveBeenCalledOnce();
-    expect(mocks.selectNote).toHaveBeenCalledWith(HUB_A);
+    expect(mocks.activateWorkspaceHomeSelector).toHaveBeenCalledTimes(1);
+    expect(mocks.selectNote).not.toHaveBeenCalled();
+  });
+
+  it('still invokes activateWorkspaceHomeSelector when hub ref is null (parent decides no-op)', () => {
+    const {args, mocks} = makeArgs({activeTodayHubUri: null});
+    const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
+
+    act(() => {
+      result.current.focusActiveTodayHubNote();
+    });
+
+    expect(mocks.activateWorkspaceHomeSelector).toHaveBeenCalledTimes(1);
   });
 });

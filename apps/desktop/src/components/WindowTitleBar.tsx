@@ -19,7 +19,10 @@ export type WindowTitleBarTodayHubSelect =
       mainShowsActiveTabPill?: boolean;
       onMainActivate: () => void;
       onPickHub: (todayNoteUri: string) => void;
+      /** Dropdown rows: middle-click opens that hub in a new foreground tab. */
       onOpenHubInNewTab: (todayNoteUri: string) => void;
+      /** Main workspace button: middle-click opens Home current page as a background tab. */
+      onOpenMainWorkspaceInNewTab: () => void;
     }
   | null
   | undefined;
@@ -62,6 +65,7 @@ export function WindowTitleBar({
             onMainActivate={todayHubSelect.onMainActivate}
             onPickHub={todayHubSelect.onPickHub}
             onOpenHubInNewTab={todayHubSelect.onOpenHubInNewTab}
+            onOpenMainWorkspaceInNewTab={todayHubSelect.onOpenMainWorkspaceInNewTab}
           />
         ) : null}
       </div>

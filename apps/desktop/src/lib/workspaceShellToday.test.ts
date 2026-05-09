@@ -5,8 +5,11 @@ import {
   selectNoteActiveHubTodayOpen,
   shouldOpenActiveHubTodayAsHome,
   workspaceSelectShowsActiveTabPillState,
+  workspaceSelectorMainShowsActiveTabPill,
+  workspaceSelectorSubLabelText,
 } from './workspaceShellToday';
 import {createEditorWorkspaceTab, tabCurrentUri} from './editorWorkspaceTabs';
+import {createWorkspaceHomeState} from './workspaceHomeNavigation';
 
 describe('selectNoteActiveHubTodayOpen', () => {
   it('returns home for the active hub Today regardless of tab count', () => {
@@ -77,6 +80,67 @@ describe('shouldOpenActiveHubTodayAsHome', () => {
         activeTodayHubUri: null,
         uriIsTodayMarkdownFile: true,
         editorWorkspaceTabCount: 0,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('workspaceSelectorSubLabelText', () => {
+  it('is undefined when Home history is at hub Today', () => {
+    const hub = '/vault/Daily/Today.md';
+    expect(
+      workspaceSelectorSubLabelText({
+        activeTodayHubUri: hub,
+        homeState: createWorkspaceHomeState(hub),
+      }),
+    ).toBeUndefined();
+  });
+
+  it('uses home current note title when history index > 0 (persists across tab surface)', () => {
+    const hub = '/vault/Daily/Today.md';
+    const sub = '/vault/Inbox/Nested.md';
+    expect(
+      workspaceSelectorSubLabelText({
+        activeTodayHubUri: hub,
+        homeState: {history: {entries: [hub, sub], index: 1}},
+      }),
+    ).toBe('Nested');
+  });
+});
+
+describe('workspaceSelectorMainShowsActiveTabPill', () => {
+  it('is true only on Home surface when history index > 0', () => {
+    const hub = '/vault/Daily/Today.md';
+    expect(
+      workspaceSelectorMainShowsActiveTabPill({
+        composingNewEntry: false,
+        activeTodayHubUri: hub,
+        activeEditorTabId: null,
+        homeState: {history: {entries: [hub, '/vault/Other.md'], index: 1}},
+      }),
+    ).toBe(true);
+  });
+
+  it('is false when an editor tab is active, even if Home has a sub-page', () => {
+    const hub = '/vault/Daily/Today.md';
+    expect(
+      workspaceSelectorMainShowsActiveTabPill({
+        composingNewEntry: false,
+        activeTodayHubUri: hub,
+        activeEditorTabId: 'tab-1',
+        homeState: {history: {entries: [hub, '/vault/Other.md'], index: 1}},
+      }),
+    ).toBe(false);
+  });
+
+  it('is false on Home root (index 0)', () => {
+    const hub = '/vault/Daily/Today.md';
+    expect(
+      workspaceSelectorMainShowsActiveTabPill({
+        composingNewEntry: false,
+        activeTodayHubUri: hub,
+        activeEditorTabId: null,
+        homeState: createWorkspaceHomeState(hub),
       }),
     ).toBe(false);
   });

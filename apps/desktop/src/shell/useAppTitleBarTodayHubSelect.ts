@@ -2,12 +2,6 @@ import {useMemo} from 'react';
 
 import type {WindowTitleBarTodayHubSelect} from '../components/WindowTitleBar';
 
-function noteTitleFromUri(uri: string): string {
-  const normalized = uri.replace(/\\/g, '/');
-  const fileName = normalized.slice(normalized.lastIndexOf('/') + 1);
-  return fileName.replace(/\.md$/i, '') || fileName || uri;
-}
-
 export function useAppTitleBarTodayHubSelect(
   vaultRoot: string | null,
   todayHubSelectorItems: ReadonlyArray<{
@@ -15,12 +9,12 @@ export function useAppTitleBarTodayHubSelect(
     label: string;
   }>,
   activeTodayHubUri: string | null,
-  selectedUri: string | null,
-  activeEditorTabId: string | null,
+  workspaceSelectorSubLabel: string | undefined,
   workspaceSelectShowsActiveTabPill: boolean,
   focusActiveTodayHubNote: () => void,
   switchTodayHubWorkspace: (uri: string) => void | Promise<void>,
   openTodayHubInNewTabAfterActive: (uri: string) => void,
+  openWorkspaceHomeCurrentInBackgroundTab: () => void,
 ): WindowTitleBarTodayHubSelect {
   return useMemo((): WindowTitleBarTodayHubSelect => {
     if (
@@ -33,33 +27,28 @@ export function useAppTitleBarTodayHubSelect(
     const activeLabel =
       todayHubSelectorItems.find(i => i.todayNoteUri === activeTodayHubUri)
         ?.label ?? 'Today';
-    const subLabel =
-      activeEditorTabId == null
-      && selectedUri != null
-      && selectedUri !== activeTodayHubUri
-        ? noteTitleFromUri(selectedUri)
-        : undefined;
     return {
       items: todayHubSelectorItems,
       activeTodayNoteUri: activeTodayHubUri,
       activeLabel,
-      subLabel,
+      subLabel: workspaceSelectorSubLabel,
       mainShowsActiveTabPill: workspaceSelectShowsActiveTabPill,
       onMainActivate: focusActiveTodayHubNote,
       onPickHub: (uri: string) => {
         void switchTodayHubWorkspace(uri);
       },
       onOpenHubInNewTab: openTodayHubInNewTabAfterActive,
+      onOpenMainWorkspaceInNewTab: openWorkspaceHomeCurrentInBackgroundTab,
     };
   }, [
     vaultRoot,
     todayHubSelectorItems,
     activeTodayHubUri,
-    selectedUri,
-    activeEditorTabId,
+    workspaceSelectorSubLabel,
     workspaceSelectShowsActiveTabPill,
     focusActiveTodayHubNote,
     switchTodayHubWorkspace,
     openTodayHubInNewTabAfterActive,
+    openWorkspaceHomeCurrentInBackgroundTab,
   ]);
 }

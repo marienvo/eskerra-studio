@@ -450,7 +450,9 @@ export default function App() {
     todayHubWorkspacesForSave,
     switchTodayHubWorkspace,
     focusActiveTodayHubNote,
+    workspaceSelectorSubLabel,
     workspaceSelectShowsActiveTabPill,
+    openWorkspaceHomeCurrentInBackgroundTab,
   } = workspaceTodayHubController;
 
   const openTodayHubInNewTabAfterActive = useCallback(
@@ -485,12 +487,12 @@ export default function App() {
     vaultRoot,
     todayHubSelectorItems,
     activeTodayHubUri,
-    selectedUri,
-    workspaceTabsController.activeEditorTabId,
+    workspaceSelectorSubLabel,
     workspaceSelectShowsActiveTabPill,
     focusActiveTodayHubNote,
     switchTodayHubWorkspace,
     openTodayHubInNewTabAfterActive,
+    openWorkspaceHomeCurrentInBackgroundTab,
   );
 
   const [vaultPaneVisible, setVaultPaneVisible] = useState(
