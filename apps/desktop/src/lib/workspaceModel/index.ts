@@ -41,3 +41,16 @@ export {
 } from './actions/tabs';
 export {ensureWorkspaceForHubsAction, selectWorkspaceAction} from './actions/workspace';
 export {remapPrefixAction, removeUrisAction} from './actions/external';
+
+export {
+  parseWorkspaceModelFromPersistence,
+  serializeWorkspaceModelToPersistence,
+  sortedNormalizedHubs,
+} from './persistence';
+export type {
+  ParseWorkspacePersistenceArgs,
+  PersistedEditorDocumentHistoryState,
+  PersistedStoredEditorWorkspaceTab,
+  SerializedWorkspacePersistence,
+  TodayHubWorkspaceSnapshotPersisted,
+} from './persistence';
