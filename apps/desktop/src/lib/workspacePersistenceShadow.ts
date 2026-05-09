@@ -141,6 +141,22 @@ export function diffIsForHub(diff: string, hub: string | null): boolean {
   return hub != null && diff.startsWith(`hub ${hub} `);
 }
 
+function isExtraModelHubPresenceDivergence(
+  diff: string,
+  modelHubKeys: ReadonlySet<string>,
+  legacyHubKeys: ReadonlySet<string>,
+): boolean {
+  if (!diff.includes('presence model=yes runtime=no')) {
+    return false;
+  }
+  for (const h of modelHubKeys) {
+    if (!legacyHubKeys.has(h) && diffIsForHub(diff, h)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function isKnownPersistenceTimingDivergence(
   args: PersistenceTimingDivergenceFilterArgs,
 ): boolean {
@@ -154,6 +170,9 @@ export function isKnownPersistenceTimingDivergence(
     legacyHubKeys,
     hasPendingProjectionHubs,
   } = args;
+  if (isExtraModelHubPresenceDivergence(diff, modelHubKeys, legacyHubKeys)) {
+    return true;
+  }
   if (hasPendingProjectionHubs && diff.includes('presence model=no runtime=yes')) {
     return true;
   }
@@ -176,7 +195,11 @@ export function isKnownPersistenceTimingDivergence(
   }
   const isTabTimingDiff =
     activeHubMatch
-    && (diff.includes('editorWorkspaceTabs') || diff.includes('activeEditorTabId'));
+    && (
+      diff.includes('editorWorkspaceTabs')
+      || diff.includes('activeEditorTabId')
+      || diff.includes('homeHistory')
+    );
   if (!isTabTimingDiff) {
     return false;
   }

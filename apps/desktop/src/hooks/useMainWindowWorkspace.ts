@@ -354,6 +354,12 @@ export function useMainWindowWorkspace(options: {
   const [activeTodayHubUri, setActiveTodayHubUri] = useState<string | null>(
     null,
   );
+  /**
+   * Per-hub workspace snapshots for inactive hubs (last switch-out / restore).
+   * Active-hub editor tabs are **not** mirrored here continuously; runtime `editorWorkspaceTabs`
+   * plus `projectWorkspaceRuntimeToModel` are authoritative for the active hub. Disk persistence
+   * uses model-derived payload (`serializeWorkspaceModelToPersistence`).
+   */
   const [todayHubWorkspacesForSave, setTodayHubWorkspacesForSave] = useState<
     Record<string, TodayHubWorkspaceSnapshot>
   >({});
@@ -732,19 +738,55 @@ export function useMainWindowWorkspace(options: {
     workspaceShadowModelRef,
   ]);
 
-  const legacyTodayHubWorkspacesPersistFiltered = useMemo(
-    () =>
-      mergeHomeHistoryIntoHubSnapshotsForPersist(
-        deriveTodayHubWorkspacesPersistFiltered(
-          vaultMarkdownRefs,
-          Object.keys(todayHubWorkspacesForSave).length === 0
-            ? restoredInboxState?.todayHubWorkspaces ?? todayHubWorkspacesForSave
-            : todayHubWorkspacesForSave,
-        ),
-        homeStatesByHub,
-      ),
-    [vaultMarkdownRefs, todayHubWorkspacesForSave, restoredInboxState, homeStatesByHub],
-  );
+  const legacyTodayHubWorkspacesPersistFiltered = useMemo(() => {
+    const rawMap =
+      Object.keys(todayHubWorkspacesForSave).length === 0
+        ? restoredInboxState?.todayHubWorkspaces ?? todayHubWorkspacesForSave
+        : todayHubWorkspacesForSave;
+    const filtered = deriveTodayHubWorkspacesPersistFiltered(
+      vaultMarkdownRefs,
+      rawMap,
+    );
+    const merged = mergeHomeHistoryIntoHubSnapshotsForPersist(
+      filtered,
+      homeStatesByHub,
+    );
+    if (activeTodayHubUri == null) {
+      return merged;
+    }
+    const hub = activeTodayHubUri;
+    const prior = merged[hub];
+    if (!prior) {
+      const home = homeStatesByHub[hub] ?? createWorkspaceHomeState(hub);
+      return {
+        ...merged,
+        [hub]: {
+          editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
+          activeEditorTabId,
+          homeHistory: {
+            entries: [...home.history.entries],
+            index: home.history.index,
+          },
+        },
+      };
+    }
+    return {
+      ...merged,
+      [hub]: {
+        ...prior,
+        editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
+        activeEditorTabId,
+      },
+    };
+  }, [
+    vaultMarkdownRefs,
+    todayHubWorkspacesForSave,
+    restoredInboxState,
+    homeStatesByHub,
+    activeTodayHubUri,
+    editorWorkspaceTabs,
+    activeEditorTabId,
+  ]);
   const todayHubWorkspacesForSwitch =
     Object.keys(todayHubWorkspacesForSave).length === 0
       ? restoredInboxState?.todayHubWorkspaces ?? todayHubWorkspacesForSave
@@ -3565,35 +3607,6 @@ export function useMainWindowWorkspace(options: {
     mirrorShadowActiveHub,
     switchTodayHubWorkspace,
     restoredInboxState,
-  ]);
-
-  useEffect(() => {
-    if (!activeTodayHubUri || !inboxShellRestored) {
-      return;
-    }
-    queueMicrotask(() => {
-      setTodayHubWorkspacesForSave(prev => {
-        const hub = activeTodayHubUri;
-        const home =
-          homeStatesByHubRef.current[hub] ?? createWorkspaceHomeState(hub);
-        return {
-          ...prev,
-          [hub]: {
-            editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
-            activeEditorTabId,
-            homeHistory: {
-              entries: [...home.history.entries],
-              index: home.history.index,
-            },
-          },
-        };
-      });
-    });
-  }, [
-    editorWorkspaceTabs,
-    activeEditorTabId,
-    activeTodayHubUri,
-    inboxShellRestored,
   ]);
 
   return {
