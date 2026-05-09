@@ -1,10 +1,16 @@
 import {act, waitFor} from '@testing-library/react';
 import {beforeEach, describe, expect, it} from 'vitest';
 
+import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+
 import {
   getDesktopMainWindowIntegrationMocks,
   mountHydratedMainWindowWorkspace,
 } from './useMainWindowWorkspace.integration.harness';
+
+const VAULT_ROOT = '/vault';
+const HUB_A = `${VAULT_ROOT}/A/Today.md`;
+const HUB_B = `${VAULT_ROOT}/B/Today.md`;
 
 describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
   beforeEach(() => {
@@ -45,6 +51,140 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
 
     expect(pluginStoreState.store.set).toHaveBeenCalledWith('vaultRoot', '/vault');
     expect(pluginStoreState.store.save).toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('restores active hub Home with zero tabs without materializing a Today tab', async () => {
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`],
+        files: {
+          [HUB_A]: 'today\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+      expect(result.current.selectionController.selectedUri).toBe(HUB_A);
+      expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+          ?.editorWorkspaceTabs,
+      ).toEqual([]);
+    });
+
+    unmount();
+  });
+
+  it('drops restored echo tab whose current URI is the hub Today URI', async () => {
+    const echoSnapshot: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [{id: 'echo-tab', entries: [HUB_A], index: 0}],
+      activeEditorTabId: 'echo-tab',
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`],
+        files: {
+          [HUB_A]: 'today\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: echoSnapshot,
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+      expect(result.current.selectionController.selectedUri).toBe(HUB_A);
+      expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+          ?.editorWorkspaceTabs,
+      ).toEqual([]);
+    });
+
+    unmount();
+  });
+
+  it('restores another hub tabs when switching immediately after hydrate', async () => {
+    const snapshotA: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [
+        {id: 'tab-a1', entries: [`${VAULT_ROOT}/Inbox/A.md`], index: 0},
+      ],
+      activeEditorTabId: 'tab-a1',
+    };
+    const snapshotB: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [
+        {id: 'tab-b1', entries: [`${VAULT_ROOT}/Inbox/B.md`], index: 0},
+      ],
+      activeEditorTabId: 'tab-b1',
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/B`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today a\n',
+          [HUB_B]: 'today b\n',
+          [`${VAULT_ROOT}/Inbox/A.md`]: 'a\n',
+          [`${VAULT_ROOT}/Inbox/B.md`]: 'b\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: `${VAULT_ROOT}/Inbox/B.md`,
+          editorWorkspaceTabs: snapshotB.editorWorkspaceTabs,
+          activeEditorTabId: snapshotB.activeEditorTabId,
+          activeTodayHubUri: HUB_B,
+          todayHubWorkspaces: {
+            [HUB_A]: snapshotA,
+            [HUB_B]: snapshotB,
+          },
+        },
+      },
+    );
+
+    await act(async () => {
+      await result.current.todayHubController.switchTodayHubWorkspace(HUB_A);
+    });
+
+    await waitFor(() => {
+      expect(result.current.todayHubController.activeTodayHubUri).toBe(HUB_A);
+      expect(result.current.tabsController.activeEditorTabId).toBe('tab-a1');
+      expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toEqual([
+        'tab-a1',
+      ]);
+    });
 
     unmount();
   });
