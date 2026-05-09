@@ -177,13 +177,22 @@ export function scheduleDevWorkspaceShadowModelDivergenceCheck(args: {
   devOrTest: boolean;
   projected: WorkspaceModel;
   readShadowModel: () => WorkspaceModel;
+  /**
+   * When set, DEV checks compare the shadow model to this snapshot instead of `projected`.
+   * Use the same legacy refs as runtime projection (`editorWorkspaceTabsRef` / `activeEditorTabIdRef`)
+   * so verification matches {@link dispatchWorkspaceActionSync} restore/switch paths where React
+   * tab state has not committed yet (ref-before-state ordering).
+   */
+  resolveExpectedFromLegacyRefs?: () => WorkspaceModel;
 }): void {
   if (!args.devOrTest) {
     return;
   }
   queueMicrotask(() => {
+    const expected =
+      args.resolveExpectedFromLegacyRefs?.() ?? args.projected;
     const diffs = describeWorkspaceModelDivergence(
-      args.projected,
+      expected,
       args.readShadowModel(),
     );
     if (diffs.length > 0) {

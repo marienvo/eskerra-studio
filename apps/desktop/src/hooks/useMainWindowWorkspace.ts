@@ -164,6 +164,8 @@ import {
   applyRestoredEditorWorkspaceTabsBridge,
   migrateLegacyOpenTabsIfNeededBridge,
   restoreInboxSelectionAfterShellRestoreBridge,
+  runDeferredShellRestoreTabStateAndShadowSync,
+  type ShellRestoreProjectionSyncArgs,
 } from './workspaceInboxShellRestoreBridge';
 import {
   remapHomeStatesPrefixBridge,
@@ -787,6 +789,15 @@ export function useMainWindowWorkspace(options: {
     scheduleDevWorkspaceShadowModelDivergenceCheck({
       devOrTest: import.meta.env.DEV || import.meta.env.MODE === 'test',
       projected: projectedWorkspaceModel,
+      resolveExpectedFromLegacyRefs: () =>
+        projectWorkspaceRuntimeToModel({
+          activeTodayHubUri: hubForProjection,
+          editorWorkspaceTabs: editorWorkspaceTabsRef.current,
+          activeEditorTabId: activeEditorTabIdRef.current,
+          legacyHubWorkspaceSnapshots: todayHubWorkspacesForProjection,
+          homeStatesByHub,
+          hubUris: projectionHubUris,
+        }),
       readShadowModel: () => workspaceShadowModelRef.current,
     });
   }, [
@@ -2746,6 +2757,22 @@ export function useMainWindowWorkspace(options: {
     [dispatchWorkspaceActionSync],
   );
 
+  const syncShadowWorkspaceFromShellRestore = useCallback(
+    (projection: ShellRestoreProjectionSyncArgs) => {
+      dispatchWorkspaceActionSync('restore shell workspace projection', () =>
+        projectWorkspaceRuntimeToModel({
+          activeTodayHubUri: projection.activeTodayHubUri,
+          editorWorkspaceTabs: editorWorkspaceTabsRef.current,
+          activeEditorTabId: activeEditorTabIdRef.current,
+          legacyHubWorkspaceSnapshots: projection.legacyHubWorkspaceSnapshots,
+          homeStatesByHub: projection.homeStatesByHub,
+          hubUris: projection.hubUris,
+        }),
+      );
+    },
+    [dispatchWorkspaceActionSync],
+  );
+
   const {switchTodayHubWorkspace, focusActiveTodayHubNote} =
     useWorkspaceTodayHubSwitch({
       state: {legacyTodayHubWorkspacesForSwitch: todayHubWorkspacesForSwitch},
@@ -3616,21 +3643,12 @@ export function useMainWindowWorkspace(options: {
         {
           editorWorkspaceTabsRef,
           activeEditorTabIdRef,
-          setEditorWorkspaceTabs,
-          setActiveEditorTabId,
-          mirrorShadowActiveWorkspaceTabs,
-          mirrorShadowActiveTab,
-          mirrorShadowHomeSurface,
         },
         chosenTabsSource,
         chosenActiveEditorTabId,
         filter,
       ),
-    [
-      mirrorShadowActiveWorkspaceTabs,
-      mirrorShadowActiveTab,
-      mirrorShadowHomeSurface,
-    ],
+    [],
   );
 
   const migrateLegacyOpenTabsIfNeeded = useCallback(
@@ -3642,15 +3660,11 @@ export function useMainWindowWorkspace(options: {
         {
           editorWorkspaceTabsRef,
           activeEditorTabIdRef,
-          setEditorWorkspaceTabs,
-          setActiveEditorTabId,
-          mirrorShadowActiveWorkspaceTabs,
-          mirrorShadowActiveTab,
         },
         rawTabs,
         filter,
       ),
-    [mirrorShadowActiveWorkspaceTabs, mirrorShadowActiveTab],
+    [],
   );
 
   const restoreInboxSelectionAfterShellRestore = useCallback(
@@ -3703,6 +3717,8 @@ export function useMainWindowWorkspace(options: {
         );
       }
 
+      let shellRestoreProjection: ShellRestoreProjectionSyncArgs | null = null;
+
       if (hubUris.length > 0) {
         const activeHubFinal = pickFinalActiveHub({
           resolvedActiveHub,
@@ -3728,9 +3744,14 @@ export function useMainWindowWorkspace(options: {
         activeTodayHubUriRef.current = activeHubFinal;
         setTodayHubWorkspacesForSave(mergedWs);
         setActiveTodayHubUri(activeHubFinal);
-        mirrorShadowActiveHub(activeHubFinal, 'restore active hub');
         setHomeStatesByHub(homeHydrated);
         setInboxShellRestored(true);
+        shellRestoreProjection = {
+          activeTodayHubUri: activeHubFinal,
+          hubUris,
+          legacyHubWorkspaceSnapshots: mergedWs,
+          homeStatesByHub: homeHydrated,
+        };
       } else if (vaultMarkdownRefs.length > 0) {
         activeTodayHubUriRef.current = null;
         setTodayHubWorkspacesForSave(restoredInboxState.todayHubWorkspaces ?? {});
@@ -3741,6 +3762,20 @@ export function useMainWindowWorkspace(options: {
         setTodayHubWorkspacesForSave(restoredInboxState.todayHubWorkspaces ?? {});
         setInboxShellRestored(true);
       }
+
+      runDeferredShellRestoreTabStateAndShadowSync(
+        {
+          editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
+          setEditorWorkspaceTabs,
+          setActiveEditorTabId,
+          mirrorShadowActiveWorkspaceTabs,
+          mirrorShadowActiveTab,
+          mirrorShadowHomeSurface,
+          syncShadowWorkspaceFromShellRestore,
+        },
+        shellRestoreProjection,
+      );
 
       restoreInboxSelectionAfterShellRestore(root, restoredTabs, hubUris.length);
       return;
@@ -3758,7 +3793,11 @@ export function useMainWindowWorkspace(options: {
     applyRestoredEditorWorkspaceTabs,
     migrateLegacyOpenTabsIfNeeded,
     mirrorShadowActiveHub,
+    mirrorShadowActiveTab,
+    mirrorShadowActiveWorkspaceTabs,
+    mirrorShadowHomeSurface,
     restoreInboxSelectionAfterShellRestore,
+    syncShadowWorkspaceFromShellRestore,
   ]);
 
   useEffect(() => {
