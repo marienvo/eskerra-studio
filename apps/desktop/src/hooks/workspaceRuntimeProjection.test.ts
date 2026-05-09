@@ -5,6 +5,7 @@ import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {
   closeAllTabsAction,
   closeOtherTabsAction,
+  closeTabAction,
   createDefaultWorkspaceState,
   normalizeWorkspaceUri,
   reorderTabsAction,
@@ -158,6 +159,108 @@ describe('editorWorkspaceTabsFromModelTabEntries', () => {
     expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs.map(x => x.id)).toEqual([
       't2',
     ]);
+  });
+
+  it('closeTabAction removes inactive tab without changing active tab id', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [
+            {id: 't1', history: {entries: [NOTE_A], index: 0}},
+            {id: 't2', history: {entries: [NOTE_B], index: 0}},
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const closed = closeTabAction(model, 't2');
+    const ws = closed.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+    expect(activeSurfaceTabIdFromWorkspaceModel(closed)).toBe('t1');
+    const persisted = serializeWorkspaceModelToPersistence(closed);
+    expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs.map(x => x.id)).toEqual([
+      't1',
+    ]);
+  });
+
+  it('closeTabAction activates right neighbor when closing active left tab', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [
+            {id: 't1', history: {entries: [NOTE_A], index: 0}},
+            {id: 't2', history: {entries: [NOTE_B], index: 0}},
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const closed = closeTabAction(model, 't1');
+    const ws = closed.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t2']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't2'});
+    expect(activeSurfaceTabIdFromWorkspaceModel(closed)).toBe('t2');
+    const legacy = editorWorkspaceTabsFromModelTabEntries(ws!.tabs);
+    expect(legacy.map(t => t.id)).toEqual(['t2']);
+    const persisted = serializeWorkspaceModelToPersistence(closed);
+    expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs.map(x => x.id)).toEqual([
+      't2',
+    ]);
+  });
+
+  it('closeTabAction activates left neighbor when closing active right tab', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [
+            {id: 't1', history: {entries: [NOTE_A], index: 0}},
+            {id: 't2', history: {entries: [NOTE_B], index: 0}},
+          ],
+          active: {kind: 'tab', id: 't2'},
+        },
+      },
+    };
+    const closed = closeTabAction(model, 't2');
+    const ws = closed.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+    expect(activeSurfaceTabIdFromWorkspaceModel(closed)).toBe('t1');
+  });
+
+  it('closeTabAction activates Home when closing sole tab', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [{id: 't1', history: {entries: [NOTE_A], index: 0}}],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const closed = closeTabAction(model, 't1');
+    const ws = closed.workspaces[hubNorm];
+    expect(ws?.tabs).toEqual([]);
+    expect(ws?.active).toEqual({kind: 'home'});
+    expect(activeSurfaceTabIdFromWorkspaceModel(closed)).toBeNull();
+    expect(editorWorkspaceTabsFromModelTabEntries(ws!.tabs)).toEqual([]);
+    const persisted = serializeWorkspaceModelToPersistence(closed);
+    expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs ?? []).toEqual([]);
   });
 });
 

@@ -1967,13 +1967,41 @@ export function useMainWindowWorkspace(options: {
         recordClosedTabAndPruneScroll(tabsBefore, tabId, tabClosing);
 
         const nextTabId = pickNeighborTabIdAfterRemovingTab(tabsBefore, tabId);
-        const nextTabs = tabsBefore.filter(t => t.id !== tabId);
+        const nextTabsLegacy = tabsBefore.filter(t => t.id !== tabId);
+
+        const nextModel = dispatchWorkspaceActionSync('close tab', m =>
+          closeTabAction(m, tabId),
+        );
+        const hub = nextModel.activeHub;
+        const derived =
+          hub != null && nextModel.workspaces[hub] != null
+            ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
+            : null;
+
+        const legacyIds = nextTabsLegacy.map(t => t.id);
+        const derivedIds = derived?.map(t => t.id) ?? [];
+        const derivedMatchesLegacy =
+          derived != null &&
+          derivedIds.length === legacyIds.length &&
+          derivedIds.every((id, i) => id === legacyIds[i]);
+
+        const nextTabs = derivedMatchesLegacy ? derived : nextTabsLegacy;
+        if (!derivedMatchesLegacy && derived != null) {
+          const warn =
+            typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+          if (warn) {
+            console.warn(
+              '[workspaceModel] closeEditorTab: model strip mismatch vs legacy filter; using legacy strip',
+              {tabId, legacyIds, derivedIds},
+            );
+          }
+        }
+
         assignLegacyEditorWorkspaceTabs({
           nextTabs,
           editorWorkspaceTabsRef,
           setEditorWorkspaceTabs,
         });
-        dispatchWorkspaceAction('close tab', model => closeTabAction(model, tabId));
 
         if (!wasActive) {
           return;
@@ -1981,7 +2009,7 @@ export function useMainWindowWorkspace(options: {
         await refocusAfterClosingActiveTab(nextTabId, nextTabs);
       })();
     },
-    [dispatchWorkspaceAction, recordClosedTabAndPruneScroll, refocusAfterClosingActiveTab],
+    [dispatchWorkspaceActionSync, recordClosedTabAndPruneScroll, refocusAfterClosingActiveTab],
   );
 
   const closeOtherEditorTabs = useCallback(
