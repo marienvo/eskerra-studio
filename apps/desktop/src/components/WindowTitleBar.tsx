@@ -14,6 +14,7 @@ export type WindowTitleBarTodayHubSelect =
       items: readonly TodayHubWorkspaceSelectItem[];
       activeTodayNoteUri: string | null;
       activeLabel: string;
+      subLabel?: string;
       /** Match title bar editor tab pill active styling on the workspace main control. */
       mainShowsActiveTabPill?: boolean;
       onMainActivate: () => void;
@@ -56,6 +57,7 @@ export function WindowTitleBar({
             items={todayHubSelect.items}
             activeTodayNoteUri={todayHubSelect.activeTodayNoteUri}
             activeLabel={todayHubSelect.activeLabel}
+            subLabel={todayHubSelect.subLabel}
             mainShowsActiveTabPill={todayHubSelect.mainShowsActiveTabPill ?? false}
             onMainActivate={todayHubSelect.onMainActivate}
             onPickHub={todayHubSelect.onPickHub}

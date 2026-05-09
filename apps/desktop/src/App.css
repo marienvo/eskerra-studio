@@ -280,6 +280,9 @@ a:focus:not(:focus-visible) {
 }
 
 .today-hub-workspace-select__label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
   font-size: var(--file-tree-node-font-size);
   font-weight: var(--file-tree-node-font-weight);
   line-height: normal;
@@ -290,6 +293,18 @@ a:focus:not(:focus-visible) {
   text-overflow: ellipsis;
   position: relative;
   top: -1px;
+}
+
+.today-hub-workspace-select__label-prefix,
+.today-hub-workspace-select__label-separator {
+  flex-shrink: 0;
+}
+
+.today-hub-workspace-select__sublabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .today-hub-workspace-select__menu-item-inner {

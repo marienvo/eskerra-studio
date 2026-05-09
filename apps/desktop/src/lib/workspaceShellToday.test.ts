@@ -3,13 +3,13 @@ import {describe, expect, it} from 'vitest';
 import {
   isActiveWorkspaceTodayLinkSurface,
   selectNoteActiveHubTodayOpen,
-  shouldOpenActiveHubTodayAsShell,
+  shouldOpenActiveHubTodayAsHome,
   workspaceSelectShowsActiveTabPillState,
 } from './workspaceShellToday';
 import {createEditorWorkspaceTab, tabCurrentUri} from './editorWorkspaceTabs';
 
 describe('selectNoteActiveHubTodayOpen', () => {
-  it('returns shell with zero tabs and preserve mode with open tabs', () => {
+  it('returns home for the active hub Today regardless of tab count', () => {
     expect(
       selectNoteActiveHubTodayOpen({
         uri: '/vault/Daily/Today.md',
@@ -17,7 +17,7 @@ describe('selectNoteActiveHubTodayOpen', () => {
         uriIsTodayMarkdownFile: true,
         editorWorkspaceTabCount: 0,
       }),
-    ).toBe('workspaceShell');
+    ).toBe('home');
     expect(
       selectNoteActiveHubTodayOpen({
         uri: '/vault/Daily/Today.md',
@@ -25,7 +25,7 @@ describe('selectNoteActiveHubTodayOpen', () => {
         uriIsTodayMarkdownFile: true,
         editorWorkspaceTabCount: 2,
       }),
-    ).toBe('workspaceHomePreserveTabs');
+    ).toBe('home');
     expect(
       selectNoteActiveHubTodayOpen({
         uri: '/vault/Daily/Today.md',
@@ -37,10 +37,10 @@ describe('selectNoteActiveHubTodayOpen', () => {
   });
 });
 
-describe('shouldOpenActiveHubTodayAsShell', () => {
-  it('is true only with zero tabs, active hub, and Today file', () => {
+describe('shouldOpenActiveHubTodayAsHome', () => {
+  it('is true only with active hub and Today file', () => {
     expect(
-      shouldOpenActiveHubTodayAsShell({
+      shouldOpenActiveHubTodayAsHome({
         uri: '/vault/Daily/Today.md',
         activeTodayHubUri: '/vault/Daily/Today.md',
         uriIsTodayMarkdownFile: true,
@@ -48,15 +48,15 @@ describe('shouldOpenActiveHubTodayAsShell', () => {
       }),
     ).toBe(true);
     expect(
-      shouldOpenActiveHubTodayAsShell({
+      shouldOpenActiveHubTodayAsHome({
         uri: '/vault/Daily/Today.md',
         activeTodayHubUri: '/vault/Daily/Today.md',
         uriIsTodayMarkdownFile: true,
         editorWorkspaceTabCount: 2,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
-      shouldOpenActiveHubTodayAsShell({
+      shouldOpenActiveHubTodayAsHome({
         uri: '/vault/Daily/Today.md',
         activeTodayHubUri: '/vault/Other/Today.md',
         uriIsTodayMarkdownFile: true,
@@ -64,7 +64,7 @@ describe('shouldOpenActiveHubTodayAsShell', () => {
       }),
     ).toBe(false);
     expect(
-      shouldOpenActiveHubTodayAsShell({
+      shouldOpenActiveHubTodayAsHome({
         uri: '/vault/Daily/Today.md',
         activeTodayHubUri: '/vault/Daily/Today.md',
         uriIsTodayMarkdownFile: false,
@@ -72,7 +72,7 @@ describe('shouldOpenActiveHubTodayAsShell', () => {
       }),
     ).toBe(false);
     expect(
-      shouldOpenActiveHubTodayAsShell({
+      shouldOpenActiveHubTodayAsHome({
         uri: '/vault/Daily/Today.md',
         activeTodayHubUri: null,
         uriIsTodayMarkdownFile: true,
@@ -121,19 +121,29 @@ describe('workspaceSelectShowsActiveTabPillState', () => {
 });
 
 describe('isActiveWorkspaceTodayLinkSurface', () => {
-  it('detects active hub Today surface for link routing', () => {
+  it('detects workspace Home while no editor tab is active', () => {
     expect(
       isActiveWorkspaceTodayLinkSurface({
         composingNewEntry: false,
         activeTodayHubUri: '/vault/Daily/Today.md',
         selectedUri: '/vault/Daily/Today.md',
+        activeEditorTabId: null,
       }),
     ).toBe(true);
     expect(
       isActiveWorkspaceTodayLinkSurface({
         composingNewEntry: false,
         activeTodayHubUri: '/vault/Daily/Today.md',
-        selectedUri: '/vault/Other/Today.md',
+        selectedUri: '/vault/Other.md',
+        activeEditorTabId: null,
+      }),
+    ).toBe(true);
+    expect(
+      isActiveWorkspaceTodayLinkSurface({
+        composingNewEntry: false,
+        activeTodayHubUri: '/vault/Daily/Today.md',
+        selectedUri: '/vault/Other.md',
+        activeEditorTabId: 'tab-1',
       }),
     ).toBe(false);
   });

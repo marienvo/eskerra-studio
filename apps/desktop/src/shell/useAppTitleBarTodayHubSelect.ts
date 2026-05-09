@@ -2,6 +2,12 @@ import {useMemo} from 'react';
 
 import type {WindowTitleBarTodayHubSelect} from '../components/WindowTitleBar';
 
+function noteTitleFromUri(uri: string): string {
+  const normalized = uri.replace(/\\/g, '/');
+  const fileName = normalized.slice(normalized.lastIndexOf('/') + 1);
+  return fileName.replace(/\.md$/i, '') || fileName || uri;
+}
+
 export function useAppTitleBarTodayHubSelect(
   vaultRoot: string | null,
   todayHubSelectorItems: ReadonlyArray<{
@@ -9,6 +15,8 @@ export function useAppTitleBarTodayHubSelect(
     label: string;
   }>,
   activeTodayHubUri: string | null,
+  selectedUri: string | null,
+  activeEditorTabId: string | null,
   workspaceSelectShowsActiveTabPill: boolean,
   focusActiveTodayHubNote: () => void,
   switchTodayHubWorkspace: (uri: string) => void | Promise<void>,
@@ -25,10 +33,17 @@ export function useAppTitleBarTodayHubSelect(
     const activeLabel =
       todayHubSelectorItems.find(i => i.todayNoteUri === activeTodayHubUri)
         ?.label ?? 'Today';
+    const subLabel =
+      activeEditorTabId == null
+      && selectedUri != null
+      && selectedUri !== activeTodayHubUri
+        ? noteTitleFromUri(selectedUri)
+        : undefined;
     return {
       items: todayHubSelectorItems,
       activeTodayNoteUri: activeTodayHubUri,
       activeLabel,
+      subLabel,
       mainShowsActiveTabPill: workspaceSelectShowsActiveTabPill,
       onMainActivate: focusActiveTodayHubNote,
       onPickHub: (uri: string) => {
@@ -40,6 +55,8 @@ export function useAppTitleBarTodayHubSelect(
     vaultRoot,
     todayHubSelectorItems,
     activeTodayHubUri,
+    selectedUri,
+    activeEditorTabId,
     workspaceSelectShowsActiveTabPill,
     focusActiveTodayHubNote,
     switchTodayHubWorkspace,

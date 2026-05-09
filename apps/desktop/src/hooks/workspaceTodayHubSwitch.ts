@@ -49,6 +49,7 @@ export type UseWorkspaceTodayHubSwitchArgs = {
   };
   callbacks: {
     selectNote: (uri: string) => void;
+    selectHomeCurrentNote: (todayNoteUri: string) => void;
     activateOpenTab: (tabId: string) => void;
   };
 };
@@ -61,7 +62,7 @@ export type UseWorkspaceTodayHubSwitchResult = {
 export function useWorkspaceTodayHubSwitch(
   args: UseWorkspaceTodayHubSwitchArgs,
 ): UseWorkspaceTodayHubSwitchResult {
-  const {selectNote, activateOpenTab} = args.callbacks;
+  const {selectNote, selectHomeCurrentNote, activateOpenTab} = args.callbacks;
 
   const {
     vaultMarkdownRefsRef,
@@ -173,11 +174,11 @@ export function useWorkspaceTodayHubSwitch(
       // Do not `selectNote(norm)` when B has restored tabs: that would navigate the
       // active tab to B's Today and overwrite e.g. a tab that was still showing A's hub note.
       if (nextTabs.length === 0) {
-        selectNote(norm);
+        selectHomeCurrentNote(norm);
       } else if (nextActive) {
         activateOpenTab(nextActive);
       } else {
-        selectNote(norm);
+        selectHomeCurrentNote(norm);
       }
     },
     [
@@ -190,6 +191,7 @@ export function useWorkspaceTodayHubSwitch(
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       inboxYamlFrontmatterInnerRef,
       selectNote,
+      selectHomeCurrentNote,
       setActiveEditorTabId,
       setActiveTodayHubUri,
       setComposingNewEntry,

@@ -485,6 +485,8 @@ export default function App() {
     vaultRoot,
     todayHubSelectorItems,
     activeTodayHubUri,
+    selectedUri,
+    workspaceTabsController.activeEditorTabId,
     workspaceSelectShowsActiveTabPill,
     focusActiveTodayHubNote,
     switchTodayHubWorkspace,

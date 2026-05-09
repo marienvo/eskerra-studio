@@ -33,7 +33,7 @@ import {
   openOrCreateVaultWikiPathMarkdownLink,
 } from '../lib/inboxWikiLinkNavigation';
 import {openSystemBrowserUrl} from '../lib/openSystemBrowserUrl';
-import {isActiveWorkspaceTodayLinkSurface} from '../lib/workspaceShellToday';
+import {isOnWorkspaceHome} from '../lib/workspaceShellToday';
 
 import type {WorkspaceLinkController} from './workspaceReturnShape';
 
@@ -83,6 +83,7 @@ export type WorkspaceLinkOpenMarkdownInEditor = (
     newTab?: boolean;
     activateNewTab?: boolean;
     insertAfterActive?: boolean;
+    home?: boolean;
   },
 ) => Promise<void>;
 
@@ -97,6 +98,7 @@ export function useWorkspaceLinkRouting(args: {
   todayHubWikiNavParentRef: MutableRefObject<string | null>;
   todayHubCellEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   activeTodayHubUriRef: MutableRefObject<string | null>;
+  activeEditorTabIdRef: MutableRefObject<string | null>;
   editorWorkspaceTabsRef: MutableRefObject<EditorWorkspaceTab[]>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   openMarkdownInEditor: WorkspaceLinkOpenMarkdownInEditor;
@@ -118,6 +120,7 @@ export function useWorkspaceLinkRouting(args: {
     todayHubWikiNavParentRef,
     todayHubCellEditorRef,
     activeTodayHubUriRef,
+    activeEditorTabIdRef,
     editorWorkspaceTabsRef,
     inboxEditorRef,
     openMarkdownInEditor,
@@ -168,13 +171,14 @@ export function useWorkspaceLinkRouting(args: {
         return;
       }
       if (
-        isActiveWorkspaceTodayLinkSurface({
+        isOnWorkspaceHome({
           composingNewEntry: composingNewEntryRef.current,
           activeTodayHubUri: activeTodayHubUriRef.current,
           selectedUri: selectedUriRef.current,
+          activeEditorTabId: activeEditorTabIdRef.current,
         })
       ) {
-        await openNoteRespectingExistingTab(uri, 'foreground-new-tab');
+        await openMarkdownInEditor(uri, {home: true});
         return;
       }
       await openMarkdownInEditor(uri);
@@ -186,6 +190,7 @@ export function useWorkspaceLinkRouting(args: {
       composingNewEntryRef,
       activeTodayHubUriRef,
       selectedUriRef,
+      activeEditorTabIdRef,
     ],
   );
 

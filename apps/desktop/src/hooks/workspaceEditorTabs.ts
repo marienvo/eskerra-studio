@@ -18,17 +18,19 @@ import {
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 
 /**
- * Decide whether a foreground open should use a hub workspace shell variant: full shell (no tabs),
- * preserve-tabs shell (tabs visible but no active pill), or normal tab navigation.
+ * Decide whether a foreground open should use the hub workspace Home surface or normal tab navigation.
  */
-export function decideWorkspaceShellMode(args: {
+export function decideHomeOpenMode(args: {
   targetNorm: string;
   activeTodayHubUri: string | null;
   options:
-    | {workspaceShell?: boolean; workspaceShellPreserveTabs?: boolean}
+    | {home?: boolean; workspaceShell?: boolean; workspaceShellPreserveTabs?: boolean}
     | undefined;
-}): 'shell' | 'preserveTabs' | 'normal' {
+}): 'home' | 'normal' {
   const {targetNorm, activeTodayHubUri, options} = args;
+  if (options?.home === true) {
+    return activeTodayHubUri ? 'home' : 'normal';
+  }
   const activeHubNorm = normalizeEditorDocUri(activeTodayHubUri ?? '');
   const isActiveHubFile =
     activeHubNorm != null
@@ -38,14 +40,13 @@ export function decideWorkspaceShellMode(args: {
   if (!isActiveHubFile) {
     return 'normal';
   }
-  if (options?.workspaceShell === true) {
-    return 'shell';
-  }
-  if (options?.workspaceShellPreserveTabs === true) {
-    return 'preserveTabs';
+  if (options?.workspaceShell === true || options?.workspaceShellPreserveTabs === true) {
+    return 'home';
   }
   return 'normal';
 }
+
+export const decideWorkspaceShellMode = decideHomeOpenMode;
 
 /**
  * Place a target URI into the editor tab strip for the foreground open path:

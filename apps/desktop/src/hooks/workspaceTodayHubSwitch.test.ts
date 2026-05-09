@@ -46,6 +46,7 @@ function makeArgs(overrides: {
   activeEditorTabId?: string | null;
   hubWorkspaces?: StubWorkspaces;
   selectNote?: ReturnType<typeof vi.fn>;
+  selectHomeCurrentNote?: ReturnType<typeof vi.fn>;
   activateOpenTab?: ReturnType<typeof vi.fn>;
   setActiveTodayHubUri?: ReturnType<typeof vi.fn>;
   setEditorWorkspaceTabs?: ReturnType<typeof vi.fn>;
@@ -55,6 +56,7 @@ function makeArgs(overrides: {
   args: UseWorkspaceTodayHubSwitchArgs;
   mocks: {
     selectNote: ReturnType<typeof vi.fn>;
+    selectHomeCurrentNote: ReturnType<typeof vi.fn>;
     activateOpenTab: ReturnType<typeof vi.fn>;
     setActiveTodayHubUri: ReturnType<typeof vi.fn>;
     setEditorWorkspaceTabs: ReturnType<typeof vi.fn>;
@@ -70,6 +72,7 @@ function makeArgs(overrides: {
     overrides.hubWorkspaces !== undefined ? overrides.hubWorkspaces : {};
 
   const selectNote = overrides.selectNote ?? vi.fn();
+  const selectHomeCurrentNote = overrides.selectHomeCurrentNote ?? vi.fn();
   const activateOpenTab = overrides.activateOpenTab ?? vi.fn();
   const setActiveTodayHubUri = overrides.setActiveTodayHubUri ?? vi.fn();
   const setEditorWorkspaceTabs = overrides.setEditorWorkspaceTabs ?? vi.fn();
@@ -107,7 +110,7 @@ function makeArgs(overrides: {
       setActiveEditorTabId,
       setActiveTodayHubUri,
     },
-    callbacks: {selectNote, activateOpenTab},
+    callbacks: {selectNote, selectHomeCurrentNote, activateOpenTab},
   };
 
   return {
@@ -115,6 +118,7 @@ function makeArgs(overrides: {
     hubWorkspaces,
     mocks: {
       selectNote,
+      selectHomeCurrentNote,
       activateOpenTab,
       setActiveTodayHubUri,
       setEditorWorkspaceTabs,
@@ -313,7 +317,7 @@ describe('switchTodayHubWorkspace', () => {
     expect(mocks.setActiveTodayHubUri).toHaveBeenCalledWith(HUB_B);
   });
 
-  it('empty target tabs: calls selectNote(norm) after clearing tabs', async () => {
+  it('empty target tabs: opens the current Home entry after clearing tabs', async () => {
     const {args, mocks} = makeArgs({
       activeTodayHubUri: HUB_A,
       hubWorkspaces: {},
@@ -326,7 +330,8 @@ describe('switchTodayHubWorkspace', () => {
 
     expect(mocks.setEditorWorkspaceTabs).toHaveBeenCalledWith([]);
     expect(mocks.setActiveEditorTabId).toHaveBeenCalledWith(null);
-    expect(mocks.selectNote).toHaveBeenCalledWith(HUB_B);
+    expect(mocks.selectHomeCurrentNote).toHaveBeenCalledWith(HUB_B);
+    expect(mocks.selectNote).not.toHaveBeenCalledWith(HUB_B);
     expect(mocks.activateOpenTab).not.toHaveBeenCalled();
   });
 });

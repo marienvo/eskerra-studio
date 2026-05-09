@@ -112,6 +112,60 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     unmount();
   });
 
+  it('navigates from workspace Home in-place and keeps tab state empty', async () => {
+    const targetUri = '/vault/Inbox/Alpha.md';
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/General', '/vault/Inbox'],
+      files: {
+        '/vault/General/Today.md': 'today\n',
+        [targetUri]: 'alpha-seed\n',
+      },
+    });
+
+    await waitFor(() => {
+      expect(result.current.todayHubController.activeTodayHubUri).not.toBeNull();
+    });
+    const hubUri = result.current.todayHubController.activeTodayHubUri!;
+
+    await act(async () => {
+      result.current.todayHubController.focusActiveTodayHubNote();
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(hubUri);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+      expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(targetUri);
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(targetUri);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+      expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
+      expect(result.current.tabsController.editorHistoryCanGoBack).toBe(true);
+    });
+
+    act(() => {
+      result.current.tabsController.editorHistoryGoBack();
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(hubUri);
+      expect(result.current.tabsController.editorHistoryCanGoForward).toBe(true);
+    });
+
+    act(() => {
+      result.current.tabsController.editorHistoryGoForward();
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(targetUri);
+    });
+
+    unmount();
+  });
+
   it('rapid note switches do not let a stale deferred save overwrite newer note content on disk', async () => {
     const uriA = '/vault/Inbox/Alpha.md';
     const uriB = '/vault/Inbox/Beta.md';

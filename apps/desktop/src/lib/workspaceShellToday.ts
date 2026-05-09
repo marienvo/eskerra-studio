@@ -3,13 +3,8 @@ import {tabCurrentUri, type EditorWorkspaceTab} from './editorWorkspaceTabs';
 import {vaultUriIsTodayMarkdownFile} from '@eskerra/core';
 
 export type SelectNoteActiveHubTodayOpen =
-  /** No tab row; load active hub Today as the implicit workspace surface. */
-  | 'workspaceShell'
-  /**
-   * Keep existing tabs but clear `activeEditorTabId` so no tab pill is “active” while the
-   * editor shows the active hub Today (title bar workspace control carries active chrome).
-   */
-  | 'workspaceHomePreserveTabs';
+  /** Load active hub Today as the implicit workspace Home surface. */
+  | 'home';
 
 /**
  * After `findTabIdWithCurrentUri` is null: how `selectNote` should open the active hub Today.
@@ -19,7 +14,7 @@ export function selectNoteActiveHubTodayOpen(input: {
   uri: string;
   activeTodayHubUri: string | null;
   uriIsTodayMarkdownFile: boolean;
-  editorWorkspaceTabCount: number;
+  editorWorkspaceTabCount?: number;
 }): SelectNoteActiveHubTodayOpen | null {
   if (input.activeTodayHubUri == null || !input.uriIsTodayMarkdownFile) {
     return null;
@@ -29,19 +24,17 @@ export function selectNoteActiveHubTodayOpen(input: {
   if (!normUri || !normHub || normUri !== normHub) {
     return null;
   }
-  return input.editorWorkspaceTabCount === 0
-    ? 'workspaceShell'
-    : 'workspaceHomePreserveTabs';
+  return 'home';
 }
 
-/** True only for the empty-tab-strip workspace shell (see {@link selectNoteActiveHubTodayOpen}). */
-export function shouldOpenActiveHubTodayAsShell(input: {
+/** True when the URI should open as the implicit active workspace Home surface. */
+export function shouldOpenActiveHubTodayAsHome(input: {
   uri: string;
   activeTodayHubUri: string | null;
   uriIsTodayMarkdownFile: boolean;
-  editorWorkspaceTabCount: number;
+  editorWorkspaceTabCount?: number;
 }): boolean {
-  return selectNoteActiveHubTodayOpen(input) === 'workspaceShell';
+  return selectNoteActiveHubTodayOpen(input) === 'home';
 }
 
 /**
@@ -76,19 +69,28 @@ export function workspaceSelectShowsActiveTabPillState(input: {
   });
 }
 
-/** Wiki / relative link activation: force new editor tab when on the active hub Today surface. */
-export function isActiveWorkspaceTodayLinkSurface(input: {
+/** True when the active editor surface is workspace Home rather than an editor tab. */
+export function isOnWorkspaceHome(input: {
   composingNewEntry: boolean;
   activeTodayHubUri: string | null;
   selectedUri: string | null;
+  activeEditorTabId?: string | null;
 }): boolean {
-  if (input.composingNewEntry || !input.activeTodayHubUri || !input.selectedUri) {
+  if (
+    input.composingNewEntry
+    || input.activeEditorTabId != null
+    || !input.activeTodayHubUri
+    || !input.selectedUri
+  ) {
     return false;
   }
   const hub = normalizeEditorDocUri(input.activeTodayHubUri);
   const sel = normalizeEditorDocUri(input.selectedUri);
-  if (!hub || !sel || hub !== sel) {
+  if (!hub || !sel) {
     return false;
   }
-  return vaultUriIsTodayMarkdownFile(sel);
+  return sel === hub || vaultUriIsTodayMarkdownFile(hub);
 }
+
+export const shouldOpenActiveHubTodayAsShell = shouldOpenActiveHubTodayAsHome;
+export const isActiveWorkspaceTodayLinkSurface = isOnWorkspaceHome;

@@ -11,6 +11,7 @@ type TodayHubWorkspaceSelectProps = {
   items: readonly TodayHubWorkspaceSelectItem[];
   activeTodayNoteUri: string | null;
   activeLabel: string;
+  subLabel?: string;
   /** Same chrome as an active editor open-note tab pill (workspace-shell Today). */
   mainShowsActiveTabPill?: boolean;
   onMainActivate: () => void;
@@ -25,6 +26,7 @@ export function TodayHubWorkspaceSelect({
   items,
   activeTodayNoteUri,
   activeLabel,
+  subLabel,
   mainShowsActiveTabPill = false,
   onMainActivate,
   onPickHub,
@@ -53,11 +55,15 @@ export function TodayHubWorkspaceSelect({
     return () => {
       ro.disconnect();
     };
-  }, [activeLabel, items.length]);
+  }, [activeLabel, subLabel, items.length]);
 
   if (items.length === 0 || activeTodayNoteUri == null) {
     return null;
   }
+
+  const mainAriaLabel = subLabel
+    ? `Today hub: ${activeLabel}: ${subLabel}. Activate this hub.`
+    : `Today hub: ${activeLabel}. Activate this hub.`;
 
   return (
     <div ref={rootRef} className="today-hub-workspace-select" role="presentation">
@@ -70,7 +76,7 @@ export function TodayHubWorkspaceSelect({
         ]
           .filter(Boolean)
           .join(' ')}
-        aria-label={`Today hub: ${activeLabel}. Activate this hub.`}
+        aria-label={mainAriaLabel}
         onClick={onMainActivate}
         onAuxClick={e => {
           if (e.button === 1) {
@@ -82,7 +88,15 @@ export function TodayHubWorkspaceSelect({
         <span className="today-hub-workspace-select__icon" aria-hidden>
           <DashboardIcon {...HUB_WORKSPACE_ICON_DIM} />
         </span>
-        <span className="today-hub-workspace-select__label">{activeLabel}</span>
+        <span className="today-hub-workspace-select__label">
+          <span className="today-hub-workspace-select__label-prefix">{activeLabel}</span>
+          {subLabel ? (
+            <>
+              <span className="today-hub-workspace-select__label-separator">: </span>
+              <span className="today-hub-workspace-select__sublabel">{subLabel}</span>
+            </>
+          ) : null}
+        </span>
       </button>
       <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
         <DropdownMenu.Trigger asChild>
