@@ -596,6 +596,72 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     unmount();
   });
 
+  it('immediate hub switch after hydrate preserves per-hub homeHistory snapshots', async () => {
+    const NOTE_A = `${VAULT_ROOT}/Inbox/ImmediateSwitchA.md`;
+    const NOTE_B = `${VAULT_ROOT}/Inbox/ImmediateSwitchB.md`;
+    const snapshotA: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [],
+      activeEditorTabId: null,
+      homeHistory: {
+        entries: [HUB_A, NOTE_A],
+        index: 1,
+      },
+    };
+    const snapshotB: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [],
+      activeEditorTabId: null,
+      homeHistory: {
+        entries: [HUB_B, NOTE_B],
+        index: 1,
+      },
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/B`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today a\n',
+          [HUB_B]: 'today b\n',
+          [NOTE_A]: 'a\n',
+          [NOTE_B]: 'b\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: NOTE_B,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_B,
+          todayHubWorkspaces: {
+            [HUB_A]: snapshotA,
+            [HUB_B]: snapshotB,
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.todayHubController.switchTodayHubWorkspace(HUB_A);
+    });
+
+    expect(result.current.todayHubController.activeTodayHubUri).toBe(HUB_A);
+    expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual(
+      snapshotA.homeHistory,
+    );
+    expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_B]?.homeHistory).toEqual(
+      snapshotB.homeHistory,
+    );
+    expect(result.current.selectionController.selectedUri).toBe(NOTE_A);
+
+    unmount();
+  });
+
   it('defaults Home stack when persisted snapshot omits homeHistory', async () => {
     const {result, unmount} = await mountHydratedMainWindowWorkspace(
       {

@@ -2,6 +2,7 @@ import {act, renderHook} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {tabsToStored, type EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import {useWorkspaceTodayHubSwitch, type UseWorkspaceTodayHubSwitchArgs} from './workspaceTodayHubSwitch';
 
@@ -52,6 +53,8 @@ function makeArgs(overrides: {
   setEditorWorkspaceTabs?: ReturnType<typeof vi.fn>;
   setActiveEditorTabId?: ReturnType<typeof vi.fn>;
   setTodayHubWorkspacesForSave?: ReturnType<typeof vi.fn>;
+  /** Initial `homeStatesByHubRef.current` for outgoing hub snapshot tests. */
+  homeStatesByHubSeed?: Record<string, WorkspaceHomeState>;
 }): {
   args: UseWorkspaceTodayHubSwitchArgs;
   mocks: {
@@ -98,7 +101,7 @@ function makeArgs(overrides: {
         history: {entries: s.entries, index: s.index},
       }))},
       activeEditorTabIdRef: {current: overrides.activeEditorTabId ?? null},
-      homeStatesByHubRef: {current: {}},
+      homeStatesByHubRef: {current: {...(overrides.homeStatesByHubSeed ?? {})}},
     },
     setters: {
       setComposingNewEntry,
@@ -180,6 +183,29 @@ describe('switchTodayHubWorkspace', () => {
     expect(mocks.setInboxEditorResetNonce).toHaveBeenCalledOnce();
     // Switch should still complete and activate hub B.
     expect(mocks.setActiveTodayHubUri).toHaveBeenCalledWith(HUB_B);
+  });
+
+  it('snapshots outgoing hub homeHistory from homeStatesByHubRef when switching hubs', async () => {
+    const NOTE_A = '/vault/Inbox/OutgoingHomeNote.md';
+    const {args, hubWorkspaces} = makeArgs({
+      activeTodayHubUri: HUB_A,
+      hubWorkspaces: {
+        [HUB_B]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+      },
+      homeStatesByHubSeed: {
+        [HUB_A]: {history: {entries: [HUB_A, NOTE_A], index: 1}},
+      },
+    });
+    const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
+
+    await act(async () => {
+      await result.current.switchTodayHubWorkspace(HUB_B);
+    });
+
+    expect(hubWorkspaces[HUB_A]?.homeHistory).toEqual({
+      entries: [HUB_A, NOTE_A],
+      index: 1,
+    });
   });
 
   it('snapshot-then-restore (target has tabs): saves outgoing hub A, keeps B snapshot, activates restored tab, does NOT call selectNote(B)', async () => {
