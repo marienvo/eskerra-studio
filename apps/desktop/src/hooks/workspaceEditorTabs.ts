@@ -35,6 +35,15 @@ export function decideHomeOpenMode(args: {
   if (options?.newTab === true) {
     return 'normal';
   }
+  // Hydration / ordering: `openMarkdownInEditor` can run before `activeTodayHubUriRef` is set.
+  // Empty tab strip + hub Today file must not fall through to `ensureFirstTab` (echo tab).
+  if (
+    activeTodayHubUri == null
+    && (activeEditorTabId == null || activeEditorTabId === '')
+    && vaultUriIsTodayMarkdownFile(targetNorm)
+  ) {
+    return 'home';
+  }
   const activeHubNorm = normalizeEditorDocUri(activeTodayHubUri ?? '');
   const isActiveHubFile =
     activeHubNorm != null

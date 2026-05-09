@@ -456,6 +456,14 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     expect(
       decideHomeOpenMode({
         targetNorm: HUB_A,
+        activeTodayHubUri: null,
+        activeEditorTabId: null,
+        options: undefined,
+      }),
+    ).toBe('home');
+    expect(
+      decideHomeOpenMode({
+        targetNorm: HUB_A,
         activeTodayHubUri: HUB_A,
         activeEditorTabId: null,
         options: {newTab: true},
