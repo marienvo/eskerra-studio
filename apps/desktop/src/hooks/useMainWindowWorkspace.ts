@@ -229,6 +229,27 @@ type OpenMarkdownInEditorOptions = {
   workspaceShellPreserveTabs?: boolean;
 };
 
+function restoredTodayHubWorkspaceUrisForRestore(args: {
+  currentHubUris: readonly string[];
+  restored: Record<string, TodayHubWorkspaceSnapshot> | null | undefined;
+  root: string;
+}): string[] {
+  const out = [...args.currentHubUris];
+  const seen = new Set(out);
+  const root = args.root.replace(/\\/g, '/');
+  for (const raw of Object.keys(args.restored ?? {})) {
+    const hub = raw.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
+    if (!hub || seen.has(hub)) {
+      continue;
+    }
+    if ((hub === root || hub.startsWith(`${root}/`)) && vaultUriIsTodayMarkdownFile(hub)) {
+      seen.add(hub);
+      out.push(hub);
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
 export type UseMainWindowWorkspaceResult = {
   vaultRoot: string | null;
   vaultSettings: EskerraSettings | null;
@@ -310,7 +331,7 @@ export function useMainWindowWorkspace(options: {
   const [deviceInstanceId, setDeviceInstanceId] = useState('');
   const [initialVaultHydrateAttemptDone, setInitialVaultHydrateAttemptDone] =
     useState(false);
-  const [inboxShellRestored, setInboxShellRestored] = useState(true);
+  const [inboxShellRestored, setInboxShellRestored] = useState(!inboxRestoreEnabled);
   const [editorWorkspaceTabs, setEditorWorkspaceTabs] = useState<
     EditorWorkspaceTab[]
   >([]);
@@ -622,11 +643,20 @@ export function useMainWindowWorkspace(options: {
   const todayHubWorkspacesPersistFiltered = useMemo(
     () =>
       mergeHomeHistoryIntoHubSnapshotsForPersist(
-        deriveTodayHubWorkspacesPersistFiltered(vaultMarkdownRefs, todayHubWorkspacesForSave),
+        deriveTodayHubWorkspacesPersistFiltered(
+          vaultMarkdownRefs,
+          Object.keys(todayHubWorkspacesForSave).length === 0
+            ? restoredInboxState?.todayHubWorkspaces ?? todayHubWorkspacesForSave
+            : todayHubWorkspacesForSave,
+        ),
         homeStatesByHub,
       ),
-    [vaultMarkdownRefs, todayHubWorkspacesForSave, homeStatesByHub],
+    [vaultMarkdownRefs, todayHubWorkspacesForSave, restoredInboxState, homeStatesByHub],
   );
+  const todayHubWorkspacesForSwitch =
+    Object.keys(todayHubWorkspacesForSave).length === 0
+      ? restoredInboxState?.todayHubWorkspaces ?? todayHubWorkspacesForSave
+      : todayHubWorkspacesForSave;
 
   const workspaceSelectShowsActiveTabPill = useMemo(
     () =>
@@ -2275,7 +2305,7 @@ export function useMainWindowWorkspace(options: {
 
   const {switchTodayHubWorkspace, focusActiveTodayHubNote} =
     useWorkspaceTodayHubSwitch({
-      state: {todayHubWorkspacesForSave},
+      state: {todayHubWorkspacesForSave: todayHubWorkspacesForSwitch},
       refs: {
         vaultMarkdownRefsRef,
         activeTodayHubUriRef,
@@ -3144,16 +3174,22 @@ export function useMainWindowWorkspace(options: {
   }, [openMarkdownInEditor, moveHomeHistory]);
 
   useEffect(() => {
-    if (!vaultRoot) {
+    if (!inboxRestoreEnabled) {
       queueMicrotask(() => {
         setInboxShellRestored(true);
+      });
+      return;
+    }
+    if (!vaultRoot) {
+      queueMicrotask(() => {
+        setInboxShellRestored(false);
       });
       return;
     }
     queueMicrotask(() => {
       setInboxShellRestored(false);
     });
-  }, [vaultRoot]);
+  }, [vaultRoot, inboxRestoreEnabled]);
 
   const applyRestoredEditorWorkspaceTabs = useCallback(
     (
@@ -3260,9 +3296,13 @@ export function useMainWindowWorkspace(options: {
     if (!inboxRestoreEnabled || inboxShellRestored) {
       return;
     }
-    if (restoredInboxState && restoredInboxState.vaultRoot === vaultRoot) {
+    if (restoredInboxState) {
       const root = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-      const hubUris = sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs);
+      const hubUris = restoredTodayHubWorkspaceUrisForRestore({
+        currentHubUris: sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs),
+        restored: restoredInboxState.todayHubWorkspaces,
+        root,
+      });
       const knownNoteUris = new Set(notes.map(n => n.uri));
       const filter = makeStoredTabFilter({root, knownNoteUris});
 
@@ -3304,20 +3344,22 @@ export function useMainWindowWorkspace(options: {
             | undefined,
         });
         activeTodayHubUriRef.current = activeHubFinal;
-        queueMicrotask(() => {
-          setTodayHubWorkspacesForSave(mergedWs);
-          setActiveTodayHubUri(activeHubFinal);
-          setHomeStatesByHub(homeHydrated);
-        });
+        setTodayHubWorkspacesForSave(mergedWs);
+        setActiveTodayHubUri(activeHubFinal);
+        setHomeStatesByHub(homeHydrated);
+        setInboxShellRestored(true);
       } else if (vaultMarkdownRefs.length > 0) {
         activeTodayHubUriRef.current = null;
-        queueMicrotask(() => {
-          setTodayHubWorkspacesForSave({});
-          setActiveTodayHubUri(null);
-        });
+        setTodayHubWorkspacesForSave(restoredInboxState.todayHubWorkspaces ?? {});
+        setActiveTodayHubUri(null);
+        setInboxShellRestored(true);
+      } else {
+        setTodayHubWorkspacesForSave(restoredInboxState.todayHubWorkspaces ?? {});
+        setInboxShellRestored(true);
       }
 
       restoreInboxSelectionAfterShellRestore(root, restoredTabs, hubUris.length);
+      return;
     }
     queueMicrotask(() => {
       setInboxShellRestored(true);
@@ -3338,6 +3380,9 @@ export function useMainWindowWorkspace(options: {
     if (!vaultRoot || !inboxShellRestored || vaultMarkdownRefs.length === 0) {
       return;
     }
+    if (restoredInboxState) {
+      return;
+    }
     const hubs = sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs);
     if (hubs.length === 0) {
       return;
@@ -3348,6 +3393,9 @@ export function useMainWindowWorkspace(options: {
     }
     if (cur != null && !hubs.includes(cur)) {
       void switchTodayHubWorkspace(hubs[0]!);
+      return;
+    }
+    if (activeTodayHubUriRef.current != null) {
       return;
     }
     const pick =
@@ -3380,6 +3428,7 @@ export function useMainWindowWorkspace(options: {
     vaultMarkdownRefs,
     activeTodayHubUri,
     switchTodayHubWorkspace,
+    restoredInboxState,
   ]);
 
   useEffect(() => {

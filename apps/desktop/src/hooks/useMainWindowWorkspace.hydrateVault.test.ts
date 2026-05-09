@@ -277,6 +277,138 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     unmount();
   });
 
+  it('persists inactive workspace tabs across restart and restores them after switching back', async () => {
+    const NOTE_A1 = `${VAULT_ROOT}/Inbox/A1.md`;
+    const NOTE_B1 = `${VAULT_ROOT}/Inbox/B1.md`;
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/B`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today a\n',
+          [HUB_B]: 'today b\n',
+          [NOTE_A1]: 'a1\n',
+          [NOTE_B1]: 'b1\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+            [HUB_B]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNoteInNewActiveTab(NOTE_A1);
+    });
+
+    await waitFor(() => {
+      expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toHaveLength(1);
+      expect(result.current.tabsController.editorWorkspaceTabs[0]?.history.entries).toEqual([
+        NOTE_A1,
+      ]);
+    });
+
+    await act(async () => {
+      await result.current.todayHubController.switchTodayHubWorkspace(HUB_B);
+    });
+
+    await waitFor(() => {
+      expect(result.current.todayHubController.activeTodayHubUri).toBe(HUB_B);
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+          ?.editorWorkspaceTabs[0]?.entries,
+      ).toEqual([NOTE_A1]);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNoteInNewActiveTab(NOTE_B1);
+    });
+
+    await waitFor(() => {
+      expect(result.current.tabsController.editorWorkspaceTabs[0]?.history.entries).toEqual([
+        NOTE_B1,
+      ]);
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_B]
+          ?.editorWorkspaceTabs[0]?.entries,
+      ).toEqual([NOTE_B1]);
+    });
+
+    const persistedTodayHubWorkspaces = structuredClone(
+      result.current.todayHubController.todayHubWorkspacesForSave,
+    );
+    expect(persistedTodayHubWorkspaces[HUB_A]?.editorWorkspaceTabs[0]?.entries).toEqual([
+      NOTE_A1,
+    ]);
+    expect(persistedTodayHubWorkspaces[HUB_B]?.editorWorkspaceTabs[0]?.entries).toEqual([
+      NOTE_B1,
+    ]);
+
+    unmount();
+
+    const {result: restarted, unmount: unmountRestarted} =
+      await mountHydratedMainWindowWorkspace(
+        {
+          dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/B`, `${VAULT_ROOT}/Inbox`],
+          files: {
+            [HUB_A]: 'today a\n',
+            [HUB_B]: 'today b\n',
+            [NOTE_A1]: 'a1\n',
+            [NOTE_B1]: 'b1\n',
+          },
+        },
+        {
+          restoredInboxState: {
+            vaultRoot: VAULT_ROOT,
+            composingNewEntry: false,
+            selectedUri: NOTE_B1,
+            editorWorkspaceTabs: persistedTodayHubWorkspaces[HUB_B]?.editorWorkspaceTabs ?? [],
+            activeEditorTabId: persistedTodayHubWorkspaces[HUB_B]?.activeEditorTabId ?? null,
+            activeTodayHubUri: HUB_B,
+            todayHubWorkspaces: persistedTodayHubWorkspaces,
+          },
+        },
+      );
+
+    await waitFor(() => {
+      expect(restarted.current.inboxShellRestored).toBe(true);
+      expect(restarted.current.selectionController.vaultMarkdownRefs.map(r => r.uri)).toEqual(
+        expect.arrayContaining([HUB_A, HUB_B]),
+      );
+      expect(
+        restarted.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+          ?.editorWorkspaceTabs[0]?.entries,
+      ).toEqual([NOTE_A1]);
+    });
+
+    await act(async () => {
+      await restarted.current.todayHubController.switchTodayHubWorkspace(HUB_A);
+    });
+
+    await waitFor(() => {
+      expect(restarted.current.tabsController.editorWorkspaceTabs[0]?.history.entries).toEqual([
+        NOTE_A1,
+      ]);
+      expect(restarted.current.selectionController.selectedUri).toBe(NOTE_A1);
+    });
+
+    unmountRestarted();
+  });
+
   it('preserves edited inbox note content when switching away and back (disk + hook state after flush)', async () => {
     const uriA = '/vault/Inbox/Alpha.md';
     const uriB = '/vault/Inbox/Beta.md';
