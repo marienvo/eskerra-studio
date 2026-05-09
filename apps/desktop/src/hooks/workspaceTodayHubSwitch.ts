@@ -18,6 +18,7 @@ import {
 } from '../lib/editorWorkspaceTabs';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {cloneEditorWorkspaceTabs} from './workspaceEditorTabs';
 
 export type UseWorkspaceTodayHubSwitchArgs = {
@@ -33,6 +34,7 @@ export type UseWorkspaceTodayHubSwitchArgs = {
     inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
     editorWorkspaceTabsRef: MutableRefObject<EditorWorkspaceTab[]>;
     activeEditorTabIdRef: MutableRefObject<string | null>;
+    homeStatesByHubRef: MutableRefObject<Record<string, WorkspaceHomeState>>;
   };
   setters: {
     setComposingNewEntry: (next: boolean) => void;
@@ -73,6 +75,7 @@ export function useWorkspaceTodayHubSwitch(
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     editorWorkspaceTabsRef,
     activeEditorTabIdRef,
+    homeStatesByHubRef,
   } = args.refs;
 
   const {
@@ -126,9 +129,18 @@ export function useWorkspaceTodayHubSwitch(
       const old = activeTodayHubUriRef.current;
       let snapForTarget: TodayHubWorkspaceSnapshot | undefined;
       if (old != null && old !== norm) {
+        const oldHome = homeStatesByHubRef.current[old];
         const outgoingSnap: TodayHubWorkspaceSnapshot = {
           editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
           activeEditorTabId: activeEditorTabIdRef.current,
+          ...(oldHome != null
+            ? {
+                homeHistory: {
+                  entries: [...oldHome.history.entries],
+                  index: oldHome.history.index,
+                },
+              }
+            : {}),
         };
         // Merge outgoing hub into the ref immediately so a second hub switch in the same
         // outer task (before React commits / before useLayoutEffect syncs props) still sees
@@ -188,6 +200,7 @@ export function useWorkspaceTodayHubSwitch(
       composingNewEntryRef,
       editorWorkspaceTabsRef,
       flushInboxSaveRef,
+      homeStatesByHubRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       inboxYamlFrontmatterInnerRef,
       selectNote,

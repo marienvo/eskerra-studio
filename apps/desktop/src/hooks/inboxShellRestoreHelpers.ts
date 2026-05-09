@@ -11,6 +11,7 @@ import {
 } from '../lib/editorWorkspaceTabs';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+import {parseWorkspaceModelFromPersistence} from '../lib/workspaceModel/persistence';
 import {pickDefaultActiveTodayHubUri} from '../lib/todayHubWorkspaceRestore';
 
 export type StoredWorkspaceRow = {id: string; entries: string[]; index: number};
@@ -222,6 +223,40 @@ export function buildRestoredEditorWorkspace(args: {
   return {tabs, activeEditorTabId: nextActive, uris};
 }
 
+function attachPersistedHomeHistoryToMergedHubSnapshots(args: {
+  hubUris: string[];
+  activeHub: string;
+  ws: RestoredInboxState['todayHubWorkspaces'];
+  mergedWs: Record<string, TodayHubWorkspaceSnapshot>;
+}): void {
+  const {hubUris, activeHub, ws, mergedWs} = args;
+  if (!ws || hubUris.length === 0) {
+    return;
+  }
+  const parsed = parseWorkspaceModelFromPersistence({
+    hubUris,
+    activeTodayHubUri: activeHub,
+    todayHubWorkspaces: ws as Record<string, unknown>,
+  });
+  for (const hub of hubUris) {
+    const stack = parsed.workspaces[hub]?.homeHistory;
+    if (!stack || stack.entries.length === 0) {
+      continue;
+    }
+    const cur = mergedWs[hub];
+    if (!cur) {
+      continue;
+    }
+    mergedWs[hub] = {
+      ...cur,
+      homeHistory: {
+        entries: [...stack.entries],
+        index: stack.index,
+      },
+    };
+  }
+}
+
 export function mergeStoredHubWorkspaces(args: {
   hubUris: string[];
   restored: RestoredInboxState;
@@ -259,6 +294,7 @@ export function mergeStoredHubWorkspaces(args: {
     editorWorkspaceTabs: tabsToStored(activeHubTabs),
     activeEditorTabId: activeHubActiveTabId,
   };
+  attachPersistedHomeHistoryToMergedHubSnapshots({hubUris, activeHub, ws, mergedWs});
   return mergedWs;
 }
 

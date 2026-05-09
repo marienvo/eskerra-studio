@@ -110,6 +110,7 @@ import {
   deriveTodayHubSettings,
   deriveTodayHubSelectorItems,
   deriveTodayHubWorkspacesPersistFiltered,
+  mergeHomeHistoryIntoHubSnapshotsForPersist,
 } from './workspaceTodayHubDerived';
 import {useWorkspaceTodayHubSwitch} from './workspaceTodayHubSwitch';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
@@ -132,6 +133,7 @@ import {
   pushHomeNavigate,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
+import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
 import type {
   WorkspaceConflictController,
   WorkspaceFrontmatterController,
@@ -617,8 +619,12 @@ export function useMainWindowWorkspace(options: {
   );
 
   const todayHubWorkspacesPersistFiltered = useMemo(
-    () => deriveTodayHubWorkspacesPersistFiltered(vaultMarkdownRefs, todayHubWorkspacesForSave),
-    [vaultMarkdownRefs, todayHubWorkspacesForSave],
+    () =>
+      mergeHomeHistoryIntoHubSnapshotsForPersist(
+        deriveTodayHubWorkspacesPersistFiltered(vaultMarkdownRefs, todayHubWorkspacesForSave),
+        homeStatesByHub,
+      ),
+    [vaultMarkdownRefs, todayHubWorkspacesForSave, homeStatesByHub],
   );
 
   const workspaceSelectShowsActiveTabPill = useMemo(
@@ -2210,6 +2216,7 @@ export function useMainWindowWorkspace(options: {
         inboxEditorYamlLeadingBeforeFrontmatterRef,
         editorWorkspaceTabsRef,
         activeEditorTabIdRef,
+        homeStatesByHubRef,
       },
       setters: {
         setComposingNewEntry,
@@ -3214,10 +3221,19 @@ export function useMainWindowWorkspace(options: {
           activeHubTabs: editorWorkspaceTabsRef.current,
           activeHubActiveTabId: activeEditorTabIdRef.current,
         });
+        const homeHydrated = hydrateWorkspaceHomeStatesFromPersisted({
+          hubUris,
+          activeTodayHubUri: activeHubFinal,
+          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces as
+            | Record<string, unknown>
+            | null
+            | undefined,
+        });
         activeTodayHubUriRef.current = activeHubFinal;
         queueMicrotask(() => {
           setTodayHubWorkspacesForSave(mergedWs);
           setActiveTodayHubUri(activeHubFinal);
+          setHomeStatesByHub(homeHydrated);
         });
       } else if (vaultMarkdownRefs.length > 0) {
         activeTodayHubUriRef.current = null;
@@ -3269,13 +3285,21 @@ export function useMainWindowWorkspace(options: {
       }) ?? hubs[0]!;
     activeTodayHubUriRef.current = pick;
     setActiveTodayHubUri(pick);
-    setTodayHubWorkspacesForSave(prev => ({
-      ...prev,
-      [pick]: {
-        editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
-        activeEditorTabId: activeEditorTabIdRef.current,
-      },
-    }));
+    setTodayHubWorkspacesForSave(prev => {
+      const home =
+        homeStatesByHubRef.current[pick] ?? createWorkspaceHomeState(pick);
+      return {
+        ...prev,
+        [pick]: {
+          editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
+          activeEditorTabId: activeEditorTabIdRef.current,
+          homeHistory: {
+            entries: [...home.history.entries],
+            index: home.history.index,
+          },
+        },
+      };
+    });
   }, [
     vaultRoot,
     inboxShellRestored,
@@ -3289,13 +3313,22 @@ export function useMainWindowWorkspace(options: {
       return;
     }
     queueMicrotask(() => {
-      setTodayHubWorkspacesForSave(prev => ({
-        ...prev,
-        [activeTodayHubUri]: {
-          editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
-          activeEditorTabId,
-        },
-      }));
+      setTodayHubWorkspacesForSave(prev => {
+        const hub = activeTodayHubUri;
+        const home =
+          homeStatesByHubRef.current[hub] ?? createWorkspaceHomeState(hub);
+        return {
+          ...prev,
+          [hub]: {
+            editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
+            activeEditorTabId,
+            homeHistory: {
+              entries: [...home.history.entries],
+              index: home.history.index,
+            },
+          },
+        };
+      });
     });
   }, [
     editorWorkspaceTabs,

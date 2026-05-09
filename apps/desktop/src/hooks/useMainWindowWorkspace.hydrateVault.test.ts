@@ -167,10 +167,13 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.inboxShellRestored).toBe(true);
       expect(
         result.current.todayHubController.todayHubWorkspacesForSave[HUB_A],
-      ).toEqual({
-        editorWorkspaceTabs: [],
-        activeEditorTabId: null,
-      });
+      ).toEqual(
+        expect.objectContaining({
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          homeHistory: {entries: [HUB_A], index: 0},
+        }),
+      );
     });
 
     unmount();
@@ -431,6 +434,199 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
         result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
           ?.editorWorkspaceTabs,
       ).toEqual([]);
+    });
+
+    unmount();
+  });
+
+  it('restores workspace Home navigation stack from persisted homeHistory', async () => {
+    const NOTE = `${VAULT_ROOT}/Inbox/WikiNav.md`;
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [NOTE]: 'wiki nav\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: NOTE,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {
+              editorWorkspaceTabs: [],
+              activeEditorTabId: null,
+              homeHistory: {
+                entries: [HUB_A, NOTE],
+                index: 1,
+              },
+            },
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+      expect(result.current.selectionController.selectedUri).toBe(NOTE);
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+      ).toEqual({
+        entries: [HUB_A, NOTE],
+        index: 1,
+      });
+    });
+
+    unmount();
+  });
+
+  it('restores Home sub-page alongside saved tabs on the same hub', async () => {
+    const NOTE = `${VAULT_ROOT}/Inbox/HomeStack.md`;
+    const TAB_NOTE = `${VAULT_ROOT}/Inbox/TabNote.md`;
+    const snapshotA: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [{id: 'tab-x', entries: [TAB_NOTE], index: 0}],
+      activeEditorTabId: null,
+      homeHistory: {
+        entries: [HUB_A, NOTE],
+        index: 1,
+      },
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [NOTE]: 'home stack\n',
+          [TAB_NOTE]: 'tab\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: NOTE,
+          editorWorkspaceTabs: snapshotA.editorWorkspaceTabs,
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: snapshotA,
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+      expect(result.current.selectionController.selectedUri).toBe(NOTE);
+      expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toEqual([
+        'tab-x',
+      ]);
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+      ).toEqual({
+        entries: [HUB_A, NOTE],
+        index: 1,
+      });
+    });
+
+    unmount();
+  });
+
+  it('keeps independent persisted homeHistory per hub when multiple hubs restore', async () => {
+    const NOTE_A = `${VAULT_ROOT}/Inbox/OnlyA.md`;
+    const NOTE_B = `${VAULT_ROOT}/Inbox/OnlyB.md`;
+    const snapshotA: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [],
+      activeEditorTabId: null,
+      homeHistory: {
+        entries: [HUB_A, NOTE_A],
+        index: 1,
+      },
+    };
+    const snapshotB: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [],
+      activeEditorTabId: null,
+      homeHistory: {
+        entries: [HUB_B, NOTE_B],
+        index: 1,
+      },
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/B`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today a\n',
+          [HUB_B]: 'today b\n',
+          [NOTE_A]: 'a\n',
+          [NOTE_B]: 'b\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: NOTE_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: snapshotA,
+            [HUB_B]: snapshotB,
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual(
+        snapshotA.homeHistory,
+      );
+      expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_B]?.homeHistory).toEqual(
+        snapshotB.homeHistory,
+      );
+    });
+
+    unmount();
+  });
+
+  it('defaults Home stack when persisted snapshot omits homeHistory', async () => {
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`],
+        files: {
+          [HUB_A]: 'today\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.tabsController.editorHistoryCanGoBack).toBe(false);
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory,
+      ).toEqual({
+        entries: [HUB_A],
+        index: 0,
+      });
     });
 
     unmount();

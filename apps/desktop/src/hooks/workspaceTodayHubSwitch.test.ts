@@ -98,6 +98,7 @@ function makeArgs(overrides: {
         history: {entries: s.entries, index: s.index},
       }))},
       activeEditorTabIdRef: {current: overrides.activeEditorTabId ?? null},
+      homeStatesByHubRef: {current: {}},
     },
     setters: {
       setComposingNewEntry,

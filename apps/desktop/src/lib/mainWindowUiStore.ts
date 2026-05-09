@@ -1,5 +1,8 @@
 import {load} from '@tauri-apps/plugin-store';
 
+import type {EditorDocumentHistoryState} from './editorDocumentHistory';
+import {parseTodayHubSnapshotHomeHistoryForStore} from './workspaceHomePersistence';
+
 export const MAIN_WINDOW_UI_STORE_PATH = 'eskerra-desktop.json';
 export const MAIN_WINDOW_UI_KEY = 'mainWindowUiV1';
 
@@ -17,6 +20,8 @@ export type StoredEditorWorkspaceTab = {
 export type TodayHubWorkspaceSnapshot = {
   editorWorkspaceTabs: StoredEditorWorkspaceTab[];
   activeEditorTabId?: string | null;
+  /** Home stack for this hub; optional for snapshots written before desktop builds that persist it. */
+  homeHistory?: EditorDocumentHistoryState;
 };
 
 export type StoredMainWindowInbox = {
@@ -181,6 +186,10 @@ function parseTodayHubWorkspacesMap(
     const entry: TodayHubWorkspaceSnapshot = {editorWorkspaceTabs: snapTabs};
     if (snapActive !== undefined) {
       entry.activeEditorTabId = snapActive;
+    }
+    const homeHistory = parseTodayHubSnapshotHomeHistoryForStore(hubUri, snap);
+    if (homeHistory) {
+      entry.homeHistory = homeHistory;
     }
     workspaces[hubUri] = entry;
   }

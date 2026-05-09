@@ -8,6 +8,10 @@ import {
 
 import {editorOpenTabPillLabel} from '../lib/editorOpenTabPillLabel';
 import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
+import {
+  createWorkspaceHomeState,
+  type WorkspaceHomeState,
+} from '../lib/workspaceHomeNavigation';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {parseTodayHubFrontmatter, type TodayHubSettings} from '../lib/todayHub';
 
@@ -79,6 +83,25 @@ export function deriveTodayHubWorkspacesPersistFiltered(
     if (hubs.has(k)) {
       out[k] = v;
     }
+  }
+  return out;
+}
+
+/** Adds `homeHistory` from runtime {@link WorkspaceHomeState} for JSON persistence. */
+export function mergeHomeHistoryIntoHubSnapshotsForPersist(
+  filtered: Record<string, TodayHubWorkspaceSnapshot>,
+  homeStatesByHub: Record<string, WorkspaceHomeState>,
+): Record<string, TodayHubWorkspaceSnapshot> {
+  const out: Record<string, TodayHubWorkspaceSnapshot> = {};
+  for (const [hub, snap] of Object.entries(filtered)) {
+    const home = homeStatesByHub[hub] ?? createWorkspaceHomeState(hub);
+    out[hub] = {
+      ...snap,
+      homeHistory: {
+        entries: [...home.history.entries],
+        index: home.history.index,
+      },
+    };
   }
   return out;
 }

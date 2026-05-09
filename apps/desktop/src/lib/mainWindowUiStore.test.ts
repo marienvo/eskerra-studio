@@ -211,6 +211,28 @@ describe('normalizeMainWindowUiPayload', () => {
     });
   });
 
+  it('parses optional homeHistory on hub snapshots', () => {
+    const out = normalizeMainWindowUiPayload({
+      vaultRoot: '/vault',
+      inbox: {
+        todayHubWorkspaces: {
+          '/vault/Daily/Today.md': {
+            editorWorkspaceTabs: [{id: 't1', entries: ['/vault/Inbox/A.md'], index: 0}],
+            activeEditorTabId: 't1',
+            homeHistory: {
+              entries: ['/vault/Daily/Today.md', '/vault/Inbox/B.md'],
+              index: 1,
+            },
+          },
+        },
+      },
+    });
+    expect(out?.inbox.todayHubWorkspaces?.['/vault/Daily/Today.md']?.homeHistory).toEqual({
+      entries: ['/vault/Daily/Today.md', '/vault/Inbox/B.md'],
+      index: 1,
+    });
+  });
+
   it('treats blank activeTodayHubUri as null', () => {
     const out = normalizeMainWindowUiPayload({
       vaultRoot: '/v',
