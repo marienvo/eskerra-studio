@@ -2018,22 +2018,32 @@ export function useMainWindowWorkspace(options: {
             editorShellScrollByUriRef.current.delete(normalizeEditorDocUri(u));
           }
         }
-        const next = prevTabs.filter(t => t.id === keepTabId);
+        const nextModel = dispatchWorkspaceActionSync('close other tabs', m =>
+          closeOtherTabsAction(m, keepTabId),
+        );
+        const hub = nextModel.activeHub;
+        const derived =
+          hub != null && nextModel.workspaces[hub] != null
+            ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
+            : null;
+        const nextTabs =
+          derived != null &&
+          derived.length === 1 &&
+          derived[0]!.id === keepTabId
+            ? derived
+            : prevTabs.filter(t => t.id === keepTabId);
         assignLegacyEditorWorkspaceTabs({
-          nextTabs: next,
+          nextTabs,
           editorWorkspaceTabsRef,
           setEditorWorkspaceTabs,
         });
-        dispatchWorkspaceAction('close other tabs', model =>
-          closeOtherTabsAction(model, keepTabId),
-        );
       })();
     },
     [
       openMarkdownInEditor,
       bumpEditorClosedStack,
       mirrorShadowActiveTab,
-      dispatchWorkspaceAction,
+      dispatchWorkspaceActionSync,
     ],
   );
 
