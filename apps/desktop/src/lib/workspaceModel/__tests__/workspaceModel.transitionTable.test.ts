@@ -13,6 +13,7 @@ import {
   pushTabNavigationAction,
   removeUrisAction,
   selectWorkspaceAction,
+  validateWorkspaceModel,
 } from '../index';
 import type {WorkspaceModel} from '../types';
 
@@ -108,6 +109,20 @@ describe('workspaceModel transition table', () => {
     const tab = m.workspaces[m.activeHub!]!.tabs[0]!;
     expect(tab.history.index).toBe(0);
     expect(m.workspaces[m.activeHub!]!.homeHistory.index).toBe(0);
+  });
+
+  it('auto-generated tab ids stay unique after close then reopen same URI', () => {
+    let m = baseModel();
+    m = openTabForegroundAction(m, NOTE);
+    m = openTabForegroundAction(m, NOTE);
+    const hub = m.activeHub!;
+    const idsBefore = m.workspaces[hub]!.tabs.map(t => t.id);
+    expect(new Set(idsBefore).size).toBe(2);
+    m = closeTabAction(m, idsBefore[0]!);
+    m = openTabForegroundAction(m, NOTE);
+    const idsAfter = m.workspaces[hub]!.tabs.map(t => t.id);
+    expect(new Set(idsAfter).size).toBe(2);
+    expect(validateWorkspaceModel(m).map(i => i.code)).not.toContain('duplicate_tab_id');
   });
 
   it('closing last tab activates Home without resetting Home history', () => {

@@ -24,11 +24,10 @@ import {
   migrateOpenTabUrisToWorkspaceTabs,
   tabCurrentUri,
   tabsFromStored,
-  tabsToStored,
 } from '../editorWorkspaceTabs';
 import {normalizeEditorDocUri} from '../editorDocumentHistory';
 import {pickDefaultActiveTodayHubUri} from '../todayHubWorkspaceRestore';
-import type {HistoryStack, WorkspaceModel, WorkspaceState} from './types';
+import type {HistoryStack, WorkspaceModel, WorkspaceState, TabEntry} from './types';
 import {createDefaultWorkspaceState, normalizeWorkspaceUri} from './types';
 
 /** Serialized tab row (matches `StoredEditorWorkspaceTab` on disk). */
@@ -311,6 +310,14 @@ function applyLegacyTopLevelMigration(
   };
 }
 
+function tabEntriesToStoredTabs(tabs: readonly TabEntry[]): PersistedStoredEditorWorkspaceTab[] {
+  return tabs.map(t => ({
+    id: t.id,
+    entries: [...t.history.entries],
+    index: t.history.index,
+  }));
+}
+
 export function parseWorkspaceModelFromPersistence(args: ParseWorkspacePersistenceArgs): WorkspaceModel {
   const hubs = sortedNormalizedHubs(args.hubUris);
   if (hubs.length === 0) {
@@ -348,7 +355,7 @@ export function serializeWorkspaceModelToPersistence(m: WorkspaceModel): Seriali
       continue;
     }
     todayHubWorkspaces[hub] = {
-      editorWorkspaceTabs: tabsToStored(ws.tabs as unknown as readonly EditorWorkspaceTab[]),
+      editorWorkspaceTabs: tabEntriesToStoredTabs(ws.tabs),
       activeEditorTabId: ws.active.kind === 'tab' ? ws.active.id : null,
       homeHistory: {
         entries: [...ws.homeHistory.entries],

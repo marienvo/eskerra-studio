@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 
 import {
   isActiveWorkspaceTodayLinkSurface,
+  isOnWorkspaceHome,
   selectNoteActiveHubTodayOpen,
   shouldOpenActiveHubTodayAsHome,
   workspaceSelectShowsActiveTabPillState,
@@ -80,6 +81,56 @@ describe('shouldOpenActiveHubTodayAsHome', () => {
         activeTodayHubUri: null,
         uriIsTodayMarkdownFile: true,
         editorWorkspaceTabCount: 0,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('isOnWorkspaceHome', () => {
+  const hubToday = '/vault/Areas/X/Today.md';
+  const homeSub = '/vault/Inbox/SubPage.md';
+
+  it('is true on hub Today and on a Home sub-page when no tab is active', () => {
+    expect(
+      isOnWorkspaceHome({
+        composingNewEntry: false,
+        activeTodayHubUri: hubToday,
+        selectedUri: hubToday,
+        activeEditorTabId: null,
+      }),
+    ).toBe(true);
+    expect(
+      isOnWorkspaceHome({
+        composingNewEntry: false,
+        activeTodayHubUri: hubToday,
+        selectedUri: homeSub,
+        activeEditorTabId: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('is false when composing, a tab is active, or active hub is not a Today file', () => {
+    expect(
+      isOnWorkspaceHome({
+        composingNewEntry: true,
+        activeTodayHubUri: hubToday,
+        selectedUri: hubToday,
+      }),
+    ).toBe(false);
+    expect(
+      isOnWorkspaceHome({
+        composingNewEntry: false,
+        activeTodayHubUri: hubToday,
+        selectedUri: hubToday,
+        activeEditorTabId: 't1',
+      }),
+    ).toBe(false);
+    expect(
+      isOnWorkspaceHome({
+        composingNewEntry: false,
+        activeTodayHubUri: '/vault/Inbox/Plain.md',
+        selectedUri: '/vault/Inbox/Plain.md',
+        activeEditorTabId: null,
       }),
     ).toBe(false);
   });

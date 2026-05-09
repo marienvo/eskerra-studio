@@ -153,7 +153,7 @@ export function isOnWorkspaceHome(input: {
   if (!hub || !sel) {
     return false;
   }
-  return sel === hub || vaultUriIsTodayMarkdownFile(hub);
+  return vaultUriIsTodayMarkdownFile(hub);
 }
 
 export const shouldOpenActiveHubTodayAsShell = shouldOpenActiveHubTodayAsHome;

@@ -1,27 +1,13 @@
-import type {EditorDocumentHistoryState} from '../../editorDocumentHistory';
 import {
   normalizeEditorDocUri,
   remapEditorHistoryPrefix,
   remapVaultUriPrefix,
   removeEditorHistoryUris,
 } from '../../editorDocumentHistory';
-import type {HistoryStack, WorkspaceModel, WorkspaceState} from '../types';
+import type {WorkspaceModel, WorkspaceState} from '../types';
 import {createDefaultWorkspaceState, normalizeWorkspaceUri} from '../types';
 
-function stackToEditor(h: HistoryStack): EditorDocumentHistoryState {
-  return {entries: [...h.entries], index: h.index};
-}
-
-function editorToStack(e: EditorDocumentHistoryState): HistoryStack {
-  if (e.entries.length === 0) {
-    return {entries: [], index: 0};
-  }
-  let idx = e.index;
-  if (idx < 0 || idx >= e.entries.length) {
-    idx = e.entries.length - 1;
-  }
-  return {entries: e.entries, index: idx};
-}
+import {editorToStack, stackToEditor} from './utils';
 
 function pruneWorkspaceState(
   hubKey: string,

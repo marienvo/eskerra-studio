@@ -40,6 +40,10 @@ describe('workspaceModel persistence roundtrip', () => {
       },
     };
     const blob = serializeWorkspaceModelToPersistence(m);
+    const stored = blob.todayHubWorkspaces[HUB]!.editorWorkspaceTabs;
+    expect(stored).toEqual([
+      {id: 't1', entries: [HUB, NOTE], index: 1},
+    ]);
     const back = parseWorkspaceModelFromPersistence({
       hubUris: [HUB],
       activeTodayHubUri: HUB,

@@ -1,24 +1,6 @@
-import type {WorkspaceModel, WorkspaceState} from '../types';
+import type {WorkspaceModel} from '../types';
 
-function patchActiveWorkspace(
-  m: WorkspaceModel,
-  patch: (ws: WorkspaceState) => WorkspaceState,
-): WorkspaceModel {
-  if (m.activeHub == null) {
-    return m;
-  }
-  const cur = m.workspaces[m.activeHub];
-  if (!cur) {
-    return m;
-  }
-  return {
-    ...m,
-    workspaces: {
-      ...m.workspaces,
-      [m.activeHub]: patch(cur),
-    },
-  };
-}
+import {patchActiveWorkspace} from './utils';
 
 /**
  * Selector main-button click (plan rules 4–6):

@@ -1,29 +1,22 @@
 import type {TabEntry, WorkspaceModel, WorkspaceState} from '../types';
 import {normalizeWorkspaceUri} from '../types';
-
-function patchActiveWorkspace(
-  m: WorkspaceModel,
-  patch: (ws: WorkspaceState) => WorkspaceState,
-): WorkspaceModel {
-  if (m.activeHub == null) {
-    return m;
-  }
-  const cur = m.workspaces[m.activeHub];
-  if (!cur) {
-    return m;
-  }
-  return {
-    ...m,
-    workspaces: {
-      ...m.workspaces,
-      [m.activeHub]: patch(cur),
-    },
-  };
-}
+import {patchActiveWorkspace} from './utils';
 
 function autoTabId(ws: WorkspaceState, uri: string): string {
   const n = normalizeWorkspaceUri(uri);
-  return `tab-${ws.tabs.length}-${n}`;
+  const base = `tab-${ws.tabs.length}-${n}`;
+  const existing = new Set(ws.tabs.map(t => t.id));
+  if (!existing.has(base)) {
+    return base;
+  }
+  let i = 1;
+  for (;;) {
+    const candidate = `${base}__${i}`;
+    if (!existing.has(candidate)) {
+      return candidate;
+    }
+    i += 1;
+  }
 }
 
 function neighborTabIdAfterClose(tabs: readonly TabEntry[], closedIndex: number): string {
