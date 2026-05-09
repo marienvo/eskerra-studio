@@ -325,6 +325,14 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.tabsController.editorWorkspaceTabs[0]?.history.entries).toEqual([
         NOTE_A1,
       ]);
+      const tabId = result.current.tabsController.activeEditorTabId;
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
+        {id: tabId, history: {entries: [NOTE_A1], index: 0}},
+      ]);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: tabId,
+      });
     });
 
     await act(async () => {
@@ -409,6 +417,15 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
         NOTE_A1,
       ]);
       expect(restarted.current.selectionController.selectedUri).toBe(NOTE_A1);
+      const tabId = restarted.current.tabsController.activeEditorTabId;
+      expect(restarted.current.workspaceShadowModelForTests?.activeHub).toBe(HUB_A);
+      expect(restarted.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
+        {id: tabId, history: {entries: [NOTE_A1], index: 0}},
+      ]);
+      expect(restarted.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: tabId,
+      });
     });
 
     unmountRestarted();
@@ -672,6 +689,158 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     unmount();
   });
 
+  it('keeps shadow tab arrays aligned across tab navigation and list operations', async () => {
+    const NOTE_1 = `${VAULT_ROOT}/Inbox/TabOne.md`;
+    const NOTE_2 = `${VAULT_ROOT}/Inbox/TabTwo.md`;
+    const NOTE_3 = `${VAULT_ROOT}/Inbox/TabThree.md`;
+    const NOTE_3_RENAMED = `${VAULT_ROOT}/Inbox/TabThreeRenamed.md`;
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [NOTE_1]: 'one\n',
+          [NOTE_2]: 'two\n',
+          [NOTE_3]: 'three\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNoteInNewActiveTab(NOTE_1);
+    });
+    await act(async () => {
+      result.current.selectionController.selectNoteInNewActiveTab(NOTE_2);
+    });
+
+    let tabOneId = '';
+    let tabTwoId = '';
+    await waitFor(() => {
+      const tabs = result.current.tabsController.editorWorkspaceTabs;
+      expect(tabs.map(t => t.history.entries)).toEqual([[NOTE_1], [NOTE_2]]);
+      tabOneId = tabs[0]!.id;
+      tabTwoId = tabs[1]!.id;
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
+        {id: tabOneId, history: {entries: [NOTE_1], index: 0}},
+        {id: tabTwoId, history: {entries: [NOTE_2], index: 0}},
+      ]);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: tabTwoId,
+      });
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(NOTE_3);
+    });
+
+    await waitFor(() => {
+      expect(result.current.tabsController.editorWorkspaceTabs[1]?.history).toEqual({
+        entries: [NOTE_2, NOTE_3],
+        index: 1,
+      });
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs[1]).toEqual({
+        id: tabTwoId,
+        history: {entries: [NOTE_2, NOTE_3], index: 1},
+      });
+    });
+
+    await act(async () => {
+      result.current.tabsController.editorHistoryGoBack();
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(NOTE_2);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs[1]?.history).toEqual({
+        entries: [NOTE_2, NOTE_3],
+        index: 0,
+      });
+    });
+
+    await act(async () => {
+      result.current.tabsController.editorHistoryGoForward();
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(NOTE_3);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs[1]?.history).toEqual({
+        entries: [NOTE_2, NOTE_3],
+        index: 1,
+      });
+    });
+
+    await act(async () => {
+      result.current.todayHubController.openWorkspaceHomeCurrentInBackgroundTab();
+    });
+    await waitFor(() => {
+      expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(3);
+      expect(result.current.tabsController.activeEditorTabId).toBe(tabTwoId);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toHaveLength(3);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: tabTwoId,
+      });
+    });
+
+    await act(async () => {
+      result.current.tabsController.reorderEditorWorkspaceTabs(2, 0);
+    });
+    await waitFor(() => {
+      const runtimeOrder = result.current.tabsController.editorWorkspaceTabs.map(t => t.id);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs.map(t => t.id)).toEqual(
+        runtimeOrder,
+      );
+    });
+
+    await act(async () => {
+      result.current.tabsController.closeOtherEditorTabs(tabTwoId);
+    });
+    await waitFor(() => {
+      expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toEqual([tabTwoId]);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
+        {id: tabTwoId, history: {entries: [NOTE_2, NOTE_3], index: 1}},
+      ]);
+    });
+
+    await act(async () => {
+      await result.current.treeController.deleteNote(NOTE_2);
+    });
+    await waitFor(() => {
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
+        {id: tabTwoId, history: {entries: [NOTE_3], index: 0}},
+      ]);
+    });
+
+    await act(async () => {
+      await result.current.treeController.renameNote(NOTE_3, 'TabThreeRenamed');
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(NOTE_3_RENAMED);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
+        {id: tabTwoId, history: {entries: [NOTE_3_RENAMED], index: 0}},
+      ]);
+    });
+
+    expect(tabOneId).not.toBe('');
+    unmount();
+  });
+
   it('closing the last tab mirrors Home as the shadow active surface', async () => {
     const TAB_NOTE = `${VAULT_ROOT}/Inbox/LastTab.md`;
     const snapshot: TodayHubWorkspaceSnapshot = {
@@ -721,6 +890,22 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.selectionController.selectedUri).toBe(HUB_A);
       expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
         kind: 'home',
+      });
+    });
+
+    await act(async () => {
+      result.current.tabsController.reopenLastClosedEditorTab();
+    });
+
+    await waitFor(() => {
+      const reopened = result.current.tabsController.editorWorkspaceTabs[0];
+      expect(reopened?.history.entries).toEqual([TAB_NOTE]);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
+        {id: reopened?.id, history: {entries: [TAB_NOTE], index: 0}},
+      ]);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: reopened?.id,
       });
     });
 

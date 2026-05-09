@@ -136,12 +136,19 @@ import {
 } from '../lib/workspaceHomeNavigation';
 import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
 import {
+  closeAllTabsAction,
+  closeOtherTabsAction,
+  closeTabAction,
   createDefaultWorkspaceState,
+  goBackAction,
+  goForwardAction,
   normalizeWorkspaceUri,
   activateTabAction,
   remapPrefixAction,
   removeUrisAction,
+  reorderTabsAction,
   selectWorkspaceAction,
+  type TabEntry,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
 import type {
@@ -607,6 +614,49 @@ export function useMainWindowWorkspace(options: {
   const mirrorShadowActiveTab = useCallback(
     (tabId: string, reason: string) => {
       dispatchWorkspaceAction(reason, model => activateTabAction(model, tabId));
+    },
+    [dispatchWorkspaceAction],
+  );
+
+  const mirrorShadowActiveWorkspaceTabs = useCallback(
+    (
+      tabs: readonly EditorWorkspaceTab[],
+      activeId: string | null,
+      reason: string,
+    ) => {
+      const shadowTabs: TabEntry[] = tabs
+        .map(t => ({
+          id: t.id,
+          history: {
+            entries: t.history.entries.map(normalizeWorkspaceUri).filter(Boolean),
+            index: t.history.index,
+          },
+        }))
+        .filter(t => t.id.trim() !== '' && t.history.entries.length > 0);
+      dispatchWorkspaceAction(reason, model => {
+        const hub = model.activeHub;
+        if (hub == null) {
+          return model;
+        }
+        const current = model.workspaces[hub];
+        if (current == null) {
+          return model;
+        }
+        const active = activeId != null && shadowTabs.some(t => t.id === activeId)
+          ? {kind: 'tab' as const, id: activeId}
+          : {kind: 'home' as const};
+        return {
+          ...model,
+          workspaces: {
+            ...model.workspaces,
+            [hub]: {
+              ...current,
+              tabs: shadowTabs,
+              active,
+            },
+          },
+        };
+      });
     },
     [dispatchWorkspaceAction],
   );
@@ -1344,6 +1394,11 @@ export function useMainWindowWorkspace(options: {
       }
       editorWorkspaceTabsRef.current = nextTabs;
       setEditorWorkspaceTabs(nextTabs);
+      mirrorShadowActiveWorkspaceTabs(
+        nextTabs,
+        activeEditorTabIdRef.current,
+        'background open tab',
+      );
       if (prefetchBody !== undefined) {
         inboxContentByUriRef.current = {
           ...inboxContentByUriRef.current,
@@ -1357,7 +1412,7 @@ export function useMainWindowWorkspace(options: {
         });
       }
     },
-    [],
+    [mirrorShadowActiveWorkspaceTabs],
   );
 
   const placeForegroundMarkdownOpen = useCallback(
@@ -1459,6 +1514,11 @@ export function useMainWindowWorkspace(options: {
       activeEditorTabIdRef.current = nextActiveId;
       setEditorWorkspaceTabs(nextTabs);
       setActiveEditorTabId(nextActiveId);
+      mirrorShadowActiveWorkspaceTabs(
+        nextTabs,
+        nextActiveId,
+        'foreground open tabs',
+      );
       if (nextActiveId == null) {
         mirrorShadowHomeSurface('foreground open home surface');
       } else {
@@ -1475,6 +1535,7 @@ export function useMainWindowWorkspace(options: {
       tryPrefetchTargetBody,
       applyBackgroundNewTabOpen,
       placeForegroundMarkdownOpen,
+      mirrorShadowActiveWorkspaceTabs,
       mirrorShadowHomeSurface,
       mirrorShadowActiveTab,
       loadOpenedNoteBodyAndApplySelection,
@@ -1757,8 +1818,11 @@ export function useMainWindowWorkspace(options: {
       }
       editorWorkspaceTabsRef.current = next;
       setEditorWorkspaceTabs(next);
+      dispatchWorkspaceAction('reorder tabs', model =>
+        reorderTabsAction(model, fromIndex, insertBeforeIndex),
+      );
     },
-    [busy],
+    [busy, dispatchWorkspaceAction],
   );
 
   /** Reset the inbox editor body, frontmatter state, and any reset-nonce-driven CodeMirror reload. */
@@ -1857,6 +1921,7 @@ export function useMainWindowWorkspace(options: {
         const nextTabs = tabsBefore.filter(t => t.id !== tabId);
         editorWorkspaceTabsRef.current = nextTabs;
         setEditorWorkspaceTabs(nextTabs);
+        dispatchWorkspaceAction('close tab', model => closeTabAction(model, tabId));
 
         if (!wasActive) {
           return;
@@ -1864,7 +1929,7 @@ export function useMainWindowWorkspace(options: {
         await refocusAfterClosingActiveTab(nextTabId, nextTabs);
       })();
     },
-    [recordClosedTabAndPruneScroll, refocusAfterClosingActiveTab],
+    [dispatchWorkspaceAction, recordClosedTabAndPruneScroll, refocusAfterClosingActiveTab],
   );
 
   const closeOtherEditorTabs = useCallback(
@@ -1902,9 +1967,17 @@ export function useMainWindowWorkspace(options: {
         const next = prevTabs.filter(t => t.id === keepTabId);
         editorWorkspaceTabsRef.current = next;
         setEditorWorkspaceTabs(next);
+        dispatchWorkspaceAction('close other tabs', model =>
+          closeOtherTabsAction(model, keepTabId),
+        );
       })();
     },
-    [openMarkdownInEditor, bumpEditorClosedStack, mirrorShadowActiveTab],
+    [
+      openMarkdownInEditor,
+      bumpEditorClosedStack,
+      mirrorShadowActiveTab,
+      dispatchWorkspaceAction,
+    ],
   );
 
   const closeAllEditorTabs = useCallback(() => {
@@ -1927,6 +2000,7 @@ export function useMainWindowWorkspace(options: {
       }
       editorWorkspaceTabsRef.current = [];
       setEditorWorkspaceTabs([]);
+      dispatchWorkspaceAction('close all tabs', closeAllTabsAction);
       activeEditorTabIdRef.current = null;
       setActiveEditorTabId(null);
       mirrorShadowHomeSurface('close all tabs home surface');
@@ -1952,6 +2026,7 @@ export function useMainWindowWorkspace(options: {
     })();
   }, [
     bumpEditorClosedStack,
+    dispatchWorkspaceAction,
     openMarkdownInEditor,
     mirrorShadowHomeSurface,
     selectHomeCurrentNote,
@@ -2510,6 +2585,7 @@ export function useMainWindowWorkspace(options: {
         mirrorShadowActiveHub,
         mirrorShadowHomeSurface,
         mirrorShadowActiveTab,
+        mirrorShadowActiveWorkspaceTabs,
       },
     });
 
@@ -3329,9 +3405,15 @@ export function useMainWindowWorkspace(options: {
       );
       editorWorkspaceTabsRef.current = nextTabs;
       setEditorWorkspaceTabs(nextTabs);
+      dispatchWorkspaceAction('tab go back', goBackAction);
       await openMarkdownInEditor(uri, {skipHistory: true});
     })();
-  }, [openMarkdownInEditor, openCurrentHomeAfterComposing, moveHomeHistory]);
+  }, [
+    dispatchWorkspaceAction,
+    openMarkdownInEditor,
+    openCurrentHomeAfterComposing,
+    moveHomeHistory,
+  ]);
 
   const editorHistoryGoForward = useCallback(() => {
     void (async () => {
@@ -3365,9 +3447,10 @@ export function useMainWindowWorkspace(options: {
       );
       editorWorkspaceTabsRef.current = nextTabs;
       setEditorWorkspaceTabs(nextTabs);
+      dispatchWorkspaceAction('tab go forward', goForwardAction);
       await openMarkdownInEditor(uri, {skipHistory: true});
     })();
-  }, [openMarkdownInEditor, moveHomeHistory]);
+  }, [dispatchWorkspaceAction, openMarkdownInEditor, moveHomeHistory]);
 
   useEffect(() => {
     if (!inboxRestoreEnabled) {
@@ -3411,6 +3494,11 @@ export function useMainWindowWorkspace(options: {
       queueMicrotask(() => {
         setEditorWorkspaceTabs(built.tabs);
         setActiveEditorTabId(built.activeEditorTabId);
+        mirrorShadowActiveWorkspaceTabs(
+          built.tabs,
+          built.activeEditorTabId,
+          'restore editor workspace tabs',
+        );
         if (built.activeEditorTabId == null) {
           mirrorShadowHomeSurface('restore editor workspace home surface');
         } else {
@@ -3422,7 +3510,11 @@ export function useMainWindowWorkspace(options: {
       });
       return built.uris;
     },
-    [mirrorShadowActiveTab, mirrorShadowHomeSurface],
+    [
+      mirrorShadowActiveWorkspaceTabs,
+      mirrorShadowActiveTab,
+      mirrorShadowHomeSurface,
+    ],
   );
 
   const migrateLegacyOpenTabsIfNeeded = useCallback(
@@ -3448,13 +3540,14 @@ export function useMainWindowWorkspace(options: {
       queueMicrotask(() => {
         setEditorWorkspaceTabs(migrated);
         setActiveEditorTabId(nextActive);
+        mirrorShadowActiveWorkspaceTabs(migrated, nextActive, 'restore legacy tabs');
         mirrorShadowActiveTab(nextActive, 'restore legacy open tab');
       });
       return migrated
         .map(t => tabCurrentUri(t))
         .filter((u): u is string => u != null);
     },
-    [mirrorShadowActiveTab],
+    [mirrorShadowActiveWorkspaceTabs, mirrorShadowActiveTab],
   );
 
   const restoreInboxSelectionAfterShellRestore = useCallback(

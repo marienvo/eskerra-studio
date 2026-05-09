@@ -91,6 +91,11 @@ export type UseWorkspaceTodayHubSwitchArgs = {
     mirrorShadowActiveHub?: (hubUri: string | null, reason: string) => void;
     mirrorShadowHomeSurface?: (reason: string) => void;
     mirrorShadowActiveTab?: (tabId: string, reason: string) => void;
+    mirrorShadowActiveWorkspaceTabs?: (
+      tabs: readonly EditorWorkspaceTab[],
+      activeId: string | null,
+      reason: string,
+    ) => void;
   };
 };
 
@@ -109,6 +114,7 @@ export function useWorkspaceTodayHubSwitch(
     mirrorShadowActiveHub,
     mirrorShadowHomeSurface,
     mirrorShadowActiveTab,
+    mirrorShadowActiveWorkspaceTabs,
   } = args.callbacks;
 
   const {
@@ -209,6 +215,11 @@ export function useWorkspaceTodayHubSwitch(
       activeTodayHubUriRef.current = norm;
       setActiveTodayHubUri(norm);
       mirrorShadowActiveHub?.(norm, 'switch workspace active hub');
+      mirrorShadowActiveWorkspaceTabs?.(
+        nextTabs,
+        nextActive,
+        'switch workspace tabs',
+      );
       if (nextActive) {
         mirrorShadowActiveTab?.(nextActive, 'switch workspace active tab');
       } else {
@@ -237,6 +248,7 @@ export function useWorkspaceTodayHubSwitch(
       inboxYamlFrontmatterInnerRef,
       mirrorShadowActiveHub,
       mirrorShadowActiveTab,
+      mirrorShadowActiveWorkspaceTabs,
       mirrorShadowHomeSurface,
       selectHomeCurrentNote,
       setActiveEditorTabId,
