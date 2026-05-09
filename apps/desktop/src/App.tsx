@@ -447,6 +447,7 @@ export default function App() {
     todayHubCleanRowBlocked,
     todayHubSelectorItems,
     activeTodayHubUri,
+    persistenceActiveTodayHubUri,
     todayHubWorkspacesForSave,
     switchTodayHubWorkspace,
     focusActiveTodayHubNote,
@@ -620,7 +621,7 @@ export default function App() {
     selectedUri,
     editorWorkspaceTabs: workspaceTabsController.editorWorkspaceTabs,
     activeEditorTabId: workspaceTabsController.activeEditorTabId,
-    activeTodayHubUri,
+    activeTodayHubUri: persistenceActiveTodayHubUri,
     todayHubWorkspacesForSave,
   });
 

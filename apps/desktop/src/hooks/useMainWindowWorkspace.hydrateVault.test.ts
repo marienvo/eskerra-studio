@@ -268,6 +268,7 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
 
     await waitFor(() => {
       expect(result.current.todayHubController.activeTodayHubUri).toBe(HUB_A);
+      expect(result.current.todayHubController.persistenceActiveTodayHubUri).toBe(HUB_A);
       expect(result.current.tabsController.activeEditorTabId).toBe('tab-a1');
       expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toEqual([
         'tab-a1',
@@ -333,6 +334,14 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
         kind: 'tab',
         id: tabId,
       });
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+          ?.editorWorkspaceTabs,
+      ).toEqual([{id: tabId, entries: [NOTE_A1], index: 0}]);
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+          ?.activeEditorTabId,
+      ).toBe(tabId);
     });
 
     await act(async () => {

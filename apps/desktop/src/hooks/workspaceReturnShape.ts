@@ -165,6 +165,7 @@ export type WorkspaceTodayHubController = {
   todayHubCleanRowBlocked: (rowUri: string) => boolean;
   todayHubSelectorItems: readonly {todayNoteUri: string; label: string}[];
   activeTodayHubUri: string | null;
+  persistenceActiveTodayHubUri: string | null;
   todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>;
   switchTodayHubWorkspace: (todayNoteUri: string) => Promise<void>;
   focusActiveTodayHubNote: () => void;
