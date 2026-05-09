@@ -134,7 +134,6 @@ import {
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
-  normalizeWorkspaceUri,
   reorderTabsAction,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
@@ -210,6 +209,11 @@ import {
   projectWorkspaceRuntimeToModel,
 } from './workspaceRuntimeProjection';
 import {
+  assignLegacyRuntimeActiveHub,
+  assignLegacyRuntimeActiveSurfaceTab,
+  reconcileLegacyRuntimeHubSurfaceAfterProjection,
+} from './workspaceRuntimeActiveLegacyBridge';
+import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
   type WorkspaceRenameMaintenanceSnapshot,
@@ -237,16 +241,6 @@ import {resolveVaultLinkBaseMarkdownUri} from '../lib/resolveVaultLinkBaseMarkdo
 
 const STORE_PATH = 'eskerra-desktop.json';
 const STORE_KEY_VAULT = 'vaultRoot';
-
-function workspaceHubUriEqual(a: string | null, b: string | null): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a == null || b == null) {
-    return false;
-  }
-  return normalizeWorkspaceUri(a) === normalizeWorkspaceUri(b);
-}
 
 /** Debounce scan of the active note body for backlinks (full vault scan is too heavy per keystroke). */
 const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
@@ -756,16 +750,19 @@ export function useMainWindowWorkspace(options: {
     }
     replaceWorkspaceShadowModel(projectedWorkspaceModel, 'runtime projection');
     const m = workspaceShadowModelRef.current;
-    const hub = m.activeHub;
-    const tab = activeSurfaceTabIdFromWorkspaceModel(m);
-    if (!workspaceHubUriEqual(hub, activeTodayHubUri)) {
-      setActiveTodayHubUri(hub);
-    }
-    if (tab !== activeEditorTabId) {
-      setActiveEditorTabId(tab);
-    }
-    activeTodayHubUriRef.current = hub;
-    activeEditorTabIdRef.current = tab;
+    reconcileLegacyRuntimeHubSurfaceAfterProjection({
+      model: m,
+      activeTodayHubUri,
+      activeEditorTabId,
+      hubSink: {
+        ref: activeTodayHubUriRef,
+        setActiveTodayHubUri,
+      },
+      tabSink: {
+        ref: activeEditorTabIdRef,
+        setActiveEditorTabId,
+      },
+    });
     scheduleDevWorkspaceShadowModelDivergenceCheck({
       devOrTest: import.meta.env.DEV || import.meta.env.MODE === 'test',
       projected: projectedWorkspaceModel,
@@ -1813,8 +1810,10 @@ export function useMainWindowWorkspace(options: {
       if (!u) {
         return;
       }
-      activeEditorTabIdRef.current = tabId;
-      setActiveEditorTabId(tabId);
+      assignLegacyRuntimeActiveSurfaceTab(tabId, {
+        ref: activeEditorTabIdRef,
+        setActiveEditorTabId,
+      });
       mirrorShadowActiveTab(tabId, 'activate open tab');
       void openMarkdownInEditor(u, {skipHistory: true});
     },
@@ -1893,8 +1892,10 @@ export function useMainWindowWorkspace(options: {
   const refocusAfterClosingActiveTab = useCallback(
     async (nextTabId: string | null, nextTabs: readonly EditorWorkspaceTab[]) => {
       if (nextTabId) {
-        activeEditorTabIdRef.current = nextTabId;
-        setActiveEditorTabId(nextTabId);
+        assignLegacyRuntimeActiveSurfaceTab(nextTabId, {
+          ref: activeEditorTabIdRef,
+          setActiveEditorTabId,
+        });
         mirrorShadowActiveTab(nextTabId, 'close tab refocus neighbor');
       }
       const neighbor = nextTabId ? findTabById(nextTabs, nextTabId) : undefined;
@@ -1909,8 +1910,10 @@ export function useMainWindowWorkspace(options: {
         return;
       }
       if (!nextTabId) {
-        activeEditorTabIdRef.current = null;
-        setActiveEditorTabId(null);
+        assignLegacyRuntimeActiveSurfaceTab(null, {
+          ref: activeEditorTabIdRef,
+          setActiveEditorTabId,
+        });
         mirrorShadowHomeSurface('close tab home surface');
       }
       clearInboxSelection();
@@ -1965,8 +1968,10 @@ export function useMainWindowWorkspace(options: {
         }
         await saveChainRef.current.catch(() => undefined);
         if (activeEditorTabIdRef.current !== keepTabId) {
-          activeEditorTabIdRef.current = keepTabId;
-          setActiveEditorTabId(keepTabId);
+          assignLegacyRuntimeActiveSurfaceTab(keepTabId, {
+            ref: activeEditorTabIdRef,
+            setActiveEditorTabId,
+          });
           mirrorShadowActiveTab(keepTabId, 'close other tabs activate kept tab');
           await openMarkdownInEditor(keepUri, {skipHistory: true});
         } else {
@@ -2023,8 +2028,10 @@ export function useMainWindowWorkspace(options: {
       editorWorkspaceTabsRef.current = [];
       setEditorWorkspaceTabs([]);
       dispatchWorkspaceAction('close all tabs', closeAllTabsAction);
-      activeEditorTabIdRef.current = null;
-      setActiveEditorTabId(null);
+      assignLegacyRuntimeActiveSurfaceTab(null, {
+        ref: activeEditorTabIdRef,
+        setActiveEditorTabId,
+      });
       mirrorShadowHomeSurface('close all tabs home surface');
       const shellHubAll = activeTodayHubUriRef.current;
       if (shellHubAll) {
@@ -2108,10 +2115,14 @@ export function useMainWindowWorkspace(options: {
         await refreshNotes(root);
         editorWorkspaceTabsRef.current = [];
         setEditorWorkspaceTabs([]);
-        activeEditorTabIdRef.current = null;
-        setActiveEditorTabId(null);
-        activeTodayHubUriRef.current = null;
-        setActiveTodayHubUri(null);
+        assignLegacyRuntimeActiveSurfaceTab(null, {
+          ref: activeEditorTabIdRef,
+          setActiveEditorTabId,
+        });
+        assignLegacyRuntimeActiveHub(null, {
+          ref: activeTodayHubUriRef,
+          setActiveTodayHubUri,
+        });
         mirrorShadowActiveHub(null, 'hydrate reset active hub');
         setTodayHubWorkspacesForSave({});
         editorClosedTabsStackRef.current = [];
@@ -3623,8 +3634,10 @@ export function useMainWindowWorkspace(options: {
         editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
         openTabUris: null,
       }) ?? hubs[0]!;
-    activeTodayHubUriRef.current = pick;
-    setActiveTodayHubUri(pick);
+    assignLegacyRuntimeActiveHub(pick, {
+      ref: activeTodayHubUriRef,
+      setActiveTodayHubUri,
+    });
     mirrorShadowActiveHub(pick, 'default active hub');
     setTodayHubWorkspacesForSave(prev => {
       const home =

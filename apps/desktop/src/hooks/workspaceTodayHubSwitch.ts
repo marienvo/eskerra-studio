@@ -20,6 +20,7 @@ import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEd
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {cloneEditorWorkspaceTabs} from './workspaceEditorTabs';
+import {assignLegacyRuntimeActiveHub} from './workspaceRuntimeActiveLegacyBridge';
 
 function snapshotTodayHubWorkspace(
   tabs: readonly EditorWorkspaceTab[],
@@ -212,8 +213,10 @@ export function useWorkspaceTodayHubSwitch(
       activeEditorTabIdRef.current = nextActive;
       setEditorWorkspaceTabs(nextTabs);
       setActiveEditorTabId(nextActive);
-      activeTodayHubUriRef.current = norm;
-      setActiveTodayHubUri(norm);
+      assignLegacyRuntimeActiveHub(norm, {
+        ref: activeTodayHubUriRef,
+        setActiveTodayHubUri,
+      });
       mirrorShadowActiveHub?.(norm, 'switch workspace active hub');
       mirrorShadowActiveWorkspaceTabs?.(
         nextTabs,
