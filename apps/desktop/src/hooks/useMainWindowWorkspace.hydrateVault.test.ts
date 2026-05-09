@@ -1,7 +1,22 @@
-import {act, renderHook, waitFor} from '@testing-library/react';
+import {
+  act,
+  renderHook,
+  waitFor,
+  type RenderHookResult,
+} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 
-import {createDesktopTestVaultFilesystem} from '../test/desktopVaultFilesystem';
+import type {VaultFilesystem} from '@eskerra/core';
+
+import {
+  createDesktopTestVaultFilesystem,
+  type CreateDesktopTestVaultFilesystemOptions,
+} from '../test/desktopVaultFilesystem';
+
+import {
+  type UseMainWindowWorkspaceResult,
+  useMainWindowWorkspace,
+} from './useMainWindowWorkspace';
 
 const persistTransientMarkdownImagesMock = vi.hoisted(() =>
   vi.fn(async (markdown: string, _vaultRoot: string) => markdown),
@@ -77,7 +92,41 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: eventMocks.listen,
 }));
 
-import {useMainWindowWorkspace} from './useMainWindowWorkspace';
+const VAULT_ROOT = '/vault';
+
+async function mountHydratedMainWindowWorkspace(seed: CreateDesktopTestVaultFilesystemOptions): Promise<{
+  fs: VaultFilesystem;
+  result: RenderHookResult<UseMainWindowWorkspaceResult, unknown>;
+  unmount: () => void;
+}> {
+  const {fs} = createDesktopTestVaultFilesystem(seed);
+  const inboxEditorRef: {current: null} = {current: null};
+  const inboxEditorShellScrollRef: {current: null} = {current: null};
+
+  const hook = renderHook(() =>
+    useMainWindowWorkspace({
+      fs,
+      inboxEditorRef,
+      inboxEditorShellScrollRef,
+      restoredInboxState: null,
+      inboxRestoreEnabled: true,
+    }),
+  );
+
+  await waitFor(() => {
+    expect(hook.result.current.initialVaultHydrateAttemptDone).toBe(true);
+  });
+
+  await act(async () => {
+    await hook.result.current.hydrateVault(VAULT_ROOT);
+  });
+
+  await waitFor(() => {
+    expect(hook.result.current.vaultRoot).toBe(VAULT_ROOT);
+  });
+
+  return {fs, result: hook.result, unmount: hook.unmount};
+}
 
 describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
   beforeEach(() => {
@@ -94,34 +143,8 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
   });
 
   it('hydrateVault bootstraps the vault on the fake fs and wires session + watch', async () => {
-    const {fs} = createDesktopTestVaultFilesystem({
+    const {fs, result, unmount} = await mountHydratedMainWindowWorkspace({
       dirs: ['/vault'],
-    });
-
-    const inboxEditorRef: {current: null} = {current: null};
-    const inboxEditorShellScrollRef: {current: null} = {current: null};
-
-    const {result, unmount} = renderHook(() =>
-      useMainWindowWorkspace({
-        fs,
-        inboxEditorRef,
-        inboxEditorShellScrollRef,
-        restoredInboxState: null,
-        inboxRestoreEnabled: true,
-      }),
-    );
-
-    await waitFor(() => {
-      expect(result.current.initialVaultHydrateAttemptDone).toBe(true);
-    });
-    expect(result.current.vaultRoot).toBeNull();
-
-    await act(async () => {
-      await result.current.hydrateVault('/vault');
-    });
-
-    await waitFor(() => {
-      expect(result.current.vaultRoot).toBe('/vault');
     });
 
     expect(result.current.busy).toBe(false);
@@ -151,6 +174,69 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
 
     expect(pluginStoreState.store.set).toHaveBeenCalledWith('vaultRoot', '/vault');
     expect(pluginStoreState.store.save).toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('preserves edited inbox note content when switching away and back (disk + hook state after flush)', async () => {
+    const uriA = '/vault/Inbox/Alpha.md';
+    const uriB = '/vault/Inbox/Beta.md';
+    const initialBody = 'alpha-seed';
+    const editedBody = 'alpha-edited';
+
+    const {fs, result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Inbox'],
+      files: {
+        [uriA]: `${initialBody}\n`,
+        [uriB]: 'beta-seed\n',
+      },
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.notes.length).toBe(2);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(initialBody);
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(editedBody);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(editedBody);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriB);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriB);
+    });
+
+    await waitFor(async () => {
+      expect(await fs.readFile(uriA, {encoding: 'utf8'})).toBe(editedBody);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(editedBody);
+    });
+
+    await act(async () => {
+      await result.current.persistenceController.flushInboxSave();
+    });
+
+    expect(await fs.readFile(uriA, {encoding: 'utf8'})).toBe(editedBody);
+    expect(result.current.selectionController.inboxContentByUri[uriA]).toBe(editedBody);
 
     unmount();
   });
