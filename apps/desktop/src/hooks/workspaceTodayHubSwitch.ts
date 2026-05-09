@@ -21,6 +21,39 @@ import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {cloneEditorWorkspaceTabs} from './workspaceEditorTabs';
 
+function snapshotTodayHubWorkspace(
+  tabs: readonly EditorWorkspaceTab[],
+  activeEditorTabId: string | null,
+  home: WorkspaceHomeState | undefined,
+): TodayHubWorkspaceSnapshot {
+  return {
+    editorWorkspaceTabs: tabsToStored(tabs),
+    activeEditorTabId,
+    ...(home != null
+      ? {
+          homeHistory: {
+            entries: [...home.history.entries],
+            index: home.history.index,
+          },
+        }
+      : {}),
+  };
+}
+
+function restoreTabsFromSnapshot(
+  snap: TodayHubWorkspaceSnapshot | undefined,
+): {nextTabs: EditorWorkspaceTab[]; nextActive: string | null} {
+  const snapTabs = snap?.editorWorkspaceTabs;
+  if (snapTabs == null || snapTabs.length === 0) {
+    return {nextTabs: [], nextActive: null};
+  }
+  const nextTabs = cloneEditorWorkspaceTabs(tabsFromStored(snapTabs));
+  return {
+    nextTabs,
+    nextActive: ensureActiveTabId(nextTabs, snap?.activeEditorTabId ?? null),
+  };
+}
+
 export type UseWorkspaceTodayHubSwitchArgs = {
   state: {
     todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>;
@@ -141,19 +174,11 @@ export function useWorkspaceTodayHubSwitch(
       const old = activeTodayHubUriRef.current;
       let snapForTarget: TodayHubWorkspaceSnapshot | undefined;
       if (old != null && old !== norm) {
-        const oldHome = homeStatesByHubRef.current[old];
-        const outgoingSnap: TodayHubWorkspaceSnapshot = {
-          editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
-          activeEditorTabId: activeEditorTabIdRef.current,
-          ...(oldHome != null
-            ? {
-                homeHistory: {
-                  entries: [...oldHome.history.entries],
-                  index: oldHome.history.index,
-                },
-              }
-            : {}),
-        };
+        const outgoingSnap = snapshotTodayHubWorkspace(
+          editorWorkspaceTabsRef.current,
+          activeEditorTabIdRef.current,
+          homeStatesByHubRef.current[old],
+        );
         // Merge outgoing hub into the ref immediately so a second hub switch in the same
         // outer task (before React commits / before useLayoutEffect syncs props) still sees
         // the just-saved workspace. The functional updater reads `snapForTarget` from latest
@@ -175,19 +200,7 @@ export function useWorkspaceTodayHubSwitch(
       snapForTarget =
         snapForTarget ?? todayHubWorkspacesForSaveRef.current[norm];
 
-      const snapTabs = snapForTarget?.editorWorkspaceTabs;
-      let nextTabs: EditorWorkspaceTab[];
-      let nextActive: string | null;
-      if (snapTabs != null && snapTabs.length > 0) {
-        nextTabs = cloneEditorWorkspaceTabs(tabsFromStored(snapTabs));
-        nextActive = ensureActiveTabId(
-          nextTabs,
-          snapForTarget?.activeEditorTabId ?? null,
-        );
-      } else {
-        nextTabs = [];
-        nextActive = null;
-      }
+      const {nextTabs, nextActive} = restoreTabsFromSnapshot(snapForTarget);
 
       editorWorkspaceTabsRef.current = nextTabs;
       activeEditorTabIdRef.current = nextActive;

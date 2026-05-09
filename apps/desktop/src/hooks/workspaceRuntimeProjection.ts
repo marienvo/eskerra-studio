@@ -138,6 +138,31 @@ function formatActive(active: WorkspaceState['active']): string {
   return active.kind === 'home' ? 'home' : `tab:${active.id}`;
 }
 
+function describeWorkspaceStateDivergence(
+  hub: string,
+  expected: WorkspaceState,
+  actual: WorkspaceState,
+): string[] {
+  const out: string[] = [];
+  if (formatActive(expected.active) !== formatActive(actual.active)) {
+    out.push(`workspace ${hub} active expected=${formatActive(expected.active)} actual=${formatActive(actual.active)}`);
+  }
+  const expectedTabs = expected.tabs.map(t => `${t.id}:${currentUriFromTab(t) ?? ''}`);
+  const actualTabs = actual.tabs.map(t => `${t.id}:${currentUriFromTab(t) ?? ''}`);
+  if (expectedTabs.join('|') !== actualTabs.join('|')) {
+    out.push(`workspace ${hub} tabs expected=[${expectedTabs.join(',')}] actual=[${actualTabs.join(',')}]`);
+  }
+  if (
+    expected.homeHistory.index !== actual.homeHistory.index
+    || expected.homeHistory.entries.join('|') !== actual.homeHistory.entries.join('|')
+  ) {
+    out.push(
+      `workspace ${hub} homeHistory expected=${JSON.stringify(expected.homeHistory)} actual=${JSON.stringify(actual.homeHistory)}`,
+    );
+  }
+  return out;
+}
+
 export function describeWorkspaceModelDivergence(
   expected: WorkspaceModel,
   actual: WorkspaceModel,
@@ -157,22 +182,7 @@ export function describeWorkspaceModelDivergence(
       out.push(`workspace ${hub} presence expected=${e ? 'yes' : 'no'} actual=${a ? 'yes' : 'no'}`);
       continue;
     }
-    if (formatActive(e.active) !== formatActive(a.active)) {
-      out.push(`workspace ${hub} active expected=${formatActive(e.active)} actual=${formatActive(a.active)}`);
-    }
-    const eTabs = e.tabs.map(t => `${t.id}:${currentUriFromTab(t) ?? ''}`);
-    const aTabs = a.tabs.map(t => `${t.id}:${currentUriFromTab(t) ?? ''}`);
-    if (eTabs.join('|') !== aTabs.join('|')) {
-      out.push(`workspace ${hub} tabs expected=[${eTabs.join(',')}] actual=[${aTabs.join(',')}]`);
-    }
-    if (
-      e.homeHistory.index !== a.homeHistory.index
-      || e.homeHistory.entries.join('|') !== a.homeHistory.entries.join('|')
-    ) {
-      out.push(
-        `workspace ${hub} homeHistory expected=${JSON.stringify(e.homeHistory)} actual=${JSON.stringify(a.homeHistory)}`,
-      );
-    }
+    out.push(...describeWorkspaceStateDivergence(hub, e, a));
   }
   return out;
 }
