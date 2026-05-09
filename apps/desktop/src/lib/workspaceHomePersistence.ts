@@ -9,6 +9,7 @@ import {
   createWorkspaceHomeState,
   type WorkspaceHomeState,
 } from './workspaceHomeNavigation';
+import {normalizeWorkspaceUri} from './workspaceModel';
 import {parseWorkspaceModelFromPersistence} from './workspaceModel/persistence';
 
 export function hydrateWorkspaceHomeStatesFromPersisted(args: {
@@ -23,7 +24,8 @@ export function hydrateWorkspaceHomeStatesFromPersisted(args: {
   });
   const out: Record<string, WorkspaceHomeState> = {};
   for (const hub of args.hubUris) {
-    const ws = model.workspaces[hub];
+    const key = normalizeWorkspaceUri(hub);
+    const ws = model.workspaces[key];
     if (!ws) {
       out[hub] = createWorkspaceHomeState(hub);
       continue;
@@ -46,12 +48,13 @@ export function parseTodayHubSnapshotHomeHistoryForStore(
   if (!Object.prototype.hasOwnProperty.call(snap, 'homeHistory')) {
     return undefined;
   }
+  const hubNorm = normalizeWorkspaceUri(hubUri);
   const model = parseWorkspaceModelFromPersistence({
-    hubUris: [hubUri],
-    activeTodayHubUri: hubUri,
-    todayHubWorkspaces: {[hubUri]: snap},
+    hubUris: [hubNorm],
+    activeTodayHubUri: hubNorm,
+    todayHubWorkspaces: {[hubNorm]: snap},
   });
-  const ws = model.workspaces[hubUri];
+  const ws = model.workspaces[hubNorm];
   if (!ws || ws.homeHistory.entries.length === 0) {
     return undefined;
   }

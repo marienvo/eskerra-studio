@@ -181,7 +181,16 @@ export function computeProjectionHubUris(args: {
           args.vaultRootNormalized,
         )
       : [];
-  if (restoredHubs.length === 0 || args.workspaceModelHubUris.length >= restoredHubs.length) {
+  if (restoredHubs.length === 0) {
+    return args.workspaceModelHubUris;
+  }
+  const workspaceNorm = new Set(
+    args.workspaceModelHubUris.map(h => normalizeWorkspaceUri(h)),
+  );
+  const allRestoredInWorkspace = restoredHubs.every(h =>
+    workspaceNorm.has(normalizeWorkspaceUri(h)),
+  );
+  if (allRestoredInWorkspace) {
     return args.workspaceModelHubUris;
   }
   return sortedNormalizedHubs([...args.workspaceModelHubUris, ...restoredHubs]);

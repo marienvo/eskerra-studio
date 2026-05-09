@@ -44,6 +44,25 @@ describe('computeProjectionHubUris', () => {
       }),
     ).toEqual(hubs);
   });
+
+  it('merges when model and restored have the same count but different hub URIs', () => {
+    const merged = computeProjectionHubUris({
+      workspaceModelHubUris: ['/vault/A/Today.md', '/vault/B/Today.md'],
+      vaultRootNormalized: vaultRoot,
+      restoredInboxState: {
+        todayHubWorkspaces: {
+          '/vault/C/Today.md': emptySnap,
+          '/vault/D/Today.md': emptySnap,
+        },
+      },
+    });
+    expect(merged).toEqual([
+      '/vault/A/Today.md',
+      '/vault/B/Today.md',
+      '/vault/C/Today.md',
+      '/vault/D/Today.md',
+    ]);
+  });
 });
 
 describe('resolveTodayHubWorkspacesForProjection', () => {
