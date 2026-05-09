@@ -1,8 +1,11 @@
 import {describe, expect, it} from 'vitest';
 
+import {createEditorWorkspaceTab} from './editorWorkspaceTabs';
 import {
+  buildStoredMainWindowInboxForPersist,
   DEFAULT_MAIN_WINDOW_PANE_VISIBILITY,
   normalizeMainWindowUiPayload,
+  type TodayHubWorkspaceSnapshot,
 } from './mainWindowUiStore';
 
 describe('normalizeMainWindowUiPayload', () => {
@@ -276,5 +279,43 @@ describe('normalizeMainWindowUiPayload', () => {
       inbox: {activeTodayHubUri: '  '},
     });
     expect(out?.inbox.activeTodayHubUri).toBeNull();
+  });
+});
+
+describe('buildStoredMainWindowInboxForPersist', () => {
+  const baseArgs = {
+    composingNewEntry: false,
+    selectedUri: '/vault/Inbox/Sel.md',
+    activeTodayHubUri: null as string | null,
+    todayHubWorkspaces: {} as Record<string, TodayHubWorkspaceSnapshot>,
+  };
+
+  it('omits top-level tab fields when the vault index includes a Today hub', () => {
+    const tab = createEditorWorkspaceTab('/vault/Inbox/Note.md', 't1');
+    const inbox = buildStoredMainWindowInboxForPersist({
+      ...baseArgs,
+      vaultMarkdownRefs: [{name: 'Today', uri: '/vault/Daily/Today.md'}],
+      editorWorkspaceTabs: [tab],
+      activeEditorTabId: 't1',
+    });
+    expect(inbox.editorWorkspaceTabs).toBeUndefined();
+    expect(inbox.activeEditorTabId).toBeUndefined();
+    expect(inbox.openTabUris).toBeUndefined();
+    expect(inbox.todayHubWorkspaces).toEqual({});
+  });
+
+  it('writes top-level tab snapshot when no Today hub is indexed', () => {
+    const tab = createEditorWorkspaceTab('/vault/Inbox/Note.md', 't1');
+    const inbox = buildStoredMainWindowInboxForPersist({
+      ...baseArgs,
+      vaultMarkdownRefs: [{name: 'Note', uri: '/vault/Inbox/Note.md'}],
+      editorWorkspaceTabs: [tab],
+      activeEditorTabId: 't1',
+    });
+    expect(inbox.editorWorkspaceTabs).toEqual([
+      {id: 't1', entries: ['/vault/Inbox/Note.md'], index: 0},
+    ]);
+    expect(inbox.activeEditorTabId).toBe('t1');
+    expect(inbox.openTabUris).toEqual(['/vault/Inbox/Note.md']);
   });
 });
