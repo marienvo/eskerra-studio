@@ -7,6 +7,7 @@ import {
   getDesktopMainWindowIntegrationMocks,
   mountHydratedMainWindowWorkspace,
 } from './useMainWindowWorkspace.integration.harness';
+import {decideHomeOpenMode} from './workspaceEditorTabs';
 
 const VAULT_ROOT = '/vault';
 const HUB_A = `${VAULT_ROOT}/A/Today.md`;
@@ -388,6 +389,78 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     });
 
     unmount();
+  });
+
+  it('keeps active hub Today on Home when focused while Home is active', async () => {
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`],
+        files: {
+          [HUB_A]: 'today\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+    });
+
+    await act(async () => {
+      result.current.todayHubController.focusActiveTodayHubNote();
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(HUB_A);
+      expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]
+          ?.editorWorkspaceTabs,
+      ).toEqual([]);
+    });
+
+    unmount();
+  });
+
+  it('routes active hub Today foreground placement to Home when Home is active', () => {
+    expect(
+      decideHomeOpenMode({
+        targetNorm: HUB_A,
+        activeTodayHubUri: HUB_A,
+        activeEditorTabId: null,
+        options: undefined,
+      }),
+    ).toBe('home');
+    expect(
+      decideHomeOpenMode({
+        targetNorm: HUB_A,
+        activeTodayHubUri: null,
+        activeEditorTabId: null,
+        options: {home: true},
+      }),
+    ).toBe('home');
+    expect(
+      decideHomeOpenMode({
+        targetNorm: HUB_A,
+        activeTodayHubUri: HUB_A,
+        activeEditorTabId: null,
+        options: {newTab: true},
+      }),
+    ).toBe('normal');
   });
 
   it('rapid note switches do not let a stale deferred save overwrite newer note content on disk', async () => {

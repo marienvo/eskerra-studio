@@ -23,13 +23,17 @@ import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 export function decideHomeOpenMode(args: {
   targetNorm: string;
   activeTodayHubUri: string | null;
+  activeEditorTabId?: string | null;
   options:
-    | {home?: boolean; workspaceShell?: boolean; workspaceShellPreserveTabs?: boolean}
+    | {home?: boolean; workspaceShell?: boolean; workspaceShellPreserveTabs?: boolean; newTab?: boolean}
     | undefined;
 }): 'home' | 'normal' {
-  const {targetNorm, activeTodayHubUri, options} = args;
+  const {targetNorm, activeTodayHubUri, activeEditorTabId, options} = args;
   if (options?.home === true) {
-    return activeTodayHubUri ? 'home' : 'normal';
+    return 'home';
+  }
+  if (options?.newTab === true) {
+    return 'normal';
   }
   const activeHubNorm = normalizeEditorDocUri(activeTodayHubUri ?? '');
   const isActiveHubFile =
@@ -39,6 +43,9 @@ export function decideHomeOpenMode(args: {
     && vaultUriIsTodayMarkdownFile(targetNorm);
   if (!isActiveHubFile) {
     return 'normal';
+  }
+  if (activeEditorTabId == null) {
+    return 'home';
   }
   if (options?.workspaceShell === true || options?.workspaceShellPreserveTabs === true) {
     return 'home';

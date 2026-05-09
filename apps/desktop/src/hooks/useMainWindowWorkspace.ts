@@ -1167,6 +1167,7 @@ export function useMainWindowWorkspace(options: {
       const homeMode = decideHomeOpenMode({
         targetNorm,
         activeTodayHubUri: activeTodayHubUriRef.current,
+        activeEditorTabId: activeEditorTabIdRef.current,
         options,
       });
       if (homeMode === 'home') {
