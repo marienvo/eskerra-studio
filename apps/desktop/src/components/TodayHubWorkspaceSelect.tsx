@@ -92,7 +92,7 @@ export function TodayHubWorkspaceSelect({
           <span className="today-hub-workspace-select__label-prefix">{activeLabel}</span>
           {subLabel ? (
             <>
-              <span className="today-hub-workspace-select__label-separator">: </span>
+              <span className="today-hub-workspace-select__label-separator">:</span>
               <span className="today-hub-workspace-select__sublabel">{subLabel}</span>
             </>
           ) : null}

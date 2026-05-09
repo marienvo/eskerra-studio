@@ -302,6 +302,7 @@ a:focus:not(:focus-visible) {
 
 .today-hub-workspace-select__sublabel {
   min-width: 0;
+  margin-inline-start: 0.25ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
