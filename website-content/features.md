@@ -28,11 +28,11 @@ Write long-form. Restructure ideas. Follow a chain of linked notes. Search acros
 
 ---
 
-## Always Within Reach
+## One Vault, Two Roles
 
-Your notes are available on your phone, at your desk, and wherever you bring your laptop.
+Mobile is for capture. Desktop is for writing. The same vault sits underneath both.
 
-There is no single device that holds the canonical version. The vault is shared. What you wrote on the couch is there at the office, and what you drafted at midnight is there in the morning.
+There is no canonical device and no import step to reconcile. What you jotted on your phone at midnight is the same file you open in the desktop editor in the morning, ready to develop, not re-import.
 
 ---
 
