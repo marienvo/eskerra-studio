@@ -135,6 +135,13 @@ import {
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
 import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
+import {
+  createDefaultWorkspaceState,
+  normalizeWorkspaceUri,
+  remapPrefixAction,
+  removeUrisAction,
+  type WorkspaceModel,
+} from '../lib/workspaceModel';
 import type {
   WorkspaceConflictController,
   WorkspaceFrontmatterController,
@@ -176,6 +183,7 @@ import {useWorkspaceController} from './useWorkspaceController';
 import {
   describeWorkspaceModelDivergence,
   projectWorkspaceRuntimeToModel,
+  workspaceHomeStateToHistoryStack,
 } from './workspaceRuntimeProjection';
 import {
   useWorkspaceRenameMaintenance,
@@ -279,6 +287,8 @@ export type UseMainWindowWorkspaceResult = {
   tabsController: WorkspaceTabsController;
   todayHubController: WorkspaceTodayHubController;
   frontmatterController: WorkspaceFrontmatterController;
+  /** Test-only shadow model for the workspaceModel migration bridge. */
+  workspaceShadowModelForTests?: WorkspaceModel;
 };
 
 
@@ -362,8 +372,10 @@ export function useMainWindowWorkspace(options: {
     | {kind: 'diskConflict'; baseUri: string; diskMarkdown: string}
   >(null);
   const {
+    model: workspaceShadowModel,
     modelRef: workspaceShadowModelRef,
     replaceModel: replaceWorkspaceShadowModel,
+    dispatchWorkspaceAction,
   } = useWorkspaceController();
 
   const subtreeMarkdownCache = useMemo(() => new SubtreeMarkdownPresenceCache(), []);
@@ -530,6 +542,27 @@ export function useMainWindowWorkspace(options: {
     homeStatesByHubRef.current = homeStatesByHub;
   }, [homeStatesByHub]);
 
+  const replaceShadowHomeStateForHub = useCallback(
+    (hubUri: string, state: WorkspaceHomeState, reason: string) => {
+      const hub = normalizeWorkspaceUri(hubUri);
+      dispatchWorkspaceAction(reason, (model: WorkspaceModel): WorkspaceModel => {
+        const current = model.workspaces[hub] ?? createDefaultWorkspaceState(hub);
+        return {
+          ...model,
+          activeHub: model.activeHub ?? hub,
+          workspaces: {
+            ...model.workspaces,
+            [hub]: {
+              ...current,
+              homeHistory: workspaceHomeStateToHistoryStack(state),
+            },
+          },
+        };
+      });
+    },
+    [dispatchWorkspaceAction],
+  );
+
   const remapHomeStatesPrefix = useCallback(
     (oldPrefix: string, newPrefix: string) => {
       const current = homeStatesByHubRef.current;
@@ -546,8 +579,12 @@ export function useMainWindowWorkspace(options: {
       }
       homeStatesByHubRef.current = next;
       setHomeStatesByHub(next);
+      dispatchWorkspaceAction(
+        `homeHistory remap ${oldPrefix} -> ${newPrefix}`,
+        model => remapPrefixAction(model, oldPrefix, newPrefix),
+      );
     },
-    [],
+    [dispatchWorkspaceAction],
   );
 
   const removeHomeHistoryUris = useCallback(
@@ -569,8 +606,12 @@ export function useMainWindowWorkspace(options: {
       }
       homeStatesByHubRef.current = next;
       setHomeStatesByHub(next);
+      dispatchWorkspaceAction(
+        'homeHistory remove uris',
+        model => removeUrisAction(model, shouldRemove),
+      );
     },
-    [],
+    [dispatchWorkspaceAction],
   );
 
   const setHomeStateForHub = useCallback(
@@ -581,8 +622,9 @@ export function useMainWindowWorkspace(options: {
       };
       homeStatesByHubRef.current = next;
       setHomeStatesByHub(next);
+      replaceShadowHomeStateForHub(hubUri, state, 'homeHistory set');
     },
-    [],
+    [replaceShadowHomeStateForHub],
   );
 
   const pushHomeHistoryForHub = useCallback(
@@ -3610,5 +3652,7 @@ export function useMainWindowWorkspace(options: {
       applyFrontmatterInnerChange,
       syncFrontmatterStateFromDisk,
     },
+    workspaceShadowModelForTests:
+      import.meta.env.MODE === 'test' ? workspaceShadowModel : undefined,
   };
 }

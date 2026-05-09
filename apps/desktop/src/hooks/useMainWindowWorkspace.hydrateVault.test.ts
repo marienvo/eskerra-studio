@@ -506,6 +506,12 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.tabsController.activeEditorTabId).toBeNull();
       expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(0);
       expect(result.current.tabsController.editorHistoryCanGoBack).toBe(true);
+      expect(
+        result.current.workspaceShadowModelForTests?.workspaces[hubUri]?.homeHistory,
+      ).toEqual({
+        entries: [hubUri, targetUri],
+        index: 1,
+      });
     });
 
     act(() => {
@@ -514,6 +520,12 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     await waitFor(() => {
       expect(result.current.selectionController.selectedUri).toBe(hubUri);
       expect(result.current.tabsController.editorHistoryCanGoForward).toBe(true);
+      expect(
+        result.current.workspaceShadowModelForTests?.workspaces[hubUri]?.homeHistory,
+      ).toEqual({
+        entries: [hubUri, targetUri],
+        index: 0,
+      });
     });
 
     act(() => {
@@ -521,6 +533,12 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     });
     await waitFor(() => {
       expect(result.current.selectionController.selectedUri).toBe(targetUri);
+      expect(
+        result.current.workspaceShadowModelForTests?.workspaces[hubUri]?.homeHistory,
+      ).toEqual({
+        entries: [hubUri, targetUri],
+        index: 1,
+      });
     });
 
     unmount();
@@ -679,6 +697,131 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       ).toEqual({
         entries: [HUB_A, HOME_SUB],
         index: 0,
+      });
+      expect(
+        result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.homeHistory,
+      ).toEqual({
+        entries: [HUB_A, HOME_SUB],
+        index: 0,
+      });
+    });
+
+    unmount();
+  });
+
+  it('keeps shadow Home history aligned when deleting the current Home sub-page', async () => {
+    const HOME_SUB = `${VAULT_ROOT}/Inbox/HomeDelete.md`;
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [HOME_SUB]: 'delete me\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(HOME_SUB);
+    });
+    await waitFor(() => {
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.homeHistory).toEqual({
+        entries: [HUB_A, HOME_SUB],
+        index: 1,
+      });
+    });
+
+    await act(async () => {
+      await result.current.treeController.deleteNote(HOME_SUB);
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(HUB_A);
+      expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual({
+        entries: [HUB_A],
+        index: 0,
+      });
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.homeHistory).toEqual({
+        entries: [HUB_A],
+        index: 0,
+      });
+    });
+
+    unmount();
+  });
+
+  it('keeps shadow Home history aligned when renaming a Home sub-page', async () => {
+    const OLD_HOME_SUB = `${VAULT_ROOT}/Inbox/HomeRenameOld.md`;
+    const NEW_HOME_SUB = `${VAULT_ROOT}/Inbox/HomeRenameNew.md`;
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [OLD_HOME_SUB]: 'rename me\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: {editorWorkspaceTabs: [], activeEditorTabId: null},
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(OLD_HOME_SUB);
+    });
+    await waitFor(() => {
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.homeHistory).toEqual({
+        entries: [HUB_A, OLD_HOME_SUB],
+        index: 1,
+      });
+    });
+
+    await act(async () => {
+      await result.current.treeController.renameNote(OLD_HOME_SUB, 'HomeRenameNew');
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(NEW_HOME_SUB);
+      expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual({
+        entries: [HUB_A, NEW_HOME_SUB],
+        index: 1,
+      });
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.homeHistory).toEqual({
+        entries: [HUB_A, NEW_HOME_SUB],
+        index: 1,
       });
     });
 
@@ -946,6 +1089,12 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       snapshotA.homeHistory,
     );
     expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_B]?.homeHistory).toEqual(
+      snapshotB.homeHistory,
+    );
+    expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.homeHistory).toEqual(
+      snapshotA.homeHistory,
+    );
+    expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_B]?.homeHistory).toEqual(
       snapshotB.homeHistory,
     );
     expect(result.current.selectionController.selectedUri).toBe(NOTE_A);

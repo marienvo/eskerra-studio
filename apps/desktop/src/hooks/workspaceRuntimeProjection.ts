@@ -35,6 +35,10 @@ function stackFromEditorHistory(history: {
   return {entries, index};
 }
 
+export function workspaceHomeStateToHistoryStack(state: WorkspaceHomeState): HistoryStack {
+  return stackFromEditorHistory(state.history);
+}
+
 function tabEntriesFromRuntimeTabs(tabs: readonly EditorWorkspaceTab[]): TabEntry[] {
   return tabs
     .map(t => ({
