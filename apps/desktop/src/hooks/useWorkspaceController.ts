@@ -48,10 +48,26 @@ export function useWorkspaceController(initialModel: WorkspaceModel = EMPTY_WORK
     });
   }, []);
 
+  /**
+   * Applies `updater(modelRef.current)` synchronously and updates React state + ref before return.
+   * Use when callers must read the next model immediately (same tick as legacy sync).
+   */
+  const dispatchWorkspaceActionSync = useCallback((
+    actionDescription: string,
+    updater: (current: WorkspaceModel) => WorkspaceModel,
+  ): WorkspaceModel => {
+    const next = updater(modelRef.current);
+    warnWorkspaceModelIssues(actionDescription, validateWorkspaceModel(next));
+    modelRef.current = next;
+    setModel(next);
+    return next;
+  }, []);
+
   return {
     model,
     modelRef,
     replaceModel,
     dispatchWorkspaceAction,
+    dispatchWorkspaceActionSync,
   };
 }

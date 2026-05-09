@@ -49,6 +49,19 @@ function tabEntriesFromRuntimeTabs(tabs: readonly EditorWorkspaceTab[]): TabEntr
     .filter(t => t.id.trim() !== '' && t.history.entries.length > 0);
 }
 
+/** Inverse of {@link tabEntriesFromRuntimeTabs} for the active hub (preserves id, entries, index). */
+export function editorWorkspaceTabsFromModelTabEntries(
+  tabs: readonly TabEntry[],
+): EditorWorkspaceTab[] {
+  return tabs.map(t => ({
+    id: t.id,
+    history: {
+      entries: [...t.history.entries],
+      index: t.history.index,
+    },
+  }));
+}
+
 function tabEntriesFromStoredSnapshot(snap: TodayHubWorkspaceSnapshot | undefined): TabEntry[] {
   return (snap?.editorWorkspaceTabs ?? [])
     .map(t => ({

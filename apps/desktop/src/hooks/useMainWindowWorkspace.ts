@@ -206,6 +206,7 @@ import {
 } from './workspaceShadowBridge';
 import {
   activeSurfaceTabIdFromWorkspaceModel,
+  editorWorkspaceTabsFromModelTabEntries,
   projectWorkspaceRuntimeToModel,
 } from './workspaceRuntimeProjection';
 import {
@@ -391,6 +392,7 @@ export function useMainWindowWorkspace(options: {
     modelRef: workspaceShadowModelRef,
     replaceModel: replaceWorkspaceShadowModel,
     dispatchWorkspaceAction,
+    dispatchWorkspaceActionSync,
   } = useWorkspaceController();
 
   const {
@@ -1835,10 +1837,10 @@ export function useMainWindowWorkspace(options: {
         return;
       }
       const tabs = editorWorkspaceTabsRef.current;
-      const next = reorderEditorWorkspaceTabsInArray(tabs, fromIndex, insertBeforeIndex);
+      const preview = reorderEditorWorkspaceTabsInArray(tabs, fromIndex, insertBeforeIndex);
       let sameOrder = true;
-      for (let i = 0; i < next.length; i++) {
-        if (next[i]!.id !== tabs[i]!.id) {
+      for (let i = 0; i < preview.length; i++) {
+        if (preview[i]!.id !== tabs[i]!.id) {
           sameOrder = false;
           break;
         }
@@ -1846,16 +1848,26 @@ export function useMainWindowWorkspace(options: {
       if (sameOrder) {
         return;
       }
+      // Model-led: apply reorder on the shadow workspace, then sync legacy tab strip from TabEntry[].
+      const nextModel = dispatchWorkspaceActionSync('reorder tabs', m =>
+        reorderTabsAction(m, fromIndex, insertBeforeIndex),
+      );
+      const hub = nextModel.activeHub;
+      if (hub == null) {
+        return;
+      }
+      const ws = nextModel.workspaces[hub];
+      if (ws == null) {
+        return;
+      }
+      const nextTabs = editorWorkspaceTabsFromModelTabEntries(ws.tabs);
       assignLegacyEditorWorkspaceTabs({
-        nextTabs: next,
+        nextTabs,
         editorWorkspaceTabsRef,
         setEditorWorkspaceTabs,
       });
-      dispatchWorkspaceAction('reorder tabs', model =>
-        reorderTabsAction(model, fromIndex, insertBeforeIndex),
-      );
     },
-    [busy, dispatchWorkspaceAction],
+    [busy, dispatchWorkspaceActionSync],
   );
 
   /** Reset the inbox editor body, frontmatter state, and any reset-nonce-driven CodeMirror reload. */

@@ -3,7 +3,15 @@ import {describe, expect, it} from 'vitest';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {
+  createDefaultWorkspaceState,
+  normalizeWorkspaceUri,
+  reorderTabsAction,
+  serializeWorkspaceModelToPersistence,
+  type WorkspaceModel,
+} from '../lib/workspaceModel';
+import {
   activeSurfaceTabIdFromWorkspaceModel,
+  editorWorkspaceTabsFromModelTabEntries,
   projectWorkspaceRuntimeToModel,
 } from './workspaceRuntimeProjection';
 
@@ -56,6 +64,46 @@ describe('activeSurfaceTabIdFromWorkspaceModel', () => {
         workspaces: {},
       }),
     ).toBeNull();
+  });
+});
+
+describe('editorWorkspaceTabsFromModelTabEntries', () => {
+  it('maps TabEntry stacks to EditorWorkspaceTab histories', () => {
+    const converted = editorWorkspaceTabsFromModelTabEntries([
+      {id: 't1', history: {entries: [NOTE_A, NOTE_B], index: 1}},
+    ]);
+    expect(converted).toEqual([
+      {id: 't1', history: {entries: [NOTE_A, NOTE_B], index: 1}},
+    ]);
+  });
+
+  it('matches reorderTabsAction tab order and preserves active surface', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [
+            {id: 't1', history: {entries: [NOTE_A], index: 0}},
+            {id: 't2', history: {entries: [NOTE_B], index: 0}},
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const reordered = reorderTabsAction(model, 0, 2);
+    const ws = reordered.workspaces[hubNorm];
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+    const legacyOrder = editorWorkspaceTabsFromModelTabEntries(ws!.tabs).map(t => t.id);
+    expect(legacyOrder).toEqual(['t2', 't1']);
+
+    const persisted = serializeWorkspaceModelToPersistence(reordered);
+    expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs.map(t => t.id)).toEqual([
+      't2',
+      't1',
+    ]);
   });
 });
 
