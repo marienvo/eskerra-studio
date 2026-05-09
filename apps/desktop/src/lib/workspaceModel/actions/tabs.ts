@@ -113,10 +113,8 @@ export function openTabBackgroundAction(
     let nextTabs: TabEntry[];
     switch (placement.kind) {
       case 'insertAtIndex': {
-        const clamped = Math.max(
-          0,
-          Math.min(placement.insertAtIndex, ws.tabs.length),
-        );
+        const at = placement.insertAtIndex ?? 0;
+        const clamped = Math.max(0, Math.min(at, ws.tabs.length));
         nextTabs = [...ws.tabs];
         nextTabs.splice(clamped, 0, entry);
         break;

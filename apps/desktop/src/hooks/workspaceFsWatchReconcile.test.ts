@@ -42,7 +42,9 @@ function minimalEnv(
     diskConflictDeferTimerRef: {current: null},
     lastInboxEditorActivityAtRef: {current: 0},
     inboxEditorRef: {current: null},
-    autosaveSchedulerRef: {current: {cancel: vi.fn()}},
+    autosaveSchedulerRef: {
+      current: {schedule: vi.fn(), cancel: vi.fn()},
+    },
     markLastPersistedMutation: vi.fn(),
     setEditorWorkspaceTabs: vi.fn(),
     setActiveEditorTabId: vi.fn(),
