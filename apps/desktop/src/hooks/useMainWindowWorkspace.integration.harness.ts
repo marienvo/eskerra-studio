@@ -33,7 +33,7 @@ export async function mountHydratedMainWindowWorkspace(
   seed: CreateDesktopTestVaultFilesystemOptions,
 ): Promise<{
   fs: VaultFilesystem;
-  result: RenderHookResult<UseMainWindowWorkspaceResult, unknown>;
+  result: RenderHookResult<UseMainWindowWorkspaceResult, unknown>['result'];
   unmount: () => void;
 }> {
   const {fs} = createDesktopTestVaultFilesystem(seed);
