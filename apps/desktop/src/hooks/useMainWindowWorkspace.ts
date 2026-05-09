@@ -172,6 +172,11 @@ import {
   normalizeVaultWatchErrorReason,
   useWorkspaceVaultWatchEffects,
 } from './workspaceVaultWatchEffects';
+import {useWorkspaceController} from './useWorkspaceController';
+import {
+  describeWorkspaceModelDivergence,
+  projectWorkspaceRuntimeToModel,
+} from './workspaceRuntimeProjection';
 import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
@@ -356,6 +361,10 @@ export function useMainWindowWorkspace(options: {
     | {kind: 'backup'; baseUri: string; backupUri: string}
     | {kind: 'diskConflict'; baseUri: string; diskMarkdown: string}
   >(null);
+  const {
+    modelRef: workspaceShadowModelRef,
+    replaceModel: replaceWorkspaceShadowModel,
+  } = useWorkspaceController();
 
   const subtreeMarkdownCache = useMemo(() => new SubtreeMarkdownPresenceCache(), []);
   const inboxBodyPrefetchGenRef = useRef(0);
@@ -639,6 +648,54 @@ export function useMainWindowWorkspace(options: {
     () => deriveTodayHubSelectorItems(vaultMarkdownRefs, notes),
     [vaultMarkdownRefs, notes],
   );
+
+  const workspaceModelHubUris = useMemo(
+    () => sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs),
+    [vaultMarkdownRefs],
+  );
+
+  const projectedWorkspaceModel = useMemo(
+    () =>
+      projectWorkspaceRuntimeToModel({
+        activeTodayHubUri,
+        editorWorkspaceTabs,
+        activeEditorTabId,
+        todayHubWorkspacesForSave,
+        homeStatesByHub,
+        hubUris: workspaceModelHubUris,
+      }),
+    [
+      activeTodayHubUri,
+      editorWorkspaceTabs,
+      activeEditorTabId,
+      todayHubWorkspacesForSave,
+      homeStatesByHub,
+      workspaceModelHubUris,
+    ],
+  );
+
+  useLayoutEffect(() => {
+    if (!inboxShellRestored) {
+      return;
+    }
+    replaceWorkspaceShadowModel(projectedWorkspaceModel, 'runtime projection');
+    if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+      queueMicrotask(() => {
+        const diffs = describeWorkspaceModelDivergence(
+          projectedWorkspaceModel,
+          workspaceShadowModelRef.current,
+        );
+        if (diffs.length > 0) {
+          console.warn('[workspaceModel] shadow divergence', diffs);
+        }
+      });
+    }
+  }, [
+    inboxShellRestored,
+    projectedWorkspaceModel,
+    replaceWorkspaceShadowModel,
+    workspaceShadowModelRef,
+  ]);
 
   const todayHubWorkspacesPersistFiltered = useMemo(
     () =>
