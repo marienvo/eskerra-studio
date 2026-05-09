@@ -1,9 +1,4 @@
-import {
-  act,
-  renderHook,
-  waitFor,
-  type RenderHookResult,
-} from '@testing-library/react';
+import {act, renderHook, waitFor} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 
 import type {VaultFilesystem} from '@eskerra/core';
@@ -96,7 +91,7 @@ const VAULT_ROOT = '/vault';
 
 async function mountHydratedMainWindowWorkspace(seed: CreateDesktopTestVaultFilesystemOptions): Promise<{
   fs: VaultFilesystem;
-  result: RenderHookResult<UseMainWindowWorkspaceResult, unknown>;
+  result: {readonly current: UseMainWindowWorkspaceResult};
   unmount: () => void;
 }> {
   const {fs} = createDesktopTestVaultFilesystem(seed);
