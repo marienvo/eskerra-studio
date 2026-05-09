@@ -123,7 +123,7 @@ function renameDirectoryTreeInFakeVault(
   const movedDirs = [...dirs].filter(
     d => d === from || d.startsWith(fromPrefix),
   );
-  movedDirs.sort((a, b) => b.length - a.length);
+    const dest = `${to}${oldUri.slice(from.length)}`;
   for (const d of movedDirs) {
     dirs.delete(d);
   }
