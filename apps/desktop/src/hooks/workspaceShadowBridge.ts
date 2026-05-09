@@ -18,6 +18,10 @@ import {
   describeWorkspaceModelDivergence,
   workspaceHomeStateToHistoryStack,
 } from './workspaceRuntimeProjection';
+import {
+  filterRestoredTodayHubWorkspacesForVault,
+  restoredTodayHubWorkspaceKeysForVault,
+} from './inboxShellRestoreHelpers';
 
 export type DispatchWorkspaceModelAction = (
   actionDescription: string,
@@ -143,23 +147,40 @@ export function createWorkspaceShadowMirrorCallbacks(
 export function resolveTodayHubWorkspacesForProjection(args: {
   legacyTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
   restoredTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot> | null | undefined;
+  /** Canonical trimmed vault root path; when null, restored snapshots are not merged (no vault yet). */
+  vaultRootNormalized: string | null;
 }): Record<string, TodayHubWorkspaceSnapshot> {
-  return Object.keys(args.legacyTodayHubWorkspaces).length === 0
-    ? args.restoredTodayHubWorkspaces ?? args.legacyTodayHubWorkspaces
-    : args.legacyTodayHubWorkspaces;
+  if (Object.keys(args.legacyTodayHubWorkspaces).length > 0) {
+    return args.legacyTodayHubWorkspaces;
+  }
+  const restored = args.restoredTodayHubWorkspaces;
+  if (restored == null || args.vaultRootNormalized == null) {
+    return args.legacyTodayHubWorkspaces;
+  }
+  const filtered = filterRestoredTodayHubWorkspacesForVault(
+    restored,
+    args.vaultRootNormalized,
+  );
+  return Object.keys(filtered).length > 0 ? filtered : args.legacyTodayHubWorkspaces;
 }
 
 export function computeProjectionHubUris(args: {
   workspaceModelHubUris: readonly string[];
+  vaultRootNormalized: string | null;
   restoredInboxState: null | {
     todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot> | null;
   };
 }): readonly string[] {
-  const restoredHubs = args.restoredInboxState
-    ? Object.keys(
-        args.restoredInboxState.todayHubWorkspaces as Record<string, TodayHubWorkspaceSnapshot>,
-      )
-    : [];
+  const restoredHubs =
+    args.vaultRootNormalized != null && args.restoredInboxState?.todayHubWorkspaces
+      ? restoredTodayHubWorkspaceKeysForVault(
+          args.restoredInboxState.todayHubWorkspaces as Record<
+            string,
+            TodayHubWorkspaceSnapshot
+          >,
+          args.vaultRootNormalized,
+        )
+      : [];
   if (restoredHubs.length === 0 || args.workspaceModelHubUris.length >= restoredHubs.length) {
     return args.workspaceModelHubUris;
   }

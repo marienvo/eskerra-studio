@@ -3,10 +3,28 @@ import {describe, expect, it} from 'vitest';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {
   buildRestoredEditorWorkspace,
+  restoredTodayHubWorkspaceKeysForVault,
   restoredTodayHubWorkspaceUrisForRestore,
 } from './inboxShellRestoreHelpers';
 
 const emptySnap = {} as TodayHubWorkspaceSnapshot;
+
+describe('restoredTodayHubWorkspaceKeysForVault', () => {
+  const root = '/vault';
+
+  it('returns Today.md hub paths under the vault root only', () => {
+    expect(
+      restoredTodayHubWorkspaceKeysForVault(
+        {
+          '/vault/Areas/X/Today.md': emptySnap,
+          '/other-vault/Areas/Y/Today.md': emptySnap,
+          '/vault/Inbox/Z.md': emptySnap,
+        },
+        root,
+      ).sort(),
+    ).toEqual(['/vault/Areas/X/Today.md']);
+  });
+});
 
 describe('restoredTodayHubWorkspaceUrisForRestore', () => {
   const root = '/vault';

@@ -329,6 +329,64 @@ export function isUriValidVaultMarkdown(args: {
 }
 
 /**
+ * Hub keys in persisted `todayHubWorkspaces` that denote valid Today.md paths under `vaultRoot`.
+ * Drops keys from other vaults, junk paths, and non-Today filenames (stale or cross-vault UI store).
+ */
+export function restoredTodayHubWorkspaceKeysForVault(
+  restored: Record<string, TodayHubWorkspaceSnapshot> | null | undefined,
+  vaultRoot: string,
+): string[] {
+  const rootNorm = vaultRoot.replace(/\\/g, '/');
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of Object.keys(restored ?? {})) {
+    const hub = raw.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
+    if (!hub || seen.has(hub)) {
+      continue;
+    }
+    if (
+      (hub === rootNorm || hub.startsWith(`${rootNorm}/`))
+      && vaultUriIsTodayMarkdownFile(hub)
+    ) {
+      seen.add(hub);
+      out.push(hub);
+    }
+  }
+  return out;
+}
+
+/**
+ * {@link restoredTodayHubWorkspaceKeysForVault} as a filtered snapshot map (canonical hub URI keys).
+ */
+export function filterRestoredTodayHubWorkspacesForVault(
+  restored: Record<string, TodayHubWorkspaceSnapshot> | null | undefined,
+  vaultRoot: string,
+): Record<string, TodayHubWorkspaceSnapshot> {
+  const out: Record<string, TodayHubWorkspaceSnapshot> = {};
+  if (restored == null) {
+    return out;
+  }
+  const rootNorm = vaultRoot.replace(/\\/g, '/');
+  for (const raw of Object.keys(restored)) {
+    const hub = raw.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
+    if (!hub) {
+      continue;
+    }
+    if (
+      !((hub === rootNorm || hub.startsWith(`${rootNorm}/`))
+        && vaultUriIsTodayMarkdownFile(hub))
+    ) {
+      continue;
+    }
+    const snap = restored[raw];
+    if (snap != null) {
+      out[hub] = snap;
+    }
+  }
+  return out;
+}
+
+/**
  * Merge refs-derived hub URIs with persisted hub keys so restore sees inactive hubs before refs refresh.
  */
 export function restoredTodayHubWorkspaceUrisForRestore(args: {
@@ -338,13 +396,8 @@ export function restoredTodayHubWorkspaceUrisForRestore(args: {
 }): string[] {
   const out = [...args.currentHubUris];
   const seen = new Set(out);
-  const root = args.root.replace(/\\/g, '/');
-  for (const raw of Object.keys(args.restored ?? {})) {
-    const hub = raw.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
-    if (!hub || seen.has(hub)) {
-      continue;
-    }
-    if ((hub === root || hub.startsWith(`${root}/`)) && vaultUriIsTodayMarkdownFile(hub)) {
+  for (const hub of restoredTodayHubWorkspaceKeysForVault(args.restored, args.root)) {
+    if (!seen.has(hub)) {
       seen.add(hub);
       out.push(hub);
     }

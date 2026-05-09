@@ -705,17 +705,29 @@ export function useMainWindowWorkspace(options: {
     [vaultMarkdownRefs],
   );
 
+  const projectionVaultRootNormalized =
+    vaultRoot != null ? normalizedVaultRootPath(vaultRoot) : null;
+
   // When the legacy map has not been populated yet (restore pending), fall back to
   // restoredInboxState so inactive-hub snapshots are available immediately. Mirrors the same
   // fallback used by legacyTodayHubWorkspacesPersistFiltered.
-  const todayHubWorkspacesForProjection = resolveTodayHubWorkspacesForProjection({
-    legacyTodayHubWorkspaces: todayHubWorkspacesForSave,
-    restoredTodayHubWorkspaces:
-      restoredInboxState?.todayHubWorkspaces as
-        | Record<string, TodayHubWorkspaceSnapshot>
-        | null
-        | undefined,
-  });
+  const todayHubWorkspacesForProjection = useMemo(
+    () =>
+      resolveTodayHubWorkspacesForProjection({
+        legacyTodayHubWorkspaces: todayHubWorkspacesForSave,
+        restoredTodayHubWorkspaces:
+          restoredInboxState?.todayHubWorkspaces as
+            | Record<string, TodayHubWorkspaceSnapshot>
+            | null
+            | undefined,
+        vaultRootNormalized: projectionVaultRootNormalized,
+      }),
+    [
+      todayHubWorkspacesForSave,
+      projectionVaultRootNormalized,
+      restoredInboxState?.todayHubWorkspaces,
+    ],
+  );
 
   // Before vaultMarkdownRefs is populated by the async collectVaultMarkdownRefs, also include
   // hubs from the restored state so the model has all hubs immediately after restore.
@@ -723,9 +735,10 @@ export function useMainWindowWorkspace(options: {
     () =>
       computeProjectionHubUris({
         workspaceModelHubUris,
+        vaultRootNormalized: projectionVaultRootNormalized,
         restoredInboxState,
       }),
-    [workspaceModelHubUris, restoredInboxState],
+    [workspaceModelHubUris, projectionVaultRootNormalized, restoredInboxState],
   );
 
   // When activeTodayHubUri is null (not yet restored), use the persisted value so the model
