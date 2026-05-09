@@ -229,7 +229,7 @@ export function createDesktopTestVaultFilesystem(
 
     async removeTree(directoryUri: string): Promise<void> {
       const root = normalizeVaultUri(directoryUri);
-      const prefix = `${root}/`;
+      const prefix = root === '/' ? '/' : `${root}/`;
 
       const fileKeys = [...files.keys()].filter(
         k => k === root || k.startsWith(prefix),

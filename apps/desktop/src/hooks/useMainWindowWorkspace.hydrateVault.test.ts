@@ -1,146 +1,22 @@
-import {act, renderHook, waitFor} from '@testing-library/react';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
-
-import type {VaultFilesystem} from '@eskerra/core';
+import {act, waitFor} from '@testing-library/react';
+import {beforeEach, describe, expect, it} from 'vitest';
 
 import {
-  createDesktopTestVaultFilesystem,
-  type CreateDesktopTestVaultFilesystemOptions,
-} from '../test/desktopVaultFilesystem';
-
-import {
-  type UseMainWindowWorkspaceResult,
-  useMainWindowWorkspace,
-} from './useMainWindowWorkspace';
-
-const persistTransientMarkdownImagesMock = vi.hoisted(() =>
-  vi.fn(async (markdown: string, _vaultRoot: string) => markdown),
-);
-
-vi.mock('../lib/persistTransientMarkdownImages', () => ({
-  persistTransientMarkdownImages: persistTransientMarkdownImagesMock,
-}));
-
-const pluginStoreState = vi.hoisted(() => {
-  const kv = new Map<string, unknown>();
-  const store = {
-    get: vi.fn(async <T>(key: string) => kv.get(key) as T),
-    set: vi.fn(async (key: string, value: unknown) => {
-      kv.set(key, value);
-    }),
-    save: vi.fn(async () => undefined),
-  };
-  const load = vi.fn(async () => store);
-  const clear = (): void => {
-    kv.clear();
-    store.get.mockClear();
-    store.set.mockClear();
-    store.save.mockClear();
-    load.mockClear();
-  };
-  return {kv, store, load, clear};
-});
-
-vi.mock('@tauri-apps/plugin-store', () => ({
-  load: pluginStoreState.load,
-}));
-
-const tauriVaultMocks = vi.hoisted(() => ({
-  setVaultSession: vi.fn(async (_rootPath: string) => undefined),
-  getVaultSession: vi.fn(async () => null),
-  startVaultWatch: vi.fn(async () => undefined),
-}));
-
-vi.mock('../lib/tauriVault', () => ({
-  setVaultSession: tauriVaultMocks.setVaultSession,
-  getVaultSession: tauriVaultMocks.getVaultSession,
-  startVaultWatch: tauriVaultMocks.startVaultWatch,
-}));
-
-const vaultSearchMocks = vi.hoisted(() => ({
-  vaultSearchIndexSchedule: vi.fn(async () => undefined),
-  vaultSearchIndexTouchPaths: vi.fn(async (_paths: string[]) => undefined),
-}));
-
-vi.mock('../lib/tauriVaultSearch', () => ({
-  vaultSearchIndexSchedule: vaultSearchMocks.vaultSearchIndexSchedule,
-  vaultSearchIndexTouchPaths: vaultSearchMocks.vaultSearchIndexTouchPaths,
-}));
-
-const vaultFrontmatterMocks = vi.hoisted(() => ({
-  vaultFrontmatterIndexSchedule: vi.fn(async () => undefined),
-  vaultFrontmatterIndexTouchPaths: vi.fn(async (_paths: string[]) => undefined),
-}));
-
-vi.mock('../lib/tauriVaultFrontmatter', () => ({
-  vaultFrontmatterIndexSchedule: vaultFrontmatterMocks.vaultFrontmatterIndexSchedule,
-  vaultFrontmatterIndexTouchPaths: vaultFrontmatterMocks.vaultFrontmatterIndexTouchPaths,
-}));
-
-const eventMocks = vi.hoisted(() => ({
-  listen: vi.fn(async (_channel: string, _handler: (e: {payload: unknown}) => void) =>
-    vi.fn(),
-  ),
-}));
-
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: eventMocks.listen,
-}));
-
-const VAULT_ROOT = '/vault';
-
-async function mountHydratedMainWindowWorkspace(seed: CreateDesktopTestVaultFilesystemOptions): Promise<{
-  fs: VaultFilesystem;
-  result: {readonly current: UseMainWindowWorkspaceResult};
-  unmount: () => void;
-}> {
-  const {fs} = createDesktopTestVaultFilesystem(seed);
-  const inboxEditorRef: {current: null} = {current: null};
-  const inboxEditorShellScrollRef: {current: null} = {current: null};
-
-  const hook = renderHook(() =>
-    useMainWindowWorkspace({
-      fs,
-      inboxEditorRef,
-      inboxEditorShellScrollRef,
-      restoredInboxState: null,
-      inboxRestoreEnabled: true,
-    }),
-  );
-
-  await waitFor(() => {
-    expect(hook.result.current.initialVaultHydrateAttemptDone).toBe(true);
-  });
-
-  await act(async () => {
-    await hook.result.current.hydrateVault(VAULT_ROOT);
-  });
-
-  await waitFor(() => {
-    expect(hook.result.current.vaultRoot).toBe(VAULT_ROOT);
-  });
-
-  return {fs, result: hook.result, unmount: hook.unmount};
-}
+  getDesktopMainWindowIntegrationMocks,
+  mountHydratedMainWindowWorkspace,
+} from './useMainWindowWorkspace.integration.harness';
 
 describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
   beforeEach(() => {
-    pluginStoreState.clear();
-    tauriVaultMocks.setVaultSession.mockClear();
-    tauriVaultMocks.getVaultSession.mockClear();
-    tauriVaultMocks.startVaultWatch.mockClear();
-    vaultSearchMocks.vaultSearchIndexSchedule.mockClear();
-    vaultSearchMocks.vaultSearchIndexTouchPaths.mockClear();
-    vaultFrontmatterMocks.vaultFrontmatterIndexSchedule.mockClear();
-    vaultFrontmatterMocks.vaultFrontmatterIndexTouchPaths.mockClear();
-    eventMocks.listen.mockClear();
-    persistTransientMarkdownImagesMock.mockClear();
+    getDesktopMainWindowIntegrationMocks().resetAll();
   });
 
   it('hydrateVault bootstraps the vault on the fake fs and wires session + watch', async () => {
     const {fs, result, unmount} = await mountHydratedMainWindowWorkspace({
       dirs: ['/vault'],
     });
+    const {tauriVaultMocks, eventMocks, vaultSearchMocks, vaultFrontmatterMocks, pluginStoreState} =
+      getDesktopMainWindowIntegrationMocks();
 
     expect(result.current.busy).toBe(false);
     expect(result.current.notificationsState.err).toBeNull();
@@ -232,6 +108,185 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
 
     expect(await fs.readFile(uriA, {encoding: 'utf8'})).toBe(editedBody);
     expect(result.current.selectionController.inboxContentByUri[uriA]).toBe(editedBody);
+
+    unmount();
+  });
+
+  it('rapid note switches do not let a stale deferred save overwrite newer note content on disk', async () => {
+    const uriA = '/vault/Inbox/Alpha.md';
+    const uriB = '/vault/Inbox/Beta.md';
+    const alphaSeed = 'alpha-seed';
+    const betaSeed = 'beta-seed';
+    const alphaFirstEdit = 'alpha-first-edit';
+    const betaFinalEdit = 'beta-final-edit';
+    const alphaSecondEdit = 'alpha-second-edit';
+
+    const {fs, result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Inbox'],
+      files: {
+        [uriA]: `${alphaSeed}\n`,
+        [uriB]: `${betaSeed}\n`,
+      },
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.notes.length).toBe(2);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaSeed);
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(alphaFirstEdit);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaFirstEdit);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriB);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriB);
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(betaFinalEdit);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(betaFinalEdit);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaFirstEdit);
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(alphaSecondEdit);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaSecondEdit);
+    });
+
+    await act(async () => {
+      await result.current.persistenceController.flushInboxSave();
+    });
+
+    await waitFor(async () => {
+      expect(await fs.readFile(uriA, {encoding: 'utf8'})).toBe(alphaSecondEdit);
+    });
+    await waitFor(async () => {
+      expect(await fs.readFile(uriB, {encoding: 'utf8'})).toBe(betaFinalEdit);
+    });
+
+    const betaDisk = await fs.readFile(uriB, {encoding: 'utf8'});
+    expect(betaDisk).not.toContain('alpha');
+    expect(betaDisk).not.toContain(alphaFirstEdit);
+    expect(betaDisk).not.toContain(alphaSecondEdit);
+
+    unmount();
+  });
+
+  it('interrupting compose by opening another note preserves prior note edits and does not leak compose text onto disk or cache', async () => {
+    const uriA = '/vault/Inbox/Alpha.md';
+    const uriB = '/vault/Inbox/Beta.md';
+    const alphaSeed = 'alpha-seed';
+    const betaSeed = 'beta-seed';
+    const alphaDirty = 'alpha-dirty-edit';
+    const composeDraft = 'compose-draft-unique-xyz';
+
+    const {fs, result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Inbox'],
+      files: {
+        [uriA]: `${alphaSeed}\n`,
+        [uriB]: `${betaSeed}\n`,
+      },
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.notes.length).toBe(2);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaSeed);
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(alphaDirty);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaDirty);
+    });
+
+    act(() => {
+      result.current.selectionController.startNewEntry();
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.composingNewEntry).toBe(true);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe('');
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(composeDraft);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(composeDraft);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriB);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriB);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.composingNewEntry).toBe(false);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(betaSeed);
+    });
+
+    await act(async () => {
+      await result.current.persistenceController.flushInboxSave();
+    });
+
+    await waitFor(async () => {
+      expect(await fs.readFile(uriA, {encoding: 'utf8'})).toBe(alphaDirty);
+    });
+    const betaDisk = await fs.readFile(uriB, {encoding: 'utf8'});
+    expect(betaDisk).toContain(betaSeed);
+    expect(betaDisk).not.toContain(composeDraft);
+
+    const alphaDisk = await fs.readFile(uriA, {encoding: 'utf8'});
+    expect(alphaDisk).not.toContain(composeDraft);
+
+    expect(String(result.current.selectionController.inboxContentByUri[uriA] ?? '')).not.toContain(
+      composeDraft,
+    );
+    expect(String(result.current.selectionController.inboxContentByUri[uriB] ?? '')).not.toContain(
+      composeDraft,
+    );
 
     unmount();
   });

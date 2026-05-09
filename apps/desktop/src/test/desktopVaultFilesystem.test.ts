@@ -107,6 +107,29 @@ describe('createDesktopTestVaultFilesystem', () => {
     expect(await fs.exists('/vault')).toBe(true);
   });
 
+  it('removeTree removes the root directory tree', async () => {
+    const {fs} = createDesktopTestVaultFilesystem({
+      dirs: ['/', '/Inbox', '/Inbox/Nested', '/Projects'],
+      files: {
+        '/root.md': 'root',
+        '/Inbox/a.md': 'a',
+        '/Inbox/Nested/deep.md': 'd',
+        '/Projects/p.md': 'p',
+      },
+    });
+
+    await fs.removeTree('/');
+
+    expect(await fs.exists('/')).toBe(false);
+    expect(await fs.exists('/root.md')).toBe(false);
+    expect(await fs.exists('/Inbox')).toBe(false);
+    expect(await fs.exists('/Inbox/a.md')).toBe(false);
+    expect(await fs.exists('/Inbox/Nested')).toBe(false);
+    expect(await fs.exists('/Inbox/Nested/deep.md')).toBe(false);
+    expect(await fs.exists('/Projects')).toBe(false);
+    expect(await fs.exists('/Projects/p.md')).toBe(false);
+  });
+
   it('collectVaultMarkdownRefs works against a seeded fake layout', async () => {
     const {fs} = createDesktopTestVaultFilesystem({
       dirs: ['/vault', '/vault/Inbox', '/vault/Proj'],
