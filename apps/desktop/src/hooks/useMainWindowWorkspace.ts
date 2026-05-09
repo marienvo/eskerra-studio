@@ -2,7 +2,7 @@
  * Main-window vault workspace: orchestration hook (Tauri FS, editor tabs, Today hub, wiki rename).
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
- * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceVaultTreeMutations`, `inboxShellRestoreHelpers`,
+ * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceEditorHistoryNavigation`, `workspaceVaultTreeMutations`, `inboxShellRestoreHelpers`,
  * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`,
  * `workspaceHomeHistoryShadowSync`).
  *
@@ -125,11 +125,7 @@ import {
 } from '../lib/workspaceShellToday';
 import {
   createWorkspaceHomeState,
-  homeCanGoBack,
-  homeCanGoForward,
   homeCurrentUri,
-  homeGoBack,
-  homeGoForward,
   pushHomeNavigate,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
@@ -138,8 +134,6 @@ import {
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
-  goBackAction,
-  goForwardAction,
   reorderTabsAction,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
@@ -180,6 +174,16 @@ import {
   applyForegroundOpenTabPlacement,
   decideHomeOpenMode,
 } from './workspaceEditorTabs';
+import {
+  computeEditorHistoryCanGoBack,
+  computeEditorHistoryCanGoForward,
+  deriveActiveHomeStateSnapshot,
+  deriveActiveTabHistorySnapshot,
+  moveHomeHistoryBridge,
+  openCurrentHomeAfterComposingBridge,
+  runEditorHistoryGoBack,
+  runEditorHistoryGoForward,
+} from './workspaceEditorHistoryNavigation';
 import {pruneEditorTabsAfterBulkTreeDelete} from './workspaceVaultTreeMutations';
 import {useWorkspaceBacklinks} from './workspaceBacklinks';
 import {useWorkspaceLinkRouting} from './workspaceLinkRouting';
@@ -3209,65 +3213,64 @@ export function useMainWindowWorkspace(options: {
     [vaultRoot, fs, refreshNotes, commitMoveVaultTreeResult],
   );
 
-  const activeTabHistory = useMemo(() => {
-    const tab = activeEditorTabId
-      ? findTabById(editorWorkspaceTabs, activeEditorTabId)
-      : undefined;
-    return tab?.history ?? {entries: [], index: -1};
-  }, [activeEditorTabId, editorWorkspaceTabs]);
+  const activeTabHistory = useMemo(
+    () =>
+      deriveActiveTabHistorySnapshot({
+        activeEditorTabId,
+        editorWorkspaceTabs,
+      }),
+    [activeEditorTabId, editorWorkspaceTabs],
+  );
 
-  const activeHomeState = useMemo(() => {
-    if (activeEditorTabId != null || activeTodayHubUri == null) {
-      return null;
-    }
-    return homeStatesByHub[activeTodayHubUri] ?? createWorkspaceHomeState(activeTodayHubUri);
-  }, [activeEditorTabId, activeTodayHubUri, homeStatesByHub]);
+  const activeHomeState = useMemo(
+    () =>
+      deriveActiveHomeStateSnapshot({
+        activeEditorTabId,
+        activeTodayHubUri,
+        homeStatesByHub,
+      }),
+    [activeEditorTabId, activeTodayHubUri, homeStatesByHub],
+  );
 
-  const editorHistoryCanGoBack = useMemo(() => {
-    if (activeHomeState) {
-      return composingNewEntry
-        ? homeCurrentUri(activeHomeState) != null
-        : homeCanGoBack(activeHomeState);
-    }
-    const {entries, index} = activeTabHistory;
-    if (entries.length === 0) {
-      return false;
-    }
-    if (composingNewEntry) {
-      return index >= 0;
-    }
-    return index > 0;
-  }, [composingNewEntry, activeHomeState, activeTabHistory]);
+  const editorHistoryCanGoBack = useMemo(
+    () =>
+      computeEditorHistoryCanGoBack({
+        composingNewEntry,
+        activeHomeState,
+        activeTabHistory,
+      }),
+    [composingNewEntry, activeHomeState, activeTabHistory],
+  );
 
-  const editorHistoryCanGoForward = useMemo(() => {
-    if (activeHomeState) {
-      return !busy && !composingNewEntry && homeCanGoForward(activeHomeState);
-    }
-    const {entries, index} = activeTabHistory;
-    if (busy || composingNewEntry) {
-      return false;
-    }
-    return index >= 0 && index < entries.length - 1;
-  }, [busy, composingNewEntry, activeHomeState, activeTabHistory]);
+  const editorHistoryCanGoForward = useMemo(
+    () =>
+      computeEditorHistoryCanGoForward({
+        busy,
+        composingNewEntry,
+        activeHomeState,
+        activeTabHistory,
+      }),
+    [busy, composingNewEntry, activeHomeState, activeTabHistory],
+  );
 
   const openCurrentHomeAfterComposing = useCallback(
-    async (state: WorkspaceHomeState): Promise<boolean> => {
-      const uri = homeCurrentUri(state);
-      if (!uri) {
-        return false;
-      }
-      setComposingNewEntry(false);
-      clearInboxYamlFrontmatterEditorRefs({
-        inner: inboxYamlFrontmatterInnerRef,
-        leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-        setInner: setInboxYamlFrontmatterInner,
-        setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-      });
-      setEditorBody('');
-      setInboxEditorResetNonce(n => n + 1);
-      await openMarkdownInEditor(uri, {home: true, skipHistory: true});
-      return true;
-    },
+    async (state: WorkspaceHomeState): Promise<boolean> =>
+      openCurrentHomeAfterComposingBridge(
+        {
+          setComposingNewEntry,
+          clearFrontmatterRefs: () =>
+            clearInboxYamlFrontmatterEditorRefs({
+              inner: inboxYamlFrontmatterInnerRef,
+              leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
+              setInner: setInboxYamlFrontmatterInner,
+              setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
+            }),
+          setEditorBody,
+          setInboxEditorResetNonce,
+          openMarkdownInEditor,
+        },
+        state,
+      ),
     [openMarkdownInEditor],
   );
 
@@ -3276,72 +3279,40 @@ export function useMainWindowWorkspace(options: {
       hubUri: string,
       state: WorkspaceHomeState,
       move: (state: WorkspaceHomeState) => WorkspaceHomeState,
-    ): Promise<boolean> => {
-      const nextHome = move(state);
-      const uri = homeCurrentUri(nextHome);
-      if (!uri) {
-        return false;
-      }
-      setHomeStateForHub(hubUri, nextHome);
-      await openMarkdownInEditor(uri, {home: true, skipHistory: true});
-      return true;
-    },
+    ): Promise<boolean> =>
+      moveHomeHistoryBridge(
+        {setHomeStateForHub, openMarkdownInEditor},
+        hubUri,
+        state,
+        move,
+      ),
     [openMarkdownInEditor, setHomeStateForHub],
   );
 
   const editorHistoryGoBack = useCallback(() => {
-    void (async () => {
-      await flushInboxSaveRef.current();
-      const activeHub = activeTodayHubUriRef.current;
-      if (activeEditorTabIdRef.current == null && activeHub != null) {
-        const snap =
-          homeStatesByHubRef.current[activeHub] ?? createWorkspaceHomeState(activeHub);
-        if (composingNewEntryRef.current) {
-          await openCurrentHomeAfterComposing(snap);
-          return;
-        }
-        if (!homeCanGoBack(snap)) {
-          return;
-        }
-        await moveHomeHistory(activeHub, snap, homeGoBack);
-        return;
-      }
-      const id = activeEditorTabIdRef.current;
-      const tabs = editorWorkspaceTabsRef.current;
-      const tab = id ? findTabById(tabs, id) : undefined;
-      const snap = tab?.history ?? {entries: [], index: -1};
-      if (composingNewEntryRef.current) {
-        if (snap.entries.length === 0 || snap.index < 0) {
-          return;
-        }
-        const uri = snap.entries[snap.index]!;
-        setComposingNewEntry(false);
+    void runEditorHistoryGoBack({
+      activeTodayHubUriRef,
+      activeEditorTabIdRef,
+      homeStatesByHubRef,
+      editorWorkspaceTabsRef,
+      composingNewEntryRef,
+      flushInboxSave: () => flushInboxSaveRef.current(),
+      dispatchWorkspaceAction,
+      openMarkdownInEditor,
+      openCurrentHomeAfterComposing,
+      moveHomeHistory,
+      setComposingNewEntry,
+      setEditorBody,
+      setInboxEditorResetNonce,
+      setEditorWorkspaceTabs,
+      clearFrontmatterRefs: () =>
         clearInboxYamlFrontmatterEditorRefs({
           inner: inboxYamlFrontmatterInnerRef,
           leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
           setInner: setInboxYamlFrontmatterInner,
           setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-        });
-        setEditorBody('');
-        setInboxEditorResetNonce(n => n + 1);
-        await openMarkdownInEditor(uri, {skipHistory: true});
-        return;
-      }
-      if (snap.index <= 0) {
-        return;
-      }
-      const nextIndex = snap.index - 1;
-      const uri = snap.entries[nextIndex]!;
-      const nextTabs = tabs.map(t =>
-        t.id === id
-          ? {...t, history: {...t.history, index: nextIndex}}
-          : t,
-      );
-      editorWorkspaceTabsRef.current = nextTabs;
-      setEditorWorkspaceTabs(nextTabs);
-      dispatchWorkspaceAction('tab go back', goBackAction);
-      await openMarkdownInEditor(uri, {skipHistory: true});
-    })();
+        }),
+    });
   }, [
     dispatchWorkspaceAction,
     openMarkdownInEditor,
@@ -3350,40 +3321,18 @@ export function useMainWindowWorkspace(options: {
   ]);
 
   const editorHistoryGoForward = useCallback(() => {
-    void (async () => {
-      if (composingNewEntryRef.current) {
-        return;
-      }
-      await flushInboxSaveRef.current();
-      const activeHub = activeTodayHubUriRef.current;
-      if (activeEditorTabIdRef.current == null && activeHub != null) {
-        const snap =
-          homeStatesByHubRef.current[activeHub] ?? createWorkspaceHomeState(activeHub);
-        if (!homeCanGoForward(snap)) {
-          return;
-        }
-        await moveHomeHistory(activeHub, snap, homeGoForward);
-        return;
-      }
-      const id = activeEditorTabIdRef.current;
-      const tabs = editorWorkspaceTabsRef.current;
-      const tab = id ? findTabById(tabs, id) : undefined;
-      const snap = tab?.history ?? {entries: [], index: -1};
-      if (snap.index < 0 || snap.index >= snap.entries.length - 1) {
-        return;
-      }
-      const nextIndex = snap.index + 1;
-      const uri = snap.entries[nextIndex]!;
-      const nextTabs = tabs.map(t =>
-        t.id === id
-          ? {...t, history: {...t.history, index: nextIndex}}
-          : t,
-      );
-      editorWorkspaceTabsRef.current = nextTabs;
-      setEditorWorkspaceTabs(nextTabs);
-      dispatchWorkspaceAction('tab go forward', goForwardAction);
-      await openMarkdownInEditor(uri, {skipHistory: true});
-    })();
+    void runEditorHistoryGoForward({
+      activeTodayHubUriRef,
+      activeEditorTabIdRef,
+      homeStatesByHubRef,
+      editorWorkspaceTabsRef,
+      composingNewEntryRef,
+      flushInboxSave: () => flushInboxSaveRef.current(),
+      dispatchWorkspaceAction,
+      openMarkdownInEditor,
+      moveHomeHistory,
+      setEditorWorkspaceTabs,
+    });
   }, [dispatchWorkspaceAction, openMarkdownInEditor, moveHomeHistory]);
 
   useEffect(() => {
