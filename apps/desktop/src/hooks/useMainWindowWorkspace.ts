@@ -136,6 +136,7 @@ import {
   closeTabAction,
   openTabBackgroundAction,
   remapPrefixAction,
+  removeUrisAction,
   reorderTabsAction,
   type OpenTabBackgroundOptions,
   type WorkspaceModel,
@@ -187,7 +188,7 @@ import {
   runEditorHistoryGoBack,
   runEditorHistoryGoForward,
 } from './workspaceEditorHistoryNavigation';
-import {pruneEditorTabsAfterBulkTreeDelete} from './workspaceVaultTreeMutations';
+import {bulkDeleteUriRemovalPredicate, pruneEditorTabsAfterBulkTreeDelete} from './workspaceVaultTreeMutations';
 import {useWorkspaceBacklinks} from './workspaceBacklinks';
 import {useWorkspaceLinkRouting} from './workspaceLinkRouting';
 import {useWorkspacePersistence} from './workspacePersistence';
@@ -596,16 +597,20 @@ export function useMainWindowWorkspace(options: {
   );
 
   const removeHomeHistoryUris = useCallback(
-    (shouldRemove: (normalizedUri: string) => boolean) =>
+    (shouldRemove: (normalizedUri: string) => boolean) => {
       removeHomeHistoryUrisBridge(
         {
           homeStatesByHubRef,
           setHomeStatesByHub,
-          dispatchWorkspaceAction,
         },
         shouldRemove,
-      ),
-    [dispatchWorkspaceAction],
+      );
+      dispatchWorkspaceActionSync(
+        'remove uris',
+        m => removeUrisAction(m, shouldRemove),
+      );
+    },
+    [dispatchWorkspaceActionSync],
   );
 
   const setHomeStateForHub = useCallback(
@@ -3328,19 +3333,7 @@ export function useMainWindowWorkspace(options: {
       } else {
         mirrorShadowActiveTab(nextActive, 'bulk delete active tab');
       }
-      removeHomeHistoryUris(uri => {
-        for (const entry of plan) {
-          const norm = entry.uri.replace(/\\/g, '/');
-          if (entry.kind === 'article') {
-            if (uri === norm) {
-              return true;
-            }
-          } else if (uri === norm || uri.startsWith(`${norm}/`)) {
-            return true;
-          }
-        }
-        return false;
-      });
+      removeHomeHistoryUris(bulkDeleteUriRemovalPredicate(plan));
       for (const key of scrollKeysToRemove) {
         sm.delete(key);
       }

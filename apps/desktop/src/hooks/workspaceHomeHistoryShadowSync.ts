@@ -1,8 +1,8 @@
 /**
  * Home stack (runtime) ↔ WorkspaceModel shadow sync for URI remap and targeted removals.
  * Runtime `homeStatesByHub` stays authoritative; shadow updates use `dispatchWorkspaceAction` /
- * `dispatchWorkspaceActionSync` at orchestration sites (see `remapHomeStatesPrefix` in
- * `useMainWindowWorkspace`).
+ * `dispatchWorkspaceActionSync` at orchestration sites (see `remapHomeStatesPrefix` and
+ * `removeHomeHistoryUris` in `useMainWindowWorkspace`).
  */
 import type {Dispatch, RefObject, SetStateAction} from 'react';
 
@@ -12,7 +12,6 @@ import {
   homeRemoveUris,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
-import {removeUrisAction} from '../lib/workspaceModel';
 import type {DispatchWorkspaceModelAction} from './workspaceShadowBridge';
 
 export function computeRemappedHomeStatesForVaultPrefix(args: {
@@ -88,22 +87,28 @@ export function remapHomeStatesPrefixBridge(
   return true;
 }
 
+export type HomeHistoryRemoveUrisReactDeps = Pick<
+  HomeHistoryShadowSyncBridgeDeps,
+  'homeStatesByHubRef' | 'setHomeStatesByHub'
+>;
+
+/**
+ * Prunes runtime `homeStatesByHub` entries. Does **not** update {@link WorkspaceModel} — callers
+ * run {@link removeUrisAction} (e.g. via `dispatchWorkspaceActionSync`) in the same transaction.
+ */
 export function removeHomeHistoryUrisBridge(
-  deps: HomeHistoryShadowSyncBridgeDeps,
+  deps: HomeHistoryRemoveUrisReactDeps,
   shouldRemove: (normalizedUri: string) => boolean,
-): void {
-  const {homeStatesByHubRef, setHomeStatesByHub, dispatchWorkspaceAction} = deps;
+): boolean {
+  const {homeStatesByHubRef, setHomeStatesByHub} = deps;
   const {next, changed} = computePrunedHomeStatesAfterUriRemoval({
     current: homeStatesByHubRef.current,
     shouldRemove,
   });
   if (!changed) {
-    return;
+    return false;
   }
   homeStatesByHubRef.current = next;
   setHomeStatesByHub(next);
-  dispatchWorkspaceAction(
-    'homeHistory remove uris',
-    model => removeUrisAction(model, shouldRemove),
-  );
+  return true;
 }

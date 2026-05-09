@@ -1,7 +1,9 @@
 import {describe, expect, it} from 'vitest';
 
+import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {createEditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import {
+  bulkDeleteUriRemovalPredicate,
   collectDeletedPathsFromBulkPlan,
   pruneEditorTabsAfterBulkTreeDelete,
 } from './workspaceVaultTreeMutations';
@@ -30,5 +32,12 @@ describe('workspaceVaultTreeMutations', () => {
     expect(scrollKeysToRemove.sort()).toEqual(
       ['vault/Projects/old/nested/x.md'].sort(),
     );
+  });
+
+  it('bulkDeleteUriRemovalPredicate flags URIs under deleted folders and leaves others', () => {
+    const plan = [{kind: 'folder' as const, uri: 'vault/Projects/old'}];
+    const pred = bulkDeleteUriRemovalPredicate(plan);
+    expect(pred(normalizeEditorDocUri('vault/Projects/old/nested/x.md'))).toBe(true);
+    expect(pred(normalizeEditorDocUri('vault/Inbox/keep.md'))).toBe(false);
   });
 });

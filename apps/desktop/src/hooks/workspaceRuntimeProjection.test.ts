@@ -12,6 +12,7 @@ import {
   normalizeWorkspaceUri,
   openTabBackgroundAction,
   remapPrefixAction,
+  removeUrisAction,
   reorderTabsAction,
   serializeWorkspaceModelToPersistence,
   type WorkspaceModel,
@@ -575,6 +576,94 @@ describe('remapPrefixAction', () => {
     expect(ws?.tabs.map(t => t.id)).toEqual(['a', 'b']);
     expect(ws?.active).toEqual({kind: 'tab', id: 'a'});
     expect(ws?.tabs[0]?.history.entries[0]).toBe(normalizeWorkspaceUri(noteUnderNew));
+  });
+});
+
+describe('removeUrisAction', () => {
+  it('drops matching URIs from tab histories, removes emptied tabs, and keeps active when it survives', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const gone = normalizeWorkspaceUri('/vault/Inbox/Gone.md');
+    const keep = normalizeWorkspaceUri(NOTE_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...createDefaultWorkspaceState(HUB_A),
+          tabs: [
+            {id: 't1', history: {entries: [gone, keep], index: 1}},
+            {id: 't2', history: {entries: [gone], index: 0}},
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const after = removeUrisAction(model, u => u === gone);
+    const ws = after.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1']);
+    expect(ws?.tabs[0]?.history.entries.map(normalizeWorkspaceUri)).toEqual([keep]);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+    const persisted = serializeWorkspaceModelToPersistence(after);
+    const rows = persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs ?? [];
+    expect(rows.map(r => r.entries.map(normalizeWorkspaceUri))).toEqual([[keep]]);
+  });
+
+  it('preserves active tab when deleting a URI that only appeared on an inactive tab', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const gone = normalizeWorkspaceUri('/vault/Inbox/Gone.md');
+    const keep = normalizeWorkspaceUri(NOTE_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...createDefaultWorkspaceState(HUB_A),
+          tabs: [
+            {id: 't1', history: {entries: [keep], index: 0}},
+            {id: 't2', history: {entries: [gone], index: 0}},
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const after = removeUrisAction(model, u => u === gone);
+    const ws = after.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+  });
+
+  it('prunes paths under a deleted folder prefix and persists remaining URIs', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const folder = '/vault/Inbox/OldDir';
+    const under = normalizeWorkspaceUri(`${folder}/note.md`);
+    const outside = normalizeWorkspaceUri(NOTE_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...createDefaultWorkspaceState(HUB_A),
+          tabs: [
+            {
+              id: 'a',
+              history: {entries: [under, outside], index: 1},
+            },
+          ],
+          active: {kind: 'tab', id: 'a'},
+        },
+      },
+    };
+    const pred = (u: string) => {
+      const f = folder;
+      return u === f || u.startsWith(`${f}/`);
+    };
+    const after = removeUrisAction(model, pred);
+    const ws = after.workspaces[hubNorm];
+    expect(ws?.tabs[0]?.history.entries.map(normalizeWorkspaceUri)).toEqual([outside]);
+    expect(ws?.tabs[0]?.history.index).toBe(0);
+    const persisted = serializeWorkspaceModelToPersistence(after);
+    expect(
+      persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs?.[0]?.entries.map(
+        normalizeWorkspaceUri,
+      ),
+    ).toEqual([outside]);
   });
 });
 

@@ -30,6 +30,15 @@ export function collectDeletedPathsFromBulkPlan(plan: readonly VaultTreeBulkItem
   return {deletedFiles, deletedFolders};
 }
 
+/** Same URI predicate as {@link pruneEditorTabsAfterBulkTreeDelete} tab pruning (vault bulk delete). */
+export function bulkDeleteUriRemovalPredicate(
+  plan: readonly VaultTreeBulkItem[],
+): (normalizedUri: string) => boolean {
+  const {deletedFiles, deletedFolders} = collectDeletedPathsFromBulkPlan(plan);
+  return (u: string) =>
+    vaultUriDeletedByTreeChange(u, deletedFiles, deletedFolders);
+}
+
 export function pruneEditorTabsAfterBulkTreeDelete(args: {
   editorWorkspaceTabs: readonly EditorWorkspaceTab[];
   activeEditorTabId: string | null;
