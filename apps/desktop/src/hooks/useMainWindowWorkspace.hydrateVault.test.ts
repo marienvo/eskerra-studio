@@ -134,6 +134,47 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     unmount();
   });
 
+  it('keeps persisted active hub workspace sanitized after dropping a restored echo tab', async () => {
+    const echoSnapshot: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [{id: 'echo-tab', entries: [HUB_A], index: 0}],
+      activeEditorTabId: 'echo-tab',
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`],
+        files: {
+          [HUB_A]: 'today\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: HUB_A,
+          editorWorkspaceTabs: echoSnapshot.editorWorkspaceTabs,
+          activeEditorTabId: echoSnapshot.activeEditorTabId,
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: echoSnapshot,
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+      expect(
+        result.current.todayHubController.todayHubWorkspacesForSave[HUB_A],
+      ).toEqual({
+        editorWorkspaceTabs: [],
+        activeEditorTabId: null,
+      });
+    });
+
+    unmount();
+  });
+
   it('preserves Home as active surface when restored hub snapshot has tabs but active tab is null', async () => {
     const snapshotA: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [
