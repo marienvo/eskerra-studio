@@ -731,14 +731,21 @@ export function useMainWindowWorkspace(options: {
 
   // Before vaultMarkdownRefs is populated by the async collectVaultMarkdownRefs, also include
   // hubs from the restored state so the model has all hubs immediately after restore.
+  // After shell restore, refs are authoritative for which Today hubs exist; do not union
+  // long-lived restored JSON keys (they can resurrect deleted hubs in the projected model).
   const projectionHubUris = useMemo(
     () =>
       computeProjectionHubUris({
         workspaceModelHubUris,
         vaultRootNormalized: projectionVaultRootNormalized,
-        restoredInboxState,
+        restoredInboxState: inboxShellRestored ? null : restoredInboxState,
       }),
-    [workspaceModelHubUris, projectionVaultRootNormalized, restoredInboxState],
+    [
+      workspaceModelHubUris,
+      projectionVaultRootNormalized,
+      restoredInboxState,
+      inboxShellRestored,
+    ],
   );
 
   // When activeTodayHubUri is null (not yet restored), use the persisted value so the model
@@ -2389,11 +2396,19 @@ export function useMainWindowWorkspace(options: {
   const syncWorkspaceModelRemoveOpenTabUri = useCallback(
     (markdownUri: string) => {
       const target = normalizeWorkspaceUri(markdownUri);
+      removeHomeHistoryUrisBridge(
+        {homeStatesByHubRef, setHomeStatesByHub},
+        u => u === target,
+      );
       dispatchWorkspaceActionSync('vault watch removed open note', m =>
         removeUrisAction(m, u => u === target),
       );
     },
-    [dispatchWorkspaceActionSync],
+    [
+      dispatchWorkspaceActionSync,
+      homeStatesByHubRef,
+      setHomeStatesByHub,
+    ],
   );
 
   useWorkspaceVaultWatchEffects({

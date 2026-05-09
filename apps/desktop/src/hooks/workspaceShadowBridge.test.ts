@@ -63,6 +63,17 @@ describe('computeProjectionHubUris', () => {
       '/vault/D/Today.md',
     ]);
   });
+
+  it('returns only workspace hubs when restoredInboxState is null', () => {
+    const hubs = ['/vault/A/Today.md'];
+    expect(
+      computeProjectionHubUris({
+        workspaceModelHubUris: hubs,
+        vaultRootNormalized: vaultRoot,
+        restoredInboxState: null,
+      }),
+    ).toEqual(hubs);
+  });
 });
 
 describe('resolveTodayHubWorkspacesForProjection', () => {

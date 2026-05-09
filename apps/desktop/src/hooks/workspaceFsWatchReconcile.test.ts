@@ -6,6 +6,7 @@ import {
   removeUrisAction,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
+import {computePrunedHomeStatesAfterUriRemoval} from './workspaceHomeHistoryShadowSync';
 import {
   applyExternalOpenNoteDeletedForFsWatch,
   type ReconcileFsOpenMarkdownEnv,
@@ -65,6 +66,11 @@ function minimalEnv(
 }
 
 describe('applyExternalOpenNoteDeletedForFsWatch', () => {
+  /**
+   * Production `syncWorkspaceModelRemoveOpenTabUri` mirrors `removeHomeHistoryUris`: it calls
+   * `removeHomeHistoryUrisBridge` then `removeUrisAction` on the shadow model. Mocks below only
+   * implement the shadow side unless a test explicitly simulates both.
+   */
   it('calls syncWorkspaceModelRemoveOpenTabUri after legacy tab strip updates', async () => {
     const sync = vi.fn();
     const tab = {id: 't1', history: {entries: [NOTE], index: 0}};
@@ -109,6 +115,49 @@ describe('applyExternalOpenNoteDeletedForFsWatch', () => {
 
     await applyExternalOpenNoteDeletedForFsWatch(env, NOTE);
 
+    const ws = model.workspaces[hubNorm];
+    expect(ws?.tabs).toHaveLength(1);
+    expect(ws?.tabs[0]?.history.entries).toEqual([OTHER]);
+  });
+
+  it('mirrors production sync: prune runtime home stacks and shadow tabs for the deleted URI', async () => {
+    const hubNorm = normalizeWorkspaceUri(HUB);
+    let homeStates: Record<string, {history: {entries: string[]; index: number}}> = {
+      [hubNorm]: {
+        history: {entries: [hubNorm, NOTE, OTHER], index: 2},
+      },
+    };
+    let model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...createDefaultWorkspaceState(HUB),
+          tabs: [{id: 't1', history: {entries: [NOTE, OTHER], index: 0}}],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const sync = (uri: string) => {
+      const target = normalizeWorkspaceUri(uri);
+      const {next} = computePrunedHomeStatesAfterUriRemoval({
+        current: homeStates,
+        shouldRemove: u => u === target,
+      });
+      homeStates = next;
+      model = removeUrisAction(model, u => u === target);
+    };
+
+    const tab = {id: 't1', history: {entries: [NOTE, OTHER], index: 0}};
+    const env = minimalEnv({
+      editorWorkspaceTabsRef: {current: [tab]},
+      activeEditorTabIdRef: {current: 't1'},
+      selectedUriRef: {current: OTHER},
+      syncWorkspaceModelRemoveOpenTabUri: sync,
+    });
+
+    await applyExternalOpenNoteDeletedForFsWatch(env, NOTE);
+
+    expect(homeStates[hubNorm]?.history.entries).toEqual([hubNorm, OTHER]);
     const ws = model.workspaces[hubNorm];
     expect(ws?.tabs).toHaveLength(1);
     expect(ws?.tabs[0]?.history.entries).toEqual([OTHER]);
