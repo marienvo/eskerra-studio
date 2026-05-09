@@ -133,6 +133,10 @@ export function useWorkspaceVaultWatchEffects(args: {
   setFsRefreshNonce: Dispatch<SetStateAction<number>>;
   setPodcastFsNonce: Dispatch<SetStateAction<number>>;
   setVaultSettings: Dispatch<SetStateAction<EskerraSettings | null>>;
+  /**
+   * @see ReconcileFsOpenMarkdownEnv['syncWorkspaceModelRemoveOpenTabUri']
+   */
+  syncWorkspaceModelRemoveOpenTabUri: (normalizedMarkdownUri: string) => void;
 }): void {
   const {
     vaultRoot,
@@ -179,6 +183,7 @@ export function useWorkspaceVaultWatchEffects(args: {
     setFsRefreshNonce,
     setPodcastFsNonce,
     setVaultSettings,
+    syncWorkspaceModelRemoveOpenTabUri,
   } = args;
 
   useEffect(() => {
@@ -237,6 +242,7 @@ export function useWorkspaceVaultWatchEffects(args: {
       openMarkdownInEditor,
       loadFullMarkdownIntoInboxEditor,
       scheduleBacklinksDeferOneFrameAfterLoad,
+      syncWorkspaceModelRemoveOpenTabUri,
     };
     const reconcileFsTodayEnv: ReconcileFsTodayHubEnv = {
       todayHubRowLastPersistedRef,
@@ -535,5 +541,6 @@ export function useWorkspaceVaultWatchEffects(args: {
     setFsRefreshNonce,
     setPodcastFsNonce,
     setVaultSettings,
+    syncWorkspaceModelRemoveOpenTabUri,
   ]);
 }

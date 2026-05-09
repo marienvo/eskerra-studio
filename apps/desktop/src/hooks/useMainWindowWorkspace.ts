@@ -139,6 +139,7 @@ import {
   remapPrefixAction,
   removeUrisAction,
   reorderTabsAction,
+  normalizeWorkspaceUri,
   type OpenTabBackgroundOptions,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
@@ -2367,6 +2368,16 @@ export function useMainWindowWorkspace(options: {
     };
   }, [hydrateVault]);
 
+  const syncWorkspaceModelRemoveOpenTabUri = useCallback(
+    (markdownUri: string) => {
+      const target = normalizeWorkspaceUri(markdownUri);
+      dispatchWorkspaceActionSync('vault watch removed open note', m =>
+        removeUrisAction(m, u => u === target),
+      );
+    },
+    [dispatchWorkspaceActionSync],
+  );
+
   useWorkspaceVaultWatchEffects({
     vaultRoot,
     fs,
@@ -2412,6 +2423,7 @@ export function useMainWindowWorkspace(options: {
     setFsRefreshNonce,
     setPodcastFsNonce,
     setVaultSettings,
+    syncWorkspaceModelRemoveOpenTabUri,
   });
 
   useEffect(() => {

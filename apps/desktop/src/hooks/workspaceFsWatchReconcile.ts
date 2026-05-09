@@ -117,6 +117,11 @@ export type ReconcileFsOpenMarkdownEnv = {
     selection: 'preserve' | 'start',
   ) => void;
   scheduleBacklinksDeferOneFrameAfterLoad: () => void;
+  /**
+   * Drops pruned URIs from the shadow workspace model in the same turn as legacy tab strip edits.
+   * Uses {@link removeUrisAction} so inactive-hub snapshots stay aligned without waiting for projection replace.
+   */
+  syncWorkspaceModelRemoveOpenTabUri?: (normalizedMarkdownUri: string) => void;
 };
 
 /** Today hub row disk/cache alignment; only used after open-tab reconcile in the same FS batch. */
@@ -196,7 +201,7 @@ function clearSoftDiskConflictRefIfUriMatches(
   }
 }
 
-async function applyExternalOpenNoteDeletedForFsWatch(
+export async function applyExternalOpenNoteDeletedForFsWatch(
   open: ReconcileFsOpenMarkdownEnv,
   normTab: string,
 ): Promise<void> {
@@ -213,6 +218,8 @@ async function applyExternalOpenNoteDeletedForFsWatch(
   open.setEditorWorkspaceTabs(nextTabs);
   open.activeEditorTabIdRef.current = nextActive;
   open.setActiveEditorTabId(nextActive);
+
+  open.syncWorkspaceModelRemoveOpenTabUri?.(normTab);
 
   clearDiskConflictRefsForMatchingUri(open, normTab);
 
