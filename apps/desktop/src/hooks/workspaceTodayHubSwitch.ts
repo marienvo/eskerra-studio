@@ -209,6 +209,8 @@ export function useWorkspaceTodayHubSwitch(
 
       const {nextTabs, nextActive} = restoreTabsFromSnapshot(snapForTarget);
 
+      // Tab strip + active tab + hub updates are intentionally interleaved before shadow mirrors;
+      // centralizing only ref/setTabs would reorder versus hub/active legacy writes.
       editorWorkspaceTabsRef.current = nextTabs;
       activeEditorTabIdRef.current = nextActive;
       setEditorWorkspaceTabs(nextTabs);

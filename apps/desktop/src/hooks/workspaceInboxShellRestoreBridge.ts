@@ -60,6 +60,7 @@ export function applyRestoredEditorWorkspaceTabsBridge(
   }
   editorWorkspaceTabsRef.current = built.tabs;
   activeEditorTabIdRef.current = built.activeEditorTabId;
+  // Sync ref immediately; defer React tab state + shadow mirrors to match restore sequencing.
   queueMicrotask(() => {
     setEditorWorkspaceTabs(built.tabs);
     setActiveEditorTabId(built.activeEditorTabId);

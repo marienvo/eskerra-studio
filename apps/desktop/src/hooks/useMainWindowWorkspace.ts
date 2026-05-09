@@ -213,6 +213,7 @@ import {
   assignLegacyRuntimeActiveSurfaceTab,
   reconcileLegacyRuntimeHubSurfaceAfterProjection,
 } from './workspaceRuntimeActiveLegacyBridge';
+import {assignLegacyEditorWorkspaceTabs} from './workspaceRuntimeTabsLegacyBridge';
 import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
@@ -1059,8 +1060,11 @@ export function useMainWindowWorkspace(options: {
           oldUri,
           nextUri,
         );
-        editorWorkspaceTabsRef.current = remappedRenameTabs;
-        setEditorWorkspaceTabs(remappedRenameTabs);
+        assignLegacyEditorWorkspaceTabs({
+          nextTabs: remappedRenameTabs,
+          editorWorkspaceTabsRef,
+          setEditorWorkspaceTabs,
+        });
         remapHomeStatesPrefix(oldUri, nextUri);
       }
     },
@@ -1411,13 +1415,16 @@ export function useMainWindowWorkspace(options: {
       } else {
         nextTabs = [...curTabs, newTab];
       }
-      editorWorkspaceTabsRef.current = nextTabs;
-      setEditorWorkspaceTabs(nextTabs);
-      mirrorShadowActiveWorkspaceTabs(
+      assignLegacyEditorWorkspaceTabs({
         nextTabs,
-        activeEditorTabIdRef.current,
-        'background open tab',
-      );
+        editorWorkspaceTabsRef,
+        setEditorWorkspaceTabs,
+        mirror: {
+          mirrorShadowActiveWorkspaceTabs,
+          activeEditorTabId: activeEditorTabIdRef.current,
+          reason: 'background open tab',
+        },
+      });
       if (prefetchBody !== undefined) {
         inboxContentByUriRef.current = {
           ...inboxContentByUriRef.current,
@@ -1529,6 +1536,8 @@ export function useMainWindowWorkspace(options: {
         options,
       );
 
+      // Foreground open keeps tab strip + active surface mirrors inline with selection/load sequencing
+      // (see loadOpenedNoteBodyAndApplySelection); do not centralize with assignLegacyEditorWorkspaceTabs here.
       editorWorkspaceTabsRef.current = nextTabs;
       activeEditorTabIdRef.current = nextActiveId;
       setEditorWorkspaceTabs(nextTabs);
@@ -1837,8 +1846,11 @@ export function useMainWindowWorkspace(options: {
       if (sameOrder) {
         return;
       }
-      editorWorkspaceTabsRef.current = next;
-      setEditorWorkspaceTabs(next);
+      assignLegacyEditorWorkspaceTabs({
+        nextTabs: next,
+        editorWorkspaceTabsRef,
+        setEditorWorkspaceTabs,
+      });
       dispatchWorkspaceAction('reorder tabs', model =>
         reorderTabsAction(model, fromIndex, insertBeforeIndex),
       );
@@ -1944,8 +1956,11 @@ export function useMainWindowWorkspace(options: {
 
         const nextTabId = pickNeighborTabIdAfterRemovingTab(tabsBefore, tabId);
         const nextTabs = tabsBefore.filter(t => t.id !== tabId);
-        editorWorkspaceTabsRef.current = nextTabs;
-        setEditorWorkspaceTabs(nextTabs);
+        assignLegacyEditorWorkspaceTabs({
+          nextTabs,
+          editorWorkspaceTabsRef,
+          setEditorWorkspaceTabs,
+        });
         dispatchWorkspaceAction('close tab', model => closeTabAction(model, tabId));
 
         if (!wasActive) {
@@ -1992,8 +2007,11 @@ export function useMainWindowWorkspace(options: {
           }
         }
         const next = prevTabs.filter(t => t.id === keepTabId);
-        editorWorkspaceTabsRef.current = next;
-        setEditorWorkspaceTabs(next);
+        assignLegacyEditorWorkspaceTabs({
+          nextTabs: next,
+          editorWorkspaceTabsRef,
+          setEditorWorkspaceTabs,
+        });
         dispatchWorkspaceAction('close other tabs', model =>
           closeOtherTabsAction(model, keepTabId),
         );
@@ -2025,8 +2043,11 @@ export function useMainWindowWorkspace(options: {
           editorShellScrollByUriRef.current.delete(normalizeEditorDocUri(u));
         }
       }
-      editorWorkspaceTabsRef.current = [];
-      setEditorWorkspaceTabs([]);
+      assignLegacyEditorWorkspaceTabs({
+        nextTabs: [],
+        editorWorkspaceTabsRef,
+        setEditorWorkspaceTabs,
+      });
       dispatchWorkspaceAction('close all tabs', closeAllTabsAction);
       assignLegacyRuntimeActiveSurfaceTab(null, {
         ref: activeEditorTabIdRef,
@@ -2113,8 +2134,11 @@ export function useMainWindowWorkspace(options: {
         const label = local.displayName.trim();
         setSettingsName(label !== '' ? label : 'Eskerra');
         await refreshNotes(root);
-        editorWorkspaceTabsRef.current = [];
-        setEditorWorkspaceTabs([]);
+        assignLegacyEditorWorkspaceTabs({
+          nextTabs: [],
+          editorWorkspaceTabsRef,
+          setEditorWorkspaceTabs,
+        });
         assignLegacyRuntimeActiveSurfaceTab(null, {
           ref: activeEditorTabIdRef,
           setActiveEditorTabId,
@@ -2993,8 +3017,11 @@ export function useMainWindowWorkspace(options: {
           oldUri,
           normalizedNext,
         );
-        editorWorkspaceTabsRef.current = remappedTabs;
-        setEditorWorkspaceTabs(remappedTabs);
+        assignLegacyEditorWorkspaceTabs({
+          nextTabs: remappedTabs,
+          editorWorkspaceTabsRef,
+          setEditorWorkspaceTabs,
+        });
         remapHomeStatesPrefix(oldUri, normalizedNext);
         await refreshNotes(vaultRoot);
         setFsRefreshNonce(n => n + 1);
@@ -3097,8 +3124,11 @@ export function useMainWindowWorkspace(options: {
         result.previousUri,
         result.nextUri,
       );
-      editorWorkspaceTabsRef.current = remappedMoveTabs;
-      setEditorWorkspaceTabs(remappedMoveTabs);
+      assignLegacyEditorWorkspaceTabs({
+        nextTabs: remappedMoveTabs,
+        editorWorkspaceTabsRef,
+        setEditorWorkspaceTabs,
+      });
       remapHomeStatesPrefix(result.previousUri, result.nextUri);
     },
     [
