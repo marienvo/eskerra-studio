@@ -240,4 +240,92 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
 
     unmount();
   });
+
+  it('rapid note switches do not let a stale deferred save overwrite newer note content on disk', async () => {
+    const uriA = '/vault/Inbox/Alpha.md';
+    const uriB = '/vault/Inbox/Beta.md';
+    const alphaSeed = 'alpha-seed';
+    const betaSeed = 'beta-seed';
+    const alphaFirstEdit = 'alpha-first-edit';
+    const betaFinalEdit = 'beta-final-edit';
+    const alphaSecondEdit = 'alpha-second-edit';
+
+    const {fs, result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Inbox'],
+      files: {
+        [uriA]: `${alphaSeed}\n`,
+        [uriB]: `${betaSeed}\n`,
+      },
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.notes.length).toBe(2);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaSeed);
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(alphaFirstEdit);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaFirstEdit);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriB);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriB);
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(betaFinalEdit);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(betaFinalEdit);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(uriA);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaFirstEdit);
+    });
+
+    act(() => {
+      result.current.selectionController.setEditorBody(alphaSecondEdit);
+    });
+    await waitFor(() => {
+      expect(result.current.selectionController.editorBody).toBe(alphaSecondEdit);
+    });
+
+    await act(async () => {
+      await result.current.persistenceController.flushInboxSave();
+    });
+
+    await waitFor(async () => {
+      expect(await fs.readFile(uriA, {encoding: 'utf8'})).toBe(alphaSecondEdit);
+    });
+    await waitFor(async () => {
+      expect(await fs.readFile(uriB, {encoding: 'utf8'})).toBe(betaFinalEdit);
+    });
+
+    const betaDisk = await fs.readFile(uriB, {encoding: 'utf8'});
+    expect(betaDisk).not.toContain('alpha');
+    expect(betaDisk).not.toContain(alphaFirstEdit);
+    expect(betaDisk).not.toContain(alphaSecondEdit);
+
+    unmount();
+  });
 });
