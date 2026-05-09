@@ -272,6 +272,11 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toEqual([
         'tab-a1',
       ]);
+      expect(result.current.workspaceShadowModelForTests?.activeHub).toBe(HUB_A);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: 'tab-a1',
+      });
     });
 
     unmount();
@@ -627,6 +632,10 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
 
     await waitFor(() => {
       expect(result.current.inboxShellRestored).toBe(true);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: 't1',
+      });
     });
 
     await act(async () => {
@@ -641,6 +650,77 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       ).toEqual({
         entries: [HUB_A, HOME_SUB],
         index: 1,
+      });
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'home',
+      });
+    });
+
+    await act(async () => {
+      result.current.tabsController.activateOpenTab('t1');
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(TAB_NOTE);
+      expect(result.current.tabsController.activeEditorTabId).toBe('t1');
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: 't1',
+      });
+    });
+
+    unmount();
+  });
+
+  it('closing the last tab mirrors Home as the shadow active surface', async () => {
+    const TAB_NOTE = `${VAULT_ROOT}/Inbox/LastTab.md`;
+    const snapshot: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [{id: 't1', entries: [TAB_NOTE], index: 0}],
+      activeEditorTabId: 't1',
+      homeHistory: {entries: [HUB_A], index: 0},
+    };
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: [VAULT_ROOT, `${VAULT_ROOT}/A`, `${VAULT_ROOT}/Inbox`],
+        files: {
+          [HUB_A]: 'today\n',
+          [TAB_NOTE]: 'tab\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: VAULT_ROOT,
+          composingNewEntry: false,
+          selectedUri: TAB_NOTE,
+          editorWorkspaceTabs: snapshot.editorWorkspaceTabs,
+          activeEditorTabId: 't1',
+          activeTodayHubUri: HUB_A,
+          todayHubWorkspaces: {
+            [HUB_A]: snapshot,
+          },
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.tabsController.activeEditorTabId).toBe('t1');
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'tab',
+        id: 't1',
+      });
+    });
+
+    await act(async () => {
+      result.current.tabsController.closeEditorTab('t1');
+    });
+
+    await waitFor(() => {
+      expect(result.current.tabsController.editorWorkspaceTabs).toEqual([]);
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
+      expect(result.current.selectionController.selectedUri).toBe(HUB_A);
+      expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+        kind: 'home',
       });
     });
 
@@ -1085,6 +1165,10 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     });
 
     expect(result.current.todayHubController.activeTodayHubUri).toBe(HUB_A);
+    expect(result.current.workspaceShadowModelForTests?.activeHub).toBe(HUB_A);
+    expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+      kind: 'home',
+    });
     expect(result.current.todayHubController.todayHubWorkspacesForSave[HUB_A]?.homeHistory).toEqual(
       snapshotA.homeHistory,
     );

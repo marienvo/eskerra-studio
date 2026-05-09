@@ -55,6 +55,9 @@ export type UseWorkspaceTodayHubSwitchArgs = {
     activateOpenTab: (tabId: string) => void;
     /** Main workspace selector control (title bar): branch per active surface / home index. */
     activateWorkspaceHomeSelector: () => void;
+    mirrorShadowActiveHub?: (hubUri: string | null, reason: string) => void;
+    mirrorShadowHomeSurface?: (reason: string) => void;
+    mirrorShadowActiveTab?: (tabId: string, reason: string) => void;
   };
 };
 
@@ -70,6 +73,9 @@ export function useWorkspaceTodayHubSwitch(
     selectHomeCurrentNote,
     activateOpenTab,
     activateWorkspaceHomeSelector,
+    mirrorShadowActiveHub,
+    mirrorShadowHomeSurface,
+    mirrorShadowActiveTab,
   } = args.callbacks;
 
   const {
@@ -189,6 +195,12 @@ export function useWorkspaceTodayHubSwitch(
       setActiveEditorTabId(nextActive);
       activeTodayHubUriRef.current = norm;
       setActiveTodayHubUri(norm);
+      mirrorShadowActiveHub?.(norm, 'switch workspace active hub');
+      if (nextActive) {
+        mirrorShadowActiveTab?.(nextActive, 'switch workspace active tab');
+      } else {
+        mirrorShadowHomeSurface?.('switch workspace home surface');
+      }
       // Do not `selectNote(norm)` when B has restored tabs: that would navigate the
       // active tab to B's Today and overwrite e.g. a tab that was still showing A's hub note.
       if (nextTabs.length === 0) {
@@ -210,6 +222,9 @@ export function useWorkspaceTodayHubSwitch(
       homeStatesByHubRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       inboxYamlFrontmatterInnerRef,
+      mirrorShadowActiveHub,
+      mirrorShadowActiveTab,
+      mirrorShadowHomeSurface,
       selectHomeCurrentNote,
       setActiveEditorTabId,
       setActiveTodayHubUri,
