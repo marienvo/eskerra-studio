@@ -74,13 +74,13 @@ Each takes a different angle on the continuity / life-flow story.
 
 ## Recommended Homepage Combination
 
-**Headline:** Catch it now. Continue it later.
+**Headline:** Capture on your phone. Continue at your desk.
 
-**Subheadline:** Write a fragment on your phone. Open the desktop and keep going. Eskerra keeps the thread.
+**Subheadline:** Eskerra is a Markdown app built around two moments: quick capture on mobile, focused writing on desktop. The notes are plain files, and the thread stays intact.
 
 **CTA:** Download Eskerra
 
-**Why:** The headline is short enough to be a tagline and specific enough to mean something. The subheadline names the exact workflow in one concrete sentence, then delivers the product name with a simple promise. Together they tell the full Eskerra story in under twenty words.
+**Why:** The headline names the exact workflow Eskerra is built for — mobile capture handed off to desktop writing — without sounding like a generic sync app. The subheadline grounds that in what Eskerra actually is: an editor-first Markdown app where mobile plays the capture role, with plain files underneath.
 
 **Strong alternative for more product-explicit contexts:**
 Headline #2 + Subheadline #4 — more literal, better for Product Hunt or app store descriptions.
