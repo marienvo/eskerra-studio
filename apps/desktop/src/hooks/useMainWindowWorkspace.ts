@@ -251,6 +251,11 @@ import {
 } from './inboxNoteBodyCache';
 import {resolveVaultLinkBaseMarkdownUri} from '../lib/resolveVaultLinkBaseMarkdownUri';
 
+/** Canonical vault root string for comparing persisted shell snapshots to the active vault. */
+function normalizedVaultRootPath(vaultRoot: string): string {
+  return trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
+}
+
 const STORE_PATH = 'eskerra-desktop.json';
 const STORE_KEY_VAULT = 'vaultRoot';
 
@@ -3704,8 +3709,13 @@ export function useMainWindowWorkspace(options: {
     if (!inboxRestoreEnabled || inboxShellRestored) {
       return;
     }
-    if (restoredInboxState) {
-      const root = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
+    const root = normalizedVaultRootPath(vaultRoot);
+    const restoredMatchesCurrentVault =
+      restoredInboxState != null &&
+      typeof restoredInboxState.vaultRoot === 'string' &&
+      normalizedVaultRootPath(restoredInboxState.vaultRoot) === root;
+
+    if (restoredMatchesCurrentVault) {
       const hubUris = restoredTodayHubWorkspaceUrisForRestore({
         currentHubUris: sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs),
         restored: restoredInboxState.todayHubWorkspaces,
@@ -3816,7 +3826,12 @@ export function useMainWindowWorkspace(options: {
     if (!vaultRoot || !inboxShellRestored || vaultMarkdownRefs.length === 0) {
       return;
     }
-    if (restoredInboxState) {
+    const root = normalizedVaultRootPath(vaultRoot);
+    const restoredMatchesCurrentVault =
+      restoredInboxState != null &&
+      typeof restoredInboxState.vaultRoot === 'string' &&
+      normalizedVaultRootPath(restoredInboxState.vaultRoot) === root;
+    if (restoredMatchesCurrentVault) {
       return;
     }
     const hubs = sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs);

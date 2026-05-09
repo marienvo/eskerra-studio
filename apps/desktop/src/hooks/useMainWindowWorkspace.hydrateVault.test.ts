@@ -93,6 +93,43 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     unmount();
   });
 
+  it('does not apply restored inbox shell when persisted vaultRoot differs from the active vault', async () => {
+    const OTHER_VAULT = '/other-vault';
+    const staleNote = `${OTHER_VAULT}/Inbox/stale.md`;
+
+    const {result, unmount} = await mountHydratedMainWindowWorkspace(
+      {
+        dirs: ['/vault', '/vault/Inbox'],
+        files: {
+          ['/vault/Inbox/local.md']: 'local\n',
+        },
+      },
+      {
+        restoredInboxState: {
+          vaultRoot: OTHER_VAULT,
+          composingNewEntry: false,
+          selectedUri: staleNote,
+          openTabUris: [staleNote],
+          editorWorkspaceTabs: [
+            {id: 'tab-1', entries: [staleNote], index: 0},
+          ],
+          activeEditorTabId: 'tab-1',
+          activeTodayHubUri: null,
+          todayHubWorkspaces: {},
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    expect(result.current.selectionController.selectedUri).not.toBe(staleNote);
+    expect(result.current.tabsController.editorWorkspaceTabs).toEqual([]);
+
+    unmount();
+  });
+
   it('drops restored echo tab whose current URI is the hub Today URI', async () => {
     const echoSnapshot: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [{id: 'echo-tab', entries: [HUB_A], index: 0}],
