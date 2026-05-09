@@ -140,16 +140,11 @@ import {
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
-  createDefaultWorkspaceState,
   goBackAction,
   goForwardAction,
-  normalizeWorkspaceUri,
-  activateTabAction,
   remapPrefixAction,
   removeUrisAction,
   reorderTabsAction,
-  selectWorkspaceAction,
-  type TabEntry,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
 import type {
@@ -196,14 +191,12 @@ import {
 } from './workspacePersistenceBridge';
 import {
   computeProjectionHubUris,
+  createWorkspaceShadowMirrorCallbacks,
   resolveProjectionActiveHubUri,
   resolveTodayHubWorkspacesForProjection,
   scheduleDevWorkspaceShadowModelDivergenceCheck,
 } from './workspaceShadowBridge';
-import {
-  projectWorkspaceRuntimeToModel,
-  workspaceHomeStateToHistoryStack,
-} from './workspaceRuntimeProjection';
+import {projectWorkspaceRuntimeToModel} from './workspaceRuntimeProjection';
 import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
@@ -396,6 +389,17 @@ export function useMainWindowWorkspace(options: {
     dispatchWorkspaceAction,
   } = useWorkspaceController();
 
+  const {
+    replaceShadowHomeStateForHub,
+    mirrorShadowActiveHub,
+    mirrorShadowHomeSurface,
+    mirrorShadowActiveTab,
+    mirrorShadowActiveWorkspaceTabs,
+  } = useMemo(
+    () => createWorkspaceShadowMirrorCallbacks(dispatchWorkspaceAction),
+    [dispatchWorkspaceAction],
+  );
+
   const subtreeMarkdownCache = useMemo(() => new SubtreeMarkdownPresenceCache(), []);
   const inboxBodyPrefetchGenRef = useRef(0);
   const vaultRefsBuildGenRef = useRef(0);
@@ -559,116 +563,6 @@ export function useMainWindowWorkspace(options: {
   useLayoutEffect(() => {
     homeStatesByHubRef.current = homeStatesByHub;
   }, [homeStatesByHub]);
-
-  const replaceShadowHomeStateForHub = useCallback(
-    (hubUri: string, state: WorkspaceHomeState, reason: string) => {
-      const hub = normalizeWorkspaceUri(hubUri);
-      dispatchWorkspaceAction(reason, (model: WorkspaceModel): WorkspaceModel => {
-        const current = model.workspaces[hub] ?? createDefaultWorkspaceState(hub);
-        return {
-          ...model,
-          activeHub: model.activeHub ?? hub,
-          workspaces: {
-            ...model.workspaces,
-            [hub]: {
-              ...current,
-              homeHistory: workspaceHomeStateToHistoryStack(state),
-            },
-          },
-        };
-      });
-    },
-    [dispatchWorkspaceAction],
-  );
-
-  const mirrorShadowActiveHub = useCallback(
-    (hubUri: string | null, reason: string) => {
-      dispatchWorkspaceAction(reason, model => {
-        if (hubUri == null) {
-          return {...model, activeHub: null, workspaces: {}};
-        }
-        const hub = normalizeWorkspaceUri(hubUri);
-        if (model.activeHub === hub) {
-          return model;
-        }
-        return selectWorkspaceAction(model, hub);
-      });
-    },
-    [dispatchWorkspaceAction],
-  );
-
-  const mirrorShadowHomeSurface = useCallback(
-    (reason: string) => {
-      dispatchWorkspaceAction(reason, model => {
-        const hub = model.activeHub;
-        if (hub == null) {
-          return model;
-        }
-        const current = model.workspaces[hub];
-        if (current == null || current.active.kind === 'home') {
-          return model;
-        }
-        return {
-          ...model,
-          workspaces: {
-            ...model.workspaces,
-            [hub]: {...current, active: {kind: 'home'}},
-          },
-        };
-      });
-    },
-    [dispatchWorkspaceAction],
-  );
-
-  const mirrorShadowActiveTab = useCallback(
-    (tabId: string, reason: string) => {
-      dispatchWorkspaceAction(reason, model => activateTabAction(model, tabId));
-    },
-    [dispatchWorkspaceAction],
-  );
-
-  const mirrorShadowActiveWorkspaceTabs = useCallback(
-    (
-      tabs: readonly EditorWorkspaceTab[],
-      activeId: string | null,
-      reason: string,
-    ) => {
-      const shadowTabs: TabEntry[] = tabs
-        .map(t => ({
-          id: t.id,
-          history: {
-            entries: t.history.entries.map(normalizeWorkspaceUri).filter(Boolean),
-            index: t.history.index,
-          },
-        }))
-        .filter(t => t.id.trim() !== '' && t.history.entries.length > 0);
-      dispatchWorkspaceAction(reason, model => {
-        const hub = model.activeHub;
-        if (hub == null) {
-          return model;
-        }
-        const current = model.workspaces[hub];
-        if (current == null) {
-          return model;
-        }
-        const active = activeId != null && shadowTabs.some(t => t.id === activeId)
-          ? {kind: 'tab' as const, id: activeId}
-          : {kind: 'home' as const};
-        return {
-          ...model,
-          workspaces: {
-            ...model.workspaces,
-            [hub]: {
-              ...current,
-              tabs: shadowTabs,
-              active,
-            },
-          },
-        };
-      });
-    },
-    [dispatchWorkspaceAction],
-  );
 
   const remapHomeStatesPrefix = useCallback(
     (oldPrefix: string, newPrefix: string) => {
