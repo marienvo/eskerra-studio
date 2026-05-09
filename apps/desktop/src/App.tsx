@@ -47,11 +47,6 @@ import {
 } from '@eskerra/core';
 
 import {
-  tabCurrentUri,
-  tabsToStored,
-  type EditorWorkspaceTab,
-} from './lib/editorWorkspaceTabs';
-import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
 } from './lib/layoutStore';
@@ -257,10 +252,8 @@ type UseAppDebouncedPersistMainWindowUiArgs = {
   notificationsPanelVisible: boolean;
   composingNewEntry: boolean;
   selectedUri: string | null;
-  editorWorkspaceTabs: readonly EditorWorkspaceTab[];
-  activeEditorTabId: string | null;
   activeTodayHubUri: string | null;
-  persistenceTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot> | null;
+  persistenceTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
 };
 
 function useAppDebouncedPersistMainWindowUi({
@@ -272,8 +265,6 @@ function useAppDebouncedPersistMainWindowUi({
   notificationsPanelVisible,
   composingNewEntry,
   selectedUri,
-  editorWorkspaceTabs,
-  activeEditorTabId,
   activeTodayHubUri,
   persistenceTodayHubWorkspaces,
 }: UseAppDebouncedPersistMainWindowUiArgs) {
@@ -284,16 +275,9 @@ function useAppDebouncedPersistMainWindowUi({
     const inbox: StoredMainWindowInbox = {
       composingNewEntry,
       selectedUri,
-      openTabUris: editorWorkspaceTabs
-        .map(t => tabCurrentUri(t))
-        .filter((u): u is string => u != null),
-      editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
-      activeEditorTabId,
       activeTodayHubUri,
+      todayHubWorkspaces: persistenceTodayHubWorkspaces,
     };
-    if (persistenceTodayHubWorkspaces != null) {
-      inbox.todayHubWorkspaces = persistenceTodayHubWorkspaces;
-    }
     const payload: StoredMainWindowUi = {
       vaultRoot,
       vaultPaneVisible,
@@ -316,8 +300,6 @@ function useAppDebouncedPersistMainWindowUi({
     notificationsPanelVisible,
     selectedUri,
     composingNewEntry,
-    editorWorkspaceTabs,
-    activeEditorTabId,
     activeTodayHubUri,
     persistenceTodayHubWorkspaces,
     inboxShellRestored,
@@ -619,8 +601,6 @@ export default function App() {
     notificationsPanelVisible,
     composingNewEntry,
     selectedUri,
-    editorWorkspaceTabs: workspaceTabsController.editorWorkspaceTabs,
-    activeEditorTabId: workspaceTabsController.activeEditorTabId,
     activeTodayHubUri: persistenceActiveTodayHubUri,
     persistenceTodayHubWorkspaces,
   });

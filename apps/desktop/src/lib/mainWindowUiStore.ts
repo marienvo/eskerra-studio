@@ -27,17 +27,24 @@ export type TodayHubWorkspaceSnapshot = {
 export type StoredMainWindowInbox = {
   composingNewEntry: boolean;
   selectedUri: string | null;
-  /** Open editor tabs (vault markdown URIs); optional for backward compatibility. */
+  /**
+   * Legacy migration only (pre multi-hub IDE tabs). Read when restoring old vault sessions;
+   * current desktop builds do not write this field — tab URIs live under `todayHubWorkspaces`.
+   */
   openTabUris?: string[];
   /**
-   * IDE-style tabs with per-tab back/forward stacks. When present, preferred over `openTabUris`.
-   * Mirror of the active hub workspace for older builds; canonical per-hub state is `todayHubWorkspaces`.
+   * Legacy migration only: mirror of the active hub tab strip from older builds.
+   * Not written by current desktop builds; canonical tab state is `todayHubWorkspaces[hub]`.
    */
   editorWorkspaceTabs?: StoredEditorWorkspaceTab[];
+  /** Legacy migration only; not written by current desktop builds. */
   activeEditorTabId?: string | null;
   /** Canonical `Today.md` URI for the hub workspace driving the tab bar. */
   activeTodayHubUri?: string | null;
-  /** Tab state keyed by normalized Today hub note URI (`…/Today.md`). */
+  /**
+   * Canonical per-hub workspace snapshots (tabs + active tab id + homeHistory).
+   * When no `Today.md` hubs exist yet, this may be `{}`.
+   */
   todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot>;
 };
 

@@ -145,7 +145,44 @@ describe('normalizeMainWindowUiPayload', () => {
     expect(out?.inbox.openTabUris).toEqual(['/v/a.md', '/v/b.md']);
   });
 
-  it('parses editorWorkspaceTabs and activeEditorTabId when present', () => {
+  it('accepts per-hub-only inbox without legacy openTabUris or top-level editor tabs', () => {
+    const out = normalizeMainWindowUiPayload({
+      vaultRoot: '/v',
+      inbox: {
+        composingNewEntry: false,
+        selectedUri: '/v/Inbox/n.md',
+        activeTodayHubUri: '/v/Today.md',
+        todayHubWorkspaces: {
+          '/v/Today.md': {
+            editorWorkspaceTabs: [{id: 't1', entries: ['/v/Inbox/n.md'], index: 0}],
+            activeEditorTabId: 't1',
+            homeHistory: {entries: ['/v/Today.md'], index: 0},
+          },
+        },
+      },
+    });
+    expect(out?.inbox.openTabUris).toBeUndefined();
+    expect(out?.inbox.editorWorkspaceTabs).toBeUndefined();
+    expect(out?.inbox.activeEditorTabId).toBeUndefined();
+    expect(out?.inbox.todayHubWorkspaces?.['/v/Today.md']?.activeEditorTabId).toBe('t1');
+  });
+
+  it('accepts legacy-free inbox with only core fields when no hub snapshots exist', () => {
+    const out = normalizeMainWindowUiPayload({
+      vaultRoot: '/v',
+      inbox: {
+        composingNewEntry: false,
+        selectedUri: '/v/Inbox/Note.md',
+        activeTodayHubUri: null,
+      },
+    });
+    expect(out?.inbox.todayHubWorkspaces).toBeUndefined();
+    expect(out?.inbox.openTabUris).toBeUndefined();
+    expect(out?.inbox.editorWorkspaceTabs).toBeUndefined();
+    expect(out?.inbox.activeEditorTabId).toBeUndefined();
+  });
+
+  it('still migrates legacy top-level editorWorkspaceTabs + activeEditorTabId when present', () => {
     const out = normalizeMainWindowUiPayload({
       vaultRoot: '/v',
       inbox: {
