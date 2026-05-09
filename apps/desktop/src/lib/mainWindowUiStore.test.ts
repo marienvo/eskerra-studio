@@ -1,8 +1,11 @@
 import {describe, expect, it} from 'vitest';
 
+import {createEditorWorkspaceTab} from './editorWorkspaceTabs';
 import {
+  buildStoredMainWindowInboxForPersist,
   DEFAULT_MAIN_WINDOW_PANE_VISIBILITY,
   normalizeMainWindowUiPayload,
+  type TodayHubWorkspaceSnapshot,
 } from './mainWindowUiStore';
 
 describe('normalizeMainWindowUiPayload', () => {
@@ -145,7 +148,44 @@ describe('normalizeMainWindowUiPayload', () => {
     expect(out?.inbox.openTabUris).toEqual(['/v/a.md', '/v/b.md']);
   });
 
-  it('parses editorWorkspaceTabs and activeEditorTabId when present', () => {
+  it('accepts per-hub-only inbox without legacy openTabUris or top-level editor tabs', () => {
+    const out = normalizeMainWindowUiPayload({
+      vaultRoot: '/v',
+      inbox: {
+        composingNewEntry: false,
+        selectedUri: '/v/Inbox/n.md',
+        activeTodayHubUri: '/v/Today.md',
+        todayHubWorkspaces: {
+          '/v/Today.md': {
+            editorWorkspaceTabs: [{id: 't1', entries: ['/v/Inbox/n.md'], index: 0}],
+            activeEditorTabId: 't1',
+            homeHistory: {entries: ['/v/Today.md'], index: 0},
+          },
+        },
+      },
+    });
+    expect(out?.inbox.openTabUris).toBeUndefined();
+    expect(out?.inbox.editorWorkspaceTabs).toBeUndefined();
+    expect(out?.inbox.activeEditorTabId).toBeUndefined();
+    expect(out?.inbox.todayHubWorkspaces?.['/v/Today.md']?.activeEditorTabId).toBe('t1');
+  });
+
+  it('accepts legacy-free inbox with only core fields when no hub snapshots exist', () => {
+    const out = normalizeMainWindowUiPayload({
+      vaultRoot: '/v',
+      inbox: {
+        composingNewEntry: false,
+        selectedUri: '/v/Inbox/Note.md',
+        activeTodayHubUri: null,
+      },
+    });
+    expect(out?.inbox.todayHubWorkspaces).toBeUndefined();
+    expect(out?.inbox.openTabUris).toBeUndefined();
+    expect(out?.inbox.editorWorkspaceTabs).toBeUndefined();
+    expect(out?.inbox.activeEditorTabId).toBeUndefined();
+  });
+
+  it('still migrates legacy top-level editorWorkspaceTabs + activeEditorTabId when present', () => {
     const out = normalizeMainWindowUiPayload({
       vaultRoot: '/v',
       inbox: {
@@ -211,11 +251,71 @@ describe('normalizeMainWindowUiPayload', () => {
     });
   });
 
+  it('parses optional homeHistory on hub snapshots', () => {
+    const out = normalizeMainWindowUiPayload({
+      vaultRoot: '/vault',
+      inbox: {
+        todayHubWorkspaces: {
+          '/vault/Daily/Today.md': {
+            editorWorkspaceTabs: [{id: 't1', entries: ['/vault/Inbox/A.md'], index: 0}],
+            activeEditorTabId: 't1',
+            homeHistory: {
+              entries: ['/vault/Daily/Today.md', '/vault/Inbox/B.md'],
+              index: 1,
+            },
+          },
+        },
+      },
+    });
+    expect(out?.inbox.todayHubWorkspaces?.['/vault/Daily/Today.md']?.homeHistory).toEqual({
+      entries: ['/vault/Daily/Today.md', '/vault/Inbox/B.md'],
+      index: 1,
+    });
+  });
+
   it('treats blank activeTodayHubUri as null', () => {
     const out = normalizeMainWindowUiPayload({
       vaultRoot: '/v',
       inbox: {activeTodayHubUri: '  '},
     });
     expect(out?.inbox.activeTodayHubUri).toBeNull();
+  });
+});
+
+describe('buildStoredMainWindowInboxForPersist', () => {
+  const baseArgs = {
+    composingNewEntry: false,
+    selectedUri: '/vault/Inbox/Sel.md',
+    activeTodayHubUri: null as string | null,
+    todayHubWorkspaces: {} as Record<string, TodayHubWorkspaceSnapshot>,
+  };
+
+  it('omits top-level tab fields when the vault index includes a Today hub', () => {
+    const tab = createEditorWorkspaceTab('/vault/Inbox/Note.md', 't1');
+    const inbox = buildStoredMainWindowInboxForPersist({
+      ...baseArgs,
+      vaultMarkdownRefs: [{name: 'Today', uri: '/vault/Daily/Today.md'}],
+      editorWorkspaceTabs: [tab],
+      activeEditorTabId: 't1',
+    });
+    expect(inbox.editorWorkspaceTabs).toBeUndefined();
+    expect(inbox.activeEditorTabId).toBeUndefined();
+    expect(inbox.openTabUris).toBeUndefined();
+    expect(inbox.todayHubWorkspaces).toEqual({});
+  });
+
+  it('writes top-level tab snapshot when no Today hub is indexed', () => {
+    const tab = createEditorWorkspaceTab('/vault/Inbox/Note.md', 't1');
+    const inbox = buildStoredMainWindowInboxForPersist({
+      ...baseArgs,
+      vaultMarkdownRefs: [{name: 'Note', uri: '/vault/Inbox/Note.md'}],
+      editorWorkspaceTabs: [tab],
+      activeEditorTabId: 't1',
+    });
+    expect(inbox.editorWorkspaceTabs).toEqual([
+      {id: 't1', entries: ['/vault/Inbox/Note.md'], index: 0},
+    ]);
+    expect(inbox.activeEditorTabId).toBe('t1');
+    expect(inbox.openTabUris).toEqual(['/vault/Inbox/Note.md']);
   });
 });

@@ -9,10 +9,12 @@ export function useAppTitleBarTodayHubSelect(
     label: string;
   }>,
   activeTodayHubUri: string | null,
+  workspaceSelectorSubLabel: string | undefined,
   workspaceSelectShowsActiveTabPill: boolean,
   focusActiveTodayHubNote: () => void,
   switchTodayHubWorkspace: (uri: string) => void | Promise<void>,
   openTodayHubInNewTabAfterActive: (uri: string) => void,
+  openWorkspaceHomeCurrentInBackgroundTab: () => void,
 ): WindowTitleBarTodayHubSelect {
   return useMemo((): WindowTitleBarTodayHubSelect => {
     if (
@@ -29,20 +31,24 @@ export function useAppTitleBarTodayHubSelect(
       items: todayHubSelectorItems,
       activeTodayNoteUri: activeTodayHubUri,
       activeLabel,
+      subLabel: workspaceSelectorSubLabel,
       mainShowsActiveTabPill: workspaceSelectShowsActiveTabPill,
       onMainActivate: focusActiveTodayHubNote,
       onPickHub: (uri: string) => {
         void switchTodayHubWorkspace(uri);
       },
       onOpenHubInNewTab: openTodayHubInNewTabAfterActive,
+      onOpenMainWorkspaceInNewTab: openWorkspaceHomeCurrentInBackgroundTab,
     };
   }, [
     vaultRoot,
     todayHubSelectorItems,
     activeTodayHubUri,
+    workspaceSelectorSubLabel,
     workspaceSelectShowsActiveTabPill,
     focusActiveTodayHubNote,
     switchTodayHubWorkspace,
     openTodayHubInNewTabAfterActive,
+    openWorkspaceHomeCurrentInBackgroundTab,
   ]);
 }

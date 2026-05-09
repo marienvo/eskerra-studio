@@ -31,6 +31,9 @@ const VAULT_ROOT = '/vault';
 
 export async function mountHydratedMainWindowWorkspace(
   seed: CreateDesktopTestVaultFilesystemOptions,
+  options?: {
+    restoredInboxState?: Parameters<typeof useMainWindowWorkspace>[0]['restoredInboxState'];
+  },
 ): Promise<{
   fs: VaultFilesystem;
   result: RenderHookResult<UseMainWindowWorkspaceResult, unknown>['result'];
@@ -45,7 +48,7 @@ export async function mountHydratedMainWindowWorkspace(
       fs,
       inboxEditorRef,
       inboxEditorShellScrollRef,
-      restoredInboxState: null,
+      restoredInboxState: options?.restoredInboxState ?? null,
       inboxRestoreEnabled: true,
     }),
   );

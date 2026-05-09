@@ -18,17 +18,32 @@ import {
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 
 /**
- * Decide whether a foreground open should use a hub workspace shell variant: full shell (no tabs),
- * preserve-tabs shell (tabs visible but no active pill), or normal tab navigation.
+ * Decide whether a foreground open should use the hub workspace Home surface or normal tab navigation.
  */
-export function decideWorkspaceShellMode(args: {
+export function decideHomeOpenMode(args: {
   targetNorm: string;
   activeTodayHubUri: string | null;
+  activeEditorTabId?: string | null;
   options:
-    | {workspaceShell?: boolean; workspaceShellPreserveTabs?: boolean}
+    | {home?: boolean; workspaceShell?: boolean; workspaceShellPreserveTabs?: boolean; newTab?: boolean}
     | undefined;
-}): 'shell' | 'preserveTabs' | 'normal' {
-  const {targetNorm, activeTodayHubUri, options} = args;
+}): 'home' | 'normal' {
+  const {targetNorm, activeTodayHubUri, activeEditorTabId, options} = args;
+  if (options?.home === true) {
+    return 'home';
+  }
+  if (options?.newTab === true) {
+    return 'normal';
+  }
+  // Hydration / ordering: `openMarkdownInEditor` can run before `activeTodayHubUriRef` is set.
+  // Empty tab strip + hub Today file must not fall through to `ensureFirstTab` (echo tab).
+  if (
+    activeTodayHubUri == null
+    && (activeEditorTabId == null || activeEditorTabId === '')
+    && vaultUriIsTodayMarkdownFile(targetNorm)
+  ) {
+    return 'home';
+  }
   const activeHubNorm = normalizeEditorDocUri(activeTodayHubUri ?? '');
   const isActiveHubFile =
     activeHubNorm != null
@@ -38,14 +53,16 @@ export function decideWorkspaceShellMode(args: {
   if (!isActiveHubFile) {
     return 'normal';
   }
-  if (options?.workspaceShell === true) {
-    return 'shell';
+  if (activeEditorTabId == null) {
+    return 'home';
   }
-  if (options?.workspaceShellPreserveTabs === true) {
-    return 'preserveTabs';
+  if (options?.workspaceShell === true || options?.workspaceShellPreserveTabs === true) {
+    return 'home';
   }
   return 'normal';
 }
+
+export const decideWorkspaceShellMode = decideHomeOpenMode;
 
 /**
  * Place a target URI into the editor tab strip for the foreground open path:

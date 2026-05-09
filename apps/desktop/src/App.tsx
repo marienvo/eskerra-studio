@@ -45,21 +45,17 @@ import {
   isVaultR2PlaylistConfigured,
   type EskerraSettings,
 } from '@eskerra/core';
+import type {EditorWorkspaceTab} from './lib/editorWorkspaceTabs';
 
-import {
-  tabCurrentUri,
-  tabsToStored,
-  type EditorWorkspaceTab,
-} from './lib/editorWorkspaceTabs';
 import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
 } from './lib/layoutStore';
 import {formatPlaybackMs} from './lib/formatPlaybackMs';
 import {
+  buildStoredMainWindowInboxForPersist,
   DEFAULT_MAIN_WINDOW_PANE_VISIBILITY,
   saveMainWindowUi,
-  type StoredMainWindowInbox,
   type StoredMainWindowUi,
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
@@ -257,10 +253,11 @@ type UseAppDebouncedPersistMainWindowUiArgs = {
   notificationsPanelVisible: boolean;
   composingNewEntry: boolean;
   selectedUri: string | null;
+  activeTodayHubUri: string | null;
+  persistenceTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
+  vaultMarkdownRefs: readonly {uri: string; name: string}[];
   editorWorkspaceTabs: readonly EditorWorkspaceTab[];
   activeEditorTabId: string | null;
-  activeTodayHubUri: string | null;
-  todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot> | null;
 };
 
 function useAppDebouncedPersistMainWindowUi({
@@ -272,28 +269,25 @@ function useAppDebouncedPersistMainWindowUi({
   notificationsPanelVisible,
   composingNewEntry,
   selectedUri,
+  activeTodayHubUri,
+  persistenceTodayHubWorkspaces,
+  vaultMarkdownRefs,
   editorWorkspaceTabs,
   activeEditorTabId,
-  activeTodayHubUri,
-  todayHubWorkspacesForSave,
 }: UseAppDebouncedPersistMainWindowUiArgs) {
   useEffect(() => {
     if (!vaultRoot || !inboxShellRestored) {
       return;
     }
-    const inbox: StoredMainWindowInbox = {
+    const inbox = buildStoredMainWindowInboxForPersist({
       composingNewEntry,
       selectedUri,
-      openTabUris: editorWorkspaceTabs
-        .map(t => tabCurrentUri(t))
-        .filter((u): u is string => u != null),
-      editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
-      activeEditorTabId,
       activeTodayHubUri,
-    };
-    if (todayHubWorkspacesForSave != null) {
-      inbox.todayHubWorkspaces = todayHubWorkspacesForSave;
-    }
+      todayHubWorkspaces: persistenceTodayHubWorkspaces,
+      vaultMarkdownRefs,
+      editorWorkspaceTabs,
+      activeEditorTabId,
+    });
     const payload: StoredMainWindowUi = {
       vaultRoot,
       vaultPaneVisible,
@@ -316,11 +310,12 @@ function useAppDebouncedPersistMainWindowUi({
     notificationsPanelVisible,
     selectedUri,
     composingNewEntry,
+    activeTodayHubUri,
+    persistenceTodayHubWorkspaces,
+    inboxShellRestored,
+    vaultMarkdownRefs,
     editorWorkspaceTabs,
     activeEditorTabId,
-    activeTodayHubUri,
-    todayHubWorkspacesForSave,
-    inboxShellRestored,
   ]);
 }
 
@@ -447,10 +442,13 @@ export default function App() {
     todayHubCleanRowBlocked,
     todayHubSelectorItems,
     activeTodayHubUri,
-    todayHubWorkspacesForSave,
+    persistenceActiveTodayHubUri,
+    persistenceTodayHubWorkspaces,
     switchTodayHubWorkspace,
     focusActiveTodayHubNote,
+    workspaceSelectorSubLabel,
     workspaceSelectShowsActiveTabPill,
+    openWorkspaceHomeCurrentInBackgroundTab,
   } = workspaceTodayHubController;
 
   const openTodayHubInNewTabAfterActive = useCallback(
@@ -485,10 +483,12 @@ export default function App() {
     vaultRoot,
     todayHubSelectorItems,
     activeTodayHubUri,
+    workspaceSelectorSubLabel,
     workspaceSelectShowsActiveTabPill,
     focusActiveTodayHubNote,
     switchTodayHubWorkspace,
     openTodayHubInNewTabAfterActive,
+    openWorkspaceHomeCurrentInBackgroundTab,
   );
 
   const [vaultPaneVisible, setVaultPaneVisible] = useState(
@@ -614,10 +614,11 @@ export default function App() {
     notificationsPanelVisible,
     composingNewEntry,
     selectedUri,
+    activeTodayHubUri: persistenceActiveTodayHubUri,
+    persistenceTodayHubWorkspaces,
+    vaultMarkdownRefs,
     editorWorkspaceTabs: workspaceTabsController.editorWorkspaceTabs,
     activeEditorTabId: workspaceTabsController.activeEditorTabId,
-    activeTodayHubUri,
-    todayHubWorkspacesForSave,
   });
 
   useAppStartupSplashPhases({

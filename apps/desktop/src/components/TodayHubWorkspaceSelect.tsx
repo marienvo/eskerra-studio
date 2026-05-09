@@ -11,12 +11,15 @@ type TodayHubWorkspaceSelectProps = {
   items: readonly TodayHubWorkspaceSelectItem[];
   activeTodayNoteUri: string | null;
   activeLabel: string;
+  subLabel?: string;
   /** Same chrome as an active editor open-note tab pill (workspace-shell Today). */
   mainShowsActiveTabPill?: boolean;
   onMainActivate: () => void;
   onPickHub: (todayNoteUri: string) => void;
-  /** Middle-click / aux click: open hub note in a new editor tab. */
+  /** Dropdown: middle-click opens that hub Today in a new editor tab. */
   onOpenHubInNewTab: (todayNoteUri: string) => void;
+  /** Main button: middle-click opens workspace Home current URI as a background tab. */
+  onOpenMainWorkspaceInNewTab: () => void;
 };
 
 const HUB_WORKSPACE_ICON_DIM = {width: 15, height: 15} as const;
@@ -25,10 +28,12 @@ export function TodayHubWorkspaceSelect({
   items,
   activeTodayNoteUri,
   activeLabel,
+  subLabel,
   mainShowsActiveTabPill = false,
   onMainActivate,
   onPickHub,
   onOpenHubInNewTab,
+  onOpenMainWorkspaceInNewTab,
 }: TodayHubWorkspaceSelectProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -53,11 +58,15 @@ export function TodayHubWorkspaceSelect({
     return () => {
       ro.disconnect();
     };
-  }, [activeLabel, items.length]);
+  }, [activeLabel, subLabel, items.length]);
 
   if (items.length === 0 || activeTodayNoteUri == null) {
     return null;
   }
+
+  const mainAriaLabel = subLabel
+    ? `Today hub: ${activeLabel}: ${subLabel}. Activate this hub.`
+    : `Today hub: ${activeLabel}. Activate this hub.`;
 
   return (
     <div ref={rootRef} className="today-hub-workspace-select" role="presentation">
@@ -70,19 +79,27 @@ export function TodayHubWorkspaceSelect({
         ]
           .filter(Boolean)
           .join(' ')}
-        aria-label={`Today hub: ${activeLabel}. Activate this hub.`}
+        aria-label={mainAriaLabel}
         onClick={onMainActivate}
         onAuxClick={e => {
           if (e.button === 1) {
             e.preventDefault();
-            onOpenHubInNewTab(activeTodayNoteUri);
+            onOpenMainWorkspaceInNewTab();
           }
         }}
       >
         <span className="today-hub-workspace-select__icon" aria-hidden>
           <DashboardIcon {...HUB_WORKSPACE_ICON_DIM} />
         </span>
-        <span className="today-hub-workspace-select__label">{activeLabel}</span>
+        <span className="today-hub-workspace-select__label">
+          <span className="today-hub-workspace-select__label-prefix">{activeLabel}</span>
+          {subLabel ? (
+            <>
+              <span className="today-hub-workspace-select__label-separator">:</span>
+              <span className="today-hub-workspace-select__sublabel">{subLabel}</span>
+            </>
+          ) : null}
+        </span>
       </button>
       <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
         <DropdownMenu.Trigger asChild>

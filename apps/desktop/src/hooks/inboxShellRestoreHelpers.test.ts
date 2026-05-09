@@ -1,6 +1,69 @@
 import {describe, expect, it} from 'vitest';
 
-import {buildRestoredEditorWorkspace} from './inboxShellRestoreHelpers';
+import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+import {
+  buildRestoredEditorWorkspace,
+  restoredTodayHubWorkspaceKeysForVault,
+  restoredTodayHubWorkspaceUrisForRestore,
+} from './inboxShellRestoreHelpers';
+
+const emptySnap = {} as TodayHubWorkspaceSnapshot;
+
+describe('restoredTodayHubWorkspaceKeysForVault', () => {
+  const root = '/vault';
+
+  it('returns Today.md hub paths under the vault root only', () => {
+    expect(
+      restoredTodayHubWorkspaceKeysForVault(
+        {
+          '/vault/Areas/X/Today.md': emptySnap,
+          '/other-vault/Areas/Y/Today.md': emptySnap,
+          '/vault/Inbox/Z.md': emptySnap,
+        },
+        root,
+      ).sort(),
+    ).toEqual(['/vault/Areas/X/Today.md']);
+  });
+});
+
+describe('restoredTodayHubWorkspaceUrisForRestore', () => {
+  const root = '/vault';
+
+  it('merges persisted hub keys under vault root that are Today markdown files', () => {
+    const hubs = restoredTodayHubWorkspaceUrisForRestore({
+      currentHubUris: ['/vault/A/Today.md'],
+      restored: {
+        '/vault/B/Today.md': emptySnap,
+      },
+      root,
+    });
+    expect(hubs).toEqual(['/vault/A/Today.md', '/vault/B/Today.md']);
+  });
+
+  it('skips restored keys outside vault root', () => {
+    expect(
+      restoredTodayHubWorkspaceUrisForRestore({
+        currentHubUris: ['/vault/A/Today.md'],
+        restored: {
+          '/other/Today.md': emptySnap,
+        },
+        root,
+      }),
+    ).toEqual(['/vault/A/Today.md']);
+  });
+
+  it('dedupes hubs already in current list', () => {
+    expect(
+      restoredTodayHubWorkspaceUrisForRestore({
+        currentHubUris: ['/vault/A/Today.md'],
+        restored: {
+          '/vault/A/Today.md': emptySnap,
+        },
+        root,
+      }),
+    ).toEqual(['/vault/A/Today.md']);
+  });
+});
 
 describe('buildRestoredEditorWorkspace', () => {
   it('returns current URIs from tab history without crashing', () => {

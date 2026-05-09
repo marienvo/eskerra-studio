@@ -8,6 +8,10 @@ import {
 
 import {editorOpenTabPillLabel} from '../lib/editorOpenTabPillLabel';
 import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
+import {
+  createWorkspaceHomeState,
+  type WorkspaceHomeState,
+} from '../lib/workspaceHomeNavigation';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {parseTodayHubFrontmatter, type TodayHubSettings} from '../lib/todayHub';
 
@@ -71,14 +75,33 @@ export function deriveTodayHubSelectorItems(
 /** Hub workspace snapshots filtered to URIs that still exist as vault `Today.md` refs. */
 export function deriveTodayHubWorkspacesPersistFiltered(
   vaultMarkdownRefs: readonly VaultMarkdownRef[],
-  todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>,
+  legacyTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>,
 ): Record<string, TodayHubWorkspaceSnapshot> {
   const hubs = new Set(sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs));
   const out: Record<string, TodayHubWorkspaceSnapshot> = {};
-  for (const [k, v] of Object.entries(todayHubWorkspacesForSave)) {
+  for (const [k, v] of Object.entries(legacyTodayHubWorkspaces)) {
     if (hubs.has(k)) {
       out[k] = v;
     }
+  }
+  return out;
+}
+
+/** Adds `homeHistory` from runtime {@link WorkspaceHomeState} for JSON persistence. */
+export function mergeHomeHistoryIntoHubSnapshotsForPersist(
+  filtered: Record<string, TodayHubWorkspaceSnapshot>,
+  homeStatesByHub: Record<string, WorkspaceHomeState>,
+): Record<string, TodayHubWorkspaceSnapshot> {
+  const out: Record<string, TodayHubWorkspaceSnapshot> = {};
+  for (const [hub, snap] of Object.entries(filtered)) {
+    const home = homeStatesByHub[hub] ?? createWorkspaceHomeState(hub);
+    out[hub] = {
+      ...snap,
+      homeHistory: {
+        entries: [...home.history.entries],
+        index: home.history.index,
+      },
+    };
   }
   return out;
 }

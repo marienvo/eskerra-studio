@@ -1,4 +1,13 @@
 import {load} from '@tauri-apps/plugin-store';
+import {sortedTodayHubNoteUrisFromRefs} from '@eskerra/core';
+
+import type {EditorDocumentHistoryState} from './editorDocumentHistory';
+import {
+  tabCurrentUri,
+  tabsToStored,
+  type EditorWorkspaceTab,
+} from './editorWorkspaceTabs';
+import {parseTodayHubSnapshotHomeHistoryForStore} from './workspaceHomePersistence';
 
 export const MAIN_WINDOW_UI_STORE_PATH = 'eskerra-desktop.json';
 export const MAIN_WINDOW_UI_KEY = 'mainWindowUiV1';
@@ -17,22 +26,36 @@ export type StoredEditorWorkspaceTab = {
 export type TodayHubWorkspaceSnapshot = {
   editorWorkspaceTabs: StoredEditorWorkspaceTab[];
   activeEditorTabId?: string | null;
+  /** Home stack for this hub; optional for snapshots written before desktop builds that persist it. */
+  homeHistory?: EditorDocumentHistoryState;
 };
 
 export type StoredMainWindowInbox = {
   composingNewEntry: boolean;
   selectedUri: string | null;
-  /** Open editor tabs (vault markdown URIs); optional for backward compatibility. */
+  /**
+   * Flat list of open note URIs for legacy restore and for hub-less vaults (no indexed
+   * `Today.md`): written together with `editorWorkspaceTabs` when applicable so
+   * `migrateLegacyOpenTabsIfNeeded` can recover tabs if rows are missing.
+   */
   openTabUris?: string[];
   /**
-   * IDE-style tabs with per-tab back/forward stacks. When present, preferred over `openTabUris`.
-   * Mirror of the active hub workspace for older builds; canonical per-hub state is `todayHubWorkspaces`.
+   * Tab strip at inbox root. For vaults with indexed Today hubs, canonical state is under
+   * `todayHubWorkspaces[hub]`; when there are no Today hub notes in the vault index, current
+   * desktop builds also write this field so shell restore can rebuild the strip.
    */
   editorWorkspaceTabs?: StoredEditorWorkspaceTab[];
+  /**
+   * Active tab id for `editorWorkspaceTabs` when persisting a hub-less vault; per-hub
+   * snapshots use `todayHubWorkspaces[hub].activeEditorTabId` when hubs exist.
+   */
   activeEditorTabId?: string | null;
   /** Canonical `Today.md` URI for the hub workspace driving the tab bar. */
   activeTodayHubUri?: string | null;
-  /** Tab state keyed by normalized Today hub note URI (`…/Today.md`). */
+  /**
+   * Canonical per-hub workspace snapshots (tabs + active tab id + homeHistory).
+   * When no `Today.md` hubs exist yet, this may be `{}`.
+   */
   todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot>;
 };
 
@@ -48,6 +71,43 @@ export type StoredMainWindowUi = {
   notificationsPanelVisible: boolean;
   inbox: StoredMainWindowInbox;
 };
+
+/** Refs entry shape accepted by {@link sortedTodayHubNoteUrisFromRefs}. */
+export type VaultMarkdownRefLike = {uri: string; name: string};
+
+/**
+ * Builds the inbox slice written by {@link saveMainWindowUi}. When the vault index has no
+ * `Today.md` hub notes, also writes top-level tab fields so hub-less shell restore can read
+ * the tab strip (restore path with no hub URIs).
+ */
+export function buildStoredMainWindowInboxForPersist(args: {
+  composingNewEntry: boolean;
+  selectedUri: string | null;
+  activeTodayHubUri: string | null;
+  todayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
+  vaultMarkdownRefs: readonly VaultMarkdownRefLike[];
+  editorWorkspaceTabs: readonly EditorWorkspaceTab[];
+  activeEditorTabId: string | null;
+}): StoredMainWindowInbox {
+  const base: StoredMainWindowInbox = {
+    composingNewEntry: args.composingNewEntry,
+    selectedUri: args.selectedUri,
+    activeTodayHubUri: args.activeTodayHubUri,
+    todayHubWorkspaces: args.todayHubWorkspaces,
+  };
+  if (sortedTodayHubNoteUrisFromRefs(args.vaultMarkdownRefs).length > 0) {
+    return base;
+  }
+  const openTabUris = args.editorWorkspaceTabs
+    .map(t => tabCurrentUri(t))
+    .filter((u): u is string => u !== '');
+  return {
+    ...base,
+    editorWorkspaceTabs: tabsToStored(args.editorWorkspaceTabs),
+    activeEditorTabId: args.activeEditorTabId,
+    ...(openTabUris.length > 0 ? {openTabUris} : {}),
+  };
+}
 
 const DEFAULT_INBOX: StoredMainWindowInbox = {
   composingNewEntry: false,
@@ -181,6 +241,10 @@ function parseTodayHubWorkspacesMap(
     const entry: TodayHubWorkspaceSnapshot = {editorWorkspaceTabs: snapTabs};
     if (snapActive !== undefined) {
       entry.activeEditorTabId = snapActive;
+    }
+    const homeHistory = parseTodayHubSnapshotHomeHistoryForStore(hubUri, snap);
+    if (homeHistory) {
+      entry.homeHistory = homeHistory;
     }
     workspaces[hubUri] = entry;
   }

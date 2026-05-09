@@ -11,6 +11,8 @@ import {
 } from '../lib/editorWorkspaceTabs';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
+import {parseWorkspaceModelFromPersistence} from '../lib/workspaceModel/persistence';
 import {pickDefaultActiveTodayHubUri} from '../lib/todayHubWorkspaceRestore';
 
 export type StoredWorkspaceRow = {id: string; entries: string[]; index: number};
@@ -99,6 +101,17 @@ export function sanitizeStoredWorkspaceRows(
   return out;
 }
 
+function dropHubTodayEchoRows(
+  hubUri: string,
+  rows: readonly StoredWorkspaceRow[],
+): StoredWorkspaceRow[] {
+  const hub = normalizeHubKey(hubUri);
+  return rows.filter(row => {
+    const current = row.entries[row.index];
+    return current == null || normalizeHubKey(current) !== hub;
+  });
+}
+
 function readActiveTabId(raw: unknown): string | null {
   if (raw === null) return null;
   if (typeof raw !== 'string') return null;
@@ -173,7 +186,7 @@ export function resolveActiveHubAndTabsSource(args: {
   if (fromSnap == null) {
     return result;
   }
-  result.chosenTabsSource = fromSnap;
+  result.chosenTabsSource = dropHubTodayEchoRows(resolved, fromSnap);
   result.chosenActiveEditorTabId = readActiveTabId(snap.activeEditorTabId);
   return result;
 }
@@ -203,13 +216,46 @@ export function buildRestoredEditorWorkspace(args: {
   const tabs = tabsFromStored(sanitized);
   let nextActive = readActiveTabId(chosenActiveEditorTabId);
   if (nextActive && !tabs.some(t => t.id === nextActive)) {
-    nextActive = null;
+    nextActive = ensureActiveTabId(tabs, nextActive);
   }
-  nextActive = ensureActiveTabId(tabs, nextActive);
   const uris = tabs
     .map(tabCurrentUri)
     .filter((u): u is string => u != null);
   return {tabs, activeEditorTabId: nextActive, uris};
+}
+
+function attachPersistedHomeHistoryToMergedHubSnapshots(args: {
+  hubUris: string[];
+  activeHub: string;
+  ws: RestoredInboxState['todayHubWorkspaces'];
+  mergedWs: Record<string, TodayHubWorkspaceSnapshot>;
+}): void {
+  const {hubUris, activeHub, ws, mergedWs} = args;
+  if (!ws || hubUris.length === 0) {
+    return;
+  }
+  const parsed = parseWorkspaceModelFromPersistence({
+    hubUris,
+    activeTodayHubUri: activeHub,
+    todayHubWorkspaces: ws as Record<string, unknown>,
+  });
+  for (const hub of hubUris) {
+    const stack = parsed.workspaces[hub]?.homeHistory;
+    if (!stack || stack.entries.length === 0) {
+      continue;
+    }
+    const cur = mergedWs[hub];
+    if (!cur) {
+      continue;
+    }
+    mergedWs[hub] = {
+      ...cur,
+      homeHistory: {
+        entries: [...stack.entries],
+        index: stack.index,
+      },
+    };
+  }
 }
 
 export function mergeStoredHubWorkspaces(args: {
@@ -233,9 +279,15 @@ export function mergeStoredHubWorkspaces(args: {
       if (rows == null) {
         continue;
       }
+      const filteredRows = dropHubTodayEchoRows(h, rows);
+      const activeId = readActiveTabId(snap.activeEditorTabId);
+      const filteredTabs = tabsFromStored(filteredRows);
       mergedWs[h] = {
-        editorWorkspaceTabs: rows,
-        activeEditorTabId: readActiveTabId(snap.activeEditorTabId),
+        editorWorkspaceTabs: filteredRows,
+        activeEditorTabId:
+          activeId == null || filteredRows.some(row => row.id === activeId)
+            ? activeId
+            : ensureActiveTabId(filteredTabs, activeId),
       };
     }
   }
@@ -243,6 +295,7 @@ export function mergeStoredHubWorkspaces(args: {
     editorWorkspaceTabs: tabsToStored(activeHubTabs),
     activeEditorTabId: activeHubActiveTabId,
   };
+  attachPersistedHomeHistoryToMergedHubSnapshots({hubUris, activeHub, ws, mergedWs});
   return mergedWs;
 }
 
@@ -273,4 +326,81 @@ export function isUriValidVaultMarkdown(args: {
   const u = normalizeVaultPath(uri);
   const inVault = u === root || u.startsWith(`${root}/`);
   return inVault && (knownNoteUris.has(u) || u.toLowerCase().endsWith('.md'));
+}
+
+/**
+ * Hub keys in persisted `todayHubWorkspaces` that denote valid Today.md paths under `vaultRoot`.
+ * Drops keys from other vaults, junk paths, and non-Today filenames (stale or cross-vault UI store).
+ */
+export function restoredTodayHubWorkspaceKeysForVault(
+  restored: Record<string, TodayHubWorkspaceSnapshot> | null | undefined,
+  vaultRoot: string,
+): string[] {
+  const rootNorm = vaultRoot.replace(/\\/g, '/');
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of Object.keys(restored ?? {})) {
+    const hub = raw.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
+    if (!hub || seen.has(hub)) {
+      continue;
+    }
+    if (
+      (hub === rootNorm || hub.startsWith(`${rootNorm}/`))
+      && vaultUriIsTodayMarkdownFile(hub)
+    ) {
+      seen.add(hub);
+      out.push(hub);
+    }
+  }
+  return out;
+}
+
+/**
+ * {@link restoredTodayHubWorkspaceKeysForVault} as a filtered snapshot map (canonical hub URI keys).
+ */
+export function filterRestoredTodayHubWorkspacesForVault(
+  restored: Record<string, TodayHubWorkspaceSnapshot> | null | undefined,
+  vaultRoot: string,
+): Record<string, TodayHubWorkspaceSnapshot> {
+  const out: Record<string, TodayHubWorkspaceSnapshot> = {};
+  if (restored == null) {
+    return out;
+  }
+  const rootNorm = vaultRoot.replace(/\\/g, '/');
+  for (const raw of Object.keys(restored)) {
+    const hub = raw.replace(/\\/g, '/').replace(/\/+/g, '/').trim();
+    if (!hub) {
+      continue;
+    }
+    if (
+      !((hub === rootNorm || hub.startsWith(`${rootNorm}/`))
+        && vaultUriIsTodayMarkdownFile(hub))
+    ) {
+      continue;
+    }
+    const snap = restored[raw];
+    if (snap != null) {
+      out[hub] = snap;
+    }
+  }
+  return out;
+}
+
+/**
+ * Merge refs-derived hub URIs with persisted hub keys so restore sees inactive hubs before refs refresh.
+ */
+export function restoredTodayHubWorkspaceUrisForRestore(args: {
+  currentHubUris: readonly string[];
+  restored: Record<string, TodayHubWorkspaceSnapshot> | null | undefined;
+  root: string;
+}): string[] {
+  const out = [...args.currentHubUris];
+  const seen = new Set(out);
+  for (const hub of restoredTodayHubWorkspaceKeysForVault(args.restored, args.root)) {
+    if (!seen.has(hub)) {
+      seen.add(hub);
+      out.push(hub);
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b));
 }

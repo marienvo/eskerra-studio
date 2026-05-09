@@ -165,9 +165,26 @@ export type WorkspaceTodayHubController = {
   todayHubCleanRowBlocked: (rowUri: string) => boolean;
   todayHubSelectorItems: readonly {todayNoteUri: string; label: string}[];
   activeTodayHubUri: string | null;
+  /** Active hub URI derived from the shadow workspace model for disk serialization. */
+  persistenceActiveTodayHubUri: string | null;
+  /**
+   * Hub workspaces serialized from the shadow workspace model — authoritative JSON for
+   * `StoredMainWindowInbox.todayHubWorkspaces`.
+   */
+  persistenceTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
+  /**
+   * Legacy React-backed map (restore merge + hub switch): inactive-hub tab snapshots and switch
+   * bookkeeping. Not necessarily identical frame-to-frame to persistenceTodayHubWorkspaces.
+   */
+  legacyTodayHubWorkspacesForSwitch: Record<string, TodayHubWorkspaceSnapshot>;
+  /**
+   * @deprecated Use persistenceTodayHubWorkspaces. Same value as model-derived persistence (former ambiguous name).
+   */
   todayHubWorkspacesForSave: Record<string, TodayHubWorkspaceSnapshot>;
   switchTodayHubWorkspace: (todayNoteUri: string) => Promise<void>;
   focusActiveTodayHubNote: () => void;
+  workspaceSelectorSubLabel?: string;
+  openWorkspaceHomeCurrentInBackgroundTab: () => void;
   workspaceSelectShowsActiveTabPill: boolean;
 };
 
