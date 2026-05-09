@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {
   activateWorkspaceSelectorAction,
+  applyIncomingHubWorkspaceAction,
   closeAllTabsAction,
   closeTabAction,
   createDefaultWorkspaceState,
@@ -149,6 +150,27 @@ describe('workspaceModel transition table', () => {
     m = selectWorkspaceAction(m, hubA);
     expect(m.activeHub).toBe(hubA);
     expect(m.workspaces[hubA]!.active).toEqual({kind: 'tab', id: 't1'});
+  });
+
+  it('applyIncomingHubWorkspaceAction selects hub and replaces that workspace state', () => {
+    const hubA = normalizeWorkspaceUri('/vault/A/Today.md');
+    const hubB = normalizeWorkspaceUri('/vault/B/Today.md');
+    const incomingB = {
+      ...createDefaultWorkspaceState(hubB),
+      tabs: [{id: 'tb', history: {entries: [hubB], index: 0}}],
+      active: {kind: 'tab' as const, id: 'tb'},
+    };
+    let m: WorkspaceModel = {
+      activeHub: hubA,
+      workspaces: {
+        [hubA]: createDefaultWorkspaceState(hubA),
+        [hubB]: createDefaultWorkspaceState(hubB),
+      },
+    };
+    m = applyIncomingHubWorkspaceAction(m, hubB, incomingB);
+    expect(m.activeHub).toBe(hubB);
+    expect(m.workspaces[hubB]).toEqual(incomingB);
+    expect(m.workspaces[hubA]).toEqual(createDefaultWorkspaceState(hubA));
   });
 
   it('removeUris clamps histories; tabs with zero entries after prune are dropped', () => {

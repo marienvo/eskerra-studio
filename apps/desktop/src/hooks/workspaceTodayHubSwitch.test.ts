@@ -3,6 +3,7 @@ import {describe, expect, it, vi} from 'vitest';
 
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
+import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {tabsToStored, type EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import {useWorkspaceTodayHubSwitch, type UseWorkspaceTodayHubSwitchArgs} from './workspaceTodayHubSwitch';
 
@@ -56,6 +57,11 @@ function makeArgs(overrides: {
   setTodayHubWorkspacesForSave?: ReturnType<typeof vi.fn>;
   /** Initial `homeStatesByHubRef.current` for outgoing hub snapshot tests. */
   homeStatesByHubSeed?: Record<string, WorkspaceHomeState>;
+  syncWorkspaceModelForIncomingHub?: ReturnType<typeof vi.fn>;
+  mirrorShadowActiveHub?: ReturnType<typeof vi.fn>;
+  mirrorShadowActiveWorkspaceTabs?: ReturnType<typeof vi.fn>;
+  mirrorShadowActiveTab?: ReturnType<typeof vi.fn>;
+  mirrorShadowHomeSurface?: ReturnType<typeof vi.fn>;
 }): {
   args: UseWorkspaceTodayHubSwitchArgs;
   mocks: {
@@ -123,6 +129,21 @@ function makeArgs(overrides: {
       selectHomeCurrentNote,
       activateOpenTab,
       activateWorkspaceHomeSelector,
+      ...(overrides.syncWorkspaceModelForIncomingHub != null
+        ? {syncWorkspaceModelForIncomingHub: overrides.syncWorkspaceModelForIncomingHub}
+        : {}),
+      ...(overrides.mirrorShadowActiveHub != null
+        ? {mirrorShadowActiveHub: overrides.mirrorShadowActiveHub}
+        : {}),
+      ...(overrides.mirrorShadowActiveWorkspaceTabs != null
+        ? {mirrorShadowActiveWorkspaceTabs: overrides.mirrorShadowActiveWorkspaceTabs}
+        : {}),
+      ...(overrides.mirrorShadowActiveTab != null
+        ? {mirrorShadowActiveTab: overrides.mirrorShadowActiveTab}
+        : {}),
+      ...(overrides.mirrorShadowHomeSurface != null
+        ? {mirrorShadowHomeSurface: overrides.mirrorShadowHomeSurface}
+        : {}),
     },
   };
 
@@ -258,6 +279,46 @@ describe('switchTodayHubWorkspace', () => {
     expect(mocks.setActiveTodayHubUri).toHaveBeenCalledWith(HUB_B);
   });
 
+  it('when syncWorkspaceModelForIncomingHub is set: calls it and skips async mirror callbacks', async () => {
+    const syncWorkspaceModelForIncomingHub = vi.fn();
+    const mirrorShadowActiveHub = vi.fn();
+    const mirrorShadowActiveWorkspaceTabs = vi.fn();
+    const mirrorShadowActiveTab = vi.fn();
+    const mirrorShadowHomeSurface = vi.fn();
+    const bSnapshot: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
+      activeEditorTabId: 'tab-b1',
+    };
+    const {args, mocks} = makeArgs({
+      activeTodayHubUri: HUB_A,
+      hubWorkspaces: {[HUB_B]: bSnapshot},
+      syncWorkspaceModelForIncomingHub,
+      mirrorShadowActiveHub,
+      mirrorShadowActiveWorkspaceTabs,
+      mirrorShadowActiveTab,
+      mirrorShadowHomeSurface,
+    });
+    const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
+
+    await act(async () => {
+      await result.current.switchTodayHubWorkspace(HUB_B);
+    });
+
+    const expectedHub = normalizeEditorDocUri(HUB_B) ?? HUB_B;
+    expect(syncWorkspaceModelForIncomingHub).toHaveBeenCalledTimes(1);
+    expect(syncWorkspaceModelForIncomingHub).toHaveBeenCalledWith({
+      hubUri: expectedHub,
+      nextTabs: expect.any(Array),
+      nextActive: 'tab-b1',
+      snapshot: bSnapshot,
+    });
+    expect(mirrorShadowActiveHub).not.toHaveBeenCalled();
+    expect(mirrorShadowActiveWorkspaceTabs).not.toHaveBeenCalled();
+    expect(mirrorShadowActiveTab).not.toHaveBeenCalled();
+    expect(mirrorShadowHomeSurface).not.toHaveBeenCalled();
+    expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
+  });
+
   it('back-to-back hub switches restore from queued snapshot when setTodayHubWorkspacesForSave defers updaters', async () => {
     const bSnapshot: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
@@ -352,6 +413,46 @@ describe('switchTodayHubWorkspace', () => {
     expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
     expect(mocks.selectNote).not.toHaveBeenCalledWith(HUB_B);
     expect(mocks.setActiveTodayHubUri).toHaveBeenCalledWith(HUB_B);
+  });
+
+  it('when syncWorkspaceModelForIncomingHub is set: calls it and skips async mirror callbacks', async () => {
+    const syncWorkspaceModelForIncomingHub = vi.fn();
+    const mirrorShadowActiveHub = vi.fn();
+    const mirrorShadowActiveWorkspaceTabs = vi.fn();
+    const mirrorShadowActiveTab = vi.fn();
+    const mirrorShadowHomeSurface = vi.fn();
+    const bSnapshot: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
+      activeEditorTabId: 'tab-b1',
+    };
+    const {args, mocks} = makeArgs({
+      activeTodayHubUri: HUB_A,
+      hubWorkspaces: {[HUB_B]: bSnapshot},
+      syncWorkspaceModelForIncomingHub,
+      mirrorShadowActiveHub,
+      mirrorShadowActiveWorkspaceTabs,
+      mirrorShadowActiveTab,
+      mirrorShadowHomeSurface,
+    });
+    const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
+
+    await act(async () => {
+      await result.current.switchTodayHubWorkspace(HUB_B);
+    });
+
+    const expectedHub = normalizeEditorDocUri(HUB_B) ?? HUB_B;
+    expect(syncWorkspaceModelForIncomingHub).toHaveBeenCalledTimes(1);
+    expect(syncWorkspaceModelForIncomingHub).toHaveBeenCalledWith({
+      hubUri: expectedHub,
+      nextTabs: expect.any(Array),
+      nextActive: 'tab-b1',
+      snapshot: bSnapshot,
+    });
+    expect(mirrorShadowActiveHub).not.toHaveBeenCalled();
+    expect(mirrorShadowActiveWorkspaceTabs).not.toHaveBeenCalled();
+    expect(mirrorShadowActiveTab).not.toHaveBeenCalled();
+    expect(mirrorShadowHomeSurface).not.toHaveBeenCalled();
+    expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
   });
 
   it('empty target tabs: opens the current Home entry after clearing tabs', async () => {

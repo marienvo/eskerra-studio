@@ -31,6 +31,22 @@ export function selectWorkspaceAction(m: WorkspaceModel, hubUri: string): Worksp
   };
 }
 
+export function applyIncomingHubWorkspaceAction(
+  m: WorkspaceModel,
+  hubUri: string,
+  workspace: WorkspaceState,
+): WorkspaceModel {
+  const next = selectWorkspaceAction(m, hubUri);
+  const hub = normalizeWorkspaceUri(hubUri);
+  return {
+    ...next,
+    workspaces: {
+      ...next.workspaces,
+      [hub]: workspace,
+    },
+  };
+}
+
 /**
  * Ensures each listed hub has a workspace entry. Does not remove hubs missing from the list
  * (deletions use removeUrisAction). If activeHub is null and the list is non-empty, activeHub

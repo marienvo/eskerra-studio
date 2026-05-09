@@ -21,6 +21,7 @@ import {
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
   projectWorkspaceRuntimeToModel,
+  workspaceStateForIncomingHubSwitch,
 } from './workspaceRuntimeProjection';
 
 const HUB_A = '/vault/A/Today.md';
@@ -664,6 +665,57 @@ describe('removeUrisAction', () => {
         normalizeWorkspaceUri,
       ),
     ).toEqual([outside]);
+  });
+});
+
+describe('workspaceStateForIncomingHubSwitch', () => {
+  it('matches projectWorkspaceRuntimeToModel active-hub slice for a tab surface', () => {
+    const tabs = [runtimeTab('tab-a', [NOTE_A])];
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const fromSwitch = workspaceStateForIncomingHubSwitch({
+      hubUri: HUB_A,
+      nextTabs: tabs,
+      nextActive: 'tab-a',
+      snapshot: undefined,
+      homeStatesByHub: {},
+    });
+    const projected = projectWorkspaceRuntimeToModel({
+      activeTodayHubUri: HUB_A,
+      editorWorkspaceTabs: tabs,
+      activeEditorTabId: 'tab-a',
+      legacyHubWorkspaceSnapshots: {},
+      homeStatesByHub: {},
+      hubUris: [HUB_A],
+    });
+    expect(fromSwitch).toEqual(projected.workspaces[hubNorm]);
+  });
+
+  it('matches active-hub slice for Home surface with runtime home stack override', () => {
+    const snapshotA: TodayHubWorkspaceSnapshot = {
+      editorWorkspaceTabs: [],
+      activeEditorTabId: null,
+      homeHistory: {entries: [HUB_A, NOTE_A], index: 1},
+    };
+    const homeStatesByHub: Record<string, WorkspaceHomeState> = {
+      [HUB_A]: {history: {entries: [HUB_A, NOTE_HOME], index: 1}},
+    };
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const fromSwitch = workspaceStateForIncomingHubSwitch({
+      hubUri: HUB_A,
+      nextTabs: [],
+      nextActive: null,
+      snapshot: snapshotA,
+      homeStatesByHub,
+    });
+    const projected = projectWorkspaceRuntimeToModel({
+      activeTodayHubUri: HUB_A,
+      editorWorkspaceTabs: [],
+      activeEditorTabId: null,
+      legacyHubWorkspaceSnapshots: {[HUB_A]: snapshotA},
+      homeStatesByHub,
+      hubUris: [HUB_A],
+    });
+    expect(fromSwitch).toEqual(projected.workspaces[hubNorm]);
   });
 });
 

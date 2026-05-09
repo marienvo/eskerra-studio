@@ -137,6 +137,32 @@ export function activeSurfaceTabIdFromWorkspaceModel(m: WorkspaceModel): string 
   return ws.active.kind === 'tab' ? ws.active.id : null;
 }
 
+export type WorkspaceStateForIncomingHubSwitchArgs = {
+  hubUri: string;
+  nextTabs: readonly EditorWorkspaceTab[];
+  nextActive: string | null;
+  snapshot: TodayHubWorkspaceSnapshot | undefined;
+  homeStatesByHub: Record<string, WorkspaceHomeState>;
+};
+
+/**
+ * Builds the target hub's {@link WorkspaceState} from the same inputs used during a Today hub
+ * workspace switch (restored tab strip + snapshot + live Home stacks). Matches the active-hub
+ * branch inside {@link projectWorkspaceRuntimeToModel} without rebuilding other workspaces.
+ */
+export function workspaceStateForIncomingHubSwitch(
+  args: WorkspaceStateForIncomingHubSwitchArgs,
+): WorkspaceState {
+  const hub = normalizeWorkspaceUri(args.hubUri);
+  const tabs = tabEntriesFromRuntimeTabs(args.nextTabs);
+  const active = activeSurfaceForTabs(tabs, args.nextActive);
+  return {
+    tabs,
+    active,
+    homeHistory: homeHistoryForHub(hub, args.snapshot, args.homeStatesByHub),
+  };
+}
+
 export function projectWorkspaceRuntimeToModel(
   args: ProjectWorkspaceRuntimeToModelArgs,
 ): WorkspaceModel {

@@ -131,6 +131,7 @@ import {
 } from '../lib/workspaceHomeNavigation';
 import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
 import {
+  applyIncomingHubWorkspaceAction,
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
@@ -213,6 +214,7 @@ import {
   editorWorkspaceTabsFromModelTabEntries,
   legacyEditorWorkspaceTabsSignature,
   projectWorkspaceRuntimeToModel,
+  workspaceStateForIncomingHubSwitch,
 } from './workspaceRuntimeProjection';
 import {
   assignLegacyRuntimeActiveHub,
@@ -2720,6 +2722,30 @@ export function useMainWindowWorkspace(options: {
     [activateOpenTab, openMarkdownInEditor],
   );
 
+  const syncWorkspaceModelForIncomingHub = useCallback(
+    (payload: {
+      hubUri: string;
+      nextTabs: readonly EditorWorkspaceTab[];
+      nextActive: string | null;
+      snapshot: TodayHubWorkspaceSnapshot | undefined;
+    }) => {
+      dispatchWorkspaceActionSync('incoming workspace switch', m =>
+        applyIncomingHubWorkspaceAction(
+          m,
+          payload.hubUri,
+          workspaceStateForIncomingHubSwitch({
+            hubUri: payload.hubUri,
+            nextTabs: payload.nextTabs,
+            nextActive: payload.nextActive,
+            snapshot: payload.snapshot,
+            homeStatesByHub: homeStatesByHubRef.current,
+          }),
+        ),
+      );
+    },
+    [dispatchWorkspaceActionSync],
+  );
+
   const {switchTodayHubWorkspace, focusActiveTodayHubNote} =
     useWorkspaceTodayHubSwitch({
       state: {legacyTodayHubWorkspacesForSwitch: todayHubWorkspacesForSwitch},
@@ -2754,6 +2780,7 @@ export function useMainWindowWorkspace(options: {
         mirrorShadowHomeSurface,
         mirrorShadowActiveTab,
         mirrorShadowActiveWorkspaceTabs,
+        syncWorkspaceModelForIncomingHub,
       },
     });
 

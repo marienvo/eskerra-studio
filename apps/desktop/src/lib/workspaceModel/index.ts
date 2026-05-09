@@ -40,7 +40,11 @@ export {
   reorderTabsAction,
   type OpenTabBackgroundOptions,
 } from './actions/tabs';
-export {ensureWorkspaceForHubsAction, selectWorkspaceAction} from './actions/workspace';
+export {
+  applyIncomingHubWorkspaceAction,
+  ensureWorkspaceForHubsAction,
+  selectWorkspaceAction,
+} from './actions/workspace';
 export {remapPrefixAction, removeUrisAction} from './actions/external';
 
 export {
