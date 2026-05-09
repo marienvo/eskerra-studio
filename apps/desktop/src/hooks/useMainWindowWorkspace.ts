@@ -135,6 +135,7 @@ import {
   closeOtherTabsAction,
   closeTabAction,
   openTabBackgroundAction,
+  remapPrefixAction,
   reorderTabsAction,
   type OpenTabBackgroundOptions,
   type WorkspaceModel,
@@ -574,17 +575,24 @@ export function useMainWindowWorkspace(options: {
   }, [homeStatesByHub]);
 
   const remapHomeStatesPrefix = useCallback(
-    (oldPrefix: string, newPrefix: string) =>
+    (oldPrefix: string, newPrefix: string) => {
+      if (oldPrefix === newPrefix) {
+        return;
+      }
       remapHomeStatesPrefixBridge(
         {
           homeStatesByHubRef,
           setHomeStatesByHub,
-          dispatchWorkspaceAction,
         },
         oldPrefix,
         newPrefix,
-      ),
-    [dispatchWorkspaceAction],
+      );
+      dispatchWorkspaceActionSync(
+        'remap vault uri prefix',
+        m => remapPrefixAction(m, oldPrefix, newPrefix),
+      );
+    },
+    [dispatchWorkspaceActionSync],
   );
 
   const removeHomeHistoryUris = useCallback(

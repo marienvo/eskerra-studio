@@ -1,6 +1,8 @@
 /**
  * Home stack (runtime) ↔ WorkspaceModel shadow sync for URI remap and targeted removals.
- * Runtime `homeStatesByHub` stays authoritative; shadow mirrors via `dispatchWorkspaceAction`.
+ * Runtime `homeStatesByHub` stays authoritative; shadow updates use `dispatchWorkspaceAction` /
+ * `dispatchWorkspaceActionSync` at orchestration sites (see `remapHomeStatesPrefix` in
+ * `useMainWindowWorkspace`).
  */
 import type {Dispatch, RefObject, SetStateAction} from 'react';
 
@@ -10,7 +12,7 @@ import {
   homeRemoveUris,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
-import {remapPrefixAction, removeUrisAction} from '../lib/workspaceModel';
+import {removeUrisAction} from '../lib/workspaceModel';
 import type {DispatchWorkspaceModelAction} from './workspaceShadowBridge';
 
 export function computeRemappedHomeStatesForVaultPrefix(args: {
@@ -57,26 +59,33 @@ export type HomeHistoryShadowSyncBridgeDeps = {
   dispatchWorkspaceAction: DispatchWorkspaceModelAction;
 };
 
+export type HomeStatesPrefixRemapReactDeps = Pick<
+  HomeHistoryShadowSyncBridgeDeps,
+  'homeStatesByHubRef' | 'setHomeStatesByHub'
+>;
+
+/**
+ * Updates runtime `homeStatesByHub` when hub keys or home stacks change under a vault prefix
+ * remap. Does **not** mutate {@link WorkspaceModel} — callers sync the shadow model (e.g.
+ * {@link remapPrefixAction}) in the same transaction.
+ */
 export function remapHomeStatesPrefixBridge(
-  deps: HomeHistoryShadowSyncBridgeDeps,
+  deps: HomeStatesPrefixRemapReactDeps,
   oldPrefix: string,
   newPrefix: string,
-): void {
-  const {homeStatesByHubRef, setHomeStatesByHub, dispatchWorkspaceAction} = deps;
+): boolean {
+  const {homeStatesByHubRef, setHomeStatesByHub} = deps;
   const {next, changed} = computeRemappedHomeStatesForVaultPrefix({
     current: homeStatesByHubRef.current,
     oldPrefix,
     newPrefix,
   });
   if (!changed) {
-    return;
+    return false;
   }
   homeStatesByHubRef.current = next;
   setHomeStatesByHub(next);
-  dispatchWorkspaceAction(
-    `homeHistory remap ${oldPrefix} -> ${newPrefix}`,
-    model => remapPrefixAction(model, oldPrefix, newPrefix),
-  );
+  return true;
 }
 
 export function removeHomeHistoryUrisBridge(

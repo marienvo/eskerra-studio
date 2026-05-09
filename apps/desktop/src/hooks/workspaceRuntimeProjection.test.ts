@@ -11,6 +11,7 @@ import {
   goForwardAction,
   normalizeWorkspaceUri,
   openTabBackgroundAction,
+  remapPrefixAction,
   reorderTabsAction,
   serializeWorkspaceModelToPersistence,
   type WorkspaceModel,
@@ -484,6 +485,96 @@ describe('editorWorkspaceTabsFromModelTabEntries', () => {
     const after = goBackAction(model);
     const ws = after.workspaces[hubNorm];
     expect(ws?.tabs).toEqual(tabsBefore);
+  });
+});
+
+describe('remapPrefixAction', () => {
+  it('remaps URIs in active and inactive tab histories and preserves tab order and active id', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const oldNote = '/vault/Inbox/RenameNote.md';
+    const newNote = '/vault/Inbox/RenamedNote.md';
+    const other = '/vault/Inbox/Other.md';
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...createDefaultWorkspaceState(HUB_A),
+          tabs: [
+            {
+              id: 't1',
+              history: {
+                entries: [
+                  normalizeWorkspaceUri(oldNote),
+                  normalizeWorkspaceUri(other),
+                ],
+                index: 0,
+              },
+            },
+            {
+              id: 't2',
+              history: {entries: [normalizeWorkspaceUri(oldNote)], index: 0},
+            },
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const after = remapPrefixAction(model, oldNote, newNote);
+    const ws = after.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1', 't2']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+    expect(ws?.tabs[0]?.history.entries.map(normalizeWorkspaceUri)).toEqual([
+      normalizeWorkspaceUri(newNote),
+      normalizeWorkspaceUri(other),
+    ]);
+    expect(ws?.tabs[1]?.history.entries.map(normalizeWorkspaceUri)).toEqual([
+      normalizeWorkspaceUri(newNote),
+    ]);
+    const persisted = serializeWorkspaceModelToPersistence(after);
+    const rows = persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs ?? [];
+    expect(rows.map(r => r.entries.map(normalizeWorkspaceUri))).toEqual([
+      [normalizeWorkspaceUri(newNote), normalizeWorkspaceUri(other)],
+      [normalizeWorkspaceUri(newNote)],
+    ]);
+  });
+
+  it('remaps workspace hub key and activeHub for directory prefix moves while preserving tab order', () => {
+    const oldHub = '/vault/Inbox/OldProj/Today.md';
+    const newHub = '/vault/Inbox/NewProj/Today.md';
+    const oldHubNorm = normalizeWorkspaceUri(oldHub);
+    const newHubNorm = normalizeWorkspaceUri(newHub);
+    const noteUnderOld = '/vault/Inbox/OldProj/Inbox/a.md';
+    const noteUnderNew = '/vault/Inbox/NewProj/Inbox/a.md';
+    const model: WorkspaceModel = {
+      activeHub: oldHubNorm,
+      workspaces: {
+        [oldHubNorm]: {
+          ...createDefaultWorkspaceState(oldHub),
+          tabs: [
+            {
+              id: 'a',
+              history: {entries: [normalizeWorkspaceUri(noteUnderOld)], index: 0},
+            },
+            {
+              id: 'b',
+              history: {entries: [normalizeWorkspaceUri('/vault/Else.md')], index: 0},
+            },
+          ],
+          active: {kind: 'tab', id: 'a'},
+        },
+      },
+    };
+    const after = remapPrefixAction(
+      model,
+      '/vault/Inbox/OldProj',
+      '/vault/Inbox/NewProj',
+    );
+    expect(after.activeHub).toBe(newHubNorm);
+    expect(Object.keys(after.workspaces).sort()).toEqual([newHubNorm]);
+    const ws = after.workspaces[newHubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['a', 'b']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 'a'});
+    expect(ws?.tabs[0]?.history.entries[0]).toBe(normalizeWorkspaceUri(noteUnderNew));
   });
 });
 
