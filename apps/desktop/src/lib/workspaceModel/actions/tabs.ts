@@ -52,21 +52,87 @@ export function openTabForegroundAction(
   });
 }
 
+/**
+ * Background tab open options. A plain `{tabId?}` (no `placement`) appends (legacy shape).
+ */
+export type OpenTabBackgroundOptions =
+  | {tabId?: string}
+  | {
+      tabId?: string;
+      placement: 'append';
+    }
+  | {
+      tabId?: string;
+      placement: 'insertAtIndex';
+      insertAtIndex: number;
+    }
+  | {
+      tabId?: string;
+      placement: 'insertAfterTab';
+      insertAfterTabId: string | null;
+    };
+
+function normalizeOpenTabBackgroundPlacement(opts?: OpenTabBackgroundOptions): {
+  kind: 'append' | 'insertAtIndex' | 'insertAfterTab';
+  tabId?: string;
+  insertAtIndex?: number;
+  insertAfterTabId?: string | null;
+} {
+  if (opts == null) {
+    return {kind: 'append'};
+  }
+  if ('placement' in opts && opts.placement === 'insertAtIndex') {
+    return {
+      kind: 'insertAtIndex',
+      tabId: opts.tabId,
+      insertAtIndex: opts.insertAtIndex,
+    };
+  }
+  if ('placement' in opts && opts.placement === 'insertAfterTab') {
+    return {
+      kind: 'insertAfterTab',
+      tabId: opts.tabId,
+      insertAfterTabId: opts.insertAfterTabId,
+    };
+  }
+  return {kind: 'append', tabId: opts.tabId};
+}
+
 export function openTabBackgroundAction(
   m: WorkspaceModel,
   uri: string,
-  opts?: {tabId?: string},
+  opts?: OpenTabBackgroundOptions,
 ): WorkspaceModel {
+  const placement = normalizeOpenTabBackgroundPlacement(opts);
   return patchActiveWorkspace(m, ws => {
-    const id = opts?.tabId ?? autoTabId(ws, uri);
+    const id = placement.tabId ?? autoTabId(ws, uri);
     const entry: TabEntry = {
       id,
       history: {entries: [normalizeWorkspaceUri(uri)], index: 0},
     };
-    return {
-      ...ws,
-      tabs: [...ws.tabs, entry],
-    };
+    let nextTabs: TabEntry[];
+    switch (placement.kind) {
+      case 'insertAtIndex': {
+        const clamped = Math.max(
+          0,
+          Math.min(placement.insertAtIndex, ws.tabs.length),
+        );
+        nextTabs = [...ws.tabs];
+        nextTabs.splice(clamped, 0, entry);
+        break;
+      }
+      case 'insertAfterTab': {
+        const aid = placement.insertAfterTabId;
+        const idx = aid == null ? -1 : ws.tabs.findIndex(t => t.id === aid);
+        const insertAt = idx < 0 ? 0 : idx + 1;
+        nextTabs = [...ws.tabs];
+        nextTabs.splice(insertAt, 0, entry);
+        break;
+      }
+      default:
+        nextTabs = [...ws.tabs, entry];
+    }
+    return {...ws, tabs: nextTabs};
   });
 }
 

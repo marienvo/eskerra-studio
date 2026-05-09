@@ -38,6 +38,7 @@ export {
   openTabBackgroundAction,
   openTabForegroundAction,
   reorderTabsAction,
+  type OpenTabBackgroundOptions,
 } from './actions/tabs';
 export {ensureWorkspaceForHubsAction, selectWorkspaceAction} from './actions/workspace';
 export {remapPrefixAction, removeUrisAction} from './actions/external';

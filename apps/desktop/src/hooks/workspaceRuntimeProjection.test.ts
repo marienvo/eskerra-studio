@@ -10,6 +10,7 @@ import {
   goBackAction,
   goForwardAction,
   normalizeWorkspaceUri,
+  openTabBackgroundAction,
   reorderTabsAction,
   serializeWorkspaceModelToPersistence,
   type WorkspaceModel,
@@ -263,6 +264,106 @@ describe('editorWorkspaceTabsFromModelTabEntries', () => {
     expect(editorWorkspaceTabsFromModelTabEntries(ws!.tabs)).toEqual([]);
     const persisted = serializeWorkspaceModelToPersistence(closed);
     expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs ?? []).toEqual([]);
+  });
+
+  it('openTabBackgroundAction appends with explicit tabId, preserves active tab, and persists', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const base = createDefaultWorkspaceState(HUB_A);
+    const noteA = normalizeWorkspaceUri(NOTE_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...base,
+          tabs: [{id: 't1', history: {entries: [noteA], index: 0}}],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const opened = openTabBackgroundAction(model, NOTE_B, {tabId: 'bg1'});
+    const ws = opened.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1', 'bg1']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+    expect(activeSurfaceTabIdFromWorkspaceModel(opened)).toBe('t1');
+    const persisted = serializeWorkspaceModelToPersistence(opened);
+    expect(persisted.todayHubWorkspaces[hubNorm]?.editorWorkspaceTabs?.map(t => t.id)).toEqual([
+      't1',
+      'bg1',
+    ]);
+  });
+
+  it('openTabBackgroundAction insertAfterTab orders like legacy insertTabAfterActive', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const noteA = normalizeWorkspaceUri(NOTE_A);
+    const noteB = normalizeWorkspaceUri(NOTE_B);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...createDefaultWorkspaceState(HUB_A),
+          tabs: [
+            {id: 't1', history: {entries: [noteA], index: 0}},
+            {id: 't2', history: {entries: [noteB], index: 0}},
+          ],
+          active: {kind: 'tab', id: 't1'},
+        },
+      },
+    };
+    const opened = openTabBackgroundAction(model, NOTE_HOME, {
+      placement: 'insertAfterTab',
+      tabId: 'new1',
+      insertAfterTabId: 't1',
+    });
+    const ws = opened.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1', 'new1', 't2']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't1'});
+  });
+
+  it('openTabBackgroundAction insertAtIndex splices like legacy insertTabAtIndex', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const noteA = normalizeWorkspaceUri(NOTE_A);
+    const noteB = normalizeWorkspaceUri(NOTE_B);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...createDefaultWorkspaceState(HUB_A),
+          tabs: [
+            {id: 't1', history: {entries: [noteA], index: 0}},
+            {id: 't2', history: {entries: [noteB], index: 0}},
+          ],
+          active: {kind: 'tab', id: 't2'},
+        },
+      },
+    };
+    const opened = openTabBackgroundAction(model, NOTE_HOME, {
+      placement: 'insertAtIndex',
+      tabId: 'n',
+      insertAtIndex: 1,
+    });
+    const ws = opened.workspaces[hubNorm];
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1', 'n', 't2']);
+    expect(ws?.active).toEqual({kind: 'tab', id: 't2'});
+  });
+
+  it('openTabBackgroundAction keeps Home surface active when background-opening from Home', () => {
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    const noteA = normalizeWorkspaceUri(NOTE_A);
+    const model: WorkspaceModel = {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          ...createDefaultWorkspaceState(HUB_A),
+          tabs: [{id: 't1', history: {entries: [noteA], index: 0}}],
+          active: {kind: 'home'},
+        },
+      },
+    };
+    const opened = openTabBackgroundAction(model, NOTE_B, {tabId: 'bg'});
+    const ws = opened.workspaces[hubNorm];
+    expect(ws?.active).toEqual({kind: 'home'});
+    expect(ws?.tabs.map(t => t.id)).toEqual(['t1', 'bg']);
+    expect(activeSurfaceTabIdFromWorkspaceModel(opened)).toBeNull();
   });
 
   it('goBackAction moves active tab history to the previous entry and persists index', () => {

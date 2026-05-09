@@ -15,25 +15,18 @@ import {
   homeGoForward,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
-import {goBackAction, goForwardAction, normalizeWorkspaceUri, type WorkspaceModel} from '../lib/workspaceModel';
+import {goBackAction, goForwardAction, type WorkspaceModel} from '../lib/workspaceModel';
 import type {DispatchWorkspaceModelActionSync} from './workspaceShadowBridge';
 import {assignLegacyEditorWorkspaceTabs} from './workspaceRuntimeTabsLegacyBridge';
-import {editorWorkspaceTabsFromModelTabEntries} from './workspaceRuntimeProjection';
+import {
+  editorWorkspaceTabsFromModelTabEntries,
+  legacyEditorWorkspaceTabsSignature,
+} from './workspaceRuntimeProjection';
 
 export type OpenMarkdownInEditorFn = (
   uri: string,
   opts?: {home?: boolean; skipHistory?: boolean},
 ) => void | Promise<void>;
-
-function normalizeTabStripSignature(tabs: readonly EditorWorkspaceTab[]): string {
-  return JSON.stringify(
-    tabs.map(t => ({
-      id: t.id,
-      entries: t.history.entries.map(e => normalizeWorkspaceUri(e)),
-      index: t.history.index,
-    })),
-  );
-}
 
 function assignLegacyEditorTabsFromTabHistoryModel(args: {
   nextModel: WorkspaceModel;
@@ -48,9 +41,9 @@ function assignLegacyEditorTabsFromTabHistoryModel(args: {
       ? editorWorkspaceTabsFromModelTabEntries(args.nextModel.workspaces[hub].tabs)
       : null;
 
-  const legacySig = normalizeTabStripSignature(args.nextTabsLegacy);
+  const legacySig = legacyEditorWorkspaceTabsSignature(args.nextTabsLegacy);
   const derivedSig =
-    derived != null ? normalizeTabStripSignature(derived) : null;
+    derived != null ? legacyEditorWorkspaceTabsSignature(derived) : null;
   const derivedMatchesLegacy = derivedSig === legacySig && derived != null;
 
   const nextTabs = derivedMatchesLegacy ? derived : args.nextTabsLegacy;

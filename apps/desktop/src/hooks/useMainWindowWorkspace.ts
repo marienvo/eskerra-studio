@@ -134,7 +134,9 @@ import {
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
+  openTabBackgroundAction,
   reorderTabsAction,
+  type OpenTabBackgroundOptions,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
 import type {
@@ -207,6 +209,7 @@ import {
 import {
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
+  legacyEditorWorkspaceTabsSignature,
   projectWorkspaceRuntimeToModel,
 } from './workspaceRuntimeProjection';
 import {
@@ -1406,17 +1409,57 @@ export function useMainWindowWorkspace(options: {
       const newTab = createEditorWorkspaceTab(targetNorm);
       const curTabs = editorWorkspaceTabsRef.current;
       const activeId = activeEditorTabIdRef.current;
-      let nextTabs: EditorWorkspaceTab[];
+      let nextTabsLegacy: EditorWorkspaceTab[];
+      let tabOpts: OpenTabBackgroundOptions;
       if (
         typeof options?.insertAtIndex === 'number'
         && Number.isFinite(options.insertAtIndex)
       ) {
-        nextTabs = insertTabAtIndex(curTabs, options.insertAtIndex, newTab);
+        nextTabsLegacy = insertTabAtIndex(curTabs, options.insertAtIndex, newTab);
+        tabOpts = {
+          placement: 'insertAtIndex',
+          tabId: newTab.id,
+          insertAtIndex: options.insertAtIndex,
+        };
       } else if (options?.insertAfterActive) {
-        nextTabs = insertTabAfterActive(curTabs, activeId, newTab);
+        nextTabsLegacy = insertTabAfterActive(curTabs, activeId, newTab);
+        tabOpts = {
+          placement: 'insertAfterTab',
+          tabId: newTab.id,
+          insertAfterTabId: activeId,
+        };
       } else {
-        nextTabs = [...curTabs, newTab];
+        nextTabsLegacy = [...curTabs, newTab];
+        tabOpts = {tabId: newTab.id};
       }
+
+      const nextModel = dispatchWorkspaceActionSync(
+        'background new tab',
+        m => openTabBackgroundAction(m, targetNorm, tabOpts),
+      );
+      const hub = nextModel.activeHub;
+      const derived =
+        hub != null && nextModel.workspaces[hub] != null
+          ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
+          : null;
+
+      const legacySig = legacyEditorWorkspaceTabsSignature(nextTabsLegacy);
+      const derivedSig =
+        derived != null ? legacyEditorWorkspaceTabsSignature(derived) : null;
+      const derivedMatchesLegacy = derivedSig === legacySig && derived != null;
+
+      const nextTabs = derivedMatchesLegacy ? derived : nextTabsLegacy;
+      if (!derivedMatchesLegacy && derived != null) {
+        const warn =
+          typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+        if (warn) {
+          console.warn(
+            '[workspaceModel] applyBackgroundNewTabOpen: model strip mismatch vs legacy placement; using legacy strip',
+            {legacySig, derivedSig},
+          );
+        }
+      }
+
       assignLegacyEditorWorkspaceTabs({
         nextTabs,
         editorWorkspaceTabsRef,
@@ -1440,7 +1483,7 @@ export function useMainWindowWorkspace(options: {
         });
       }
     },
-    [mirrorShadowActiveWorkspaceTabs],
+    [dispatchWorkspaceActionSync, mirrorShadowActiveWorkspaceTabs],
   );
 
   const placeForegroundMarkdownOpen = useCallback(

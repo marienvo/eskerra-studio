@@ -62,6 +62,19 @@ export function editorWorkspaceTabsFromModelTabEntries(
   }));
 }
 
+/** Stable signature for comparing legacy vs model-derived tab strips (ids + normalized histories). */
+export function legacyEditorWorkspaceTabsSignature(
+  tabs: readonly EditorWorkspaceTab[],
+): string {
+  return JSON.stringify(
+    tabs.map(t => ({
+      id: t.id,
+      entries: t.history.entries.map(e => normalizeWorkspaceUri(e)),
+      index: t.history.index,
+    })),
+  );
+}
+
 function tabEntriesFromStoredSnapshot(snap: TodayHubWorkspaceSnapshot | undefined): TabEntry[] {
   return (snap?.editorWorkspaceTabs ?? [])
     .map(t => ({
