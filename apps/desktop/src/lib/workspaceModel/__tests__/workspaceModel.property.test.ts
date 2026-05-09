@@ -55,6 +55,33 @@ type WorkspacePropAction =
   | {t: 'remapPrefix'; pairIdx: number}
   | {t: 'removeUris'; targetMask: number};
 
+type SurfaceNavAction = Extract<
+  WorkspacePropAction,
+  | {t: 'selectWorkspace'}
+  | {t: 'ensureWorkspaceForHubs'}
+  | {t: 'activateWorkspaceSelector'}
+  | {t: 'activateTab'}
+  | {t: 'pushHomeNavigation'}
+  | {t: 'pushTabNavigation'}
+  | {t: 'goBack'}
+  | {t: 'goForward'}
+>;
+
+type TabMutationAction = Extract<
+  WorkspacePropAction,
+  | {t: 'openTabForeground'}
+  | {t: 'openTabBackground'}
+  | {t: 'closeTab'}
+  | {t: 'closeOtherTabs'}
+  | {t: 'closeAllTabs'}
+  | {t: 'reorderTabs'}
+>;
+
+type ExternalWorkspaceAction = Extract<
+  WorkspacePropAction,
+  {t: 'remapPrefix'} | {t: 'removeUris'}
+>;
+
 function assertValid(m: WorkspaceModel, label: string): void {
   const issues = validateWorkspaceModel(m);
   expect(issues, label).toEqual([]);
@@ -92,22 +119,24 @@ function arbTabEntry(tabIndex: number, notes: readonly string[]): fc.Arbitrary<T
 }
 
 function arbWorkspaceState(hub: string, hubIndex: number, notes: readonly string[]): fc.Arbitrary<WorkspaceState> {
-  return fc.integer({min: 0, max: 5}).chain(nTabs => {
+  return fc.integer({min: 0, max: 5}).chain((nTabs): fc.Arbitrary<WorkspaceState> => {
     const homeArb = arbHistoryStack(hub, notes);
     if (nTabs === 0) {
-      return homeArb.map(homeHistory => ({
-        tabs: [],
-        homeHistory,
-        active: {kind: 'home' as const},
-      }));
+      return homeArb.map(
+        (homeHistory): WorkspaceState => ({
+          tabs: [],
+          homeHistory,
+          active: {kind: 'home'},
+        }),
+      );
     }
     const tabArbs = Array.from({length: nTabs}, (_, ti) => arbTabEntry(hubIndex * 10 + ti, notes));
     return fc
       .tuple(homeArb, fc.tuple(...tabArbs), fc.boolean(), fc.integer({min: 0, max: nTabs - 1}))
-      .map(([homeHistory, tabs, useHome, tabIdx]) => ({
+      .map(([homeHistory, tabs, useHome, tabIdx]): WorkspaceState => ({
         tabs,
         homeHistory,
-        active: useHome ? ({kind: 'home' as const} as const) : ({kind: 'tab' as const, id: tabs[tabIdx]!.id} as const),
+        active: useHome ? {kind: 'home'} : {kind: 'tab', id: tabs[tabIdx]!.id},
       }));
   });
 }
@@ -180,7 +209,7 @@ function activeWorkspaceTabs(m: WorkspaceModel): readonly TabEntry[] {
   return ws?.tabs ?? [];
 }
 
-function applySurfaceNavAction(m: WorkspaceModel, a: WorkspacePropAction, ctx: PropContext): WorkspaceModel {
+function applySurfaceNavAction(m: WorkspaceModel, a: SurfaceNavAction, ctx: PropContext): WorkspaceModel {
   const hubs = sortedWorkspaceHubKeys(m);
   const notes = ctx.initialNotes;
 
@@ -213,14 +242,15 @@ function applySurfaceNavAction(m: WorkspaceModel, a: WorkspacePropAction, ctx: P
       return goBackAction(m);
     case 'goForward':
       return goForwardAction(m);
-    default: {
-      const _x: never = a;
-      return _x;
-    }
   }
 }
 
-function applyTabMutationAction(m: WorkspaceModel, a: WorkspacePropAction, step: number, ctx: PropContext): WorkspaceModel {
+function applyTabMutationAction(
+  m: WorkspaceModel,
+  a: TabMutationAction,
+  step: number,
+  ctx: PropContext,
+): WorkspaceModel {
   const notes = ctx.initialNotes;
   const tabs = activeWorkspaceTabs(m);
 
@@ -256,14 +286,10 @@ function applyTabMutationAction(m: WorkspaceModel, a: WorkspacePropAction, step:
       }
       return reorderTabsAction(m, a.fromIdx % len, a.beforeIdx % (len + 1));
     }
-    default: {
-      const _x: never = a;
-      return _x;
-    }
   }
 }
 
-function applyExternalAction(m: WorkspaceModel, a: WorkspacePropAction, ctx: PropContext): WorkspaceModel {
+function applyExternalAction(m: WorkspaceModel, a: ExternalWorkspaceAction, ctx: PropContext): WorkspaceModel {
   switch (a.t) {
     case 'remapPrefix': {
       const [oldP, newP] = REMAP_PAIRS[a.pairIdx % REMAP_PAIRS.length]!;
@@ -281,10 +307,6 @@ function applyExternalAction(m: WorkspaceModel, a: WorkspacePropAction, ctx: Pro
         return m;
       }
       return removeUrisAction(m, u => removeSet.has(normalizeWorkspaceUri(u)));
-    }
-    default: {
-      const _x: never = a;
-      return _x;
     }
   }
 }
