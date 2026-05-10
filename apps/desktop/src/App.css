@@ -1358,10 +1358,10 @@ a:focus:not(:focus-visible) {
   align-items: center;
 }
 
-/* Three-column grid: equal 1fr sides keep now-playing centered at 50% of toolbar width. */
+/* Three-column grid: 1fr sides; center column uses minmax(0, 50%) for extrinsic width (safe for nested container queries). */
 .pane-header--editor-toolbar.editor-workspace-toolbar--playback {
   display: grid;
-  grid-template-columns: minmax(min-content, 1fr) fit-content(50%) minmax(min-content, 1fr);
+  grid-template-columns: minmax(min-content, 1fr) minmax(0, 50%) minmax(min-content, 1fr);
   align-items: center;
 }
 
@@ -1372,9 +1372,18 @@ a:focus:not(:focus-visible) {
   flex: unset;
 }
 
-.pane-header--editor-toolbar.editor-workspace-toolbar--playback > .editor-workspace-toolbar__now-playing.pane-title {
+/* Grid cell wrapper: explicit width from track; holds container query (not on intrinsic-sized <p>). */
+.pane-header--editor-toolbar.editor-workspace-toolbar--playback
+  > .editor-workspace-toolbar__now-playing-container {
   grid-column: 2;
   justify-self: center;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  container-name: editor-workspace-now-playing;
+  container-type: inline-size;
 }
 
 .pane-header--editor-toolbar.editor-workspace-toolbar--playback > .pane-header-trailing-actions {
@@ -1394,7 +1403,9 @@ a:focus:not(:focus-visible) {
   align-self: stretch;
 }
 
-.pane-header--editor-toolbar.editor-workspace-toolbar--playback > .editor-workspace-toolbar__now-playing.pane-title {
+.pane-header--editor-toolbar.editor-workspace-toolbar--playback
+  > .editor-workspace-toolbar__now-playing-container
+  > .editor-workspace-toolbar__now-playing.pane-title {
   box-sizing: border-box;
   margin: 0;
   flex: none;
@@ -1402,15 +1413,13 @@ a:focus:not(:focus-visible) {
   align-items: center;
   min-width: 0;
   max-width: 100%;
+  width: 100%;
   overflow: hidden;
   text-align: center;
   padding-inline: 0.5rem;
   font-size: 0.72rem;
   line-height: 1.22;
   font-weight: 400;
-  /* Container for `@container` hide of the progress slider when this row is too narrow. */
-  container-name: editor-workspace-now-playing;
-  container-type: inline-size;
 }
 
 .editor-workspace-toolbar__now-playing-inner {

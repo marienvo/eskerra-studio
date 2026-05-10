@@ -177,31 +177,33 @@ export function EditorWorkspaceToolbar({
         {toolbarCenter}
       </div>
       {showPlaybackChrome ? (
-        <p
-          className="editor-workspace-toolbar__now-playing pane-title pane-title--truncate"
-          title={`${nowPlaying.episodeTitle} — ${nowPlaying.seriesName}`}
-        >
-          <button
-            type="button"
-            className="editor-workspace-toolbar__close-now-playing pane-header-add-btn icon-btn-ghost app-tooltip-trigger"
-            onClick={nowPlaying.onClose}
-            aria-label="Close podcast"
-            data-tooltip="Close podcast"
-            data-tooltip-placement="inline-end"
+        <div className="editor-workspace-toolbar__now-playing-container">
+          <p
+            className="editor-workspace-toolbar__now-playing pane-title pane-title--truncate"
+            title={`${nowPlaying.episodeTitle} — ${nowPlaying.seriesName}`}
           >
-            <span className="editor-workspace-toolbar__close-now-playing-glyph" aria-hidden>
-              <Cross2Icon width={13} height={13} />
+            <button
+              type="button"
+              className="editor-workspace-toolbar__close-now-playing pane-header-add-btn icon-btn-ghost app-tooltip-trigger"
+              onClick={nowPlaying.onClose}
+              aria-label="Close podcast"
+              data-tooltip="Close podcast"
+              data-tooltip-placement="inline-end"
+            >
+              <span className="editor-workspace-toolbar__close-now-playing-glyph" aria-hidden>
+                <Cross2Icon width={13} height={13} />
+              </span>
+            </button>
+            <span className="editor-workspace-toolbar__now-playing-inner">
+              <strong>{nowPlaying.episodeTitle}</strong>
+              <span className="editor-workspace-toolbar__now-playing-series muted">
+                {' '}
+                — {nowPlaying.seriesName}
+              </span>
             </span>
-          </button>
-          <span className="editor-workspace-toolbar__now-playing-inner">
-            <strong>{nowPlaying.episodeTitle}</strong>
-            <span className="editor-workspace-toolbar__now-playing-series muted">
-              {' '}
-              — {nowPlaying.seriesName}
-            </span>
-          </span>
-          <NowPlayingProgressSlider {...nowPlaying.progress} />
-        </p>
+            <NowPlayingProgressSlider {...nowPlaying.progress} />
+          </p>
+        </div>
       ) : null}
       <div className="pane-header-trailing-actions">
         {onCleanNote ? (
