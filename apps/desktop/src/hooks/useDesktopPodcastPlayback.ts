@@ -14,7 +14,6 @@ import {
   type PodcastPlayerPlaybackState,
   type VaultFilesystem,
 } from '@eskerra/core';
-import {invoke} from '@tauri-apps/api/core';
 import {useMachine} from '@xstate/react';
 import {
   useCallback,
@@ -50,15 +49,7 @@ const NEAR_END_SUBSTATES = new Set<PodcastPlayerPlaybackState>([
   'ended',
 ]);
 
-async function cacheRemoteArtworkToFileUri(remoteUrl: string): Promise<string | null> {
-  try {
-    return await invoke<string>('media_cache_artwork', {url: remoteUrl});
-  } catch {
-    return null;
-  }
-}
-
-/** When RSS channel artwork URL is not yet in memory cache, resolve + download in the background for MediaSession. */
+/** When RSS channel artwork URL is not yet in memory cache, resolve it in the background for MediaSession. */
 function scheduleMediaSessionChannelArtwork(episodeId: string, rssFeedUrl: string): void {
   void (async () => {
     let remote: string | null;
@@ -70,18 +61,15 @@ function scheduleMediaSessionChannelArtwork(episodeId: string, rssFeedUrl: strin
     if (!remote) {
       return;
     }
-    const file = await cacheRemoteArtworkToFileUri(remote);
-    if (file) {
-      await notifyDesktopMprisArtworkReady(episodeId, file);
-    }
+    await notifyDesktopMprisArtworkReady(episodeId, remote);
   })();
 }
 
 /**
- * Returns a `file://` cover URI when the feed artwork is already known (peek hit);
+ * Returns a remote cover URL when the feed artwork is already known (peek hit);
  * otherwise schedules background resolve + cache and returns `undefined`.
  */
-async function channelArtworkFileUriForMediaSession(
+async function channelArtworkUrlForMediaSession(
   episodeId: string,
   rssFeedUrl: string | undefined,
 ): Promise<string | undefined> {
@@ -96,8 +84,7 @@ async function channelArtworkFileUriForMediaSession(
     scheduleMediaSessionChannelArtwork(episodeId, rssFeedUrl);
     return undefined;
   }
-  const file = await cacheRemoteArtworkToFileUri(peek);
-  return file ?? undefined;
+  return peek.trim() || undefined;
 }
 
 function clampSeekMs(
@@ -208,7 +195,7 @@ async function runPrimedPrimePausedWithArtwork(
   const player = getDesktopAudioPlayer();
   const trackUrl = catalogEp.mp3Url;
   try {
-    const artwork = await channelArtworkFileUriForMediaSession(catalogEp.id, catalogEp.rssFeedUrl);
+    const artwork = await channelArtworkUrlForMediaSession(catalogEp.id, catalogEp.rssFeedUrl);
     await player.primePausedAt(
       {
         artist: catalogEp.seriesName,
@@ -415,7 +402,7 @@ async function runDesktopPlayEpisodeUserAction(
     onError('Device id missing from local settings.');
   }
 
-  const artwork = await channelArtworkFileUriForMediaSession(ep.id, ep.rssFeedUrl);
+  const artwork = await channelArtworkUrlForMediaSession(ep.id, ep.rssFeedUrl);
   await getDesktopAudioPlayer().play(
     {
       artist: ep.seriesName,

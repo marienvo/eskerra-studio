@@ -44,11 +44,11 @@ describe('desktopMediaSession', () => {
     vi.unstubAllGlobals();
   });
 
-  it('syncDesktopMediaSessionPlayback sets metadata with title, artist, and artwork when available', () => {
+  it('uses remote artwork URLs for MediaMetadata', () => {
     syncDesktopMediaSessionPlayback({
       title: 'Episode 1',
       artist: 'My Show',
-      artworkUrl: 'file:///tmp/cover.jpg',
+      artworkUrl: 'https://cdn.example.com/cover.jpg',
       durationMs: 60_000,
       positionMs: 10_000,
       playing: true,
@@ -57,9 +57,65 @@ describe('desktopMediaSession', () => {
     expect(mediaSession.metadata!.title).toBe('Episode 1');
     expect(mediaSession.metadata!.artist).toBe('My Show');
     expect(mediaSession.metadata!.artwork).toHaveLength(1);
-    expect(mediaSession.metadata!.artwork[0]!.src).toBe('file:///tmp/cover.jpg');
+    expect(mediaSession.metadata!.artwork[0]!.src).toBe(
+      'https://cdn.example.com/cover.jpg',
+    );
+    expect(mediaSession.metadata!.artwork[0]!.sizes).toBe('512x512');
     expect(mediaSession.playbackState).toBe('playing');
     expect(setPositionState).toHaveBeenCalled();
+  });
+
+  it('ignores file and internal asset artwork URLs', () => {
+    syncDesktopMediaSessionPlayback({
+      title: 'E',
+      artist: 'S',
+      artworkUrl: 'file:///tmp/cover.jpg',
+      durationMs: 10_000,
+      positionMs: 0,
+      playing: false,
+    });
+    expect(mediaSession.metadata!.artwork).toEqual([]);
+
+    syncDesktopMediaSessionPlayback({
+      title: 'E',
+      artist: 'S',
+      artworkUrl: 'asset://localhost/tmp/cover.jpg',
+      durationMs: 10_000,
+      positionMs: 0,
+      playing: false,
+    });
+    expect(mediaSession.metadata!.artwork).toEqual([]);
+  });
+
+  it('uses empty artwork when artworkUrl is null, undefined, or blank', () => {
+    syncDesktopMediaSessionPlayback({
+      title: 'E',
+      artist: 'S',
+      artworkUrl: null,
+      durationMs: 10_000,
+      positionMs: 0,
+      playing: false,
+    });
+    expect(mediaSession.metadata!.artwork).toEqual([]);
+
+    syncDesktopMediaSessionPlayback({
+      title: 'E',
+      artist: 'S',
+      durationMs: 10_000,
+      positionMs: 0,
+      playing: false,
+    });
+    expect(mediaSession.metadata!.artwork).toEqual([]);
+
+    syncDesktopMediaSessionPlayback({
+      title: 'E',
+      artist: 'S',
+      artworkUrl: '   ',
+      durationMs: 10_000,
+      positionMs: 0,
+      playing: false,
+    });
+    expect(mediaSession.metadata!.artwork).toEqual([]);
   });
 
   it('does not call setPositionState when duration is unknown', () => {

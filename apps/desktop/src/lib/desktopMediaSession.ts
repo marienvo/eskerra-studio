@@ -3,14 +3,18 @@
  * No-ops when `mediaSession` is missing (non-browser or unsupported runtime).
  */
 
+import {buildMediaSessionArtwork} from './desktopMediaSessionArtwork';
+import {
+  clearDesktopMediaSession as clearDesktopMediaSessionDom,
+  getMediaSession,
+  __resetDesktopMediaSessionForTests as resetDomForTests,
+} from './desktopMediaSessionDom';
+
 export type DesktopMediaSessionPlaybackState = 'playing' | 'paused' | 'none';
 
-function getMediaSession(): MediaSession | undefined {
-  if (typeof navigator === 'undefined') {
-    return undefined;
-  }
-  return navigator.mediaSession;
-}
+export {clearDesktopMediaSessionDom as clearDesktopMediaSession};
+export {resetDomForTests as __resetDesktopMediaSessionForTests};
+export {buildMediaSessionArtwork, resolveArtworkSrcForMediaSession} from './desktopMediaSessionArtwork';
 
 export function setDesktopMediaSessionMetadata(params: {
   title: string;
@@ -22,10 +26,7 @@ export function setDesktopMediaSessionMetadata(params: {
     return;
   }
   const {title, artist, artworkUrl} = params;
-  const artwork =
-    artworkUrl != null && artworkUrl.length > 0
-      ? [{src: artworkUrl} as MediaImage]
-      : [];
+  const artwork = buildMediaSessionArtwork(artworkUrl);
   try {
     ms.metadata = new MediaMetadata({
       title,
@@ -101,29 +102,4 @@ export function syncDesktopMediaSessionPlayback(params: {
   if (durationMs != null) {
     setDesktopMediaSessionPositionState(positionMs, durationMs);
   }
-}
-
-export function clearDesktopMediaSession(): void {
-  const ms = getMediaSession();
-  if (!ms) {
-    return;
-  }
-  ms.metadata = null;
-  ms.playbackState = 'none';
-  if (ms.setPositionState) {
-    try {
-      ms.setPositionState({
-        duration: 0,
-        position: 0,
-        playbackRate: 1,
-      });
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-/** Vitest: clear session state; safe when `mediaSession` is mocked or missing. */
-export function __resetDesktopMediaSessionForTests(): void {
-  clearDesktopMediaSession();
 }

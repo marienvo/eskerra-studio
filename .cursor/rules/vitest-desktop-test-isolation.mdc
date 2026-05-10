@@ -19,7 +19,7 @@ Authoritative detail: `specs/adrs/adr-vitest-desktop-test-isolation.md`. PR chec
 
 **`setupFiles` run before test files.** Importing a module that loads `@tauri-apps/*` at **module scope** binds the real Tauri client **before** `vi.mock('@tauri-apps/...')` runs → errors like `Cannot read properties of undefined (reading 'invoke')`.
 
-- **Safe to import in setup** (no Tauri at top level): e.g. `artworkCacheDesktop`, `cleanNoteMarkdown`, `editorWorkspaceTabs`, `htmlClipboardToMarkdown`, `tableShellStaticPreviewStore` — only those wired today; extend cautiously.
+- **Safe to import in setup** (no Tauri at top level): e.g. `artworkCacheDesktop`, `cleanNoteMarkdown`, `desktopMediaSessionDom` (MediaSession DOM reset only), `editorWorkspaceTabs`, `htmlClipboardToMarkdown`, `tableShellStaticPreviewStore` — only those wired today; extend cautiously.
 - **Not wired in setup** (Tauri / `invoke` / `plugin-store` at import): e.g. `emojiUsageStore`, `emojiColonAutocomplete`, `rssFeedUrlCacheDesktop`, `podcastPhase1Desktop`, `htmlAudioPlayer`. They still export **`__resetForTests`**; call it from **`beforeEach` / `afterEach`** in tests that mock Tauri, or split caches into a Tauri-free module if you need global reset.
 
 ## New module-scoped mutable state
