@@ -2,12 +2,26 @@
 
 use sha2::{Digest, Sha256};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 /// Max artwork download size (bytes).
 const ARTWORK_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const ARTWORK_FETCH_TIMEOUT_SECS: u64 = 5;
+
+/// Ensures concurrent artwork downloads for the same URL do not share one `.part` path (PID alone is not unique).
+static ARTWORK_PART_TMP_NONCE: AtomicU64 = AtomicU64::new(0);
+
+fn next_artwork_part_tmp_path(cache_dir: &Path, digest: &str) -> std::path::PathBuf {
+    let nonce = ARTWORK_PART_TMP_NONCE.fetch_add(1, Ordering::Relaxed);
+    cache_dir.join(format!(
+        ".{}.{}.{}.part",
+        digest,
+        std::process::id(),
+        nonce
+    ))
+}
 
 fn artwork_cache_digest(url: &str) -> String {
     let d = Sha256::digest(url.as_bytes());
@@ -152,7 +166,7 @@ pub async fn media_cache_artwork(app: AppHandle, url: String) -> Result<String, 
         return file_uri_for_path(&dest);
     }
 
-    let tmp = cache_dir.join(format!(".{}.{}.part", digest, std::process::id()));
+    let tmp = next_artwork_part_tmp_path(&cache_dir, &digest);
     stream_artwork_to_file_capped(&mut res, &tmp, ARTWORK_MAX_BYTES).await?;
     match std::fs::rename(&tmp, &dest) {
         Ok(()) => file_uri_for_path(&dest),
@@ -169,7 +183,10 @@ pub async fn media_cache_artwork(app: AppHandle, url: String) -> Result<String, 
 
 #[cfg(test)]
 mod tests {
-    use super::{add_streamed_bytes, artwork_cache_digest, extension_from_content_type};
+    use super::{
+        add_streamed_bytes, artwork_cache_digest, extension_from_content_type,
+        next_artwork_part_tmp_path,
+    };
 
     #[test]
     fn digest_is_sixteen_hex_chars() {
@@ -196,6 +213,17 @@ mod tests {
         let max = 10u64;
         assert_eq!(add_streamed_bytes(0, 10, max).unwrap(), 10);
         assert_eq!(add_streamed_bytes(9, 1, max).unwrap(), 10);
+    }
+
+    #[test]
+    fn part_tmp_paths_differ_for_concurrent_download_pattern() {
+        let dir = std::path::Path::new("/tmp");
+        let digest = artwork_cache_digest("https://example.com/cover.png");
+        let a = next_artwork_part_tmp_path(dir, &digest);
+        let b = next_artwork_part_tmp_path(dir, &digest);
+        assert_ne!(a, b);
+        assert!(a.to_string_lossy().ends_with(".part"));
+        assert!(b.to_string_lossy().ends_with(".part"));
     }
 
     #[test]
