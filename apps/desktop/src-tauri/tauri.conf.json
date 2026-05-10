@@ -11,6 +11,7 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "enableGTKAppId": true,
     "macOSPrivateApi": true,
     "withGlobalTauri": true,
     "windows": [
@@ -69,6 +70,7 @@
       "rpm": {
         "desktopTemplate": "linux/eskerra.desktop.hbs",
         "files": {
+          "/usr/share/applications/com.eskerra.desktop.desktop": "linux/com.eskerra.desktop.desktop",
           "/usr/share/metainfo/eskerra.metainfo.xml": "metainfo/eskerra.metainfo.xml",
           "/usr/share/eskerra/screenshot.png": "../../../assets/screenshot.png"
         }

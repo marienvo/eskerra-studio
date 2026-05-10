@@ -4,6 +4,8 @@ mod media;
 mod r2_http;
 mod tiling;
 #[cfg(target_os = "linux")]
+mod linux_app_identity;
+#[cfg(target_os = "linux")]
 mod tiling_gdk;
 mod tiling_score;
 mod vault;
@@ -63,6 +65,8 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            #[cfg(target_os = "linux")]
+            linux_app_identity::apply_linux_app_identity_branding();
             vault_watch::setup_vault_watch(app)?;
             Ok(())
         })
