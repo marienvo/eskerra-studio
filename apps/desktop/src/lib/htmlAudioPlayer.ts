@@ -286,7 +286,7 @@ export class HtmlAudioPlayer implements AudioPlayer {
       this.scheduleBufferingEval();
       return;
     }
-    if (positionMs > this.lastKnownPositionMs || positionMs < this.lastKnownPositionMs) {
+    if (positionMs !== this.lastKnownPositionMs) {
       this.lastKnownPositionMs = positionMs;
       this.lastAdvanceAtMs = now;
       this.stuckHold = false;
