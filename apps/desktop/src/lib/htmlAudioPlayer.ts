@@ -380,11 +380,10 @@ export class HtmlAudioPlayer implements AudioPlayer {
       return;
     }
     this.currentTrack = {...this.currentTrack, artwork: coverUrl};
-    const durationSec = this.audio.duration;
-    const durationMs = Number.isFinite(durationSec) ? clampMs(durationSec * 1000) : 1;
+    const durationMs = this.durationMsOrNull();
     this.syncMediaSessionFull(
       this.currentTrack,
-      durationMs > 0 ? durationMs : null,
+      durationMs != null && durationMs > 0 ? durationMs : null,
       clampMs(this.audio.currentTime * 1000),
       !this.audio.paused,
     );
