@@ -7,7 +7,6 @@ import {
 } from '@eskerra/core';
 import {useMachine} from '@xstate/react';
 import {
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -21,7 +20,7 @@ import {clearPlaylistEntry, writePlaylistEntry} from '../lib/vaultBootstrap';
 import type {DesktopPlaybackContext} from './desktopPlaybackContext';
 import {useDesktopPlaybackCatalogProbe} from './useDesktopPlaybackCatalogProbe';
 import {useDesktopPlaybackNativeIdleStop, useDesktopPlaybackNativeListeners} from './useDesktopPlaybackNativeListeners';
-import {useDesktopPlaybackPlaylistSync} from './useDesktopPlaybackPlaylistSync';
+import {useDesktopPlaybackLastPrimedResetOnVaultRoot, useDesktopPlaybackPlaylistSync} from './useDesktopPlaybackPlaylistSync';
 import {useDesktopPlaybackSessionActions} from './useDesktopPlaybackSessionActions';
 import {useDesktopPlaybackTransportActions} from './useDesktopPlaybackTransportActions';
 import type {
@@ -208,9 +207,7 @@ export function useDesktopPodcastPlayback({
   const {markEpisodePlayed, playEpisode, waitForPersistFlushed, dismissNowPlaying} =
     useDesktopPlaybackSessionActions(playbackCtx, {actorRef, vaultRoot, fs});
 
-  useEffect(() => {
-    lastPrimedPlaylistKeyRef.current = null;
-  }, [vaultRoot]);
+  useDesktopPlaybackLastPrimedResetOnVaultRoot(lastPrimedPlaylistKeyRef, vaultRoot);
 
   useDesktopPlaybackNativeListeners(send);
 

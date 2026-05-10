@@ -5,7 +5,7 @@ import {
   type PodcastPlayerPlaybackState,
   type VaultFilesystem,
 } from '@eskerra/core';
-import {useEffect, useRef} from 'react';
+import {useEffect, useRef, type MutableRefObject} from 'react';
 
 import {getDesktopAudioPlayer} from '../lib/htmlAudioPlayer';
 import {runDesktopPrimedPlaylistNativeResume} from '../lib/podcasts/desktopPlaybackPriming';
@@ -23,6 +23,17 @@ const NEAR_END_SUBSTATES = new Set<PodcastPlayerPlaybackState>([
   'nearEndPaused',
   'ended',
 ]);
+
+/** Clears primed-resume key when the vault root changes (call before native listeners; see orchestrator order). */
+export function useDesktopPlaybackLastPrimedResetOnVaultRoot(
+  lastPrimedPlaylistKeyRef: MutableRefObject<string | null>,
+  vaultRoot: string | null,
+): void {
+  useEffect(() => {
+    lastPrimedPlaylistKeyRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lastPrimedPlaylistKeyRef is stable
+  }, [vaultRoot]);
+}
 
 export function useDesktopPlaybackPlaylistSync(
   ctx: DesktopPlaybackContext,
