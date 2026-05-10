@@ -1,0 +1,239 @@
+import {buildPlaylistEntryForWrite, MIN_PROGRESS_MS, type PlaylistEntry} from '@eskerra/core';
+import {useCallback} from 'react';
+
+import {getDesktopAudioPlayer} from '../lib/htmlAudioPlayer';
+import {clampSeekMs, clampSeekToMs} from '../lib/podcasts/desktopPlaybackSeekHelpers';
+import type {PodcastEpisode} from '../lib/podcasts/podcastTypes';
+import {clearPlaylistEntry} from '../lib/vaultBootstrap';
+import type {DesktopPlaybackContext} from './desktopPlaybackContext';
+
+export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) {
+  const {
+    send,
+    snapshotRef,
+    vaultRootRef,
+    fsRef,
+    episodesByIdRef,
+    deviceIdRef,
+    onPlaylistDiskUpdatedRef,
+    lastPrimedPlaylistKeyRef,
+    onError,
+  } = ctx;
+
+  const queuePersistFromProgress = useCallback(
+    (episode: PodcastEpisode, positionMs: number, durationMs: number | null) => {
+      const deviceId = deviceIdRef.current;
+      if (!deviceId) {
+        onError('Device id missing from local settings.');
+        return;
+      }
+      const machineCtx = snapshotRef.current.context;
+      const base: PlaylistEntry =
+        machineCtx.playlistBaseline?.episodeId === episode.id
+          ? machineCtx.playlistBaseline
+          : {
+              durationMs,
+              episodeId: episode.id,
+              mp3Url: episode.mp3Url,
+              positionMs: 0,
+              updatedAt: 0,
+              playbackOwnerId: '',
+              controlRevision: 0,
+            };
+      const entry = buildPlaylistEntryForWrite(
+        base,
+        {
+          durationMs,
+          episodeId: episode.id,
+          mp3Url: episode.mp3Url,
+          positionMs,
+        },
+        deviceId,
+        Date.now(),
+      );
+      send({type: 'QUEUE_PERSIST', entry});
+    },
+    [onError, send],
+  );
+
+  const seekBy = useCallback(
+    async (deltaMs: number) => {
+      const ep = snapshotRef.current.context.episode
+        ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
+        : null;
+      if (!ep) {
+        return;
+      }
+      send({type: 'SEEK_START'});
+      try {
+        const p = getDesktopAudioPlayer();
+        const progress = await p.getProgress();
+        const next = clampSeekMs(
+          progress.positionMs,
+          progress.durationMs,
+          deltaMs,
+        );
+        await p.seekTo(next);
+        const latest = await p.getProgress();
+
+        const root = vaultRootRef.current;
+        if (!root) {
+          return;
+        }
+
+        if (latest.positionMs < MIN_PROGRESS_MS) {
+          await p.stop();
+          await clearPlaylistEntry(root, fsRef.current);
+          lastPrimedPlaylistKeyRef.current = null;
+          send({type: 'RESET'});
+          onPlaylistDiskUpdatedRef.current?.();
+          return;
+        }
+
+        queuePersistFromProgress(ep, latest.positionMs, latest.durationMs);
+      } catch (e) {
+        onError(e instanceof Error ? e.message : 'Could not seek playback.');
+      } finally {
+        send({type: 'SEEK_END'});
+      }
+    },
+    [onError, queuePersistFromProgress, send],
+  );
+
+  const seekTo = useCallback(
+    async (absoluteMs: number) => {
+      if (!vaultRootRef.current) {
+        return;
+      }
+      const ep = snapshotRef.current.context.episode
+        ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
+        : null;
+      if (!ep) {
+        return;
+      }
+      send({type: 'SEEK_START'});
+      try {
+        const p = getDesktopAudioPlayer();
+        const progress = await p.getProgress();
+        const target = clampSeekToMs(absoluteMs, progress.durationMs);
+        await p.seekTo(target);
+        const latest = await p.getProgress();
+
+        const root = vaultRootRef.current;
+        if (!root) {
+          return;
+        }
+
+        if (latest.positionMs < MIN_PROGRESS_MS) {
+          await p.stop();
+          await clearPlaylistEntry(root, fsRef.current);
+          lastPrimedPlaylistKeyRef.current = null;
+          send({type: 'RESET'});
+          onPlaylistDiskUpdatedRef.current?.();
+          return;
+        }
+
+        queuePersistFromProgress(ep, latest.positionMs, latest.durationMs);
+      } catch (e) {
+        onError(e instanceof Error ? e.message : 'Could not seek playback.');
+      } finally {
+        send({type: 'SEEK_END'});
+      }
+    },
+    [onError, queuePersistFromProgress, send],
+  );
+
+  const pauseIfPlaying = useCallback(async () => {
+    const p = getDesktopAudioPlayer();
+    const st = await p.getState();
+    if (st !== 'playing') {
+      return;
+    }
+    const ep = snapshotRef.current.context.episode
+      ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
+      : null;
+    if (!ep) {
+      return;
+    }
+
+    await p.pause();
+    const latestProgress = await p.getProgress();
+
+    const root = vaultRootRef.current;
+    if (!root) {
+      return;
+    }
+    const deviceId = deviceIdRef.current;
+    if (!deviceId) {
+      onError('Device id missing from local settings.');
+      return;
+    }
+
+    try {
+      if (latestProgress.positionMs < MIN_PROGRESS_MS) {
+        await clearPlaylistEntry(root, fsRef.current);
+        onPlaylistDiskUpdatedRef.current?.();
+        return;
+      }
+
+      queuePersistFromProgress(
+        ep,
+        latestProgress.positionMs,
+        latestProgress.durationMs,
+      );
+    } catch (e) {
+      onError(
+        e instanceof Error ? e.message : 'Could not save playback position.',
+      );
+    }
+  }, [onError, queuePersistFromProgress]);
+
+  const togglePause = useCallback(async () => {
+    const p = getDesktopAudioPlayer();
+    const st = await p.getState();
+    const ep = snapshotRef.current.context.episode
+      ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
+      : null;
+    if (!ep) {
+      return;
+    }
+
+    if (st === 'playing') {
+      await pauseIfPlaying();
+    } else if (
+      st === 'paused' ||
+      st === 'ended' ||
+      st === 'loading' ||
+      st === 'error'
+    ) {
+      await p.resume();
+      const resumeProgress = await p.getProgress();
+
+      const resumeDeviceId = deviceIdRef.current;
+      if (!resumeDeviceId) {
+        onError('Device id missing from local settings.');
+        return;
+      }
+
+      try {
+        queuePersistFromProgress(
+          ep,
+          resumeProgress.positionMs,
+          resumeProgress.durationMs,
+        );
+      } catch (e) {
+        onError(
+          e instanceof Error ? e.message : 'Could not save playback position.',
+        );
+      }
+    }
+  }, [onError, queuePersistFromProgress, pauseIfPlaying]);
+
+  return {
+    queuePersistFromProgress,
+    seekBy,
+    seekTo,
+    pauseIfPlaying,
+    togglePause,
+  };
+}

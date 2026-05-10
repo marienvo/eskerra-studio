@@ -1,12 +1,9 @@
 import {
-  buildPlaylistEntryForWrite,
   getPlaybackSubstate,
   getPlaybackTransportPlayControl,
   isPersistIdle,
   isPlaybackTransportBusy,
-  MIN_PROGRESS_MS,
   type PlaybackTransportPlayControl,
-  type PlaylistEntry,
   podcastPlayerMachine,
   type PodcastPlayerDeps,
   type PodcastPlayerPlaybackState,
@@ -30,25 +27,16 @@ import {
   markDesktopEpisodeAsPlayed,
   markDesktopEpisodeAsPlayedAndRefreshCatalog,
 } from '../lib/podcasts/markEpisodeAsPlayedDesktop';
-import {runDesktopPrimedPlaylistNativeResume} from '../lib/podcasts/desktopPlaybackPriming';
 import {
   runDesktopPlayEpisodeUserAction,
   type PlaylistMachineContext,
 } from '../lib/podcasts/desktopPlaybackPlayAction';
-import {clampSeekMs, clampSeekToMs, episodeToSnapshot} from '../lib/podcasts/desktopPlaybackSeekHelpers';
 import type {PodcastEpisode} from '../lib/podcasts/podcastTypes';
-import {
-  clearPlaylistEntry,
-  readPlaylistEntry,
-  writePlaylistEntry,
-} from '../lib/vaultBootstrap';
-
-const NEAR_END_SUBSTATES = new Set<PodcastPlayerPlaybackState>([
-  'markingNearEnd',
-  'nearEndPlaying',
-  'nearEndPaused',
-  'ended',
-]);
+import {clearPlaylistEntry, writePlaylistEntry} from '../lib/vaultBootstrap';
+import type {DesktopPlaybackContext} from './desktopPlaybackContext';
+import {useDesktopPlaybackNativeIdleStop, useDesktopPlaybackNativeListeners} from './useDesktopPlaybackNativeListeners';
+import {useDesktopPlaybackPlaylistSync} from './useDesktopPlaybackPlaylistSync';
+import {useDesktopPlaybackTransportActions} from './useDesktopPlaybackTransportActions';
 
 export type DesktopPlayerLabel = PodcastPlayerPlaybackState | 'nativeLoading';
 
@@ -132,7 +120,6 @@ export function useDesktopPodcastPlayback({
   const deviceIdRef = useRef(deviceInstanceId.trim());
   const lastPrimedPlaylistKeyRef = useRef<string | null>(null);
   const userPlaybackDepthRef = useRef(0);
-  const nearEndNonceHandledRef = useRef(0);
 
   useLayoutEffect(() => {
     vaultRootRef.current = vaultRoot;
@@ -276,245 +263,40 @@ export function useDesktopPodcastPlayback({
 
   const seekDisabled = isPlaybackTransportBusy(snapCtx);
 
+  const playbackCtx: DesktopPlaybackContext = {
+    send,
+    snapshotRef,
+    vaultRootRef,
+    fsRef,
+    episodesByIdRef,
+    consumeEpisodesRef,
+    deviceIdRef,
+    onPlaylistDiskUpdatedRef,
+    lastPrimedPlaylistKeyRef,
+    userPlaybackDepthRef,
+    onError,
+  };
+
   useEffect(() => {
     lastPrimedPlaylistKeyRef.current = null;
   }, [vaultRoot]);
 
-  useEffect(() => {
-    const player = getDesktopAudioPlayer();
-    const unsub = player.addStateListener(s => {
-      send({type: 'NATIVE', state: s});
-    });
-    return () => {
-      unsub();
-    };
-  }, [send]);
+  useDesktopPlaybackNativeListeners(send);
 
-  useEffect(() => {
-    const player = getDesktopAudioPlayer();
-    const unsubProg = player.addProgressListener(p => {
-      send({type: 'PROGRESS', positionMs: p.positionMs, durationMs: p.durationMs});
-    });
-    return () => {
-      unsubProg();
-    };
-  }, [send]);
-
-  useEffect(() => {
-    const player = getDesktopAudioPlayer();
-    const unsub = player.addBufferingListener(buffering => {
-      send({type: 'BUFFERING', buffering});
-    });
-    return () => {
-      unsub();
-    };
-  }, [send]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!vaultRoot) {
-      queueMicrotask(() => {
-        if (!cancelled) {
-          send({type: 'RESET'});
-        }
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
-    readPlaylistEntry(vaultRoot, fs)
-      .then(async pl => {
-        if (cancelled) {
-          return;
-        }
-        const st = await getDesktopAudioPlayer().getState();
-        if (st === 'playing' || userPlaybackDepthRef.current > 0) {
-          return;
-        }
-        if (!pl) {
-          const snap = snapshotRef.current;
-          const isNearEnd =
-            snap.context.inNearEndZone ||
-            NEAR_END_SUBSTATES.has(getPlaybackSubstate(snap));
-          if (isNearEnd) {
-            return;
-          }
-          send({type: 'RESET'});
-          return;
-        }
-        const catalogEp = consumeEpisodesRef.current.find(e => e.id === pl.episodeId);
-        if (!catalogEp || catalogEp.isListened) {
-          clearPlaylistEntry(vaultRoot, fs).finally(() => {
-            onPlaylistDiskUpdatedRef.current?.();
-          });
-          send({type: 'RESET'});
-          return;
-        }
-        send({
-          type: 'HYDRATE',
-          episode: episodeToSnapshot(catalogEp),
-          entry: pl,
-          baseline: pl,
-        });
-      })
-      .catch(() => {
-        if (!cancelled) {
-          send({type: 'RESET'});
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [vaultRoot, fs, playlistRevision, send]);
-
-  useEffect(() => {
-    if (snapCtx.nearEndResyncNonce === nearEndNonceHandledRef.current) {
-      return;
-    }
-    if (snapCtx.inNearEndZone || !snapCtx.episode || !vaultRoot) {
-      nearEndNonceHandledRef.current = snapCtx.nearEndResyncNonce;
-      return;
-    }
-    const deviceId = deviceIdRef.current;
-    if (!deviceId) {
-      nearEndNonceHandledRef.current = snapCtx.nearEndResyncNonce;
-      return;
-    }
-    const ep = episodesById.get(snapCtx.episode.id);
-    if (!ep) {
-      nearEndNonceHandledRef.current = snapCtx.nearEndResyncNonce;
-      return;
-    }
-    nearEndNonceHandledRef.current = snapCtx.nearEndResyncNonce;
-    const ctx = snapshotRef.current.context;
-    const base: PlaylistEntry =
-      ctx.playlistBaseline?.episodeId === ep.id
-        ? ctx.playlistBaseline
-        : {
-            durationMs: ctx.durationMs,
-            episodeId: ep.id,
-            mp3Url: ep.mp3Url,
-            positionMs: 0,
-            updatedAt: 0,
-            playbackOwnerId: '',
-            controlRevision: 0,
-          };
-    const entry = buildPlaylistEntryForWrite(
-      base,
-      {
-        durationMs: ctx.durationMs,
-        episodeId: ep.id,
-        mp3Url: ep.mp3Url,
-        positionMs: ctx.positionMs,
-      },
-      deviceId,
-      Date.now(),
-    );
-    send({type: 'QUEUE_PERSIST', entry});
-  }, [
-    snapCtx.nearEndResyncNonce,
-    snapCtx.inNearEndZone,
-    snapCtx.episode,
-    snapCtx.durationMs,
-    snapCtx.positionMs,
+  useDesktopPlaybackPlaylistSync(playbackCtx, {
     vaultRoot,
-    episodesById,
-    send,
-  ]);
-
-  useEffect(() => {
-    if (!vaultRoot || !consumeCatalogReady) {
-      return;
-    }
-    if (playbackSub !== 'primed') {
-      return;
-    }
-    if (userPlaybackDepthRef.current > 0) {
-      return;
-    }
-    const pl = snapCtx.playlistBaseline;
-    const epSnap = snapCtx.episode;
-    if (!pl || !epSnap) {
-      return;
-    }
-    const catalogEp = episodesByIdRef.current.get(pl.episodeId);
-    if (!catalogEp || catalogEp.isListened) {
-      return;
-    }
-    const trackUrl = catalogEp.mp3Url;
-    const key = `${catalogEp.id}:${pl.positionMs}:${trackUrl}`;
-    if (key === lastPrimedPlaylistKeyRef.current) {
-      return;
-    }
-
-    let cancelled = false;
-    void runDesktopPrimedPlaylistNativeResume({
-      isCancelled: () => cancelled,
-      pl,
-      catalogEp,
-      key,
-      lastPrimedKeyRef: lastPrimedPlaylistKeyRef,
-      onError: (message: string) => {
-        onError(message);
-      },
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    vaultRoot,
+    fs,
+    playlistRevision,
     consumeCatalogReady,
     playbackSub,
-    snapCtx.playlistBaseline,
-    snapCtx.episode,
-    onError,
-  ]);
+    snapCtx,
+    episodesById,
+  });
 
-  useEffect(() => {
-    if (playbackSub !== 'idle' || snapCtx.episode != null) {
-      return;
-    }
-    getDesktopAudioPlayer()
-      .stop()
-      .catch(() => undefined);
-  }, [playbackSub, snapCtx.episode]);
+  useDesktopPlaybackNativeIdleStop(playbackSub, snapCtx.episode);
 
-  const queuePersistFromProgress = useCallback(
-    (episode: PodcastEpisode, positionMs: number, durationMs: number | null) => {
-      const deviceId = deviceIdRef.current;
-      if (!deviceId) {
-        onError('Device id missing from local settings.');
-        return;
-      }
-      const ctx = snapshotRef.current.context;
-      const base: PlaylistEntry =
-        ctx.playlistBaseline?.episodeId === episode.id
-          ? ctx.playlistBaseline
-          : {
-              durationMs,
-              episodeId: episode.id,
-              mp3Url: episode.mp3Url,
-              positionMs: 0,
-              updatedAt: 0,
-              playbackOwnerId: '',
-              controlRevision: 0,
-            };
-      const entry = buildPlaylistEntryForWrite(
-        base,
-        {
-          durationMs,
-          episodeId: episode.id,
-          mp3Url: episode.mp3Url,
-          positionMs,
-        },
-        deviceId,
-        Date.now(),
-      );
-      send({type: 'QUEUE_PERSIST', entry});
-    },
-    [onError, send],
-  );
+  const {seekBy, seekTo, pauseIfPlaying, togglePause} =
+    useDesktopPlaybackTransportActions(playbackCtx);
 
   const playEpisode = useCallback(
     async (ep: PodcastEpisode) => {
@@ -546,138 +328,6 @@ export function useDesktopPodcastPlayback({
     [vaultRoot, fs, onError, send],
   );
 
-  const seekBy = useCallback(
-    async (deltaMs: number) => {
-      const ep = snapshotRef.current.context.episode
-        ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
-        : null;
-      if (!ep) {
-        return;
-      }
-      send({type: 'SEEK_START'});
-      try {
-        const p = getDesktopAudioPlayer();
-        const progress = await p.getProgress();
-        const next = clampSeekMs(
-          progress.positionMs,
-          progress.durationMs,
-          deltaMs,
-        );
-        await p.seekTo(next);
-        const latest = await p.getProgress();
-
-        const root = vaultRootRef.current;
-        if (!root) {
-          return;
-        }
-
-        if (latest.positionMs < MIN_PROGRESS_MS) {
-          await p.stop();
-          await clearPlaylistEntry(root, fsRef.current);
-          lastPrimedPlaylistKeyRef.current = null;
-          send({type: 'RESET'});
-          onPlaylistDiskUpdatedRef.current?.();
-          return;
-        }
-
-        queuePersistFromProgress(ep, latest.positionMs, latest.durationMs);
-      } catch (e) {
-        onError(e instanceof Error ? e.message : 'Could not seek playback.');
-      } finally {
-        send({type: 'SEEK_END'});
-      }
-    },
-    [onError, queuePersistFromProgress, send],
-  );
-
-  const seekTo = useCallback(
-    async (absoluteMs: number) => {
-      if (!vaultRootRef.current) {
-        return;
-      }
-      const ep = snapshotRef.current.context.episode
-        ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
-        : null;
-      if (!ep) {
-        return;
-      }
-      send({type: 'SEEK_START'});
-      try {
-        const p = getDesktopAudioPlayer();
-        const progress = await p.getProgress();
-        const target = clampSeekToMs(absoluteMs, progress.durationMs);
-        await p.seekTo(target);
-        const latest = await p.getProgress();
-
-        const root = vaultRootRef.current;
-        if (!root) {
-          return;
-        }
-
-        if (latest.positionMs < MIN_PROGRESS_MS) {
-          await p.stop();
-          await clearPlaylistEntry(root, fsRef.current);
-          lastPrimedPlaylistKeyRef.current = null;
-          send({type: 'RESET'});
-          onPlaylistDiskUpdatedRef.current?.();
-          return;
-        }
-
-        queuePersistFromProgress(ep, latest.positionMs, latest.durationMs);
-      } catch (e) {
-        onError(e instanceof Error ? e.message : 'Could not seek playback.');
-      } finally {
-        send({type: 'SEEK_END'});
-      }
-    },
-    [onError, queuePersistFromProgress, send],
-  );
-
-  const pauseIfPlaying = useCallback(async () => {
-    const p = getDesktopAudioPlayer();
-    const st = await p.getState();
-    if (st !== 'playing') {
-      return;
-    }
-    const ep = snapshotRef.current.context.episode
-      ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
-      : null;
-    if (!ep) {
-      return;
-    }
-
-    await p.pause();
-    const latestProgress = await p.getProgress();
-
-    const root = vaultRootRef.current;
-    if (!root) {
-      return;
-    }
-    const deviceId = deviceIdRef.current;
-    if (!deviceId) {
-      onError('Device id missing from local settings.');
-      return;
-    }
-
-    try {
-      if (latestProgress.positionMs < MIN_PROGRESS_MS) {
-        await clearPlaylistEntry(root, fsRef.current);
-        onPlaylistDiskUpdatedRef.current?.();
-        return;
-      }
-
-      queuePersistFromProgress(
-        ep,
-        latestProgress.positionMs,
-        latestProgress.durationMs,
-      );
-    } catch (e) {
-      onError(
-        e instanceof Error ? e.message : 'Could not save playback position.',
-      );
-    }
-  }, [onError, queuePersistFromProgress]);
-
   const waitForPersistFlushed = useCallback(async (timeoutMs: number) => {
     try {
       await waitFor(actorRef, snap => isPersistIdle(snap), {timeout: timeoutMs});
@@ -685,47 +335,6 @@ export function useDesktopPodcastPlayback({
       /* timeout or actor stopped — continue shutdown */
     }
   }, [actorRef]);
-
-  const togglePause = useCallback(async () => {
-    const p = getDesktopAudioPlayer();
-    const st = await p.getState();
-    const ep = snapshotRef.current.context.episode
-      ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
-      : null;
-    if (!ep) {
-      return;
-    }
-
-    if (st === 'playing') {
-      await pauseIfPlaying();
-    } else if (
-      st === 'paused' ||
-      st === 'ended' ||
-      st === 'loading' ||
-      st === 'error'
-    ) {
-      await p.resume();
-      const resumeProgress = await p.getProgress();
-
-      const resumeDeviceId = deviceIdRef.current;
-      if (!resumeDeviceId) {
-        onError('Device id missing from local settings.');
-        return;
-      }
-
-      try {
-        queuePersistFromProgress(
-          ep,
-          resumeProgress.positionMs,
-          resumeProgress.durationMs,
-        );
-      } catch (e) {
-        onError(
-          e instanceof Error ? e.message : 'Could not save playback position.',
-        );
-      }
-    }
-  }, [onError, queuePersistFromProgress, pauseIfPlaying]);
 
   const dismissNowPlaying = useCallback(async () => {
     const root = vaultRootRef.current;
