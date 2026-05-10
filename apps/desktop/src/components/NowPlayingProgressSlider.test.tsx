@@ -16,6 +16,7 @@ describe('NowPlayingProgressSlider', () => {
 
     const input = screen.getByRole('slider', {name: 'Playback progress'}) as HTMLInputElement;
     expect(input.getAttribute('max')).toBe('60000');
+    expect(input.getAttribute('step')).toBe('5000');
     expect(Number(input.value)).toBe(30_000);
   });
 
@@ -66,5 +67,22 @@ describe('NowPlayingProgressSlider', () => {
     input = screen.getByRole('slider', {name: 'Playback progress'}) as HTMLInputElement;
     expect(input.disabled).toBe(true);
     expect(Number(input.value)).toBe(0);
+  });
+
+  it('does not call onSeek on pointer release when the value did not change', () => {
+    const onSeek = vi.fn();
+    render(
+      <NowPlayingProgressSlider
+        disabled={false}
+        durationMs={60_000}
+        onSeek={onSeek}
+        positionMs={30_000}
+      />,
+    );
+
+    const input = screen.getByRole('slider', {name: 'Playback progress'});
+    fireEvent.pointerDown(input);
+    fireEvent.pointerUp(input);
+    expect(onSeek).not.toHaveBeenCalled();
   });
 });

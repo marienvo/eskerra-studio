@@ -1408,6 +1408,9 @@ a:focus:not(:focus-visible) {
   font-size: 0.72rem;
   line-height: 1.22;
   font-weight: 400;
+  /* Container for `@container` hide of the progress slider when this row is too narrow. */
+  container-name: editor-workspace-now-playing;
+  container-type: inline-size;
 }
 
 .editor-workspace-toolbar__now-playing-inner {
@@ -1443,7 +1446,7 @@ a:focus:not(:focus-visible) {
   font-weight: 400;
 }
 
-/* Now-playing scrubber: fixed width; hidden below viewport width (see plan desktop-now-playing-progress-slider). */
+/* Now-playing scrubber: fixed width; hidden when the now-playing row is too narrow (container query). */
 .now-playing-progress-slider {
   --now-playing-slider-width: 180px;
   box-sizing: border-box;
@@ -1522,7 +1525,7 @@ a:focus:not(:focus-visible) {
   box-shadow: none;
 }
 
-@media (max-width: 1100px) {
+@container editor-workspace-now-playing (max-width: 560px) {
   .now-playing-progress-slider {
     display: none;
   }

@@ -27,6 +27,8 @@ export function NowPlayingProgressSlider({
   const [dragMs, setDragMs] = useState(0);
   const scrubbingRef = useRef(false);
   const pendingMsRef = useRef(0);
+  /** Playback position (ms) when the current pointer scrub started; skip `onSeek` if unchanged at release. */
+  const scrubOriginMsRef = useRef(0);
 
   let displayMs: number;
   if (hardDisabled) {
@@ -53,6 +55,7 @@ export function NowPlayingProgressSlider({
     if (hardDisabled) {
       return;
     }
+    scrubOriginMsRef.current = Math.min(maxMs, Math.max(0, positionMs));
     scrubbingRef.current = true;
     applyPendingToState(Number(e.currentTarget.value));
   };
@@ -63,7 +66,9 @@ export function NowPlayingProgressSlider({
     }
     scrubbingRef.current = false;
     setDragging(false);
-    onSeek(pendingMsRef.current);
+    if (pendingMsRef.current !== scrubOriginMsRef.current) {
+      onSeek(pendingMsRef.current);
+    }
   };
 
   const handleInput = (e: React.FormEvent<HTMLInputElement>) => {
@@ -80,7 +85,11 @@ export function NowPlayingProgressSlider({
     applyPendingToState(Number(e.currentTarget.value));
     if (!scrubbingRef.current) {
       setDragging(false);
-      onSeek(pendingMsRef.current);
+      const next = pendingMsRef.current;
+      const cur = Math.min(maxMs, Math.max(0, positionMs));
+      if (next !== cur) {
+        onSeek(next);
+      }
     }
   };
 
@@ -98,7 +107,7 @@ export function NowPlayingProgressSlider({
         onPointerCancel={finishScrubIfNeeded}
         onPointerDown={handlePointerDown}
         onPointerUp={finishScrubIfNeeded}
-        step={1000}
+        step={5000}
         type="range"
         value={displayMs}
       />
