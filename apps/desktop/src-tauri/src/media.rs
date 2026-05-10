@@ -81,7 +81,14 @@ async fn stream_artwork_to_file_capped(
         };
         let Some(chunk) = chunk else { break };
 
-        written = add_streamed_bytes(written, chunk.len(), max_bytes)?;
+        written = match add_streamed_bytes(written, chunk.len(), max_bytes) {
+            Ok(n) => n,
+            Err(e) => {
+                drop(file);
+                let _ = std::fs::remove_file(dest);
+                return Err(e);
+            }
+        };
         if let Err(e) = file.write_all(&chunk) {
             drop(file);
             let _ = std::fs::remove_file(dest);
