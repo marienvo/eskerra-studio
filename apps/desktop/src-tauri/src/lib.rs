@@ -12,7 +12,6 @@ mod vault_frontmatter_index;
 mod vault_search;
 mod vault_search_index;
 mod vault_watch;
-mod window_state_disk;
 
 use vault::VaultRootState;
 use vault_frontmatter_index::VaultFrontmatterIndexState;
@@ -65,11 +64,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(
-            tauri_plugin_window_state::Builder::default()
-                .skip_initial_state("main")
-                .build(),
-        )
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             #[cfg(target_os = "linux")]
             linux_app_identity::apply_linux_app_identity_branding();
@@ -101,7 +96,6 @@ pub fn run() {
             vault_frontmatter_index::vault_frontmatter_index_values_for_key,
             vault_frontmatter_index::vault_frontmatter_index_touch_paths,
             vault_watch::vault_start_watch,
-            window_state_disk::eskerra_peek_window_state_file,
             crash_log::eskerra_append_crash_log,
         ])
         .run(tauri::generate_context!())
