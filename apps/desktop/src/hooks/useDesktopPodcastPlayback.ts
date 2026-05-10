@@ -185,6 +185,10 @@ export function useDesktopPodcastPlayback({
 
   const seekDisabled = isPlaybackTransportBusy(snapCtx);
 
+  /**
+   * Recreated every render. Sub-hooks must destructure fields from `ctx` and must not list `ctx`
+   * itself in hook dependency arrays (only primitives / stable callbacks belong there).
+   */
   const playbackCtx: DesktopPlaybackContext = {
     send,
     sendRef,
