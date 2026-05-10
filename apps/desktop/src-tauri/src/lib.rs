@@ -41,11 +41,11 @@ fn prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
-/// Must run before `tauri::Builder` / WebKit spawn so `g_get_application_name()` is non-empty
-/// when WebKit builds `WebProcessCreationParameters` (MPRIS `Identity` on GNOME).
+/// Must run from `main()` before `tauri::Builder::run()` so WebKit sees a default
+/// [`GApplication`](https://docs.gtk.org/gio/class.Application.html) id and `g_get_application_name()`.
 #[cfg(target_os = "linux")]
-pub fn early_linux_glib_application_name_for_webkit() {
-    linux_app_identity::early_glib_application_name_for_webkit();
+pub fn early_linux_webkit_prerun() {
+    linux_app_identity::early_linux_webkit_prerun();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
