@@ -65,6 +65,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
         return;
       }
       send({type: 'SEEK_START'});
+      let needsSeekEnd = true;
       try {
         const p = getDesktopAudioPlayer();
         const progress = await p.getProgress();
@@ -85,6 +86,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
           await p.stop();
           await clearPlaylistEntry(root, fsRef.current);
           lastPrimedPlaylistKeyRef.current = null;
+          needsSeekEnd = false;
           send({type: 'RESET'});
           onPlaylistDiskUpdatedRef.current?.();
           return;
@@ -94,7 +96,9 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
       } catch (e) {
         onError(e instanceof Error ? e.message : 'Could not seek playback.');
       } finally {
-        send({type: 'SEEK_END'});
+        if (needsSeekEnd) {
+          send({type: 'SEEK_END'});
+        }
       }
     },
     [
@@ -122,6 +126,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
         return;
       }
       send({type: 'SEEK_START'});
+      let needsSeekEnd = true;
       try {
         const p = getDesktopAudioPlayer();
         const progress = await p.getProgress();
@@ -138,6 +143,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
           await p.stop();
           await clearPlaylistEntry(root, fsRef.current);
           lastPrimedPlaylistKeyRef.current = null;
+          needsSeekEnd = false;
           send({type: 'RESET'});
           onPlaylistDiskUpdatedRef.current?.();
           return;
@@ -147,7 +153,9 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
       } catch (e) {
         onError(e instanceof Error ? e.message : 'Could not seek playback.');
       } finally {
-        send({type: 'SEEK_END'});
+        if (needsSeekEnd) {
+          send({type: 'SEEK_END'});
+        }
       }
     },
     [
