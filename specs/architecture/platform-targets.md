@@ -17,7 +17,7 @@ This document records product and engineering decisions about which platforms Es
 
 - A **desktop companion app** ships as **Tauri** in this repository under `apps/desktop/`, sharing vault semantics and TypeScript core with Android.
 - The **primary** engineering and manual testing target is **Linux** (**Fedora Workstation**, **GNOME**). Builds may work on other OSes when upstream Tauri/tooling allows it; product commitments stay Linux-first.
-- OS media integration on Linux uses **MPRIS** (for example via **souvlaki**) so GNOME shell and hardware media keys can control playback.
+- OS media integration on Linux uses **MPRIS** as exposed by **WebKitGTK** from **`navigator.mediaSession`** (metadata, playback state, and **play** / **pause** actions), so GNOME shell and hardware media keys control the same session as the in-app **HTMLAudioElement**.
 
 ## Shipping artifacts: Android + Fedora RPM
 

@@ -1,8 +1,9 @@
 mod crash_log;
 mod link_rich_metadata;
-mod media;
 mod r2_http;
 mod tiling;
+#[cfg(target_os = "linux")]
+mod linux_app_identity;
 #[cfg(target_os = "linux")]
 mod tiling_gdk;
 mod tiling_score;
@@ -39,14 +40,20 @@ fn prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
+/// Must run from `main()` before `tauri::Builder::run()` so WebKit sees a default
+/// [`GApplication`](https://docs.gtk.org/gio/class.Application.html) id and `g_get_application_name()`.
+#[cfg(target_os = "linux")]
+pub fn early_linux_webkit_prerun() {
+    linux_app_identity::early_linux_webkit_prerun();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
         .manage(VaultRootState::default())
         .manage(VaultSearchSessionState::default())
         .manage(VaultSearchIndexState::default())
-        .manage(VaultFrontmatterIndexState::default())
-        .manage(media::MediaSessionState::default());
+        .manage(VaultFrontmatterIndexState::default());
 
     #[cfg(not(mobile))]
     {
@@ -64,7 +71,8 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            media::init_media_session(app)?;
+            #[cfg(target_os = "linux")]
+            linux_app_identity::apply_linux_app_identity_branding();
             vault_watch::setup_vault_watch(app)?;
             Ok(())
         })
@@ -95,10 +103,6 @@ pub fn run() {
             vault_watch::vault_start_watch,
             window_state_disk::eskerra_peek_window_state_file,
             crash_log::eskerra_append_crash_log,
-            media::media_set_metadata,
-            media::media_set_playback,
-            media::media_clear_session,
-            media::media_cache_artwork,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

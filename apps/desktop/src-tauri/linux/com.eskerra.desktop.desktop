@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Eskerra
+Exec=eskerra
+Icon=com.eskerra.desktop
+StartupWMClass=com.eskerra.desktop
+Terminal=false
+NoDisplay=true

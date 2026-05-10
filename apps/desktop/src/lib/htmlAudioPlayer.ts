@@ -1,4 +1,3 @@
-import {invoke} from '@tauri-apps/api/core';
 import type {
   AudioPlayer,
   AudioTrack,
@@ -6,6 +5,14 @@ import type {
   PlayerState,
   Unsubscribe,
 } from '@eskerra/core';
+
+import {
+  clearDesktopMediaSession,
+  setDesktopMediaSessionMetadata,
+  setDesktopMediaSessionPlaybackState,
+  setDesktopMediaSessionPositionState,
+  syncDesktopMediaSessionPlayback,
+} from './desktopMediaSession';
 
 function clampMs(n: number): number {
   if (!Number.isFinite(n) || n < 0) {
@@ -59,26 +66,6 @@ function mapAudioPaused(audio: HTMLAudioElement, ended: boolean): PlayerState {
   return audio.paused ? 'paused' : 'playing';
 }
 
-async function syncMprisMetadata(
-  track: AudioTrack,
-  durationMs: number,
-  positionMs: number,
-  playing: boolean,
-): Promise<void> {
-  try {
-    const dur = Math.max(durationMs, 1);
-    await invoke('media_set_metadata', {
-      title: track.title,
-      artist: track.artist,
-      coverUrl: track.artwork ?? null,
-      durationMs: dur,
-    });
-    await invoke('media_set_playback', {playing, positionMs: clampMs(positionMs)});
-  } catch {
-    // MPRIS may be unavailable outside Linux sessions; ignore.
-  }
-}
-
 const BUFFERING_DEBOUNCE_MS = 800;
 const STUCK_POSITION_THRESHOLD_MS = 800;
 
@@ -98,6 +85,50 @@ export class HtmlAudioPlayer implements AudioPlayer {
   private lastKnownPositionMs = -1;
   private lastAdvanceAtMs = Date.now();
 
+  private durationMsOrNull(): number | null {
+    return Number.isFinite(this.audio.duration)
+      ? clampMs(this.audio.duration * 1000)
+      : null;
+  }
+
+  /** Playback state + position only (throttled `timeupdate`); avoids rewriting metadata every tick. */
+  private syncMediaSessionProgress(playing: boolean): void {
+    if (!this.currentTrack) {
+      return;
+    }
+    const durationMs = this.durationMsOrNull();
+    const positionMs = clampMs(this.audio.currentTime * 1000);
+    setDesktopMediaSessionPlaybackState(playing ? 'playing' : 'paused');
+    if (durationMs != null) {
+      setDesktopMediaSessionPositionState(positionMs, durationMs);
+    }
+  }
+
+  private syncMediaSessionFull(
+    track: AudioTrack,
+    durationMs: number | null,
+    positionMs: number,
+    playing: boolean,
+  ): void {
+    syncDesktopMediaSessionPlayback({
+      title: track.title,
+      artist: track.artist,
+      artworkUrl: track.artwork ?? null,
+      durationMs,
+      positionMs: clampMs(positionMs),
+      playing,
+    });
+  }
+
+  private primeMediaSessionBeforeLoad(track: AudioTrack): void {
+    setDesktopMediaSessionMetadata({
+      title: track.title,
+      artist: track.artist,
+      artworkUrl: track.artwork ?? null,
+    });
+    setDesktopMediaSessionPlaybackState('playing');
+  }
+
   constructor() {
     const emitProgress = () => {
       const now = Date.now();
@@ -114,10 +145,7 @@ export class HtmlAudioPlayer implements AudioPlayer {
       for (const cb of this.progressListeners) {
         cb(progress);
       }
-      invoke('media_set_playback', {
-        playing: !this.audio.paused,
-        positionMs,
-      }).catch(() => undefined);
+      this.syncMediaSessionProgress(!this.audio.paused);
     };
 
     const emitFinalProgressOnEnded = () => {
@@ -133,10 +161,17 @@ export class HtmlAudioPlayer implements AudioPlayer {
       for (const cb of this.progressListeners) {
         cb(progress);
       }
-      invoke('media_set_playback', {
-        playing: false,
-        positionMs,
-      }).catch(() => undefined);
+      if (this.currentTrack) {
+        const durationMs = Number.isFinite(this.audio.duration)
+          ? clampMs(this.audio.duration * 1000)
+          : null;
+        this.syncMediaSessionFull(
+          this.currentTrack,
+          durationMs,
+          positionMs,
+          false,
+        );
+      }
     };
 
     this.audio.addEventListener('timeupdate', emitProgress);
@@ -145,7 +180,7 @@ export class HtmlAudioPlayer implements AudioPlayer {
         return;
       }
       const durationMs = clampMs(this.audio.duration * 1000);
-      void syncMprisMetadata(
+      this.syncMediaSessionFull(
         this.currentTrack,
         durationMs,
         clampMs(this.audio.currentTime * 1000),
@@ -251,7 +286,7 @@ export class HtmlAudioPlayer implements AudioPlayer {
       this.scheduleBufferingEval();
       return;
     }
-    if (positionMs > this.lastKnownPositionMs || positionMs < this.lastKnownPositionMs) {
+    if (positionMs !== this.lastKnownPositionMs) {
       this.lastKnownPositionMs = positionMs;
       this.lastAdvanceAtMs = now;
       this.stuckHold = false;
@@ -282,7 +317,7 @@ export class HtmlAudioPlayer implements AudioPlayer {
     this.audio.pause();
     this.audio.src = '';
     this.currentTrack = null;
-    await invoke('media_clear_session').catch(() => undefined);
+    clearDesktopMediaSession();
   }
 
   addEndedListener(callback: () => void): Unsubscribe {
@@ -338,19 +373,17 @@ export class HtmlAudioPlayer implements AudioPlayer {
   }
 
   /**
-   * After channel artwork is resolved and cached to a `file://` URI, refresh MPRIS metadata
-   * if this episode is still the loaded track.
+   * After channel artwork is resolved, refresh MediaSession metadata if this episode is still loaded.
    */
-  async syncArtworkIfCurrentEpisode(episodeId: string, coverFileUrl: string): Promise<void> {
+  async syncArtworkIfCurrentEpisode(episodeId: string, coverUrl: string): Promise<void> {
     if (this.currentTrack?.id !== episodeId) {
       return;
     }
-    this.currentTrack = {...this.currentTrack, artwork: coverFileUrl};
-    const durationSec = this.audio.duration;
-    const durationMs = Number.isFinite(durationSec) ? clampMs(durationSec * 1000) : 1;
-    await syncMprisMetadata(
+    this.currentTrack = {...this.currentTrack, artwork: coverUrl};
+    const durationMs = this.durationMsOrNull();
+    this.syncMediaSessionFull(
       this.currentTrack,
-      Math.max(durationMs, 1),
+      durationMs != null && durationMs > 0 ? durationMs : null,
       clampMs(this.audio.currentTime * 1000),
       !this.audio.paused,
     );
@@ -359,13 +392,13 @@ export class HtmlAudioPlayer implements AudioPlayer {
   async pause(): Promise<void> {
     this.audio.pause();
     this.emitState();
-    const positionMs = clampMs(this.audio.currentTime * 1000);
-    await invoke('media_set_playback', {playing: false, positionMs}).catch(() => undefined);
+    this.syncMediaSessionProgress(false);
   }
 
   async resume(): Promise<void> {
     await playIgnoringSuperseded(this.audio);
     this.emitState();
+    this.syncMediaSessionProgress(true);
   }
 
   async play(track: AudioTrack, positionMs?: number): Promise<void> {
@@ -386,16 +419,26 @@ export class HtmlAudioPlayer implements AudioPlayer {
       this.resetBufferingTracking();
       await playIgnoringSuperseded(this.audio);
       this.emitState();
+      this.syncMediaSessionProgress(true);
       return;
     }
 
     this.resetBufferingTracking();
+    this.primeMediaSessionBeforeLoad(track);
     this.audio.src = track.url;
     if (positionMs !== undefined) {
       this.audio.currentTime = Math.max(0, positionMs) / 1000;
     }
-    await playIgnoringSuperseded(this.audio);
+    try {
+      await playIgnoringSuperseded(this.audio);
+    } catch (e) {
+      if (!isAbortError(e)) {
+        clearDesktopMediaSession();
+      }
+      throw e;
+    }
     this.emitState();
+    this.syncMediaSessionProgress(true);
   }
 
   /**
@@ -407,6 +450,12 @@ export class HtmlAudioPlayer implements AudioPlayer {
     this.resetBufferingTracking();
     this.currentTrack = track;
     this.audio.pause();
+    setDesktopMediaSessionMetadata({
+      title: track.title,
+      artist: track.artist,
+      artworkUrl: track.artwork ?? null,
+    });
+    setDesktopMediaSessionPlaybackState('paused');
     this.audio.src = track.url;
 
     await new Promise<void>((resolve, reject) => {
@@ -429,9 +478,7 @@ export class HtmlAudioPlayer implements AudioPlayer {
         this.audio.pause();
 
         const posOut = clampMs(this.audio.currentTime * 1000);
-        const durOut = Number.isFinite(durationSec) ? clampMs(durationSec * 1000) : 0;
-        void syncMprisMetadata(track, Math.max(durOut, 1), posOut, false);
-        invoke('media_set_playback', {playing: false, positionMs: posOut}).catch(() => undefined);
+        this.syncMediaSessionFull(track, durationMs, posOut, false);
 
         const progress: PlayerProgress = {
           durationMs: Number.isFinite(durationSec) ? clampMs(durationSec * 1000) : null,
@@ -487,11 +534,7 @@ export class HtmlAudioPlayer implements AudioPlayer {
     this.stuckHold = false;
     this.scheduleBufferingEval();
     this.emitState();
-    const positionOut = clampMs(this.audio.currentTime * 1000);
-    await invoke('media_set_playback', {
-      playing: !this.audio.paused,
-      positionMs: positionOut,
-    }).catch(() => undefined);
+    this.syncMediaSessionProgress(!this.audio.paused);
   }
 
   async stop(): Promise<void> {
@@ -501,7 +544,7 @@ export class HtmlAudioPlayer implements AudioPlayer {
     this.currentTrack = null;
     this.endedFlag = false;
     this.emitState();
-    await invoke('media_clear_session').catch(() => undefined);
+    clearDesktopMediaSession();
   }
 
   /**
@@ -518,10 +561,10 @@ export class HtmlAudioPlayer implements AudioPlayer {
     this.stateListeners.clear();
     this.bufferingListeners.clear();
     this.endedListeners.clear();
-    invoke('media_clear_session').catch(() => undefined);
+    clearDesktopMediaSession();
   }
 
-  /** Handles OS media keys / MPRIS toggle when the shell sends "play" or "toggle". */
+  /** Handles OS media keys when MediaSession or legacy callers invoke resume/toggle behavior. */
   async resumeOrToggleFromOs(): Promise<void> {
     if (this.endedFlag || !this.audio.src) {
       return;
@@ -552,10 +595,10 @@ export function __resetForTests(): void {
   }
 }
 
-/** Call after `media_cache_artwork` when artwork was not known at `play()` / `primePausedAt()`. */
+/** Call after artwork resolves when it was not known at `play()` / `primePausedAt()` (MediaSession). */
 export async function notifyDesktopMprisArtworkReady(
   episodeId: string,
-  coverFileUrl: string,
+  coverUrl: string,
 ): Promise<void> {
-  await getDesktopAudioPlayer().syncArtworkIfCurrentEpisode(episodeId, coverFileUrl);
+  await getDesktopAudioPlayer().syncArtworkIfCurrentEpisode(episodeId, coverUrl);
 }
