@@ -20,5 +20,6 @@ pub fn early_glib_application_name_for_webkit() {
 #[cfg(target_os = "linux")]
 pub fn apply_linux_app_identity_branding() {
     gtk::glib::set_application_name("Eskerra");
-    gtk::Window::set_default_icon_name("eskerra");
+    // Match `Icon=` in `.desktop` files and GNOME’s icon lookup for the reverse-DNS desktop id.
+    gtk::Window::set_default_icon_name("com.eskerra.desktop");
 }

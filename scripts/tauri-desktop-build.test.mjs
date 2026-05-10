@@ -34,6 +34,10 @@ test('tauri linux RPM config: GTK app id, desktop entry alias, and bundled PNG i
     aliasBody.includes('StartupWMClass=com.eskerra.desktop'),
     'reverse-DNS alias .desktop must match GTK WM_CLASS',
   );
+  assert.ok(
+    aliasBody.includes('Icon=com.eskerra.desktop'),
+    'alias .desktop Icon must match hicolor basename for GNOME MPRIS heuristics',
+  );
 
   assert.equal(cfg.bundle.linux.rpm.desktopTemplate, 'linux/eskerra.desktop.hbs');
   const desktopHbs = readFileSync(
@@ -44,6 +48,24 @@ test('tauri linux RPM config: GTK app id, desktop entry alias, and bundled PNG i
     desktopHbs.includes('StartupWMClass=com.eskerra.desktop'),
     'launcher .desktop must match GTK WM_CLASS when enableGTKAppId uses identifier',
   );
+  assert.ok(
+    desktopHbs.includes('Icon=com.eskerra.desktop'),
+    'launcher .desktop Icon must match reverse-DNS hicolor entries',
+  );
+
+  const hicolorKeys = [
+    '/usr/share/icons/hicolor/32x32/apps/com.eskerra.desktop.png',
+    '/usr/share/icons/hicolor/64x64/apps/com.eskerra.desktop.png',
+    '/usr/share/icons/hicolor/128x128/apps/com.eskerra.desktop.png',
+    '/usr/share/icons/hicolor/256x256/apps/com.eskerra.desktop.png',
+  ];
+  for (const dest of hicolorKeys) {
+    assert.ok(Object.hasOwn(rpmFiles, dest), `RPM must ship parallel icon: ${dest}`);
+    assert.ok(
+      existsSync(join(DESKTOP_SRC_TAURI, rpmFiles[dest])),
+      `missing icon source for ${dest}`,
+    );
+  }
   assert.ok(existsSync(join(DESKTOP_SRC_TAURI, cfg.bundle.linux.rpm.desktopTemplate)));
 
   const icons = cfg.bundle.icon;
