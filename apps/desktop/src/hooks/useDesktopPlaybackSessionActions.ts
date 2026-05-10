@@ -50,6 +50,7 @@ export function useDesktopPlaybackSessionActions(
       ep,
       onCatalogRefreshRef.current,
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
   }, []);
 
   const playEpisode = useCallback(
@@ -79,6 +80,7 @@ export function useDesktopPlaybackSessionActions(
         userPlaybackDepthRef.current -= 1;
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
     [vaultRoot, fs, onError, send],
   );
 
@@ -104,6 +106,7 @@ export function useDesktopPlaybackSessionActions(
     lastPrimedPlaylistKeyRef.current = null;
     sendRef.current({type: 'RESET'});
     onPlaylistDiskUpdatedRef.current?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
   }, []);
 
   return {

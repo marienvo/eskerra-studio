@@ -53,6 +53,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
       );
       send({type: 'QUEUE_PERSIST', entry});
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
     [onError, send],
   );
 
@@ -97,6 +98,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
         send({type: 'SEEK_END'});
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
     [onError, queuePersistFromProgress, send],
   );
 
@@ -140,6 +142,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
         send({type: 'SEEK_END'});
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
     [onError, queuePersistFromProgress, send],
   );
 
@@ -186,7 +189,9 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
         e instanceof Error ? e.message : 'Could not save playback position.',
       );
     }
-  }, [onError, queuePersistFromProgress]);
+  },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
+  [onError, queuePersistFromProgress]);
 
   const togglePause = useCallback(async () => {
     const p = getDesktopAudioPlayer();
@@ -227,7 +232,9 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
         );
       }
     }
-  }, [onError, queuePersistFromProgress, pauseIfPlaying]);
+  },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
+  [onError, queuePersistFromProgress, pauseIfPlaying]);
 
   return {
     queuePersistFromProgress,

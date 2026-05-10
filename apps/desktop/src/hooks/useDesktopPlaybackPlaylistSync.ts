@@ -107,6 +107,7 @@ export function useDesktopPlaybackPlaylistSync(
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
   }, [vaultRoot, fs, playlistRevision, send]);
 
   useEffect(() => {
@@ -153,6 +154,7 @@ export function useDesktopPlaybackPlaylistSync(
       Date.now(),
     );
     send({type: 'QUEUE_PERSIST', entry});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
   }, [
     snapCtx.nearEndResyncNonce,
     snapCtx.inNearEndZone,
@@ -204,6 +206,7 @@ export function useDesktopPlaybackPlaylistSync(
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
   }, [
     vaultRoot,
     consumeCatalogReady,
