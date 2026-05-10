@@ -20,7 +20,7 @@ describe('NowPlayingProgressSlider', () => {
     expect(Number(input.value)).toBe(30_000);
   });
 
-  it('commits once on change after scrub (not on input), matching pointerup then change', () => {
+  it('commits on pointer release after drag', () => {
     const onSeek = vi.fn();
     render(
       <NowPlayingProgressSlider
@@ -38,10 +38,45 @@ describe('NowPlayingProgressSlider', () => {
     expect(onSeek).not.toHaveBeenCalled();
 
     fireEvent.pointerUp(input);
-    expect(onSeek).not.toHaveBeenCalled();
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(50_000);
+  });
+
+  it('does not double-fire when stray change follows pointerup within dedupe window', () => {
+    const onSeek = vi.fn();
+    render(
+      <NowPlayingProgressSlider
+        disabled={false}
+        durationMs={60_000}
+        onSeek={onSeek}
+        positionMs={30_000}
+      />,
+    );
+
+    const input = screen.getByRole('slider', {name: 'Playback progress'});
+    fireEvent.pointerDown(input);
+    fireEvent.input(input, {target: {value: '50000'}});
+    fireEvent.pointerUp(input);
     fireEvent.change(input, {target: {value: '50000'}});
     expect(onSeek).toHaveBeenCalledTimes(1);
     expect(onSeek).toHaveBeenCalledWith(50_000);
+  });
+
+  it('keyboard arrow commits via change', () => {
+    const onSeek = vi.fn();
+    render(
+      <NowPlayingProgressSlider
+        disabled={false}
+        durationMs={60_000}
+        onSeek={onSeek}
+        positionMs={30_000}
+      />,
+    );
+
+    const input = screen.getByRole('slider', {name: 'Playback progress'});
+    fireEvent.change(input, {target: {value: '35000'}});
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(35_000);
   });
 
   it('disables the input when disabled or duration is zero', () => {
@@ -85,7 +120,6 @@ describe('NowPlayingProgressSlider', () => {
     const input = screen.getByRole('slider', {name: 'Playback progress'});
     fireEvent.pointerDown(input);
     fireEvent.pointerUp(input);
-    fireEvent.change(input, {target: {value: '30000'}});
     expect(onSeek).not.toHaveBeenCalled();
   });
 });

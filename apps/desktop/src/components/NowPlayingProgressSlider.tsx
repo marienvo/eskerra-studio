@@ -2,6 +2,9 @@ import {useRef, useState} from 'react';
 
 import {formatPlaybackMs} from '../lib/formatPlaybackMs';
 
+/** Suppress duplicate `onSeek` from a stray `change` right after pointer-driven commit (browser/React timing). */
+const POINTER_SEEK_CHANGE_DEDUPE_MS = 80;
+
 export type NowPlayingProgressSliderProps = {
   positionMs: number;
   durationMs: number;
@@ -12,7 +15,10 @@ export type NowPlayingProgressSliderProps = {
 
 /**
  * Native range control for desktop now-playing scrubbing.
- * Pointer drags commit on `change` after release (`pointerup` only clears scrub UI so `change` does not double-fire `onSeek`).
+ * Pointer release commits on `pointerup` / `pointercancel`. Keyboard and other non-pointer updates
+ * commit via `onChange`. React maps `onChange` on range inputs to `input`, so there is no separate
+ * deferred `change` after release; a short post-pointer dedupe window avoids double `onSeek` if a
+ * stray `change` still arrives.
  */
 export function NowPlayingProgressSlider({
   positionMs,
@@ -27,6 +33,8 @@ export function NowPlayingProgressSlider({
   const [dragMs, setDragMs] = useState(0);
   const scrubbingRef = useRef(false);
   const pendingMsRef = useRef(0);
+  const scrubOriginMsRef = useRef(0);
+  const lastPointerDrivenSeekAtRef = useRef(0);
 
   let displayMs: number;
   if (hardDisabled) {
@@ -54,16 +62,21 @@ export function NowPlayingProgressSlider({
       return;
     }
     scrubbingRef.current = true;
+    scrubOriginMsRef.current = Math.min(maxMs, Math.max(0, positionMs));
     applyPendingToState(Number(e.currentTarget.value));
   };
 
-  /** Clears scrub UI state only; `change` commits the seek (avoids double `onSeek` when pointerup precedes change). */
   const finishScrubIfNeeded = () => {
     if (!scrubbingRef.current) {
       return;
     }
     scrubbingRef.current = false;
     setDragging(false);
+    const pending = pendingMsRef.current;
+    if (pending !== scrubOriginMsRef.current) {
+      onSeek(pending);
+      lastPointerDrivenSeekAtRef.current = Date.now();
+    }
   };
 
   const handleInput = (e: React.FormEvent<HTMLInputElement>) => {
@@ -80,6 +93,9 @@ export function NowPlayingProgressSlider({
     applyPendingToState(Number(e.currentTarget.value));
     if (!scrubbingRef.current) {
       setDragging(false);
+      if (Date.now() - lastPointerDrivenSeekAtRef.current < POINTER_SEEK_CHANGE_DEDUPE_MS) {
+        return;
+      }
       const next = pendingMsRef.current;
       const cur = Math.min(maxMs, Math.max(0, positionMs));
       if (next !== cur) {
