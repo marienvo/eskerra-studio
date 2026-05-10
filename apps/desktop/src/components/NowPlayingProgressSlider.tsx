@@ -12,7 +12,7 @@ export type NowPlayingProgressSliderProps = {
 
 /**
  * Native range control for desktop now-playing scrubbing.
- * Pointer drags commit on release; keyboard and simple clicks commit via `change` when not scrubbing.
+ * Pointer drags commit on `change` after release (`pointerup` only clears scrub UI so `change` does not double-fire `onSeek`).
  */
 export function NowPlayingProgressSlider({
   positionMs,
@@ -27,8 +27,6 @@ export function NowPlayingProgressSlider({
   const [dragMs, setDragMs] = useState(0);
   const scrubbingRef = useRef(false);
   const pendingMsRef = useRef(0);
-  /** Playback position (ms) when the current pointer scrub started; skip `onSeek` if unchanged at release. */
-  const scrubOriginMsRef = useRef(0);
 
   let displayMs: number;
   if (hardDisabled) {
@@ -55,20 +53,17 @@ export function NowPlayingProgressSlider({
     if (hardDisabled) {
       return;
     }
-    scrubOriginMsRef.current = Math.min(maxMs, Math.max(0, positionMs));
     scrubbingRef.current = true;
     applyPendingToState(Number(e.currentTarget.value));
   };
 
+  /** Clears scrub UI state only; `change` commits the seek (avoids double `onSeek` when pointerup precedes change). */
   const finishScrubIfNeeded = () => {
     if (!scrubbingRef.current) {
       return;
     }
     scrubbingRef.current = false;
     setDragging(false);
-    if (pendingMsRef.current !== scrubOriginMsRef.current) {
-      onSeek(pendingMsRef.current);
-    }
   };
 
   const handleInput = (e: React.FormEvent<HTMLInputElement>) => {

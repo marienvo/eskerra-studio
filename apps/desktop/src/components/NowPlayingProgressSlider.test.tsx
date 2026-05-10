@@ -20,7 +20,7 @@ describe('NowPlayingProgressSlider', () => {
     expect(Number(input.value)).toBe(30_000);
   });
 
-  it('commits once on pointer release after scrubbing, not on intermediate input events', () => {
+  it('commits once on change after scrub (not on input), matching pointerup then change', () => {
     const onSeek = vi.fn();
     render(
       <NowPlayingProgressSlider
@@ -38,6 +38,8 @@ describe('NowPlayingProgressSlider', () => {
     expect(onSeek).not.toHaveBeenCalled();
 
     fireEvent.pointerUp(input);
+    expect(onSeek).not.toHaveBeenCalled();
+    fireEvent.change(input, {target: {value: '50000'}});
     expect(onSeek).toHaveBeenCalledTimes(1);
     expect(onSeek).toHaveBeenCalledWith(50_000);
   });
@@ -83,6 +85,7 @@ describe('NowPlayingProgressSlider', () => {
     const input = screen.getByRole('slider', {name: 'Playback progress'});
     fireEvent.pointerDown(input);
     fireEvent.pointerUp(input);
+    fireEvent.change(input, {target: {value: '30000'}});
     expect(onSeek).not.toHaveBeenCalled();
   });
 });
