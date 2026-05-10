@@ -9,15 +9,24 @@ import {
 import type {PlaybackTransportProps} from './PlaybackTransport';
 import {PlaybackTransport} from './PlaybackTransport';
 import {MaterialIcon} from './MaterialIcon';
+import {NowPlayingProgressSlider} from './NowPlayingProgressSlider';
 import {cleanNoteMenuShortcutLabel} from '../lib/desktopShortcutLabels';
 
 const EDITOR_TOOLBAR_ICON_DIM = {width: 15, height: 15} as const;
+
+export type EditorWorkspaceToolbarNowPlayingProgress = {
+  positionMs: number;
+  durationMs: number;
+  disabled: boolean;
+  onSeek: (ms: number) => void;
+};
 
 export type EditorWorkspaceToolbarNowPlaying = {
   episodeTitle: string;
   seriesName: string;
   /** Removes the active episode from the playlist without marking it as listened. */
   onClose: () => void;
+  progress: EditorWorkspaceToolbarNowPlayingProgress;
 };
 
 export type EditorWorkspaceToolbarProps = {
@@ -191,6 +200,7 @@ export function EditorWorkspaceToolbar({
               — {nowPlaying.seriesName}
             </span>
           </span>
+          <NowPlayingProgressSlider {...nowPlaying.progress} />
         </p>
       ) : null}
       <div className="pane-header-trailing-actions">

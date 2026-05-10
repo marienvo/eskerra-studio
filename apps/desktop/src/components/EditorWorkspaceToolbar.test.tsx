@@ -2,6 +2,7 @@ import {fireEvent, render, screen} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 
 import type {PlaybackTransportProps} from './PlaybackTransport';
+import type {EditorWorkspaceToolbarNowPlayingProgress} from './EditorWorkspaceToolbar';
 import {EditorWorkspaceToolbar} from './EditorWorkspaceToolbar';
 
 const transport: PlaybackTransportProps = {
@@ -12,6 +13,13 @@ const transport: PlaybackTransportProps = {
   playControl: 'paused',
   positionLabel: '0:00',
   seekDisabled: false,
+};
+
+const defaultNowPlayingProgress: EditorWorkspaceToolbarNowPlayingProgress = {
+  positionMs: 0,
+  durationMs: 120_000,
+  disabled: false,
+  onSeek: vi.fn(),
 };
 
 const baseProps = {
@@ -46,6 +54,7 @@ describe('EditorWorkspaceToolbar close now playing', () => {
           episodeTitle: 'My episode',
           onClose,
           seriesName: 'My show',
+          progress: defaultNowPlayingProgress,
         }}
       />,
     );
@@ -81,10 +90,33 @@ describe('EditorWorkspaceToolbar close now playing', () => {
           episodeTitle: 'Hidden',
           onClose: vi.fn(),
           seriesName: 'Show',
+          progress: defaultNowPlayingProgress,
         }}
       />,
     );
 
     expect(screen.queryByRole('button', {name: 'Close podcast'})).toBeNull();
+  });
+
+  it('renders the progress slider after now playing metadata', () => {
+    render(
+      <EditorWorkspaceToolbar
+        {...baseProps}
+        playbackTransport={transport}
+        nowPlaying={{
+          episodeTitle: 'My episode',
+          onClose: vi.fn(),
+          seriesName: 'My show',
+          progress: defaultNowPlayingProgress,
+        }}
+      />,
+    );
+
+    const row = screen.getByTitle('My episode — My show');
+    const series = row.querySelector('.editor-workspace-toolbar__now-playing-series');
+    expect(series?.textContent).toContain('My show');
+
+    const slider = screen.getByRole('slider', {name: 'Playback progress'});
+    expect(series?.compareDocumentPosition(slider)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 });

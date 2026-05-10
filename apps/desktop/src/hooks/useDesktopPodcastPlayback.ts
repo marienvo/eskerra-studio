@@ -115,6 +115,14 @@ function clampSeekMs(
   return next;
 }
 
+function clampSeekToMs(targetMs: number, durationMs: number | null): number {
+  const t = Math.max(0, targetMs);
+  if (durationMs != null && durationMs > 0) {
+    return Math.min(durationMs, t);
+  }
+  return t;
+}
+
 export type DesktopPlayerLabel = PodcastPlayerPlaybackState | 'nativeLoading';
 
 function episodeToSnapshot(ep: PodcastEpisode): PlayerEpisodeSnapshot {
@@ -455,6 +463,8 @@ export type UseDesktopPodcastPlaybackResult = {
   /** Mark an episode as listened in vault markdown and rescan the catalog (no audio stop). */
   markEpisodePlayed: (ep: PodcastEpisode) => Promise<void>;
   seekBy: (deltaMs: number) => Promise<void>;
+  /** Seek to an absolute position in milliseconds (clamped to duration; same MIN_PROGRESS_MS reset as {@link seekBy}). */
+  seekTo: (absoluteMs: number) => Promise<void>;
   togglePause: () => Promise<void>;
   /**
    * Pause native audio and queue playlist persist (same as user pause while playing).
@@ -956,6 +966,49 @@ export function useDesktopPodcastPlayback({
     [onError, queuePersistFromProgress, send],
   );
 
+  const seekTo = useCallback(
+    async (absoluteMs: number) => {
+      if (!vaultRootRef.current) {
+        return;
+      }
+      const ep = snapshotRef.current.context.episode
+        ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
+        : null;
+      if (!ep) {
+        return;
+      }
+      send({type: 'SEEK_START'});
+      try {
+        const p = getDesktopAudioPlayer();
+        const progress = await p.getProgress();
+        const target = clampSeekToMs(absoluteMs, progress.durationMs);
+        await p.seekTo(target);
+        const latest = await p.getProgress();
+
+        const root = vaultRootRef.current;
+        if (!root) {
+          return;
+        }
+
+        if (latest.positionMs < MIN_PROGRESS_MS) {
+          await p.stop();
+          await clearPlaylistEntry(root, fsRef.current);
+          lastPrimedPlaylistKeyRef.current = null;
+          send({type: 'RESET'});
+          onPlaylistDiskUpdatedRef.current?.();
+          return;
+        }
+
+        queuePersistFromProgress(ep, latest.positionMs, latest.durationMs);
+      } catch (e) {
+        onError(e instanceof Error ? e.message : 'Could not seek playback.');
+      } finally {
+        send({type: 'SEEK_END'});
+      }
+    },
+    [onError, queuePersistFromProgress, send],
+  );
+
   const pauseIfPlaying = useCallback(async () => {
     const p = getDesktopAudioPlayer();
     const st = await p.getState();
@@ -1079,6 +1132,7 @@ export function useDesktopPodcastPlayback({
     positionMs: snapCtx.positionMs,
     playbackTransportPlayControl,
     seekBy,
+    seekTo,
     seekDisabled,
     togglePause,
     pauseIfPlaying,

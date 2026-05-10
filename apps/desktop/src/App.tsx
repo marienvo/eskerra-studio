@@ -183,9 +183,24 @@ function useAppPodcastPlaybackRegion({
       onClose: () => {
         desktopPlayback.dismissNowPlaying().catch(() => {});
       },
+      progress: {
+        positionMs: desktopPlayback.positionMs,
+        durationMs: desktopPlayback.durationMs ?? 0,
+        disabled: desktopPlayback.playbackTransportPlayControl === 'loading',
+        onSeek: (ms: number) => {
+          desktopPlayback.seekTo(ms).catch(() => {});
+        },
+      },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- granular playback fields; hook return object is unstable
-  }, [desktopPlayback.activeEpisode, desktopPlayback.dismissNowPlaying]);
+  }, [
+    desktopPlayback.activeEpisode,
+    desktopPlayback.dismissNowPlaying,
+    desktopPlayback.durationMs,
+    desktopPlayback.playbackTransportPlayControl,
+    desktopPlayback.positionMs,
+    desktopPlayback.seekTo,
+  ]);
 
   const playbackTransport = useMemo((): PlaybackTransportProps | undefined => {
     if (desktopPlayback.activeEpisode == null) {
