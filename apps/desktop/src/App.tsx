@@ -21,37 +21,23 @@ import {VaultSearchPalette} from './components/VaultSearchPalette';
 import {VaultTab} from './components/VaultTab.tsx';
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
 import {EpisodesPane} from './components/EpisodesPane';
-import {
-  APP_SHELL_TAGLINE,
-  AppSetupTagline,
-  AppStatusBar,
-} from './components/AppStatusBar';
+import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
 import {ToastStack} from './components/ToastStack';
-import type {PlaybackTransportProps} from './components/PlaybackTransport';
 import {WindowTitleBar} from './components/WindowTitleBar';
+import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
 import {useDesktopPlaylistR2EtagPollingForMainWindow} from './hooks/useDesktopPlaylistR2EtagPolling';
-import {useDesktopPodcastCatalog} from './hooks/useDesktopPodcastCatalog';
-import {useDesktopPodcastPlayback} from './hooks/useDesktopPodcastPlayback';
-import {clearPodcastMarkdownFileContentCache} from './lib/podcasts/podcastPhase1Desktop';
-import {runDesktopPodcastRssSync} from './lib/podcasts/podcastRssSyncDesktop';
 import {useTauriWindowMaximized} from './hooks/useTauriWindowMaximized';
 import {useTauriWindowTiling} from './hooks/useTauriWindowTiling';
 import {useEditorHistoryMouseButtons} from './hooks/useEditorHistoryMouseButtons';
 import {useMainWindowWorkspace} from './hooks/useMainWindowWorkspace';
 import {usePreventMiddleClickPaste} from './hooks/usePreventMiddleClickPaste';
 import {ThemedChromeBackground} from './theme/ThemedChromeBackground';
-import {
-  defaultEskerraSettings,
-  isVaultR2PlaylistConfigured,
-  type EskerraSettings,
-} from '@eskerra/core';
 import type {EditorWorkspaceTab} from './lib/editorWorkspaceTabs';
 
 import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
 } from './lib/layoutStore';
-import {formatPlaybackMs} from './lib/formatPlaybackMs';
 import {
   buildStoredMainWindowInboxForPersist,
   DEFAULT_MAIN_WINDOW_PANE_VISIBILITY,
@@ -59,9 +45,6 @@ import {
   type StoredMainWindowUi,
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
-import {
-  resolveAppStatusBarCenter,
-} from './lib/resolveAppStatusBarCenter';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {writeVaultSettings} from './lib/vaultBootstrap';
 import {AppThemeShell} from './shell/AppThemeShell';
@@ -83,185 +66,6 @@ import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
 import './App.css';
 
 type AppPage = 'vault' | 'settings';
-
-const PLAYBACK_SKIP_MS = 10_000;
-
-type AppPodcastPlaybackRegionArgs = {
-  vaultRoot: string | null;
-  fs: ReturnType<typeof createTauriVaultFilesystem>;
-  podcastFsNonce: number;
-  setErr: (err: string | null) => void;
-  deviceInstanceId: string | null;
-  vaultSettings: EskerraSettings | null;
-  err: string | null;
-  diskConflict: unknown;
-  diskConflictSoft: unknown;
-  renameLinkProgress: {done: number; total: number} | null;
-  wikiRenameNotice: string | null;
-};
-
-function useAppPodcastPlaybackRegion({
-  vaultRoot,
-  fs,
-  podcastFsNonce,
-  setErr,
-  deviceInstanceId,
-  vaultSettings,
-  err,
-  diskConflict,
-  diskConflictSoft,
-  renameLinkProgress,
-  wikiRenameNotice,
-}: AppPodcastPlaybackRegionArgs) {
-  const [playlistDiskRevision, setPlaylistDiskRevision] = useState(0);
-  const bumpPlaylistDiskRevision = useCallback(() => {
-    setPlaylistDiskRevision(r => r + 1);
-  }, []);
-
-  const podcastCatalog = useDesktopPodcastCatalog({
-    vaultRoot,
-    fs,
-    fsRefreshNonce: podcastFsNonce,
-    onError: setErr,
-  });
-
-  const rssSyncingRef = useRef(false);
-  const [rssSyncing, setRssSyncing] = useState(false);
-  const [rssSyncPercent, setRssSyncPercent] = useState<number | null>(null);
-
-  const handleEpisodesRssSync = useCallback(async () => {
-    if (vaultRoot == null || rssSyncingRef.current) {
-      return;
-    }
-    rssSyncingRef.current = true;
-    setRssSyncing(true);
-    setRssSyncPercent(null);
-    try {
-      await runDesktopPodcastRssSync(vaultRoot, fs, {
-        onProgress: payload => {
-          const n = payload.percent;
-          if (Number.isFinite(n) && n >= 0 && n <= 100) {
-            setRssSyncPercent(n);
-          }
-        },
-      });
-      clearPodcastMarkdownFileContentCache();
-      await podcastCatalog.refreshPodcasts(true);
-    } catch {
-      // Errors per-file are already logged inside runDesktopPodcastRssSync.
-    } finally {
-      rssSyncingRef.current = false;
-      setRssSyncing(false);
-      setRssSyncPercent(null);
-    }
-  }, [vaultRoot, fs, podcastCatalog]);
-
-  const consumeCatalogReady = Boolean(vaultRoot) && !podcastCatalog.catalogLoading;
-
-  const desktopPlayback = useDesktopPodcastPlayback({
-    consumeCatalogReady,
-    consumeEpisodes: podcastCatalog.episodes,
-    deviceInstanceId: deviceInstanceId ?? '',
-    fs,
-    onCatalogRefresh: () => podcastCatalog.refreshPodcasts(false),
-    onError: setErr,
-    onPlaylistDiskUpdated: bumpPlaylistDiskRevision,
-    playlistRevision: playlistDiskRevision,
-    r2PlaylistConfigured: isVaultR2PlaylistConfigured(
-      vaultSettings ?? defaultEskerraSettings,
-    ),
-    vaultRoot,
-  });
-
-  const toolbarNowPlaying = useMemo(() => {
-    if (desktopPlayback.activeEpisode == null) {
-      return null;
-    }
-    return {
-      episodeTitle: desktopPlayback.activeEpisode.title,
-      seriesName: desktopPlayback.activeEpisode.seriesName,
-      onClose: () => {
-        desktopPlayback.dismissNowPlaying().catch(() => {});
-      },
-      progress: {
-        positionMs: desktopPlayback.positionMs,
-        durationMs: desktopPlayback.durationMs ?? 0,
-        disabled: desktopPlayback.playbackTransportPlayControl === 'loading',
-        onSeek: (ms: number) => {
-          desktopPlayback.seekTo(ms).catch(() => {});
-        },
-      },
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- granular playback fields; hook return object is unstable
-  }, [
-    desktopPlayback.activeEpisode,
-    desktopPlayback.dismissNowPlaying,
-    desktopPlayback.durationMs,
-    desktopPlayback.playbackTransportPlayControl,
-    desktopPlayback.positionMs,
-    desktopPlayback.seekTo,
-  ]);
-
-  const playbackTransport = useMemo((): PlaybackTransportProps | undefined => {
-    if (desktopPlayback.activeEpisode == null) {
-      return undefined;
-    }
-    const seek = desktopPlayback.seekBy;
-    return {
-      positionLabel: formatPlaybackMs(desktopPlayback.positionMs),
-      durationLabel: formatPlaybackMs(desktopPlayback.durationMs),
-      seekDisabled: desktopPlayback.seekDisabled,
-      playControl: desktopPlayback.playbackTransportPlayControl,
-      onSeekBack: () => void seek(-PLAYBACK_SKIP_MS),
-      onSeekForward: () => void seek(PLAYBACK_SKIP_MS),
-      onTogglePlay: () => desktopPlayback.togglePause(),
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- granular playback fields below; hook return object is unstable
-  }, [
-    desktopPlayback.activeEpisode,
-    desktopPlayback.durationMs,
-    desktopPlayback.playbackTransportPlayControl,
-    desktopPlayback.positionMs,
-    desktopPlayback.seekBy,
-    desktopPlayback.seekDisabled,
-    desktopPlayback.togglePause,
-  ]);
-
-  const statusBarCenter = useMemo(
-    () =>
-      resolveAppStatusBarCenter({
-        err,
-        diskConflict: diskConflict != null,
-        diskConflictSoft: diskConflictSoft != null,
-        renameLinkProgress,
-        wikiRenameNotice,
-        playerLabel: desktopPlayback.playerLabel,
-        activeEpisode: desktopPlayback.activeEpisode,
-        tagline: APP_SHELL_TAGLINE,
-      }),
-    [
-      err,
-      diskConflict,
-      diskConflictSoft,
-      renameLinkProgress,
-      wikiRenameNotice,
-      desktopPlayback.playerLabel,
-      desktopPlayback.activeEpisode,
-    ],
-  );
-
-  return {
-    podcastCatalog,
-    rssSyncing,
-    rssSyncPercent,
-    handleEpisodesRssSync,
-    desktopPlayback,
-    toolbarNowPlaying,
-    playbackTransport,
-    statusBarCenter,
-    bumpPlaylistDiskRevision,
-  };
-}
 
 type UseAppDebouncedPersistMainWindowUiArgs = {
   vaultRoot: string | null;
@@ -582,7 +386,7 @@ export default function App() {
     playbackTransport,
     statusBarCenter,
     bumpPlaylistDiskRevision,
-  } = useAppPodcastPlaybackRegion({
+  } = useAppPodcastPlayback({
     vaultRoot,
     fs,
     podcastFsNonce,
