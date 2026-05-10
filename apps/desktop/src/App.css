@@ -1475,11 +1475,21 @@ a:focus:not(:focus-visible) {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 1.1rem;
+  /* Match toolbar icon height (15px) so the bar does not grow when the slider renders. */
+  height: 15px;
   margin: 0;
   padding: 0;
   cursor: default;
   background: transparent;
+  /* No focus ring: seek is also available via the «/» buttons in PlaybackTransport. */
+  outline: none;
+  box-shadow: none;
+}
+
+.now-playing-progress-slider__input:focus,
+.now-playing-progress-slider__input:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .now-playing-progress-slider__input:active {
@@ -1494,44 +1504,44 @@ a:focus:not(:focus-visible) {
 .now-playing-progress-slider__input::-webkit-slider-runnable-track {
   height: 3px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-muted) 55%, var(--color-border));
+  background: #ffffff;
 }
 
 .now-playing-progress-slider__input::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 10px;
-  height: 10px;
-  margin-top: -3.5px;
+  width: 9px;
+  height: 9px;
+  margin-top: -3px;
   border-radius: 50%;
   border: none;
-  background: var(--color-accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  background: #ffffff;
+  box-shadow: none;
+  outline: none;
 }
 
 .now-playing-progress-slider__input:disabled::-webkit-slider-thumb {
-  background: var(--color-muted);
-  box-shadow: none;
+  opacity: 0.5;
 }
 
 .now-playing-progress-slider__input::-moz-range-track {
   height: 3px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-muted) 55%, var(--color-border));
+  background: #ffffff;
 }
 
 .now-playing-progress-slider__input::-moz-range-thumb {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border: none;
   border-radius: 50%;
-  background: var(--color-accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  background: #ffffff;
+  box-shadow: none;
+  outline: none;
 }
 
 .now-playing-progress-slider__input:disabled::-moz-range-thumb {
-  background: var(--color-muted);
-  box-shadow: none;
+  opacity: 0.5;
 }
 
 @container editor-workspace-now-playing (max-width: 560px) {
