@@ -833,6 +833,10 @@ export function useMainWindowWorkspace(options: {
     workspaceShadowModelRef,
     activeTodayHubUri,
     activeEditorTabId,
+    homeStatesByHub,
+    hubForProjection,
+    projectionHubUris,
+    todayHubWorkspacesForProjection,
   ]);
 
   const legacyTodayHubWorkspacesPersistFiltered = useMemo(() => {
@@ -1181,7 +1185,7 @@ export function useMainWindowWorkspace(options: {
         setInboxContentByUri(prev => ({...prev, ...updates}));
       }
     },
-    [fs],
+    [fs, saveChainRef],
   );
 
   const persistTodayHubRow = useCallback(
@@ -1259,7 +1263,7 @@ export function useMainWindowWorkspace(options: {
       saveChainRef.current = next.catch(() => undefined);
       await next;
     },
-    [fs, refreshNotes, subtreeMarkdownCache],
+    [fs, refreshNotes, subtreeMarkdownCache, saveActiveRef, saveChainRef],
   );
 
   const resolveDiskConflictReloadFromDisk = useCallback(() => {
@@ -1305,7 +1309,7 @@ export function useMainWindowWorkspace(options: {
     setDiskConflictSoft(null);
     diskConflictSoftRef.current = null;
     setErr(null);
-  }, []);
+  }, [autosaveSchedulerRef]);
 
   const elevateDiskConflictSoftToBlocking = useCallback(() => {
     const s = diskConflictSoftRef.current;
@@ -1319,7 +1323,7 @@ export function useMainWindowWorkspace(options: {
     diskConflictRef.current = hard;
     setDiskConflictSoft(null);
     diskConflictSoftRef.current = null;
-  }, []);
+  }, [autosaveSchedulerRef]);
 
   const dismissDiskConflictSoft = useCallback(() => {
     setDiskConflictSoft(null);
@@ -1447,7 +1451,12 @@ export function useMainWindowWorkspace(options: {
       setComposingNewEntry(false);
       setSelectedUri(targetNorm);
     },
-    [loadFullMarkdownIntoInboxEditor, scheduleBacklinksDeferOneFrameAfterLoad],
+    [
+      backlinksActiveBodyRef,
+      loadFullMarkdownIntoInboxEditor,
+      scheduleBacklinksDeferOneFrameAfterLoad,
+      setBacklinksActiveBody,
+    ],
   );
 
   const applyBackgroundNewTabOpen = useCallback(
@@ -1653,6 +1662,7 @@ export function useMainWindowWorkspace(options: {
       loadOpenedNoteBodyAndApplySelection(targetNorm, prefetchBody);
     },
     [
+      autosaveSchedulerRef,
       inboxEditorShellScrollRef,
       clearStaleDiskConflictsForOpen,
       prepareInboxScrollDirectiveForOpen,
@@ -1817,6 +1827,8 @@ export function useMainWindowWorkspace(options: {
     inboxEditorRef,
     enqueuePersistOutgoingNoteMarkdown,
     scheduleBacklinksDeferOneFrameAfterLoad,
+    backlinksActiveBodyRef,
+    setBacklinksActiveBody,
   ]);
 
   const keepMyEditsFromMerge = useCallback(() => {
@@ -1845,7 +1857,7 @@ export function useMainWindowWorkspace(options: {
       diskConflictSoftRef.current = null;
       setMergeView({kind: 'diskConflict', baseUri: normUri, diskMarkdown: s.diskMarkdown});
     }
-  }, []);
+  }, [autosaveSchedulerRef]);
 
   const applyMergedBodyFromMerge = useCallback(
     (body: string) => {
@@ -1906,6 +1918,9 @@ export function useMainWindowWorkspace(options: {
       inboxEditorRef,
       enqueuePersistOutgoingNoteMarkdown,
       scheduleBacklinksDeferOneFrameAfterLoad,
+      autosaveSchedulerRef,
+      backlinksActiveBodyRef,
+      setBacklinksActiveBody,
     ],
   );
 
@@ -2104,7 +2119,13 @@ export function useMainWindowWorkspace(options: {
         await refocusAfterClosingActiveTab(nextTabId, nextTabs);
       })();
     },
-    [dispatchWorkspaceActionSync, recordClosedTabAndPruneScroll, refocusAfterClosingActiveTab],
+    [
+      dispatchWorkspaceActionSync,
+      flushInboxSaveRef,
+      recordClosedTabAndPruneScroll,
+      refocusAfterClosingActiveTab,
+      saveChainRef,
+    ],
   );
 
   const closeOtherEditorTabs = useCallback(
@@ -2163,10 +2184,12 @@ export function useMainWindowWorkspace(options: {
       })();
     },
     [
-      openMarkdownInEditor,
       bumpEditorClosedStack,
-      mirrorShadowActiveTab,
       dispatchWorkspaceActionSync,
+      flushInboxSaveRef,
+      mirrorShadowActiveTab,
+      openMarkdownInEditor,
+      saveChainRef,
     ],
   );
 
@@ -2227,7 +2250,7 @@ export function useMainWindowWorkspace(options: {
   }, [
     bumpEditorClosedStack,
     dispatchWorkspaceActionSync,
-    openMarkdownInEditor,
+    flushInboxSaveRef,
     mirrorShadowHomeSurface,
     selectHomeCurrentNote,
   ]);
@@ -2365,6 +2388,7 @@ export function useMainWindowWorkspace(options: {
       bumpEditorClosedStack,
       subtreeMarkdownCache,
       mirrorShadowActiveHub,
+      flushInboxSaveRef,
     ],
   );
 
@@ -2579,7 +2603,13 @@ export function useMainWindowWorkspace(options: {
     queueMicrotask(() => {
       setBacklinksActiveBody(snap);
     });
-  }, [selectedUri, composingNewEntry, vaultRoot]);
+  }, [
+    backlinksActiveBodyRef,
+    composingNewEntry,
+    selectedUri,
+    setBacklinksActiveBody,
+    vaultRoot,
+  ]);
 
   useEffect(() => {
     if (composingNewEntry || !selectedUri) {
@@ -2599,7 +2629,14 @@ export function useMainWindowWorkspace(options: {
       setBacklinksActiveBody(liveFull);
     }, INBOX_BACKLINK_BODY_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
-  }, [editorBody, selectedUri, composingNewEntry, inboxYamlFrontmatterInner]);
+  }, [
+    backlinksActiveBodyRef,
+    composingNewEntry,
+    editorBody,
+    inboxYamlFrontmatterInner,
+    selectedUri,
+    setBacklinksActiveBody,
+  ]);
 
   useEffect(() => {
     if (!vaultRoot || !selectedUri) {
@@ -2693,7 +2730,7 @@ export function useMainWindowWorkspace(options: {
       lastPersistedExternalMutationSeqRef.current += 1;
       resetInboxEditorComposeState();
     })();
-  }, [resetInboxEditorComposeState]);
+  }, [flushInboxSaveRef, resetInboxEditorComposeState]);
 
   const cancelNewEntry = useCallback(() => {
     void (async () => {
@@ -2701,7 +2738,7 @@ export function useMainWindowWorkspace(options: {
       setComposingNewEntry(false);
       resetInboxEditorComposeState();
     })();
-  }, [resetInboxEditorComposeState]);
+  }, [flushInboxSaveRef, resetInboxEditorComposeState]);
 
   /** Pick where to refocus after the active tab is closed: surviving tab → workspace shell hub → empty. */
   const refocusAfterActiveTabRemoved = useCallback(
@@ -3025,10 +3062,12 @@ export function useMainWindowWorkspace(options: {
       fs,
       refreshNotes,
       subtreeMarkdownCache,
+      autosaveSchedulerRef,
       refocusAfterActiveTabRemoved,
       removeHomeHistoryUris,
       mirrorShadowActiveTab,
       mirrorShadowHomeSurface,
+      saveChainRef,
     ],
   );
 
@@ -3150,9 +3189,11 @@ export function useMainWindowWorkspace(options: {
       refreshNotes,
       openMarkdownInEditor,
       subtreeMarkdownCache,
+      autosaveSchedulerRef,
       removeHomeHistoryUris,
       mirrorShadowActiveTab,
       mirrorShadowHomeSurface,
+      saveChainRef,
     ],
   );
 
@@ -3241,7 +3282,16 @@ export function useMainWindowWorkspace(options: {
         setBusy(false);
       }
     },
-    [vaultRoot, fs, refreshNotes, clearRenameNotice, subtreeMarkdownCache, remapHomeStatesPrefix],
+    [
+      vaultRoot,
+      fs,
+      refreshNotes,
+      clearRenameNotice,
+      subtreeMarkdownCache,
+      remapHomeStatesPrefix,
+      autosaveSchedulerRef,
+      flushInboxSaveRef,
+    ],
   );
 
   const commitMovedArticleResult = useCallback(
@@ -3378,7 +3428,14 @@ export function useMainWindowWorkspace(options: {
         setBusy(false);
       }
     },
-    [vaultRoot, fs, refreshNotes, commitMoveVaultTreeResult],
+    [
+      vaultRoot,
+      fs,
+      refreshNotes,
+      commitMoveVaultTreeResult,
+      autosaveSchedulerRef,
+      flushInboxSaveRef,
+    ],
   );
 
   const bulkDeleteRemoveVaultEntry = useCallback(
@@ -3498,6 +3555,8 @@ export function useMainWindowWorkspace(options: {
       bulkDeleteRemoveVaultEntry,
       bulkDeletePruneTabsAndScroll,
       clearInboxSelection,
+      autosaveSchedulerRef,
+      saveChainRef,
     ],
   );
 
@@ -3533,7 +3592,14 @@ export function useMainWindowWorkspace(options: {
         setBusy(false);
       }
     },
-    [vaultRoot, fs, refreshNotes, commitMoveVaultTreeResult],
+    [
+      vaultRoot,
+      fs,
+      refreshNotes,
+      commitMoveVaultTreeResult,
+      autosaveSchedulerRef,
+      flushInboxSaveRef,
+    ],
   );
 
   const activeTabHistory = useMemo(
@@ -3638,6 +3704,7 @@ export function useMainWindowWorkspace(options: {
     });
   }, [
     dispatchWorkspaceActionSync,
+    flushInboxSaveRef,
     openMarkdownInEditor,
     openCurrentHomeAfterComposing,
     moveHomeHistory,
@@ -3656,7 +3723,12 @@ export function useMainWindowWorkspace(options: {
       moveHomeHistory,
       setEditorWorkspaceTabs,
     });
-  }, [dispatchWorkspaceActionSync, openMarkdownInEditor, moveHomeHistory]);
+  }, [
+    dispatchWorkspaceActionSync,
+    flushInboxSaveRef,
+    openMarkdownInEditor,
+    moveHomeHistory,
+  ]);
 
   useEffect(() => {
     if (!inboxRestoreEnabled) {
