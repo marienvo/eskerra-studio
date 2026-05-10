@@ -52,8 +52,7 @@ export function useDesktopPlaybackSessionActions(
         onCatalogRefreshRef.current,
       );
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-    [],
+    [fsRef, onCatalogRefreshRef, vaultRootRef],
   );
 
   const playEpisode = useCallback(
@@ -83,8 +82,16 @@ export function useDesktopPlaybackSessionActions(
         userPlaybackDepthRef.current -= 1;
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-    [vaultRoot, fs, onError, send],
+    [
+      deviceIdRef,
+      fs,
+      lastPrimedPlaylistKeyRef,
+      onError,
+      send,
+      snapshotRef,
+      userPlaybackDepthRef,
+      vaultRoot,
+    ],
   );
 
   const waitForPersistFlushed = useCallback(async (timeoutMs: number) => {
@@ -111,8 +118,7 @@ export function useDesktopPlaybackSessionActions(
       sendRef.current({type: 'RESET'});
       onPlaylistDiskUpdatedRef.current?.();
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-    [],
+    [fsRef, lastPrimedPlaylistKeyRef, onPlaylistDiskUpdatedRef, sendRef, vaultRootRef],
   );
 
   return {

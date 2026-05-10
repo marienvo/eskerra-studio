@@ -53,8 +53,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
       );
       send({type: 'QUEUE_PERSIST', entry});
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-    [onError, send],
+    [deviceIdRef, onError, send, snapshotRef],
   );
 
   const seekBy = useCallback(
@@ -98,8 +97,17 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
         send({type: 'SEEK_END'});
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-    [onError, queuePersistFromProgress, send],
+    [
+      episodesByIdRef,
+      fsRef,
+      lastPrimedPlaylistKeyRef,
+      onError,
+      onPlaylistDiskUpdatedRef,
+      queuePersistFromProgress,
+      send,
+      snapshotRef,
+      vaultRootRef,
+    ],
   );
 
   const seekTo = useCallback(
@@ -142,8 +150,17 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
         send({type: 'SEEK_END'});
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-    [onError, queuePersistFromProgress, send],
+    [
+      episodesByIdRef,
+      fsRef,
+      lastPrimedPlaylistKeyRef,
+      onError,
+      onPlaylistDiskUpdatedRef,
+      queuePersistFromProgress,
+      send,
+      snapshotRef,
+      vaultRootRef,
+    ],
   );
 
   const pauseIfPlaying = useCallback(async () => {
@@ -190,8 +207,16 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
       );
     }
   },
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-  [onError, queuePersistFromProgress]);
+  [
+    deviceIdRef,
+    episodesByIdRef,
+    fsRef,
+    onError,
+    onPlaylistDiskUpdatedRef,
+    queuePersistFromProgress,
+    snapshotRef,
+    vaultRootRef,
+  ]);
 
   const togglePause = useCallback(async () => {
     const p = getDesktopAudioPlayer();
@@ -233,8 +258,14 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
       }
     }
   },
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-  [onError, queuePersistFromProgress, pauseIfPlaying]);
+  [
+    deviceIdRef,
+    episodesByIdRef,
+    onError,
+    pauseIfPlaying,
+    queuePersistFromProgress,
+    snapshotRef,
+  ]);
 
   return {
     queuePersistFromProgress,

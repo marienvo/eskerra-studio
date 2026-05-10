@@ -31,8 +31,7 @@ export function useDesktopPlaybackLastPrimedResetOnVaultRoot(
 ): void {
   useEffect(() => {
     lastPrimedPlaylistKeyRef.current = null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-  }, [vaultRoot]);
+  }, [lastPrimedPlaylistKeyRef, vaultRoot]);
 }
 
 export function useDesktopPlaybackPlaylistSync(
@@ -118,8 +117,16 @@ export function useDesktopPlaybackPlaylistSync(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-  }, [vaultRoot, fs, playlistRevision, send]);
+  }, [
+    consumeEpisodesRef,
+    fs,
+    onPlaylistDiskUpdatedRef,
+    playlistRevision,
+    send,
+    snapshotRef,
+    userPlaybackDepthRef,
+    vaultRoot,
+  ]);
 
   useEffect(() => {
     if (snapCtx.nearEndResyncNonce === nearEndNonceHandledRef.current) {
@@ -165,16 +172,17 @@ export function useDesktopPlaybackPlaylistSync(
       Date.now(),
     );
     send({type: 'QUEUE_PERSIST', entry});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
   }, [
-    snapCtx.nearEndResyncNonce,
-    snapCtx.inNearEndZone,
-    snapCtx.episode,
-    snapCtx.durationMs,
-    snapCtx.positionMs,
-    vaultRoot,
+    deviceIdRef,
     episodesById,
     send,
+    snapCtx.durationMs,
+    snapCtx.episode,
+    snapCtx.inNearEndZone,
+    snapCtx.nearEndResyncNonce,
+    snapCtx.positionMs,
+    snapshotRef,
+    vaultRoot,
   ]);
 
   useEffect(() => {
@@ -217,13 +225,15 @@ export function useDesktopPlaybackPlaylistSync(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
   }, [
-    vaultRoot,
     consumeCatalogReady,
-    playbackSub,
-    snapCtx.playlistBaseline,
-    snapCtx.episode,
+    episodesByIdRef,
+    lastPrimedPlaylistKeyRef,
     onError,
+    playbackSub,
+    snapCtx.episode,
+    snapCtx.playlistBaseline,
+    userPlaybackDepthRef,
+    vaultRoot,
   ]);
 }
