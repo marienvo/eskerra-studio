@@ -48,6 +48,55 @@ fn file_uri_for_path(path: &Path) -> Result<String, String> {
     Ok(format!("file://{}", s))
 }
 
+fn add_streamed_bytes(current: u64, chunk_len: usize, max: u64) -> Result<u64, String> {
+    let n = chunk_len as u64;
+    let next = current
+        .checked_add(n)
+        .ok_or_else(|| "artwork too large".to_string())?;
+    if next > max {
+        return Err("artwork too large".to_string());
+    }
+    Ok(next)
+}
+
+/// Streams the response body to `dest`, enforcing `max_bytes` incrementally (no full-body buffer).
+async fn stream_artwork_to_file_capped(
+    res: &mut reqwest::Response,
+    dest: &Path,
+    max_bytes: u64,
+) -> Result<(), String> {
+    use std::io::Write;
+
+    let mut file = std::fs::File::create(dest).map_err(|e| e.to_string())?;
+    let mut written: u64 = 0;
+
+    loop {
+        let chunk = match res.chunk().await {
+            Err(e) => {
+                drop(file);
+                let _ = std::fs::remove_file(dest);
+                return Err(e.to_string());
+            }
+            Ok(c) => c,
+        };
+        let Some(chunk) = chunk else { break };
+
+        written = add_streamed_bytes(written, chunk.len(), max_bytes)?;
+        if let Err(e) = file.write_all(&chunk) {
+            drop(file);
+            let _ = std::fs::remove_file(dest);
+            return Err(e.to_string());
+        }
+    }
+
+    if let Err(e) = file.sync_all() {
+        drop(file);
+        let _ = std::fs::remove_file(dest);
+        return Err(e.to_string());
+    }
+    Ok(())
+}
+
 /// Download remote artwork to the app cache and return a `file://` URI for MediaSession artwork.
 #[tauri::command]
 pub async fn media_cache_artwork(app: AppHandle, url: String) -> Result<String, String> {
@@ -70,7 +119,7 @@ pub async fn media_cache_artwork(app: AppHandle, url: String) -> Result<String, 
         .build()
         .map_err(|e| e.to_string())?;
 
-    let res = client
+    let mut res = client
         .get(trimmed)
         .send()
         .await
@@ -96,13 +145,8 @@ pub async fn media_cache_artwork(app: AppHandle, url: String) -> Result<String, 
         return file_uri_for_path(&dest);
     }
 
-    let bytes = res.bytes().await.map_err(|e| e.to_string())?;
-    if bytes.len() as u64 > ARTWORK_MAX_BYTES {
-        return Err("artwork too large".to_string());
-    }
-
     let tmp = cache_dir.join(format!(".{}.{}.part", digest, std::process::id()));
-    std::fs::write(&tmp, &bytes).map_err(|e| e.to_string())?;
+    stream_artwork_to_file_capped(&mut res, &tmp, ARTWORK_MAX_BYTES).await?;
     match std::fs::rename(&tmp, &dest) {
         Ok(()) => file_uri_for_path(&dest),
         Err(e) => {
@@ -118,7 +162,7 @@ pub async fn media_cache_artwork(app: AppHandle, url: String) -> Result<String, 
 
 #[cfg(test)]
 mod tests {
-    use super::{artwork_cache_digest, extension_from_content_type};
+    use super::{add_streamed_bytes, artwork_cache_digest, extension_from_content_type};
 
     #[test]
     fn digest_is_sixteen_hex_chars() {
@@ -138,5 +182,19 @@ mod tests {
             extension_from_content_type("application/octet-stream"),
             ".img"
         );
+    }
+
+    #[test]
+    fn streamed_byte_cap_allows_up_to_max() {
+        let max = 10u64;
+        assert_eq!(add_streamed_bytes(0, 10, max).unwrap(), 10);
+        assert_eq!(add_streamed_bytes(9, 1, max).unwrap(), 10);
+    }
+
+    #[test]
+    fn streamed_byte_cap_rejects_over_max() {
+        let max = 10u64;
+        assert!(add_streamed_bytes(10, 1, max).is_err());
+        assert!(add_streamed_bytes(0, 11, max).is_err());
     }
 }
