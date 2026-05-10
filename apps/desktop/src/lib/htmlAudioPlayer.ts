@@ -429,7 +429,14 @@ export class HtmlAudioPlayer implements AudioPlayer {
     if (positionMs !== undefined) {
       this.audio.currentTime = Math.max(0, positionMs) / 1000;
     }
-    await playIgnoringSuperseded(this.audio);
+    try {
+      await playIgnoringSuperseded(this.audio);
+    } catch (e) {
+      if (!isAbortError(e)) {
+        clearDesktopMediaSession();
+      }
+      throw e;
+    }
     this.emitState();
     this.syncMediaSessionProgress(true);
   }
