@@ -7,9 +7,7 @@ import {
 import {useEffect, type MutableRefObject} from 'react';
 
 import type {useDesktopPodcastPlayback} from '../hooks/useDesktopPodcastPlayback';
-
-/** Max time to wait for R2 playlist persist after pausing on window close (debounce + network). */
-const SHUTDOWN_PERSIST_TIMEOUT_MS = 3000;
+import {PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS} from '../lib/podcasts/playbackPersistTimeout';
 
 export function useAppTauriCloseAndFocusSave(
   desktopPlaybackRef: MutableRefObject<
@@ -32,7 +30,7 @@ export function useAppTauriCloseAndFocusSave(
           try {
             await desktopPlaybackRef.current.pauseIfPlaying();
             await desktopPlaybackRef.current.waitForPersistFlushed(
-              SHUTDOWN_PERSIST_TIMEOUT_MS,
+              PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS,
             );
           } catch (e) {
             if (import.meta.env.DEV) {

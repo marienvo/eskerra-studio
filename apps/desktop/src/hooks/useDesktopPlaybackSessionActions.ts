@@ -17,6 +17,7 @@ import {
   type PlaylistMachineContext,
 } from '../lib/podcasts/desktopPlaybackPlayAction';
 import type {PodcastEpisode} from '../lib/podcasts/podcastTypes';
+import {PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS} from '../lib/podcasts/playbackPersistTimeout';
 import {clearPlaylistEntry} from '../lib/vaultBootstrap';
 import type {DesktopPlaybackContext} from './desktopPlaybackContext';
 
@@ -113,6 +114,9 @@ export function useDesktopPlaybackSessionActions(
       } catch {
         /* ignore */
       }
+      /* Drain debounced / in-flight QUEUE_PERSIST so a late write cannot restore after clear.
+       * Same best-effort timeout as window close: very slow persist can still race. */
+      await waitForPersistFlushed(PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS);
       try {
         await clearPlaylistEntry(root, fsRef.current);
         onPlaylistDiskUpdatedRef.current?.();
@@ -121,7 +125,14 @@ export function useDesktopPlaybackSessionActions(
         sendRef.current({type: 'RESET'});
       }
     },
-    [fsRef, lastPrimedPlaylistKeyRef, onPlaylistDiskUpdatedRef, sendRef, vaultRootRef],
+    [
+      fsRef,
+      lastPrimedPlaylistKeyRef,
+      onPlaylistDiskUpdatedRef,
+      sendRef,
+      vaultRootRef,
+      waitForPersistFlushed,
+    ],
   );
 
   return {
