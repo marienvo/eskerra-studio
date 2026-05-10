@@ -1,6 +1,5 @@
 mod crash_log;
 mod link_rich_metadata;
-mod media;
 mod r2_http;
 mod tiling;
 #[cfg(target_os = "linux")]
@@ -104,7 +103,6 @@ pub fn run() {
             vault_watch::vault_start_watch,
             window_state_disk::eskerra_peek_window_state_file,
             crash_log::eskerra_append_crash_log,
-            media::media_cache_artwork,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
