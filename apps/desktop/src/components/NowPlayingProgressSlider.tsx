@@ -15,7 +15,9 @@ export type NowPlayingProgressSliderProps = {
 
 /**
  * Native range control for desktop now-playing scrubbing.
- * Pointer release commits on `pointerup` / `pointercancel`. Keyboard and other non-pointer updates
+ * `pointerdown` calls `setPointerCapture` so `pointerup` / `pointercancel` / `lostpointercapture`
+ * still reach this element when the pointer releases outside the control.
+ * Pointer release commits on `pointerup` / `pointercancel` / `lostpointercapture`. Keyboard and other non-pointer updates
  * commit via `onChange`. React maps `onChange` on range inputs to `input`, so there is no separate
  * deferred `change` after release; a short post-pointer dedupe window avoids double `onSeek` if a
  * stray `change` still arrives.
@@ -64,6 +66,11 @@ export function NowPlayingProgressSlider({
     scrubbingRef.current = true;
     scrubOriginMsRef.current = Math.min(maxMs, Math.max(0, positionMs));
     applyPendingToState(Number(e.currentTarget.value));
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore e.g. invalid pointer id or capture unsupported */
+    }
   };
 
   const finishScrubIfNeeded = () => {
@@ -115,6 +122,7 @@ export function NowPlayingProgressSlider({
         min={0}
         onChange={handleChange}
         onInput={handleInput}
+        onLostPointerCapture={finishScrubIfNeeded}
         onPointerCancel={finishScrubIfNeeded}
         onPointerDown={handlePointerDown}
         onPointerUp={finishScrubIfNeeded}

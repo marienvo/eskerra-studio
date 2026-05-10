@@ -32,14 +32,33 @@ describe('NowPlayingProgressSlider', () => {
     );
 
     const input = screen.getByRole('slider', {name: 'Playback progress'});
-    fireEvent.pointerDown(input);
+    fireEvent.pointerDown(input, {pointerId: 1});
     fireEvent.input(input, {target: {value: '40000'}});
     fireEvent.input(input, {target: {value: '50000'}});
     expect(onSeek).not.toHaveBeenCalled();
 
-    fireEvent.pointerUp(input);
+    fireEvent.pointerUp(input, {pointerId: 1});
     expect(onSeek).toHaveBeenCalledTimes(1);
     expect(onSeek).toHaveBeenCalledWith(50_000);
+  });
+
+  it('finalizes scrub on lostpointercapture', () => {
+    const onSeek = vi.fn();
+    render(
+      <NowPlayingProgressSlider
+        disabled={false}
+        durationMs={60_000}
+        onSeek={onSeek}
+        positionMs={30_000}
+      />,
+    );
+
+    const input = screen.getByRole('slider', {name: 'Playback progress'});
+    fireEvent.pointerDown(input, {pointerId: 1});
+    fireEvent.input(input, {target: {value: '45000'}});
+    fireEvent.lostPointerCapture(input, {pointerId: 1});
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenCalledWith(45_000);
   });
 
   it('does not double-fire when stray change follows pointerup within dedupe window', () => {
