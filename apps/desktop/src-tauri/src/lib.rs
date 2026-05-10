@@ -45,8 +45,7 @@ pub fn run() {
         .manage(VaultRootState::default())
         .manage(VaultSearchSessionState::default())
         .manage(VaultSearchIndexState::default())
-        .manage(VaultFrontmatterIndexState::default())
-        .manage(media::MediaSessionState::default());
+        .manage(VaultFrontmatterIndexState::default());
 
     #[cfg(not(mobile))]
     {
@@ -64,7 +63,6 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            media::init_media_session(app)?;
             vault_watch::setup_vault_watch(app)?;
             Ok(())
         })
@@ -95,9 +93,6 @@ pub fn run() {
             vault_watch::vault_start_watch,
             window_state_disk::eskerra_peek_window_state_file,
             crash_log::eskerra_append_crash_log,
-            media::media_set_metadata,
-            media::media_set_playback,
-            media::media_clear_session,
             media::media_cache_artwork,
         ])
         .run(tauri::generate_context!())

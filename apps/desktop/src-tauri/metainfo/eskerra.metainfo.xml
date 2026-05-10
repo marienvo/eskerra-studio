@@ -7,7 +7,7 @@
   <summary>Desktop companion for your local Eskerra vault — notes, podcasts, and playback</summary>
   <description>
     <p>Eskerra opens a folder-based vault on your machine: markdown in Inbox, podcast notes from General, and MP3 streaming with playlist state.</p>
-    <p>On Fedora and GNOME, playback integrates with the shell via MPRIS (media keys and system controls). RSS sync and some mobile-only accelerations are not required for this desktop release; the vault layout stays compatible with the Android app.</p>
+    <p>On Fedora and GNOME, playback integrates with the shell via the WebKit media session (MPRIS: media keys and system controls). RSS sync and some mobile-only accelerations are not required for this desktop release; the vault layout stays compatible with the Android app.</p>
   </description>
   <developer id="com.eskerra">
     <name>Eskerra</name>
@@ -17,6 +17,9 @@
   <url type="bugtracker">https://github.com/marienvo/notebox/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.34.3" date="2026-05-10"/>
+    <release version="0.34.2" date="2026-05-10"/>
+    <release version="0.34.1" date="2026-05-10"/>
     <release version="0.34.0" date="2026-05-10"/>
     <release version="0.33.7" date="2026-05-09"/>
     <release version="0.33.6" date="2026-05-09"/>

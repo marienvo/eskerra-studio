@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.34.0"
+version = "0.34.3"
 description = "Desktop companion for your local Eskerra vault — notes, podcasts, and playback."
 authors = ["Eskerra contributors"]
 license = "AGPL-3.0-only"
@@ -47,7 +47,6 @@ tantivy-sstable = { path = "vendor/tantivy-sstable" }
 tempfile = "3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-souvlaki = { version = "0.7", default-features = false, features = ["use_zbus"] }
 # Align with webkit2gtk / Tauri Linux stack for GDK window state (tiling flags).
 gdk = "0.18"
 gtk = { version = "0.18", default-features = false, features = ["v3_24"] }
