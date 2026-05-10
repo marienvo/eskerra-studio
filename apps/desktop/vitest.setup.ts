@@ -7,6 +7,7 @@ import {__resetForTests as resetCleanNoteMarkdown} from './src/lib/cleanNoteMark
 import {__resetForTests as resetEditorWorkspaceTabs} from './src/lib/editorWorkspaceTabs';
 import {__resetForTests as resetHtmlClipboardToMarkdown} from './src/lib/htmlClipboardToMarkdown';
 import {__resetForTests as resetTableShellStaticPreviewStore} from './src/editor/noteEditor/eskerraTableV1/tableShellStaticPreviewStore';
+import {__resetDesktopMediaSessionForTests} from './src/lib/desktopMediaSession';
 
 /**
  * Do not import modules here that load `@tauri-apps/*` at module scope — Vitest runs `setupFiles`
@@ -28,6 +29,7 @@ afterEach(() => {
   resetEditorWorkspaceTabs();
   resetHtmlClipboardToMarkdown();
   resetTableShellStaticPreviewStore();
+  __resetDesktopMediaSessionForTests();
 });
 
 beforeEach(() => {

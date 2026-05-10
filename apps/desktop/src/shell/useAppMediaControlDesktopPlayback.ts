@@ -1,4 +1,3 @@
-import {listen} from '@tauri-apps/api/event';
 import {useEffect, type MutableRefObject} from 'react';
 
 import type {useDesktopPodcastPlayback} from '../hooks/useDesktopPodcastPlayback';
@@ -10,36 +9,41 @@ export function useAppMediaControlDesktopPlayback(
   >,
 ) {
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    listen<string>('media-control', event => {
-      const action = event.payload;
-      const p = getDesktopAudioPlayer();
-      (async () => {
-        if (action === 'pause' || action === 'stop') {
-          if ((await p.getState()) === 'playing') {
-            await desktopPlaybackRef.current.togglePause();
-          } else if (action === 'stop') {
-            await p.pause();
-          }
+    const ms =
+      typeof navigator !== 'undefined' ? navigator.mediaSession : undefined;
+    if (!ms?.setActionHandler) {
+      return;
+    }
+
+    const onPlay = () => {
+      const run = async () => {
+        const st = await getDesktopAudioPlayer().getState();
+        if (st === 'playing') {
           return;
         }
-        if (action === 'play' || action === 'toggle') {
-          await desktopPlaybackRef.current.togglePause();
-        }
-      })().catch(() => undefined);
-    })
-      .then(fn => {
-        if (cancelled) {
-          fn();
-        } else {
-          unlisten = fn;
-        }
-      })
-      .catch(() => undefined);
+        await desktopPlaybackRef.current.togglePause();
+      };
+      run().catch(() => undefined);
+    };
+
+    const onPause = () => {
+      desktopPlaybackRef.current.pauseIfPlaying().catch(() => undefined);
+    };
+
+    try {
+      ms.setActionHandler('play', onPlay);
+      ms.setActionHandler('pause', onPause);
+    } catch {
+      return;
+    }
+
     return () => {
-      cancelled = true;
-      unlisten?.();
+      try {
+        ms.setActionHandler('play', null);
+        ms.setActionHandler('pause', null);
+      } catch {
+        /* ignore */
+      }
     };
   }, [desktopPlaybackRef]);
 }

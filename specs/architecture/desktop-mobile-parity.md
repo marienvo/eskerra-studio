@@ -29,9 +29,9 @@ The following are **identical on disk** once a vault root is chosen:
 | Read/write Inbox markdown | Yes | Yes |
 | Callout / alert markdown (`> [!type]`) | Yes (vault note detail reader) | Yes (CodeMirror vault editor + hub/table static rich) |
 | Edit vault display name (`settings-local.json`) | Yes | Yes |
-| Stream MP3 / resume from `playlist.json` | Yes (`react-native-track-player`) | Yes (`HTMLAudioElement` + Linux MPRIS via souvlaki) |
+| Stream MP3 / resume from `playlist.json` | Yes (`react-native-track-player`) | Yes (`HTMLAudioElement`; Linux GNOME/MPRIS via WebKitGTK **`navigator.mediaSession`**) |
 | Episodes list from vault `General/` podcast markdown | Yes (sectioned list) | Yes (desktop parses the same `*- podcasts.md` / RSS pie rules via TypeScript under `apps/desktop/src/lib/podcasts/`) |
-| OS play/pause (lock screen / shell) | Yes (Track Player service) | Yes on Linux (MPRIS); other OSes depend on Tauri + souvlaki behavior |
+| OS play/pause (lock screen / shell) | Yes (Track Player service) | Yes on Linux when WebKit exposes **MediaSession**; `media_cache_artwork` caches remote cover art to `file://` for artwork URLs |
 | Filesystem-driven vault refresh | Pull-to-refresh / native listing | **notify**-based watch on `Inbox/`, `General/`, `.eskerra/` with debounced UI refresh (plus optional Settings “Refresh from disk”) |
 | RSS → vault markdown sync (Kotlin / native) | Yes | **Deferred** — not required for first desktop milestone |
 | Native podcast artwork cache module | Android | **Deferred** on desktop |
@@ -39,7 +39,7 @@ The following are **identical on disk** once a vault root is chosen:
 ## Media architecture
 
 - **Android:** `AudioPlayer` implementation uses **Track Player**; `AudioPlayer` interface types live in `@eskerra/core`.
-- **Desktop:** `HtmlAudioPlayer` implements the same interface using **`<audio>`**; Rust commands **`media_set_metadata`**, **`media_set_playback`**, and **`media_clear_session`** mirror state to the OS on Linux (**souvlaki** / MPRIS). The frontend listens for the **`media-control`** event for shell-driven **play / pause / toggle** and toggles the web audio element accordingly.
+- **Desktop:** `HtmlAudioPlayer` implements the same interface using **`<audio>`**; **`desktopMediaSession`** updates **`navigator.mediaSession`** (metadata, playback state, position) so WebKitGTK exposes a **single** MPRIS player on GNOME (no separate Rust MPRIS bridge). **`media_cache_artwork`** downloads remote episode/feed artwork to a local **`file://`** URL for the session. The shell registers **MediaSession** **play** / **pause** action handlers that call **`togglePause`** / **`pauseIfPlaying`** on the desktop playback ref.
 - **Shared playlist:** both apps use the same **`playlist.json`** payload (vault disk path or R2 object). With R2 enabled, they **re-read on startup** and on **vault/podcast refresh** so another device’s newer `updatedAt` replaces local playback state when applicable.
 
 ## Desktop main-window UX

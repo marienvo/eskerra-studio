@@ -46,7 +46,7 @@ The mobile app is **Android-only**. Tabs and stacks (from navigation code) map a
 | **Vault root** | Native folder dialog; path persisted (store + session) |
 | **Layout / notes** | Bootstrap vault (`initEskerraVault` via `@eskerra/core`), **list Inbox notes**, **single-column editor**, create note (`window.prompt` title), save markdown |
 | **Settings** | Display name editable in header; change folder |
-| **Audio** | Manual **MP3 URL** field; **play / pause**; **resume from** `.eskerra/playlist.json`; **MPRIS** on Linux (souvlaki) |
+| **Audio** | Manual **MP3 URL** field; **play / pause**; **resume from** `.eskerra/playlist.json`; **MPRIS** on Linux via WebKitGTK **MediaSession** |
 | **Podcasts from vault** | **Not present** as a first-class Episodes UI (no scan of `General/` episode lists, no sectioned list, no refresh) |
 | **RSS sync** | **Deferred** (documented in parity matrix) |
 | **Mark played / batch** | **Not present** |
@@ -85,7 +85,7 @@ The mobile app is **Android-only**. Tabs and stacks (from navigation code) map a
 
 - **Port or share** the TypeScript-side vault scanning and episode model (`podcastPhase1`, types under `apps/mobile/src/types`, hooks like `usePodcasts`) into a **desktop-consumable module**—prefer **`@eskerra/core` or a small `packages/` slice** if it avoids duplicating parsing rules.
 - **UI:** sectioned episode list analogous to `PodcastsScreen` (sections, row actions that exist **without** sync first—play at minimum).
-- **Playback:** **play episode** wires `HtmlAudioPlayer` + `playlist.json` updates + **MPRIS metadata** (title/artist/position) matching episode fields where available.
+- **Playback:** **play episode** wires `HtmlAudioPlayer` + `playlist.json` updates + **MediaSession / MPRIS metadata** (title/artist/position) matching episode fields where available.
 - **Mini-player equivalent:** persistent player strip (play/pause, scrub if supported by `AudioPlayer` interface, show title).
 - **Pull-to-refresh:** if shown in UI, either **re-scan disk only** or hide until Phase 3—avoid implying RSS when only rescanning.
 
@@ -153,7 +153,7 @@ The mobile app is **Android-only**. Tabs and stacks (from navigation code) map a
 - **Shell:** tab-like or sidebar navigation grouping **Episodes | Log | Entry | Settings** (and placeholders for **Playlist | Record** only if you want structural parity with RN **tabs**, not feature parity with empty screens).
 - **Settings screen:** dedicated screen or panel mirroring Android: **vault path label**, **change folder**, **display name**, status/error messaging.
 - **Theming:** if Android ships light/dark for main lists, align desktop (at least **prefers-color-scheme**).
-- **Document platform gaps:** MPRIS on Linux vs macOS/Windows behavior (souvlaki support matrix when relevant).
+- **Document platform gaps:** Linux **MediaSession** / MPRIS vs macOS/Windows behavior when relevant.
 
 **Exit criteria**
 

@@ -58,8 +58,8 @@ async function cacheRemoteArtworkToFileUri(remoteUrl: string): Promise<string | 
   }
 }
 
-/** When RSS channel artwork URL is not yet in memory cache, resolve + download in the background for MPRIS. */
-function scheduleMprisChannelArtwork(episodeId: string, rssFeedUrl: string): void {
+/** When RSS channel artwork URL is not yet in memory cache, resolve + download in the background for MediaSession. */
+function scheduleMediaSessionChannelArtwork(episodeId: string, rssFeedUrl: string): void {
   void (async () => {
     let remote: string | null;
     try {
@@ -81,7 +81,7 @@ function scheduleMprisChannelArtwork(episodeId: string, rssFeedUrl: string): voi
  * Returns a `file://` cover URI when the feed artwork is already known (peek hit);
  * otherwise schedules background resolve + cache and returns `undefined`.
  */
-async function channelArtworkFileUriForMpris(
+async function channelArtworkFileUriForMediaSession(
   episodeId: string,
   rssFeedUrl: string | undefined,
 ): Promise<string | undefined> {
@@ -93,7 +93,7 @@ async function channelArtworkFileUriForMpris(
     return undefined;
   }
   if (peek === undefined) {
-    scheduleMprisChannelArtwork(episodeId, rssFeedUrl);
+    scheduleMediaSessionChannelArtwork(episodeId, rssFeedUrl);
     return undefined;
   }
   const file = await cacheRemoteArtworkToFileUri(peek);
@@ -208,7 +208,7 @@ async function runPrimedPrimePausedWithArtwork(
   const player = getDesktopAudioPlayer();
   const trackUrl = catalogEp.mp3Url;
   try {
-    const artwork = await channelArtworkFileUriForMpris(catalogEp.id, catalogEp.rssFeedUrl);
+    const artwork = await channelArtworkFileUriForMediaSession(catalogEp.id, catalogEp.rssFeedUrl);
     await player.primePausedAt(
       {
         artist: catalogEp.seriesName,
@@ -415,7 +415,7 @@ async function runDesktopPlayEpisodeUserAction(
     onError('Device id missing from local settings.');
   }
 
-  const artwork = await channelArtworkFileUriForMpris(ep.id, ep.rssFeedUrl);
+  const artwork = await channelArtworkFileUriForMediaSession(ep.id, ep.rssFeedUrl);
   await getDesktopAudioPlayer().play(
     {
       artist: ep.seriesName,
