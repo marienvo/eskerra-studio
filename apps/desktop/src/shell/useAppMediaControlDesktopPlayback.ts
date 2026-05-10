@@ -34,22 +34,25 @@ export function useAppMediaControlDesktopPlayback(
       desktopPlaybackRef.current.dismissNowPlaying().catch(() => undefined);
     };
 
-    try {
-      ms.setActionHandler('play', onPlay);
-      ms.setActionHandler('pause', onPause);
-      ms.setActionHandler('stop', onStop);
-    } catch {
-      return;
-    }
+    const trySetHandler = (
+      action: 'play' | 'pause' | 'stop',
+      handler: (() => void) | null,
+    ) => {
+      try {
+        ms.setActionHandler(action, handler);
+      } catch {
+        /* Action may be unsupported on this WebView / browser build. */
+      }
+    };
+
+    trySetHandler('play', onPlay);
+    trySetHandler('pause', onPause);
+    trySetHandler('stop', onStop);
 
     return () => {
-      try {
-        ms.setActionHandler('play', null);
-        ms.setActionHandler('pause', null);
-        ms.setActionHandler('stop', null);
-      } catch {
-        /* ignore */
-      }
+      trySetHandler('play', null);
+      trySetHandler('pause', null);
+      trySetHandler('stop', null);
     };
   }, [desktopPlaybackRef]);
 }
