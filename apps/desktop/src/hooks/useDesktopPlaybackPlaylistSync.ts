@@ -220,7 +220,7 @@ export function useDesktopPlaybackPlaylistSync(
 
     let cancelled = false;
     void runDesktopPrimedPlaylistNativeResume({
-      isCancelled: () => cancelled,
+      isCancelled: () => cancelled || userPlaybackDepthRef.current > 0,
       pl,
       catalogEp,
       key,
