@@ -43,15 +43,18 @@ export function useDesktopPlaybackSessionActions(
   } = ctx;
   const {actorRef, vaultRoot, fs} = args;
 
-  const markEpisodePlayed = useCallback(async (ep: PodcastEpisode) => {
-    await markDesktopEpisodeAsPlayedAndRefreshCatalog(
-      vaultRootRef.current,
-      fsRef.current,
-      ep,
-      onCatalogRefreshRef.current,
-    );
+  const markEpisodePlayed = useCallback(
+    async (ep: PodcastEpisode) => {
+      await markDesktopEpisodeAsPlayedAndRefreshCatalog(
+        vaultRootRef.current,
+        fsRef.current,
+        ep,
+        onCatalogRefreshRef.current,
+      );
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-  }, []);
+    [],
+  );
 
   const playEpisode = useCallback(
     async (ep: PodcastEpisode) => {
@@ -92,22 +95,25 @@ export function useDesktopPlaybackSessionActions(
     }
   }, [actorRef]);
 
-  const dismissNowPlaying = useCallback(async () => {
-    const root = vaultRootRef.current;
-    if (!root) {
-      return;
-    }
-    try {
-      await getDesktopAudioPlayer().stop();
-    } catch {
-      /* ignore */
-    }
-    await clearPlaylistEntry(root, fsRef.current);
-    lastPrimedPlaylistKeyRef.current = null;
-    sendRef.current({type: 'RESET'});
-    onPlaylistDiskUpdatedRef.current?.();
+  const dismissNowPlaying = useCallback(
+    async () => {
+      const root = vaultRootRef.current;
+      if (!root) {
+        return;
+      }
+      try {
+        await getDesktopAudioPlayer().stop();
+      } catch {
+        /* ignore */
+      }
+      await clearPlaylistEntry(root, fsRef.current);
+      lastPrimedPlaylistKeyRef.current = null;
+      sendRef.current({type: 'RESET'});
+      onPlaylistDiskUpdatedRef.current?.();
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
-  }, []);
+    [],
+  );
 
   return {
     markEpisodePlayed,

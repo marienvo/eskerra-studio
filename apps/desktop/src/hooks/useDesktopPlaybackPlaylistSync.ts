@@ -31,7 +31,7 @@ export function useDesktopPlaybackLastPrimedResetOnVaultRoot(
 ): void {
   useEffect(() => {
     lastPrimedPlaylistKeyRef.current = null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- lastPrimedPlaylistKeyRef is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs from DesktopPlaybackContext are stable
   }, [vaultRoot]);
 }
 
