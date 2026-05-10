@@ -29,8 +29,21 @@ test('tauri linux RPM config: GTK app id, desktop entry alias, and bundled PNG i
   assert.ok(Object.hasOwn(rpmFiles, aliasDest), 'RPM extra files must ship the reverse-DNS desktop alias');
   assert.equal(rpmFiles[aliasDest], 'linux/com.eskerra.desktop.desktop');
   assert.ok(existsSync(join(DESKTOP_SRC_TAURI, rpmFiles[aliasDest])));
+  const aliasBody = readFileSync(join(DESKTOP_SRC_TAURI, rpmFiles[aliasDest]), 'utf8');
+  assert.ok(
+    aliasBody.includes('StartupWMClass=com.eskerra.desktop'),
+    'reverse-DNS alias .desktop must match GTK WM_CLASS',
+  );
 
   assert.equal(cfg.bundle.linux.rpm.desktopTemplate, 'linux/eskerra.desktop.hbs');
+  const desktopHbs = readFileSync(
+    join(DESKTOP_SRC_TAURI, cfg.bundle.linux.rpm.desktopTemplate),
+    'utf8',
+  );
+  assert.ok(
+    desktopHbs.includes('StartupWMClass=com.eskerra.desktop'),
+    'launcher .desktop must match GTK WM_CLASS when enableGTKAppId uses identifier',
+  );
   assert.ok(existsSync(join(DESKTOP_SRC_TAURI, cfg.bundle.linux.rpm.desktopTemplate)));
 
   const icons = cfg.bundle.icon;

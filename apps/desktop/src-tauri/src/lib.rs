@@ -41,6 +41,13 @@ fn prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
+/// Must run before `tauri::Builder` / WebKit spawn so `g_get_application_name()` is non-empty
+/// when WebKit builds `WebProcessCreationParameters` (MPRIS `Identity` on GNOME).
+#[cfg(target_os = "linux")]
+pub fn early_linux_glib_application_name_for_webkit() {
+    linux_app_identity::early_glib_application_name_for_webkit();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()

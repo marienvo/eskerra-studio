@@ -3,6 +3,6 @@ Type=Application
 Name=Eskerra
 Exec=eskerra
 Icon=eskerra
-StartupWMClass=eskerra
+StartupWMClass=com.eskerra.desktop
 Terminal=false
 NoDisplay=true
