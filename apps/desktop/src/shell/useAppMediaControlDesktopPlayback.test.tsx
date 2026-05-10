@@ -8,7 +8,10 @@ import {useAppMediaControlDesktopPlayback} from './useAppMediaControlDesktopPlay
 type DesktopPodcastPlayback = ReturnType<typeof useDesktopPodcastPlayback>;
 
 function playbackRefStub(
-  partial: Pick<DesktopPodcastPlayback, 'togglePause' | 'pauseIfPlaying'>,
+  partial: Pick<
+    DesktopPodcastPlayback,
+    'togglePause' | 'pauseIfPlaying' | 'dismissNowPlaying'
+  >,
 ): MutableRefObject<DesktopPodcastPlayback> {
   return {current: partial as DesktopPodcastPlayback};
 }
@@ -49,10 +52,15 @@ describe('useAppMediaControlDesktopPlayback', () => {
     vi.unstubAllGlobals();
   });
 
-  it('registers play and pause handlers that delegate to the desktop playback ref', async () => {
+  it('registers play, pause, and stop handlers that delegate to the desktop playback ref', async () => {
     const togglePause = vi.fn().mockResolvedValue(undefined);
     const pauseIfPlaying = vi.fn().mockResolvedValue(undefined);
-    const ref = playbackRefStub({togglePause, pauseIfPlaying});
+    const dismissNowPlaying = vi.fn().mockResolvedValue(undefined);
+    const ref = playbackRefStub({
+      togglePause,
+      pauseIfPlaying,
+      dismissNowPlaying,
+    });
 
     getDesktopAudioPlayer.mockReturnValue({
       getState: vi.fn().mockResolvedValue('paused'),
@@ -64,6 +72,7 @@ describe('useAppMediaControlDesktopPlayback', () => {
 
     expect(setActionHandler).toHaveBeenCalledWith('play', expect.any(Function));
     expect(setActionHandler).toHaveBeenCalledWith('pause', expect.any(Function));
+    expect(setActionHandler).toHaveBeenCalledWith('stop', expect.any(Function));
 
     await handlers.play!();
     expect(togglePause).toHaveBeenCalledTimes(1);
@@ -72,9 +81,13 @@ describe('useAppMediaControlDesktopPlayback', () => {
     await handlers.pause!();
     expect(pauseIfPlaying).toHaveBeenCalledTimes(1);
 
+    await handlers.stop!();
+    expect(dismissNowPlaying).toHaveBeenCalledTimes(1);
+
     unmount();
     expect(setActionHandler).toHaveBeenCalledWith('play', null);
     expect(setActionHandler).toHaveBeenCalledWith('pause', null);
+    expect(setActionHandler).toHaveBeenCalledWith('stop', null);
   });
 
   it('play handler does not toggle when already playing', async () => {
@@ -82,6 +95,7 @@ describe('useAppMediaControlDesktopPlayback', () => {
     const ref = playbackRefStub({
       togglePause,
       pauseIfPlaying: vi.fn().mockResolvedValue(undefined),
+      dismissNowPlaying: vi.fn().mockResolvedValue(undefined),
     });
     getDesktopAudioPlayer.mockReturnValue({
       getState: vi.fn().mockResolvedValue('playing'),
@@ -101,6 +115,7 @@ describe('useAppMediaControlDesktopPlayback', () => {
     const ref = playbackRefStub({
       togglePause: vi.fn(),
       pauseIfPlaying: vi.fn(),
+      dismissNowPlaying: vi.fn(),
     });
     expect(() =>
       renderHook(() => useAppMediaControlDesktopPlayback(ref)),

@@ -30,9 +30,14 @@ export function useAppMediaControlDesktopPlayback(
       desktopPlaybackRef.current.pauseIfPlaying().catch(() => undefined);
     };
 
+    const onStop = () => {
+      desktopPlaybackRef.current.dismissNowPlaying().catch(() => undefined);
+    };
+
     try {
       ms.setActionHandler('play', onPlay);
       ms.setActionHandler('pause', onPause);
+      ms.setActionHandler('stop', onStop);
     } catch {
       return;
     }
@@ -41,6 +46,7 @@ export function useAppMediaControlDesktopPlayback(
       try {
         ms.setActionHandler('play', null);
         ms.setActionHandler('pause', null);
+        ms.setActionHandler('stop', null);
       } catch {
         /* ignore */
       }
