@@ -14,6 +14,7 @@ export type DesktopPlaybackMachineContext = DesktopPlaybackMachineSnapshot['cont
 
 export type DesktopPlaybackContext = {
   send: (event: PodcastPlayerMachineEvent) => void;
+  sendRef: MutableRefObject<(event: PodcastPlayerMachineEvent) => void>;
   snapshotRef: MutableRefObject<DesktopPlaybackMachineSnapshot>;
   vaultRootRef: MutableRefObject<string | null>;
   fsRef: MutableRefObject<VaultFilesystem>;
@@ -21,6 +22,7 @@ export type DesktopPlaybackContext = {
   consumeEpisodesRef: MutableRefObject<readonly PodcastEpisode[]>;
   deviceIdRef: MutableRefObject<string>;
   onPlaylistDiskUpdatedRef: MutableRefObject<(() => void) | undefined>;
+  onCatalogRefreshRef: MutableRefObject<(() => Promise<void>) | undefined>;
   lastPrimedPlaylistKeyRef: MutableRefObject<string | null>;
   userPlaybackDepthRef: MutableRefObject<number>;
   onError: (msg: string | null) => void;

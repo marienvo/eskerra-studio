@@ -1,42 +1,31 @@
 import {
   getPlaybackSubstate,
   getPlaybackTransportPlayControl,
-  isPersistIdle,
   isPlaybackTransportBusy,
   podcastPlayerMachine,
   type PodcastPlayerDeps,
 } from '@eskerra/core';
 import {useMachine} from '@xstate/react';
 import {
-  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
 } from 'react';
-import {waitFor} from 'xstate';
 
-import {
-  getDesktopAudioPlayer,
-  isAbortError,
-} from '../lib/htmlAudioPlayer';
+import {getDesktopAudioPlayer} from '../lib/htmlAudioPlayer';
 import {
   markDesktopEpisodeAsPlayed,
-  markDesktopEpisodeAsPlayedAndRefreshCatalog,
 } from '../lib/podcasts/markEpisodeAsPlayedDesktop';
-import {
-  runDesktopPlayEpisodeUserAction,
-  type PlaylistMachineContext,
-} from '../lib/podcasts/desktopPlaybackPlayAction';
-import type {PodcastEpisode} from '../lib/podcasts/podcastTypes';
 import {clearPlaylistEntry, writePlaylistEntry} from '../lib/vaultBootstrap';
 import type {DesktopPlaybackContext} from './desktopPlaybackContext';
 import {useDesktopPlaybackCatalogProbe} from './useDesktopPlaybackCatalogProbe';
 import {useDesktopPlaybackNativeIdleStop, useDesktopPlaybackNativeListeners} from './useDesktopPlaybackNativeListeners';
 import {useDesktopPlaybackPlaylistSync} from './useDesktopPlaybackPlaylistSync';
+import {useDesktopPlaybackSessionActions} from './useDesktopPlaybackSessionActions';
 import {useDesktopPlaybackTransportActions} from './useDesktopPlaybackTransportActions';
-import type {DesktopPlayerLabel} from './useDesktopPodcastPlayback.types';
 import type {
+  DesktopPlayerLabel,
   UseDesktopPodcastPlaybackOptions,
   UseDesktopPodcastPlaybackResult,
 } from './useDesktopPodcastPlayback.types';
@@ -194,19 +183,11 @@ export function useDesktopPodcastPlayback({
 
   const activeEpisodeId = snapCtx.episode?.id ?? null;
 
-  const markEpisodePlayed = useCallback(async (ep: PodcastEpisode) => {
-    await markDesktopEpisodeAsPlayedAndRefreshCatalog(
-      vaultRootRef.current,
-      fsRef.current,
-      ep,
-      onCatalogRefreshRef.current,
-    );
-  }, []);
-
   const seekDisabled = isPlaybackTransportBusy(snapCtx);
 
   const playbackCtx: DesktopPlaybackContext = {
     send,
+    sendRef,
     snapshotRef,
     vaultRootRef,
     fsRef,
@@ -214,10 +195,14 @@ export function useDesktopPodcastPlayback({
     consumeEpisodesRef,
     deviceIdRef,
     onPlaylistDiskUpdatedRef,
+    onCatalogRefreshRef,
     lastPrimedPlaylistKeyRef,
     userPlaybackDepthRef,
     onError,
   };
+
+  const {markEpisodePlayed, playEpisode, waitForPersistFlushed, dismissNowPlaying} =
+    useDesktopPlaybackSessionActions(playbackCtx, {actorRef, vaultRoot, fs});
 
   useEffect(() => {
     lastPrimedPlaylistKeyRef.current = null;
@@ -239,60 +224,6 @@ export function useDesktopPodcastPlayback({
 
   const {seekBy, seekTo, pauseIfPlaying, togglePause} =
     useDesktopPlaybackTransportActions(playbackCtx);
-
-  const playEpisode = useCallback(
-    async (ep: PodcastEpisode) => {
-      if (!vaultRoot) {
-        return;
-      }
-      userPlaybackDepthRef.current += 1;
-      try {
-        await runDesktopPlayEpisodeUserAction(
-          ep,
-          vaultRoot,
-          fs,
-          onError,
-          send,
-          () => snapshotRef.current.context as PlaylistMachineContext,
-          () => deviceIdRef.current,
-          lastPrimedPlaylistKeyRef,
-        );
-      } catch (e) {
-        if (isAbortError(e)) {
-          return;
-        }
-        onError(e instanceof Error ? e.message : String(e));
-        send({type: 'ERROR', message: e instanceof Error ? e.message : String(e)});
-      } finally {
-        userPlaybackDepthRef.current -= 1;
-      }
-    },
-    [vaultRoot, fs, onError, send],
-  );
-
-  const waitForPersistFlushed = useCallback(async (timeoutMs: number) => {
-    try {
-      await waitFor(actorRef, snap => isPersistIdle(snap), {timeout: timeoutMs});
-    } catch {
-      /* timeout or actor stopped — continue shutdown */
-    }
-  }, [actorRef]);
-
-  const dismissNowPlaying = useCallback(async () => {
-    const root = vaultRootRef.current;
-    if (!root) {
-      return;
-    }
-    try {
-      await getDesktopAudioPlayer().stop();
-    } catch {
-      /* ignore */
-    }
-    await clearPlaylistEntry(root, fsRef.current);
-    lastPrimedPlaylistKeyRef.current = null;
-    sendRef.current({type: 'RESET'});
-    onPlaylistDiskUpdatedRef.current?.();
-  }, []);
 
   return {
     activeEpisode,
