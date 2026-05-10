@@ -154,7 +154,7 @@ describe('useDesktopPodcastPlayback dismissNowPlaying', () => {
 
     expect(hoisted.audioStop).toHaveBeenCalled();
     expect(hoisted.clearPlaylistEntryMock).toHaveBeenCalledWith('/vault', fs);
-    expect(hoisted.onPlaylistDiskUpdated).toHaveBeenCalled();
+    expect(hoisted.onPlaylistDiskUpdated).not.toHaveBeenCalled();
     expect(result.current.activeEpisode).toBeNull();
   });
 

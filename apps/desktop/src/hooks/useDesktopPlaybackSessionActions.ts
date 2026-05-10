@@ -115,10 +115,10 @@ export function useDesktopPlaybackSessionActions(
       }
       try {
         await clearPlaylistEntry(root, fsRef.current);
+        onPlaylistDiskUpdatedRef.current?.();
       } finally {
         lastPrimedPlaylistKeyRef.current = null;
         sendRef.current({type: 'RESET'});
-        onPlaylistDiskUpdatedRef.current?.();
       }
     },
     [fsRef, lastPrimedPlaylistKeyRef, onPlaylistDiskUpdatedRef, sendRef, vaultRootRef],
