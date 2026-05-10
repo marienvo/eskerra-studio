@@ -117,6 +117,47 @@ describe('useDesktopPodcastPlayback dismissNowPlaying', () => {
     expect(markDesktopEpisodeAsPlayed).not.toHaveBeenCalled();
   });
 
+  it('still resets playback when clearing the playlist fails', async () => {
+    hoisted.clearPlaylistEntryMock.mockRejectedValueOnce(new Error('disk write'));
+    hoisted.readPlaylistEntryMock.mockResolvedValue(playlistRow);
+
+    const {result} = renderHook(() =>
+      useDesktopPodcastPlayback({
+        consumeCatalogReady: true,
+        consumeEpisodes: [catalogEpisode],
+        deviceInstanceId: 'device-1',
+        fs,
+        onCatalogRefresh: vi.fn(),
+        onError: vi.fn(),
+        onPlaylistDiskUpdated: hoisted.onPlaylistDiskUpdated,
+        playlistRevision: 0,
+        r2PlaylistConfigured: false,
+        vaultRoot: '/vault',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.activeEpisode?.id).toBe('e1');
+    });
+
+    let dismissError: unknown;
+    await act(async () => {
+      try {
+        await result.current.dismissNowPlaying();
+      } catch (e) {
+        dismissError = e;
+      }
+    });
+
+    expect(dismissError).toBeInstanceOf(Error);
+    expect((dismissError as Error).message).toBe('disk write');
+
+    expect(hoisted.audioStop).toHaveBeenCalled();
+    expect(hoisted.clearPlaylistEntryMock).toHaveBeenCalledWith('/vault', fs);
+    expect(hoisted.onPlaylistDiskUpdated).toHaveBeenCalled();
+    expect(result.current.activeEpisode).toBeNull();
+  });
+
   it('no-ops when vault root is missing', async () => {
     hoisted.readPlaylistEntryMock.mockResolvedValue(null);
 

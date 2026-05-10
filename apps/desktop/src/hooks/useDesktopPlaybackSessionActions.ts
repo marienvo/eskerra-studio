@@ -113,10 +113,13 @@ export function useDesktopPlaybackSessionActions(
       } catch {
         /* ignore */
       }
-      await clearPlaylistEntry(root, fsRef.current);
-      lastPrimedPlaylistKeyRef.current = null;
-      sendRef.current({type: 'RESET'});
-      onPlaylistDiskUpdatedRef.current?.();
+      try {
+        await clearPlaylistEntry(root, fsRef.current);
+      } finally {
+        lastPrimedPlaylistKeyRef.current = null;
+        sendRef.current({type: 'RESET'});
+        onPlaylistDiskUpdatedRef.current?.();
+      }
     },
     [fsRef, lastPrimedPlaylistKeyRef, onPlaylistDiskUpdatedRef, sendRef, vaultRootRef],
   );
