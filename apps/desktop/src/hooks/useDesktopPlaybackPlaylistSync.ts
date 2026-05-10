@@ -5,7 +5,7 @@ import {
   type PodcastPlayerPlaybackState,
   type VaultFilesystem,
 } from '@eskerra/core';
-import {useEffect, useRef, type MutableRefObject} from 'react';
+import {useEffect, useLayoutEffect, useRef, type MutableRefObject} from 'react';
 
 import {getDesktopAudioPlayer} from '../lib/htmlAudioPlayer';
 import {runDesktopPrimedPlaylistNativeResume} from '../lib/podcasts/desktopPlaybackPriming';
@@ -61,6 +61,10 @@ export function useDesktopPlaybackPlaylistSync(
     args;
 
   const nearEndNonceHandledRef = useRef(0);
+  const consumeCatalogReadyRef = useRef(consumeCatalogReady);
+  useLayoutEffect(() => {
+    consumeCatalogReadyRef.current = consumeCatalogReady;
+  }, [consumeCatalogReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +98,9 @@ export function useDesktopPlaybackPlaylistSync(
           send({type: 'RESET'});
           return;
         }
+        if (!consumeCatalogReadyRef.current) {
+          return;
+        }
         const catalogEp = consumeEpisodesRef.current.find(e => e.id === pl.episodeId);
         if (!catalogEp || catalogEp.isListened) {
           clearPlaylistEntry(vaultRoot, fs).finally(() => {
@@ -118,6 +125,7 @@ export function useDesktopPlaybackPlaylistSync(
       cancelled = true;
     };
   }, [
+    consumeCatalogReady,
     consumeEpisodesRef,
     fs,
     onPlaylistDiskUpdatedRef,

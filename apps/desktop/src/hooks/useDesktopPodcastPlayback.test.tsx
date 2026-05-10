@@ -333,3 +333,83 @@ describe('useDesktopPodcastPlayback seekTo', () => {
     expect(hoisted.playerSeekTo).not.toHaveBeenCalled();
   });
 });
+
+describe('useDesktopPodcastPlayback playlist disk hydrate vs catalog loading', () => {
+  beforeEach(() => {
+    hoisted.audioStop.mockClear();
+    hoisted.clearPlaylistEntryMock.mockClear();
+    hoisted.readPlaylistEntryMock.mockReset();
+    hoisted.onPlaylistDiskUpdated.mockReset();
+    hoisted.playerGetProgress.mockReset();
+    hoisted.playerGetProgress.mockResolvedValue({positionMs: 0, durationMs: 0});
+    hoisted.playerSeekTo.mockClear();
+    hoisted.writePlaylistEntryMock.mockClear();
+    vi.mocked(markDesktopEpisodeAsPlayed).mockClear();
+  });
+
+  it('does not clear playlist while catalog is still loading', async () => {
+    hoisted.readPlaylistEntryMock.mockResolvedValue(playlistRow);
+
+    const {result, rerender} = renderHook(
+      ({ready, episodes}: {ready: boolean; episodes: PodcastEpisode[]}) =>
+        useDesktopPodcastPlayback({
+          consumeCatalogReady: ready,
+          consumeEpisodes: episodes,
+          deviceInstanceId: 'device-1',
+          fs,
+          onCatalogRefresh: vi.fn(),
+          onError: vi.fn(),
+          onPlaylistDiskUpdated: hoisted.onPlaylistDiskUpdated,
+          playlistRevision: 0,
+          r2PlaylistConfigured: false,
+          vaultRoot: '/vault',
+        }),
+      {initialProps: {ready: false, episodes: [] as PodcastEpisode[]}},
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hoisted.clearPlaylistEntryMock).not.toHaveBeenCalled();
+
+    rerender({ready: true, episodes: [catalogEpisode]});
+
+    await waitFor(() => {
+      expect(result.current.activeEpisode?.id).toBe('e1');
+    });
+    expect(hoisted.clearPlaylistEntryMock).not.toHaveBeenCalled();
+  });
+
+  it('clears stale playlist row after catalog is ready when episode is missing', async () => {
+    const ghostPlaylist: PlaylistEntry = {...playlistRow, episodeId: 'missing-ep'};
+    hoisted.readPlaylistEntryMock.mockResolvedValue(ghostPlaylist);
+
+    const {rerender} = renderHook(
+      ({ready, episodes}: {ready: boolean; episodes: PodcastEpisode[]}) =>
+        useDesktopPodcastPlayback({
+          consumeCatalogReady: ready,
+          consumeEpisodes: episodes,
+          deviceInstanceId: 'device-1',
+          fs,
+          onCatalogRefresh: vi.fn(),
+          onError: vi.fn(),
+          onPlaylistDiskUpdated: hoisted.onPlaylistDiskUpdated,
+          playlistRevision: 0,
+          r2PlaylistConfigured: false,
+          vaultRoot: '/vault',
+        }),
+      {initialProps: {ready: false, episodes: [] as PodcastEpisode[]}},
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hoisted.clearPlaylistEntryMock).not.toHaveBeenCalled();
+
+    rerender({ready: true, episodes: [catalogEpisode]});
+
+    await waitFor(() => {
+      expect(hoisted.clearPlaylistEntryMock).toHaveBeenCalledWith('/vault', fs);
+    });
+  });
+});
