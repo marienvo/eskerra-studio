@@ -180,8 +180,12 @@ function useAppPodcastPlaybackRegion({
     return {
       episodeTitle: desktopPlayback.activeEpisode.title,
       seriesName: desktopPlayback.activeEpisode.seriesName,
+      onClose: () => {
+        desktopPlayback.dismissNowPlaying().catch(() => {});
+      },
     };
-  }, [desktopPlayback.activeEpisode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- granular playback fields; hook return object is unstable
+  }, [desktopPlayback.activeEpisode, desktopPlayback.dismissNowPlaying]);
 
   const playbackTransport = useMemo((): PlaybackTransportProps | undefined => {
     if (desktopPlayback.activeEpisode == null) {

@@ -1398,16 +1398,40 @@ a:focus:not(:focus-visible) {
   box-sizing: border-box;
   margin: 0;
   flex: none;
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   text-align: center;
   padding-inline: 0.5rem;
   font-size: 0.72rem;
   line-height: 1.22;
   font-weight: 400;
+}
+
+.editor-workspace-toolbar__now-playing-inner {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-workspace-toolbar__close-now-playing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: 0.375rem;
+  cursor: default;
+  vertical-align: middle;
+}
+
+.editor-workspace-toolbar__close-now-playing-glyph {
+  display: inline-flex;
+  line-height: 0;
 }
 
 .editor-workspace-toolbar__now-playing strong {

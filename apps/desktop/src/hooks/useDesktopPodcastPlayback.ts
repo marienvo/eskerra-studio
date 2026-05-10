@@ -471,6 +471,10 @@ export type UseDesktopPodcastPlaybackResult = {
   localPlaybackActive: boolean;
   playbackTransportPlayControl: PlaybackTransportPlayControl;
   seekDisabled: boolean;
+  /**
+   * Stop audio, clear the playlist entry, and reset playback state without marking the episode as listened.
+   */
+  dismissNowPlaying: () => Promise<void>;
 };
 
 export function useDesktopPodcastPlayback({
@@ -575,6 +579,11 @@ export function useDesktopPodcastPlayback({
   const [snapshot, send, actorRef] = useMachine(podcastPlayerMachine, {
     input: {deps},
   });
+
+  const sendRef = useRef(send);
+  useLayoutEffect(() => {
+    sendRef.current = send;
+  }, [send]);
 
   const snapshotRef = useRef(snapshot);
   useLayoutEffect(() => {
@@ -1041,6 +1050,22 @@ export function useDesktopPodcastPlayback({
     }
   }, [onError, queuePersistFromProgress, pauseIfPlaying]);
 
+  const dismissNowPlaying = useCallback(async () => {
+    const root = vaultRootRef.current;
+    if (!root) {
+      return;
+    }
+    try {
+      await getDesktopAudioPlayer().stop();
+    } catch {
+      /* ignore */
+    }
+    await clearPlaylistEntry(root, fsRef.current);
+    lastPrimedPlaylistKeyRef.current = null;
+    sendRef.current({type: 'RESET'});
+    onPlaylistDiskUpdatedRef.current?.();
+  }, []);
+
   return {
     activeEpisode,
     activeEpisodeId,
@@ -1058,5 +1083,6 @@ export function useDesktopPodcastPlayback({
     togglePause,
     pauseIfPlaying,
     waitForPersistFlushed,
+    dismissNowPlaying,
   };
 }
