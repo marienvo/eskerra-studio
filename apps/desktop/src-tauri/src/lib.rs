@@ -1,14 +1,15 @@
 mod crash_log;
 mod link_rich_metadata;
-mod r2_http;
-mod tiling;
 #[cfg(target_os = "linux")]
 mod linux_app_identity;
+mod r2_http;
+mod tiling;
 #[cfg(target_os = "linux")]
 mod tiling_gdk;
 mod tiling_score;
 mod vault;
 mod vault_frontmatter_index;
+mod vault_git_sync;
 mod vault_search;
 mod vault_search_index;
 mod vault_watch;
