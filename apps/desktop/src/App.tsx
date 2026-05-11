@@ -20,6 +20,8 @@ import {VaultTab} from './components/VaultTab.tsx';
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
 import {EpisodesPane} from './components/EpisodesPane';
 import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
+import {GitStatusChip} from './components/GitStatusChip';
+import {useVaultGitStatus} from './hooks/useVaultGitStatus';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
@@ -136,6 +138,10 @@ function useAppDebouncedPersistMainWindowUi({
   ]);
 }
 
+// TODO: make configurable via vault settings once multi-remote / multi-branch support is needed.
+const GIT_SYNC_REMOTE = 'origin';
+const GIT_SYNC_BRANCH = 'main';
+
 export default function App() {
   const {maximized} = useTauriWindowMaximized();
   const {tiling, tilingDebug} = useTauriWindowTiling();
@@ -187,6 +193,11 @@ export default function App() {
     restoredInboxState,
     inboxRestoreEnabled: layoutsReady,
   });
+  const {
+    status: gitStatus,
+    loading: gitStatusLoading,
+    error: gitStatusError,
+  } = useVaultGitStatus({vaultPath: vaultRoot, remote: GIT_SYNC_REMOTE, branch: GIT_SYNC_BRANCH});
   const {
     notes,
     selectedUri,
@@ -695,6 +706,13 @@ export default function App() {
 
           <AppStatusBar
             onOpenSettings={() => setActivePage('settings')}
+            statusIndicator={
+              <GitStatusChip
+                status={gitStatus}
+                loading={gitStatusLoading}
+                error={gitStatusError}
+              />
+            }
           />
           <ToastStack
             items={notificationItems}

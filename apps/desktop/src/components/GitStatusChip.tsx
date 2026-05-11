@@ -25,12 +25,12 @@ export function GitStatusChip({status, loading = false, error = null}: GitStatus
     return (
       <span
         className="git-status-chip git-status-chip--danger"
-        aria-label={`Sync error: ${error}`}
+        aria-label={`Git status error: ${error}`}
         data-tooltip={error}
         data-tooltip-placement="inline-start"
       >
         <IconGlyph name="error_outline" size={12} aria-hidden />
-        Sync error
+        Git status error
       </span>
     );
   }

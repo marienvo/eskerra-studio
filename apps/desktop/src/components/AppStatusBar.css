@@ -1,0 +1,74 @@
+.app-status-bar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.35rem;
+  box-sizing: border-box;
+  padding: 0.28rem var(--panel-grid-padding) 0.32rem 0;
+  background: transparent;
+}
+
+.app-status-bar-center-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  min-width: 0;
+  width: 100%;
+}
+
+/* Second row: tagline, episode line, or width of message chip (see AppStatusBar). */
+.app-status-bar-center-line {
+  margin: 0;
+  max-width: 100%;
+  width: 100%;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.2;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-status-bar-center--tagline {
+  color: var(--color-shell-tagline);
+}
+
+.app-status-bar-trailing {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 0.25rem;
+}
+
+/* Status bar leading/trailing compact icon tiles (Episodes, Settings); size from `--app-shell-icon-tile-size`. */
+.app-status-bar-icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--app-shell-icon-tile-size);
+  height: var(--app-shell-icon-tile-size);
+  min-width: var(--app-shell-icon-tile-size);
+  margin: 0;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--color-shell-icon-muted);
+  cursor: default;
+}
+
+.app-status-bar-icon-tile:hover:not(:disabled) {
+  color: var(--color-shell-icon);
+}
+
+.app-status-bar-icon-tile.icon-btn-ghost:hover:not(:disabled) {
+  background: var(--color-shell-hover-bg);
+}

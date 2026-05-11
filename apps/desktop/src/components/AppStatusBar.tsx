@@ -1,4 +1,7 @@
+import type {ReactNode} from 'react';
+
 import {MaterialIcon} from './MaterialIcon';
+import './AppStatusBar.css';
 
 /** Shared with {@link AppSetupTagline} and main {@link AppStatusBar}. */
 export const APP_SHELL_TAGLINE = 'Think. Compose. Nothing else.';
@@ -14,9 +17,10 @@ export function AppSetupTagline() {
 
 type AppStatusBarProps = {
   onOpenSettings: () => void;
+  statusIndicator?: ReactNode;
 };
 
-export function AppStatusBar({onOpenSettings}: AppStatusBarProps) {
+export function AppStatusBar({onOpenSettings, statusIndicator}: AppStatusBarProps) {
   return (
     <footer className="app-status-bar">
       <div className="app-status-bar-center-stack">
@@ -25,6 +29,7 @@ export function AppStatusBar({onOpenSettings}: AppStatusBarProps) {
         </p>
       </div>
       <div className="app-status-bar-trailing">
+        {statusIndicator}
         <button
           type="button"
           className="app-status-bar-icon-tile app-tooltip-trigger icon-btn-ghost"

@@ -30,8 +30,8 @@ describe('GitStatusChip', () => {
 
   it('renders error state when error is provided', () => {
     render(<GitStatusChip status={null} error="Connection refused" />);
-    expect(screen.getByText('Sync error')).toBeInstanceOf(HTMLElement);
-    const chip = screen.getByText('Sync error').closest('span');
+    expect(screen.getByText('Git status error')).toBeInstanceOf(HTMLElement);
+    const chip = screen.getByText('Git status error').closest('span');
     expect(chip?.getAttribute('data-tooltip')).toBe('Connection refused');
   });
 
