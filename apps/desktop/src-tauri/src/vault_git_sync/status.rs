@@ -694,4 +694,54 @@ mod tests {
         // git sometimes outputs space-separated on some platforms
         assert_eq!(parse_rev_list_count("2 5").unwrap(), (2, 5));
     }
+
+    // -----------------------------------------------------------------------
+    // GitStatusResult serialization — verifies camelCase field names
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn git_status_result_serializes_camel_case_fields() {
+        use serde_json::Value;
+
+        let result = GitStatusResult {
+            branch: Some("main".into()),
+            expected_branch: "main".into(),
+            has_uncommitted_changes: true,
+            has_staged_changes: false,
+            has_untracked_files: true,
+            ahead: 2,
+            behind: 1,
+            remote_ref_available: true,
+            unsafe_state: Some(GitStatusUnsafeState::IndexLock),
+            is_wrong_branch: false,
+        };
+        let v: Value = serde_json::to_value(&result).unwrap();
+
+        // Spot-check every multi-word snake_case field to confirm camelCase output.
+        assert_eq!(v["expectedBranch"], "main");
+        assert_eq!(v["hasUncommittedChanges"], true);
+        assert_eq!(v["hasStagedChanges"], false);
+        assert_eq!(v["hasUntrackedFiles"], true);
+        assert_eq!(v["remoteRefAvailable"], true);
+        assert_eq!(v["unsafeState"], "indexLock");
+        assert_eq!(v["isWrongBranch"], false);
+        assert_eq!(v["ahead"], 2);
+        assert_eq!(v["behind"], 1);
+
+        // Confirm no snake_case keys leak through.
+        for key in &[
+            "expected_branch",
+            "has_uncommitted_changes",
+            "has_staged_changes",
+            "has_untracked_files",
+            "remote_ref_available",
+            "unsafe_state",
+            "is_wrong_branch",
+        ] {
+            assert!(
+                v.get(key).is_none(),
+                "snake_case key {key:?} must not appear in serialized output"
+            );
+        }
+    }
 }
