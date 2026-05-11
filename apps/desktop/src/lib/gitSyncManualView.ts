@@ -1,4 +1,48 @@
-import type {SyncError} from './tauriVaultGitSync';
+import type {GitStatusResult, SyncError, SyncRunResult} from './tauriVaultGitSync';
+
+type ManualSyncDisabledReasonInput = {
+  vaultPath: string | null;
+  gitStatus: GitStatusResult | null;
+  gitStatusLoading: boolean;
+  gitStatusError: string | null;
+  running: boolean;
+};
+
+export function getManualSyncDisabledReason({
+  vaultPath,
+  gitStatus,
+  gitStatusLoading,
+  gitStatusError,
+  running,
+}: ManualSyncDisabledReasonInput): string | null {
+  if (running) {
+    return 'Syncing vault';
+  }
+  if (vaultPath == null) {
+    return 'Sync vault';
+  }
+  if (gitStatusLoading) {
+    return 'Checking Git status';
+  }
+  if (gitStatusError != null) {
+    return 'Git status unavailable';
+  }
+  if (gitStatus?.unsafeState != null) {
+    return 'Git needs attention';
+  }
+  if (gitStatus?.isWrongBranch === true) {
+    return 'Wrong Git branch';
+  }
+  return null;
+}
+
+export function formatVaultGitSyncSuccess(result: SyncRunResult): string {
+  const sha = result.localCommit.commit?.sha;
+  if (sha == null || sha.trim() === '') {
+    return 'Vault sync complete.';
+  }
+  return `Vault sync complete. Committed ${sha.slice(0, 7)}.`;
+}
 
 function hasType(value: unknown): value is {type: string} {
   return (
@@ -31,18 +75,15 @@ export function formatVaultGitSyncError(error: unknown): string {
 
   switch (syncError.type) {
     case 'mergeFailed': {
-      const parts = ['Merge conflict.'];
+      const parts = ['Merge conflict. Manual intervention required.'];
       appendDetail(parts, 'Snapshot branch', syncError.snapshotBranch);
       appendDetail(parts, 'Pre-merge SHA', syncError.preMergeSha);
-      parts.push('Manual intervention is required.');
       return parts.join(' ');
     }
     case 'lockAlreadyHeld':
       return 'Sync already running.';
     case 'pushRejected':
-      return syncError.stderr.trim() === ''
-        ? 'Push rejected.'
-        : `Push rejected. ${syncError.stderr.trim()}`;
+      return 'Push rejected. Local changes remain committed.';
     case 'gitCommandFailed': {
       const command = syncError.command.trim();
       const stderr = syncError.stderr.trim();

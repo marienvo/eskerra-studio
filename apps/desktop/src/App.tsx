@@ -46,6 +46,7 @@ import {
   type StoredMainWindowUi,
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
+import {getManualSyncDisabledReason} from './lib/gitSyncManualView';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import type {SyncConfig} from './lib/tauriVaultGitSync';
 import {writeVaultSettings} from './lib/vaultBootstrap';
@@ -498,8 +499,16 @@ export default function App() {
     vaultPath: vaultRoot,
     config: MANUAL_GIT_SYNC_CONFIG,
     notify: pushNotification,
-    onSuccess: refreshGitStatus,
+    onSettled: refreshGitStatus,
   });
+  const manualSyncDisabledReason = getManualSyncDisabledReason({
+    vaultPath: vaultRoot,
+    gitStatus,
+    gitStatusLoading,
+    gitStatusError,
+    running: manualGitSync.running,
+  });
+  const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
 
   if (!vaultRoot) {
     return (
@@ -747,6 +756,8 @@ export default function App() {
             onOpenSettings={() => setActivePage('settings')}
             onManualSync={() => void manualGitSync.run()}
             manualSyncBusy={manualGitSync.running}
+            manualSyncDisabled={manualSyncDisabledReason != null}
+            manualSyncLabel={manualSyncLabel}
             statusIndicator={
               <GitStatusChip
                 status={gitStatus}

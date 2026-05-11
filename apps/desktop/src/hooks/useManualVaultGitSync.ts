@@ -1,7 +1,10 @@
 import {appLocalDataDir, join} from '@tauri-apps/api/path';
 import {useCallback, useRef, useState} from 'react';
 
-import {formatVaultGitSyncError} from '../lib/gitSyncManualView';
+import {
+  formatVaultGitSyncError,
+  formatVaultGitSyncSuccess,
+} from '../lib/gitSyncManualView';
 import {
   runVaultGitSync,
   type SyncConfig,
@@ -12,14 +15,14 @@ type UseManualVaultGitSyncArgs = {
   vaultPath: string | null;
   config: SyncConfig;
   notify: (tone: SessionNotificationTone, text: string) => void;
-  onSuccess: () => void;
+  onSettled: () => void;
 };
 
 export function useManualVaultGitSync({
   vaultPath,
   config,
   notify,
-  onSuccess,
+  onSettled,
 }: UseManualVaultGitSyncArgs) {
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
@@ -33,16 +36,16 @@ export function useManualVaultGitSync({
     setRunning(true);
     try {
       const locksDir = await join(await appLocalDataDir(), 'locks');
-      await runVaultGitSync({vaultPath, locksDir, config});
-      notify('info', 'Vault sync complete.');
-      onSuccess();
+      const result = await runVaultGitSync({vaultPath, locksDir, config});
+      notify('info', formatVaultGitSyncSuccess(result));
     } catch (error) {
       notify('error', formatVaultGitSyncError(error));
     } finally {
+      onSettled();
       runningRef.current = false;
       setRunning(false);
     }
-  }, [config, notify, onSuccess, vaultPath]);
+  }, [config, notify, onSettled, vaultPath]);
 
   return {running, run};
 }

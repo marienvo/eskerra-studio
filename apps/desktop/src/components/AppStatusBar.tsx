@@ -20,6 +20,7 @@ type AppStatusBarProps = {
   onManualSync?: () => void;
   manualSyncBusy?: boolean;
   manualSyncDisabled?: boolean;
+  manualSyncLabel?: string;
   statusIndicator?: ReactNode;
 };
 
@@ -28,6 +29,7 @@ export function AppStatusBar({
   onManualSync,
   manualSyncBusy = false,
   manualSyncDisabled = false,
+  manualSyncLabel = 'Sync vault',
   statusIndicator,
 }: AppStatusBarProps) {
   return (
@@ -43,8 +45,8 @@ export function AppStatusBar({
           <button
             type="button"
             className="app-status-bar-icon-tile app-tooltip-trigger icon-btn-ghost"
-            aria-label={manualSyncBusy ? 'Syncing vault' : 'Sync vault'}
-            data-tooltip={manualSyncBusy ? 'Syncing vault' : 'Sync vault'}
+            aria-label={manualSyncLabel}
+            data-tooltip={manualSyncLabel}
             data-tooltip-placement="inline-start"
             disabled={manualSyncBusy || manualSyncDisabled}
             onClick={onManualSync}
