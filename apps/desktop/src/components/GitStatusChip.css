@@ -1,0 +1,53 @@
+/* ---------------------------------------------------------------------------
+ * Git status chip — compact inline pill; designed for status-bar shell context.
+ * Tones use opaque light backgrounds so the pill reads clearly on the dark
+ * AppChromeBackground gradient.
+ * --------------------------------------------------------------------------- */
+.git-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.4rem 0.1rem 0.25rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 14ch;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.git-status-chip--danger {
+  background: var(--color-shell-status-error-bg);
+  border-color: var(--color-shell-status-error-border);
+  color: var(--color-shell-status-error);
+}
+
+.git-status-chip--warning {
+  background: #fef6e4;
+  border-color: color-mix(in srgb, var(--color-semantic-warning) 40%, transparent);
+  color: #7a5209;
+}
+
+.git-status-chip--info {
+  background: var(--color-shell-status-info-bg);
+  border-color: var(--color-shell-status-info-border);
+  color: var(--color-shell-status-info);
+}
+
+.git-status-chip--success {
+  background: #edf7f1;
+  border-color: color-mix(in srgb, var(--color-semantic-success) 35%, transparent);
+  color: #2a6644;
+}
+
+.git-status-chip--muted {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-shell-icon-muted);
+}

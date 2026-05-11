@@ -1,0 +1,53 @@
+---
+description: CSS colocation policy for desktop app components
+globs:
+  - apps/desktop/src/**/*.tsx
+  - apps/desktop/src/**/*.css
+  - apps/desktop/src/App.css
+alwaysApply: false
+---
+
+# CSS colocation — desktop app components
+
+## Four conventions for component-local CSS
+
+1. **Same folder** as the component file.
+2. **Same basename** as the component file (`GitStatusChip.tsx` → `GitStatusChip.css`).
+3. **Imported once** by the component — no other file imports it.
+4. **Classes prefixed** with the component name in kebab-case (`GitStatusChip` → `.git-status-chip`, `.git-status-chip--modifier`).
+
+```
+src/components/GitStatusChip.tsx
+src/components/GitStatusChip.css   ← same folder, same basename
+```
+
+```tsx
+// GitStatusChip.tsx — single import, no re-import elsewhere
+import './GitStatusChip.css';
+```
+
+```css
+/* GitStatusChip.css — all classes start with the component prefix */
+.git-status-chip { … }
+.git-status-chip--danger { … }
+.git-status-chip__icon { … }
+```
+
+## CSS Modules
+
+The app uses **both** plain `.css` imports (`FrontmatterEditor.css`) and CSS Modules (`FileTreeNode.module.css`).
+
+- Default to **plain `.css`** for new app-level components (`apps/desktop/src/`).
+- Use **`.module.css`** only when local class scoping is genuinely needed (name collision risk, deeply nested selectors).
+- The design-system packages (`packages/eskerra-ds-*`) always use CSS Modules — keep that consistent.
+
+## App.css scope
+
+`App.css` is for:
+
+- Global resets and root-level layout.
+- Shell-level structural rules that span multiple unrelated components.
+- CSS custom-property overrides scoped to `html[data-ui-chrome='...']` or `[data-app-surface='...']`.
+- Shared utility classes used by more than ~3 unrelated components.
+
+**Do not add component-specific styles to `App.css`.** If you touch `App.css` and notice existing component-specific blocks, move them to a colocated file in the same change. Keep `App.css` on a shrinking trajectory, not a growing one.
