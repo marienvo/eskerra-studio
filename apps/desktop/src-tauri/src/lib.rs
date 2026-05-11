@@ -109,6 +109,7 @@ pub fn run() {
             vault_watch::vault_start_watch,
             vault_git_sync::commands::vault_git_status,
             vault_git_sync::commands::vault_git_stage_plan,
+            vault_git_sync::commands::vault_git_sync_run,
             crash_log::eskerra_append_crash_log,
         ])
         .run(tauri::generate_context!())

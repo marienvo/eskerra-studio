@@ -72,6 +72,13 @@ export interface StagePlan {
   unsupportedPaths: StagePlanEntry[];
 }
 
+export interface StageApplyResult {
+  stagedPaths: StagePlanEntry[];
+  excludedPaths: StagePlanEntry[];
+  unsupportedPaths: StagePlanEntry[];
+  mutated: boolean;
+}
+
 export interface StagePlanEntry {
   path: string;
   change: StagePlanChange;
@@ -91,6 +98,29 @@ export type StagePlanReason =
   | 'excludedGitDirectory'
   | 'includeNotMatched'
   | 'unsupportedStatus';
+
+// Mirrors vault_git_sync::local_commit::{LocalCommitResult, CommitInfo}
+// Rust: #[serde(rename_all = "camelCase")]
+export interface LocalCommitResult {
+  stageResult: StageApplyResult;
+  commit: CommitInfo | null;
+  mutated: boolean;
+}
+
+export interface CommitInfo {
+  sha: string;
+  message: string;
+}
+
+// Mirrors vault_git_sync::sync_run::SyncRunResult
+// Rust: #[serde(rename_all = "camelCase")]
+export interface SyncRunResult {
+  localCommit: LocalCommitResult;
+  preMergeSha: string | null;
+  pushed: boolean;
+  snapshotBranch: string | null;
+  finalHeadSha: string | null;
+}
 
 // Mirrors vault_git_sync::errors::SyncError
 // Rust: #[serde(tag = "type", rename_all = "camelCase")]
@@ -135,6 +165,18 @@ export async function getVaultGitStagePlan(input: {
 }): Promise<StagePlan> {
   return invoke<StagePlan>('vault_git_stage_plan', {
     vaultPath: input.vaultPath,
+    config: input.config,
+  });
+}
+
+export async function runVaultGitSync(input: {
+  vaultPath: string;
+  locksDir: string;
+  config: SyncConfig;
+}): Promise<SyncRunResult> {
+  return invoke<SyncRunResult>('vault_git_sync_run', {
+    vaultPath: input.vaultPath,
+    locksDir: input.locksDir,
     config: input.config,
   });
 }

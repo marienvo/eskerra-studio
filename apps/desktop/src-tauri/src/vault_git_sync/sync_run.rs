@@ -437,6 +437,51 @@ mod tests {
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     }
 
+    #[test]
+    fn sync_run_result_serializes_camel_case_fields() {
+        use crate::vault_git_sync::local_commit::CommitInfo;
+        use crate::vault_git_sync::stage_plan::{
+            StageApplyResult, StagePlanChange, StagePlanEntry, StagePlanReason,
+        };
+
+        let result = SyncRunResult {
+            local_commit: LocalCommitResult {
+                stage_result: StageApplyResult {
+                    staged_paths: vec![StagePlanEntry {
+                        path: "note.md".into(),
+                        change: StagePlanChange::ModifiedTracked,
+                        reason: StagePlanReason::Included,
+                    }],
+                    excluded_paths: vec![],
+                    unsupported_paths: vec![],
+                    mutated: true,
+                },
+                commit: Some(CommitInfo {
+                    sha: "abc123".into(),
+                    message: "sync".into(),
+                }),
+                mutated: true,
+            },
+            pre_merge_sha: Some("abc123".into()),
+            pushed: true,
+            snapshot_branch: Some("eskerra/sync-snapshot-1".into()),
+            final_head_sha: Some("def456".into()),
+        };
+
+        let value = serde_json::to_value(result).unwrap();
+
+        assert_eq!(
+            value["localCommit"]["stageResult"]["stagedPaths"][0]["path"],
+            "note.md"
+        );
+        assert_eq!(value["localCommit"]["commit"]["sha"], "abc123");
+        assert_eq!(value["preMergeSha"], "abc123");
+        assert_eq!(value["snapshotBranch"], "eskerra/sync-snapshot-1");
+        assert_eq!(value["finalHeadSha"], "def456");
+        assert!(value.get("local_commit").is_none());
+        assert!(value["localCommit"].get("stage_result").is_none());
+    }
+
     fn put_local_repo_in_merge_conflict(f: &Fixture) -> String {
         write(f.local_path(), "base.md", "local");
         git(&["add", "base.md"], f.local_path());

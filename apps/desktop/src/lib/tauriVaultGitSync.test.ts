@@ -11,12 +11,15 @@ vi.mock('@tauri-apps/api/core', () => ({
 import {
   getVaultGitStagePlan,
   getVaultGitStatus,
+  runVaultGitSync,
   type GitStatusResult,
   type StagePlan,
+  type SyncRunResult,
   type SyncConfig,
 } from './tauriVaultGitSync';
 
 const VAULT = '/home/user/vault';
+const LOCKS_DIR = '/home/user/.local/share/eskerra/locks';
 
 const cleanResult: GitStatusResult = {
   branch: 'main',
@@ -60,6 +63,23 @@ const stagePlan: StagePlan = {
   includedPaths: [{path: 'note.md', change: 'modifiedTracked', reason: 'included'}],
   excludedPaths: [{path: 'Scripts/build.md', change: 'modifiedTracked', reason: 'excludedByConfig'}],
   unsupportedPaths: [],
+};
+
+const syncRunResult: SyncRunResult = {
+  localCommit: {
+    stageResult: {
+      stagedPaths: [{path: 'note.md', change: 'modifiedTracked', reason: 'included'}],
+      excludedPaths: [],
+      unsupportedPaths: [],
+      mutated: true,
+    },
+    commit: {sha: 'abc123', message: 'chore: sync now laptop'},
+    mutated: true,
+  },
+  preMergeSha: 'abc123',
+  pushed: true,
+  snapshotBranch: null,
+  finalHeadSha: 'def456',
 };
 
 describe('getVaultGitStatus', () => {
@@ -139,5 +159,48 @@ describe('getVaultGitStagePlan', () => {
     await expect(getVaultGitStagePlan({vaultPath: VAULT, config: syncConfig})).rejects.toEqual(
       error,
     );
+  });
+});
+
+describe('runVaultGitSync', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+  });
+
+  it('invokes vault_git_sync_run with correct argument shape', async () => {
+    mockInvoke.mockResolvedValue(syncRunResult);
+    await runVaultGitSync({vaultPath: VAULT, locksDir: LOCKS_DIR, config: syncConfig});
+    expect(mockInvoke).toHaveBeenCalledWith('vault_git_sync_run', {
+      vaultPath: VAULT,
+      locksDir: LOCKS_DIR,
+      config: syncConfig,
+    });
+  });
+
+  it('returns the invoke result', async () => {
+    mockInvoke.mockResolvedValue(syncRunResult);
+    const result = await runVaultGitSync({vaultPath: VAULT, locksDir: LOCKS_DIR, config: syncConfig});
+    expect(result).toEqual(syncRunResult);
+  });
+
+  it('propagates MergeFailed errors as-is', async () => {
+    const error = {
+      type: 'mergeFailed',
+      stderr: 'conflict',
+      snapshotBranch: 'eskerra/sync-snapshot-1',
+      preMergeSha: 'abc123',
+    };
+    mockInvoke.mockRejectedValue(error);
+    await expect(
+      runVaultGitSync({vaultPath: VAULT, locksDir: LOCKS_DIR, config: syncConfig}),
+    ).rejects.toEqual(error);
+  });
+
+  it('propagates LockAlreadyHeld errors as-is', async () => {
+    const error = {type: 'lockAlreadyHeld'};
+    mockInvoke.mockRejectedValue(error);
+    await expect(
+      runVaultGitSync({vaultPath: VAULT, locksDir: LOCKS_DIR, config: syncConfig}),
+    ).rejects.toEqual(error);
   });
 });
