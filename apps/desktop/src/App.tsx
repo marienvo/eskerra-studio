@@ -194,11 +194,6 @@ export default function App() {
     inboxRestoreEnabled: layoutsReady,
   });
   const {
-    status: gitStatus,
-    loading: gitStatusLoading,
-    error: gitStatusError,
-  } = useVaultGitStatus({vaultPath: vaultRoot, remote: GIT_SYNC_REMOTE, branch: GIT_SYNC_BRANCH});
-  const {
     notes,
     selectedUri,
     editorBody,
@@ -234,7 +229,18 @@ export default function App() {
     onInboxSaveShortcut,
     onCleanNoteInbox,
     flushInboxSave,
+    saveSettledNonce,
   } = workspacePersistenceController;
+  const {
+    status: gitStatus,
+    loading: gitStatusLoading,
+    error: gitStatusError,
+    refresh: refreshGitStatus,
+  } = useVaultGitStatus({vaultPath: vaultRoot, remote: GIT_SYNC_REMOTE, branch: GIT_SYNC_BRANCH});
+  useEffect(() => {
+    if (saveSettledNonce === 0) return;
+    refreshGitStatus();
+  }, [saveSettledNonce, refreshGitStatus]);
   const {
     err,
     setErr,

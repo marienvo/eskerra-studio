@@ -1027,6 +1027,7 @@ export function useMainWindowWorkspace(options: {
     enqueuePersistOutgoingNoteMarkdown,
     flushInboxSave,
     onInboxSaveShortcut,
+    saveSettledNonce,
   } = useWorkspacePersistence({
     fs,
     vaultRoot,
@@ -4036,6 +4037,7 @@ export function useMainWindowWorkspace(options: {
       onInboxSaveShortcut,
       onCleanNoteInbox,
       flushInboxSave,
+      saveSettledNonce,
     },
     linkController,
     treeController: {

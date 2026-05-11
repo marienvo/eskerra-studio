@@ -3,6 +3,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type Dispatch,
   type MutableRefObject,
   type RefObject,
@@ -111,6 +112,7 @@ export function useWorkspacePersistence(args: {
   enqueueInboxPersist: () => Promise<void>;
   flushInboxSave: () => Promise<void>;
   onInboxSaveShortcut: () => void;
+  saveSettledNonce: number;
 } {
   const {
     fs,
@@ -145,6 +147,7 @@ export function useWorkspacePersistence(args: {
     createInboxAutosaveScheduler(INBOX_AUTOSAVE_DEBOUNCE_MS),
   );
   const flushInboxSaveRef = useRef<() => Promise<void>>(async () => {});
+  const [saveSettledNonce, setSaveSettledNonce] = useState(0);
 
   /** Merge a known-good body for `norm` into the inbox content cache (state + ref). No-op if no change. */
   const mergeInboxNoteBodyCacheRefAndState = useCallback(
@@ -202,6 +205,7 @@ export function useWorkspacePersistence(args: {
           return;
         }
         await saveNoteMarkdown(norm, fs, md);
+        setSaveSettledNonce(n => n + 1);
         refreshNotes(root).catch(() => undefined);
 
         const activeSel = selectedUriRef.current;
@@ -281,6 +285,7 @@ export function useWorkspacePersistence(args: {
           scheduleBacklinksDeferOneFrameAfterLoad();
         }
         await saveNoteMarkdown(uri, fs, md);
+        setSaveSettledNonce(n => n + 1);
         await refreshNotes(root);
         if (selectedUriRef.current !== uri || composingNewEntryRef.current) {
           return;
@@ -423,5 +428,6 @@ export function useWorkspacePersistence(args: {
     enqueueInboxPersist,
     flushInboxSave,
     onInboxSaveShortcut,
+    saveSettledNonce,
   };
 }

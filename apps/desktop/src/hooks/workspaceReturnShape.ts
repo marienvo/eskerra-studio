@@ -96,6 +96,7 @@ export type WorkspacePersistenceController = {
   onInboxSaveShortcut: () => void;
   onCleanNoteInbox: () => void;
   flushInboxSave: () => Promise<void>;
+  saveSettledNonce: number;
 };
 
 export type WorkspaceTreeController = {
