@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 use crate::vault_git_sync::errors::SyncError;
 
@@ -17,12 +18,6 @@ pub struct GitOutput {
 pub struct GitCmd {
     cwd: PathBuf,
     args: Vec<String>,
-    /// Stored for API stability. **No-op until Phase 3.** All Phase 1 calls are
-    /// local-only (rev-parse, symbolic-ref, diff --cached, etc.) and complete in
-    /// milliseconds. Wire up in Phase 3 when `git fetch` / `git push` are added —
-    /// those can block indefinitely on a slow or unreachable remote. Implementation:
-    /// thread + channel, or switch `run` to `tokio::process::Command` with
-    /// `tokio::time::timeout`.
     timeout: Option<Duration>,
 }
 
@@ -41,14 +36,48 @@ impl GitCmd {
     }
 
     pub fn run(self) -> Result<GitOutput, SyncError> {
-        let output = Command::new("git")
+        let mut child = Command::new("git")
             .args(&self.args)
             .current_dir(&self.cwd)
             // Non-interactive defaults: never prompt for credentials or open an editor.
             .env("GIT_TERMINAL_PROMPT", "0")
             .env("GIT_EDITOR", "true")
             .env("GIT_SEQUENCE_EDITOR", "true")
-            .output()
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| SyncError::GitCommandFailed {
+                command: format!("git {}", self.args.join(" ")),
+                exit_code: None,
+                stderr: e.to_string(),
+            })?;
+
+        if let Some(timeout) = self.timeout {
+            let start = Instant::now();
+            loop {
+                if let Some(_status) =
+                    child.try_wait().map_err(|e| SyncError::GitCommandFailed {
+                        command: format!("git {}", self.args.join(" ")),
+                        exit_code: None,
+                        stderr: e.to_string(),
+                    })?
+                {
+                    break;
+                }
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(SyncError::Timeout {
+                        step: format!("git {}", self.args.join(" ")),
+                        secs: timeout.as_secs().try_into().unwrap_or(u32::MAX),
+                    });
+                }
+                sleep(Duration::from_millis(10));
+            }
+        }
+
+        let output = child
+            .wait_with_output()
             .map_err(|e| SyncError::GitCommandFailed {
                 command: format!("git {}", self.args.join(" ")),
                 exit_code: None,
@@ -97,13 +126,11 @@ mod tests {
     }
 
     #[test]
-    fn timeout_builder_is_noop_until_phase_3() {
-        // timeout() is accepted and stored but not enforced; wired up in Phase 3.
+    fn timeout_builder_enforces_timeout() {
         let dir = tempdir().unwrap();
-        let out = GitCmd::new(dir.path(), &["--version"])
-            .timeout(Duration::from_secs(30))
-            .run()
-            .unwrap();
-        assert!(out.success);
+        let result = GitCmd::new(dir.path(), &["-c", "alias.wait=!sleep 2", "wait"])
+            .timeout(Duration::from_millis(20))
+            .run();
+        assert!(matches!(result, Err(SyncError::Timeout { .. })));
     }
 }
