@@ -624,6 +624,37 @@ mod tests {
     }
 
     #[test]
+    fn stage_plan_serializes_camel_case_fields_and_values() {
+        let plan = StagePlan {
+            included_paths: vec![StagePlanEntry {
+                path: "note.md".into(),
+                change: StagePlanChange::ModifiedTracked,
+                reason: StagePlanReason::Included,
+            }],
+            excluded_paths: vec![StagePlanEntry {
+                path: "Scripts/build.md".into(),
+                change: StagePlanChange::AddedUntracked,
+                reason: StagePlanReason::ExcludedByConfig,
+            }],
+            unsupported_paths: vec![StagePlanEntry {
+                path: "conflict.md".into(),
+                change: StagePlanChange::Unsupported,
+                reason: StagePlanReason::UnsupportedStatus,
+            }],
+        };
+
+        let value = serde_json::to_value(&plan).unwrap();
+
+        assert_eq!(value["includedPaths"][0]["path"], "note.md");
+        assert_eq!(value["includedPaths"][0]["change"], "modifiedTracked");
+        assert_eq!(value["includedPaths"][0]["reason"], "included");
+        assert_eq!(value["excludedPaths"][0]["reason"], "excludedByConfig");
+        assert_eq!(value["unsupportedPaths"][0]["reason"], "unsupportedStatus");
+        assert!(value.get("included_paths").is_none());
+        assert!(value["includedPaths"][0].get("change").is_some());
+    }
+
+    #[test]
     fn apply_modified_included_file_becomes_staged() {
         let repo = Repo::new();
         repo.commit("note.md", "old", "init");

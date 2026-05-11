@@ -26,6 +26,72 @@ export interface GitStatusResult {
   isWrongBranch: boolean;
 }
 
+// Mirrors vault_git_sync::config::SyncConfig
+// Rust: #[serde(rename_all = "camelCase")]
+export interface SyncConfig {
+  remote: string;
+  branch: string;
+  include: string[];
+  exclude: string[];
+  backupDirectory: string;
+  conflictPolicies: ConflictPolicy[];
+  markdownConflictCallout: MarkdownCalloutConfig;
+  commitMessageTemplate: string;
+  hostLabel: string | null;
+  backupLocalSubdir: string;
+  backupRemoteSubdir: string;
+  timeouts: SyncTimeouts;
+  allowCreateBackupDirectory: boolean;
+  skipCommitHooks: boolean;
+}
+
+export interface ConflictPolicy {
+  glob: string;
+  strategy: ConflictStrategy;
+}
+
+export type ConflictStrategy = 'preferLocal' | 'preferRemote' | 'manual';
+
+export interface MarkdownCalloutConfig {
+  enabled: boolean;
+  calloutKind: string;
+  template: string;
+}
+
+export interface SyncTimeouts {
+  fetchSecs: number;
+  pushSecs: number;
+  mergeSecs: number;
+}
+
+// Mirrors vault_git_sync::stage_plan::StagePlan
+// Rust: #[serde(rename_all = "camelCase")]
+export interface StagePlan {
+  includedPaths: StagePlanEntry[];
+  excludedPaths: StagePlanEntry[];
+  unsupportedPaths: StagePlanEntry[];
+}
+
+export interface StagePlanEntry {
+  path: string;
+  change: StagePlanChange;
+  reason: StagePlanReason;
+}
+
+export type StagePlanChange =
+  | 'modifiedTracked'
+  | 'addedUntracked'
+  | 'deletedTracked'
+  | 'staged'
+  | 'unsupported';
+
+export type StagePlanReason =
+  | 'included'
+  | 'excludedByConfig'
+  | 'excludedGitDirectory'
+  | 'includeNotMatched'
+  | 'unsupportedStatus';
+
 // Mirrors vault_git_sync::errors::SyncError
 // Rust: #[serde(tag = "type", rename_all = "camelCase")]
 export type SyncError =
@@ -47,6 +113,7 @@ export type SyncError =
   | {type: 'authenticationFailed'; stderr: string}
   | {type: 'lockAlreadyHeld'}
   | {type: 'invalidConfig'; reason: string}
+  | {type: 'unsupportedStagePlan'; paths: string[]}
   | {type: 'gitCommandFailed'; command: string; exitCode: number | null; stderr: string}
   | {type: 'timeout'; step: string; secs: number};
 
@@ -59,5 +126,15 @@ export async function getVaultGitStatus(input: {
     vaultPath: input.vaultPath,
     remote: input.remote,
     branch: input.branch,
+  });
+}
+
+export async function getVaultGitStagePlan(input: {
+  vaultPath: string;
+  config: SyncConfig;
+}): Promise<StagePlan> {
+  return invoke<StagePlan>('vault_git_stage_plan', {
+    vaultPath: input.vaultPath,
+    config: input.config,
   });
 }

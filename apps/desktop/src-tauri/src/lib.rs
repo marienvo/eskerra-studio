@@ -108,6 +108,7 @@ pub fn run() {
             vault_frontmatter_index::vault_frontmatter_index_touch_paths,
             vault_watch::vault_start_watch,
             vault_git_sync::commands::vault_git_status,
+            vault_git_sync::commands::vault_git_stage_plan,
             crash_log::eskerra_append_crash_log,
         ])
         .run(tauri::generate_context!())
