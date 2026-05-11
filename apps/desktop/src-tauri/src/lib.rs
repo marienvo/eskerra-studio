@@ -12,12 +12,17 @@ mod vault_frontmatter_index;
 mod vault_search;
 mod vault_search_index;
 mod vault_watch;
-mod window_state_disk;
 
 use vault::VaultRootState;
 use vault_frontmatter_index::VaultFrontmatterIndexState;
 use vault_search::VaultSearchSessionState;
 use vault_search_index::VaultSearchIndexState;
+
+fn main_window_restore_flags() -> tauri_plugin_window_state::StateFlags {
+    tauri_plugin_window_state::StateFlags::all()
+        .difference(tauri_plugin_window_state::StateFlags::POSITION)
+        .difference(tauri_plugin_window_state::StateFlags::DECORATIONS)
+}
 
 #[cfg(all(not(mobile), debug_assertions))]
 fn prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -67,7 +72,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .skip_initial_state("main")
+                .with_state_flags(main_window_restore_flags())
                 .build(),
         )
         .setup(|app| {
@@ -101,7 +106,6 @@ pub fn run() {
             vault_frontmatter_index::vault_frontmatter_index_values_for_key,
             vault_frontmatter_index::vault_frontmatter_index_touch_paths,
             vault_watch::vault_start_watch,
-            window_state_disk::eskerra_peek_window_state_file,
             crash_log::eskerra_append_crash_log,
         ])
         .run(tauri::generate_context!())

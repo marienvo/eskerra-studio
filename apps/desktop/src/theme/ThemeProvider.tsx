@@ -9,7 +9,6 @@ import {
 } from '@eskerra/core';
 import type {Dispatch, ReactNode, SetStateAction} from 'react';
 import {useCallback, useEffect, useLayoutEffect, useMemo, useRef} from 'react';
-import {isTauri} from '@tauri-apps/api/core';
 
 import {useDesktopThemePreferenceR2EtagPollingForMainWindow} from '../hooks/useDesktopThemePreferenceR2EtagPolling';
 
@@ -25,8 +24,6 @@ type ThemeProviderProps = {
   setVaultSettings: Dispatch<SetStateAction<EskerraSettings | null>>;
   fs: VaultFilesystem;
   children: ReactNode;
-  /** Called once when theme preference + vault themes are both settled. Tauri-only. */
-  onThemeReady?: () => void;
 };
 
 function buildThemesById(vaultItems: VaultThemeListItem[]): Map<string, ThemeDefinition> {
@@ -48,10 +45,9 @@ export function ThemeProvider({
   setVaultSettings,
   fs,
   children,
-  onThemeReady,
 }: ThemeProviderProps) {
-  const {items: vaultThemeItems, ready: vaultThemesReady} = useVaultThemes({vaultRoot, fs});
-  const {preference, preferenceLoaded, setPreferenceLocal, persistPreference} = useThemePreference({
+  const {items: vaultThemeItems} = useVaultThemes({vaultRoot, fs});
+  const {preference, setPreferenceLocal, persistPreference} = useThemePreference({
     vaultRoot,
     vaultSettings,
     setVaultSettings,
@@ -104,21 +100,6 @@ export function ThemeProvider({
     root.dataset.uiChrome = resolvedMode;
     root.style.colorScheme = resolvedMode;
   }, [chromePalette, resolvedMode]);
-
-  const onThemeReadyRef = useRef(onThemeReady);
-  useLayoutEffect(() => {
-    onThemeReadyRef.current = onThemeReady;
-  });
-  const firedThemeReadyRef = useRef(false);
-  useEffect(() => {
-    if (!isTauri() || firedThemeReadyRef.current) {
-      return;
-    }
-    if (vaultThemesReady && preferenceLoaded) {
-      firedThemeReadyRef.current = true;
-      onThemeReadyRef.current?.();
-    }
-  }, [vaultThemesReady, preferenceLoaded]);
 
   const value = useMemo((): ThemeShellContextValue => {
     return {

@@ -9,7 +9,6 @@ type AppThemeShellProps = {
   vaultSettings: EskerraSettings | null;
   setVaultSettings: (s: SetStateAction<EskerraSettings | null>) => void;
   fs: ReturnType<typeof createTauriVaultFilesystem>;
-  onThemeReady: () => void;
   children: ReactNode;
 };
 
@@ -18,7 +17,6 @@ export function AppThemeShell({
   vaultSettings,
   setVaultSettings,
   fs,
-  onThemeReady,
   children,
 }: AppThemeShellProps) {
   return (
@@ -26,8 +24,7 @@ export function AppThemeShell({
       vaultRoot={vaultRoot}
       vaultSettings={vaultSettings}
       setVaultSettings={setVaultSettings}
-      fs={fs}
-      onThemeReady={onThemeReady}>
+      fs={fs}>
       {children}
     </ThemeProvider>
   );

@@ -3,7 +3,6 @@
  *
  * Ownership: app-level orchestration and Tauri window integration; vault editing behavior is in `VaultTab` / workspace hook.
  */
-import {isTauri} from '@tauri-apps/api/core';
 import {open} from '@tauri-apps/plugin-dialog';
 import {
   useCallback,
@@ -15,7 +14,6 @@ import {
 } from 'react';
 
 import {SettingsPage} from './components/SettingsPage';
-import {DesktopStartupSplash} from './components/DesktopStartupSplash';
 import {QuickOpenNotePalette} from './components/QuickOpenNotePalette';
 import {VaultSearchPalette} from './components/VaultSearchPalette';
 import {VaultTab} from './components/VaultTab.tsx';
@@ -54,10 +52,6 @@ import {useAppMediaControlDesktopPlayback} from './shell/useAppMediaControlDeskt
 import {useAppNotificationSession} from './shell/useAppNotificationSession';
 import {useAppOnMountLayoutHydration} from './shell/useAppOnMountLayoutHydration';
 import {useAppRootClassName} from './shell/useAppRootClassName';
-import {
-  useAppStartupSplashPhases,
-  type StartupSplashPhase,
-} from './shell/useAppStartupSplashPhases';
 import {useAppTauriCloseAndFocusSave} from './shell/useAppTauriCloseAndFocusSave';
 import {useAppTauriDocumentChrome} from './shell/useAppTauriDocumentChrome';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
@@ -184,7 +178,6 @@ export default function App() {
     linkController: workspaceLinkController,
     treeController: workspaceTreeController,
     inboxShellRestored,
-    initialVaultHydrateAttemptDone,
     tabsController: workspaceTabsController,
     todayHubController: workspaceTodayHubController,
   } = useMainWindowWorkspace({
@@ -355,26 +348,6 @@ export default function App() {
 
   const [layouts, setLayouts] = useState<StoredLayouts>(DEFAULT_LAYOUTS);
   const [notificationsPanelVisible, setNotificationsPanelVisible] = useState(true);
-  const [startupSplashPhase, setStartupSplashPhase] = useState<StartupSplashPhase>(
-    () => (!isTauri() ? 'done' : 'artwork'),
-  );
-  const [themeReady, setThemeReady] = useState(!isTauri());
-  const onThemeReady = useCallback(() => setThemeReady(true), []);
-
-  const appStartupReady = useMemo(
-    () =>
-      initialVaultHydrateAttemptDone &&
-      layoutsReady &&
-      themeReady &&
-      (vaultRoot ? inboxShellRestored : true),
-    [
-      initialVaultHydrateAttemptDone,
-      layoutsReady,
-      themeReady,
-      vaultRoot,
-      inboxShellRestored,
-    ],
-  );
 
   const {
     podcastCatalog,
@@ -444,12 +417,6 @@ export default function App() {
     activeEditorTabId: workspaceTabsController.activeEditorTabId,
   });
 
-  useAppStartupSplashPhases({
-    appStartupReady,
-    startupSplashPhase,
-    setStartupSplashPhase,
-  });
-
   const pickFolder = async () => {
     setErr(null);
     const dir = await open({directory: true, multiple: false});
@@ -484,22 +451,13 @@ export default function App() {
     setNotificationsPanelVisible,
   });
 
-  const startupOverlay =
-    isTauri() && startupSplashPhase !== 'done' ? (
-      <DesktopStartupSplash
-        phase={startupSplashPhase === 'artwork' ? 'artwork' : 'scrim'}
-      />
-    ) : null;
-
   if (!vaultRoot) {
     return (
       <AppThemeShell
         vaultRoot={vaultRoot}
         vaultSettings={vaultSettings}
         setVaultSettings={setVaultSettings}
-        fs={fs}
-        onThemeReady={onThemeReady}>
-        {startupOverlay}
+        fs={fs}>
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
           <div className="app-root-chrome">
@@ -525,9 +483,7 @@ export default function App() {
         vaultRoot={vaultRoot}
         vaultSettings={vaultSettings}
         setVaultSettings={setVaultSettings}
-        fs={fs}
-        onThemeReady={onThemeReady}>
-        {startupOverlay}
+        fs={fs}>
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
           <div className="app-root-chrome">
@@ -547,9 +503,7 @@ export default function App() {
       vaultRoot={vaultRoot}
       vaultSettings={vaultSettings}
       setVaultSettings={setVaultSettings}
-      fs={fs}
-      onThemeReady={onThemeReady}>
-      {startupOverlay}
+      fs={fs}>
       <div ref={appRootRef} className={appRootClassName}>
         <ThemedChromeBackground />
         <div className="app-root-chrome">
