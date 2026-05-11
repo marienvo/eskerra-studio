@@ -21,6 +21,7 @@ import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEdi
 import {EpisodesPane} from './components/EpisodesPane';
 import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
 import {GitStatusChip} from './components/GitStatusChip';
+import {useManualVaultGitSync} from './hooks/useManualVaultGitSync';
 import {useVaultGitStatus} from './hooks/useVaultGitStatus';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
@@ -46,6 +47,7 @@ import {
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
+import type {SyncConfig} from './lib/tauriVaultGitSync';
 import {writeVaultSettings} from './lib/vaultBootstrap';
 import {AppThemeShell} from './shell/AppThemeShell';
 import {useAppLayoutWidthPersisters} from './shell/useAppLayoutWidthPersisters';
@@ -141,6 +143,30 @@ function useAppDebouncedPersistMainWindowUi({
 // TODO: make configurable via vault settings once multi-remote / multi-branch support is needed.
 const GIT_SYNC_REMOTE = 'origin';
 const GIT_SYNC_BRANCH = 'main';
+const MANUAL_GIT_SYNC_CONFIG: SyncConfig = {
+  remote: GIT_SYNC_REMOTE,
+  branch: GIT_SYNC_BRANCH,
+  include: ['**/*.md'],
+  exclude: ['Scripts/**'],
+  backupDirectory: '_sync-backups',
+  conflictPolicies: [{glob: '**/*.md', strategy: 'manual'}],
+  markdownConflictCallout: {
+    enabled: false,
+    calloutKind: 'warning',
+    template: 'Conflict backup: [[{backup_path}]]',
+  },
+  commitMessageTemplate: 'chore: sync {timestamp} {host}',
+  hostLabel: null,
+  backupLocalSubdir: 'local',
+  backupRemoteSubdir: 'remote',
+  timeouts: {
+    fetchSecs: 30,
+    pushSecs: 30,
+    mergeSecs: 30,
+  },
+  allowCreateBackupDirectory: false,
+  skipCommitHooks: true,
+};
 
 export default function App() {
   const {maximized} = useTauriWindowMaximized();
@@ -458,6 +484,7 @@ export default function App() {
     dismissItem: dismissNotification,
     clearAll: clearAllNotifications,
     highlightId: notificationHighlightId,
+    pushItem: pushNotification,
   } = useAppNotificationSession({
     err,
     diskConflict,
@@ -466,6 +493,12 @@ export default function App() {
     statusBarCenter,
     renameLinkProgress,
     setNotificationsPanelVisible,
+  });
+  const manualGitSync = useManualVaultGitSync({
+    vaultPath: vaultRoot,
+    config: MANUAL_GIT_SYNC_CONFIG,
+    notify: pushNotification,
+    onSuccess: refreshGitStatus,
   });
 
   if (!vaultRoot) {
@@ -712,6 +745,8 @@ export default function App() {
 
           <AppStatusBar
             onOpenSettings={() => setActivePage('settings')}
+            onManualSync={() => void manualGitSync.run()}
+            manualSyncBusy={manualGitSync.running}
             statusIndicator={
               <GitStatusChip
                 status={gitStatus}

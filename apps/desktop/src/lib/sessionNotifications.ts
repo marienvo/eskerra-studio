@@ -3,6 +3,7 @@ export const SESSION_NOTIF_RENAME_PROGRESS_ID = 'session-notif-rename-progress';
 
 export type SessionNotificationSource =
   | 'status'
+  | 'manualGitSync'
   | 'renameProgress'
   | 'diskConflictBlocking'
   | 'diskConflictSoft';

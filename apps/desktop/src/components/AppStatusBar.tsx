@@ -17,10 +17,19 @@ export function AppSetupTagline() {
 
 type AppStatusBarProps = {
   onOpenSettings: () => void;
+  onManualSync?: () => void;
+  manualSyncBusy?: boolean;
+  manualSyncDisabled?: boolean;
   statusIndicator?: ReactNode;
 };
 
-export function AppStatusBar({onOpenSettings, statusIndicator}: AppStatusBarProps) {
+export function AppStatusBar({
+  onOpenSettings,
+  onManualSync,
+  manualSyncBusy = false,
+  manualSyncDisabled = false,
+  statusIndicator,
+}: AppStatusBarProps) {
   return (
     <footer className="app-status-bar">
       <div className="app-status-bar-center-stack">
@@ -30,6 +39,19 @@ export function AppStatusBar({onOpenSettings, statusIndicator}: AppStatusBarProp
       </div>
       <div className="app-status-bar-trailing">
         {statusIndicator}
+        {onManualSync ? (
+          <button
+            type="button"
+            className="app-status-bar-icon-tile app-tooltip-trigger icon-btn-ghost"
+            aria-label={manualSyncBusy ? 'Syncing vault' : 'Sync vault'}
+            data-tooltip={manualSyncBusy ? 'Syncing vault' : 'Sync vault'}
+            data-tooltip-placement="inline-start"
+            disabled={manualSyncBusy || manualSyncDisabled}
+            onClick={onManualSync}
+          >
+            <MaterialIcon name="sync" size={12} />
+          </button>
+        ) : null}
         <button
           type="button"
           className="app-status-bar-icon-tile app-tooltip-trigger icon-btn-ghost"

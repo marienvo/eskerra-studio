@@ -69,6 +69,10 @@
   color: var(--color-shell-icon);
 }
 
+.app-status-bar-icon-tile:disabled {
+  opacity: 0.45;
+}
+
 .app-status-bar-icon-tile.icon-btn-ghost:hover:not(:disabled) {
   background: var(--color-shell-hover-bg);
 }
