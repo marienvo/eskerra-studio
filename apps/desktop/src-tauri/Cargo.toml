@@ -20,6 +20,7 @@ tauri-build = { version = "2.5.6", features = [] }
 [dependencies]
 serde_json = "1.0"
 fs2 = "0.4"
+glob = "0.3"
 sha2 = "0.10"
 serde_yaml = "0.9"
 regex = "1"

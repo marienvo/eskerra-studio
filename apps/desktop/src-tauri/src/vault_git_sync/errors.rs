@@ -47,6 +47,9 @@ pub enum SyncError {
     InvalidConfig {
         reason: String,
     },
+    UnsupportedStagePlan {
+        paths: Vec<String>,
+    },
     GitCommandFailed {
         command: String,
         exit_code: Option<i32>,

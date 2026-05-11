@@ -72,6 +72,7 @@ dependencies = [
  "base64 0.22.1",
  "fs2",
  "gdk",
+ "glob",
  "gtk",
  "notify",
  "regex",
