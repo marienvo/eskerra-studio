@@ -80,7 +80,7 @@ pub fn apply_stage_plan(
     apply_built_stage_plan(vault_path, plan)
 }
 
-fn apply_built_stage_plan(
+pub(crate) fn apply_built_stage_plan(
     vault_path: &Path,
     plan: StagePlan,
 ) -> Result<StageApplyResult, SyncError> {
