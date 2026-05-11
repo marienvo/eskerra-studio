@@ -143,7 +143,7 @@ function useAppDebouncedPersistMainWindowUi({
 
 // TODO: make configurable via vault settings once multi-remote / multi-branch support is needed.
 const GIT_SYNC_REMOTE = 'origin';
-const GIT_SYNC_BRANCH = 'main';
+const GIT_SYNC_BRANCH = 'master';
 const MANUAL_GIT_SYNC_CONFIG: SyncConfig = {
   remote: GIT_SYNC_REMOTE,
   branch: GIT_SYNC_BRANCH,
