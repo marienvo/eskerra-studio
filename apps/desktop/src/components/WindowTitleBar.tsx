@@ -33,6 +33,7 @@ type WindowTitleBarProps = {
   /** Mount point for editor open-note tabs (React portal target). */
   onEditorTabsHostRef?: (el: HTMLDivElement | null) => void;
   todayHubSelect?: WindowTitleBarTodayHubSelect;
+  closeSyncing?: boolean;
   onCloseRequest?: (input: {instant: boolean}) => void;
 };
 
@@ -40,6 +41,7 @@ export function WindowTitleBar({
   tiling = 'none',
   onEditorTabsHostRef,
   todayHubSelect = null,
+  closeSyncing = false,
   onCloseRequest,
 }: WindowTitleBarProps) {
   const tauri = isDesktopTauriHost();
@@ -85,7 +87,7 @@ export function WindowTitleBar({
     };
   }, [tauri]);
 
-  const closeLabel = shiftHeld ? 'Close instantly' : 'Sync and close';
+  const closeLabel = shiftHeld ? 'Close instantly' : closeSyncing ? 'Syncing before close' : 'Sync and close';
 
   return (
     <header className="window-title-bar" data-window-tiling={tiling}>

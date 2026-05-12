@@ -57,6 +57,23 @@ describe('WindowTitleBar close control', () => {
     );
   });
 
+  it('shows syncing close label while sync is running', () => {
+    render(<WindowTitleBar closeSyncing onCloseRequest={vi.fn()} />);
+
+    const close = screen.getByRole('button', {name: 'Syncing before close'});
+    expect(close.getAttribute('data-tooltip')).toBe('Syncing before close');
+  });
+
+  it('lets Shift held override syncing close label', () => {
+    render(<WindowTitleBar closeSyncing onCloseRequest={vi.fn()} />);
+
+    fireEvent.keyDown(window, {key: 'Shift'});
+
+    expect(screen.getByRole('button', {name: 'Close instantly'}).getAttribute('data-tooltip')).toBe(
+      'Close instantly',
+    );
+  });
+
   it('falls back to direct close when no close handler is provided', () => {
     render(<WindowTitleBar />);
 

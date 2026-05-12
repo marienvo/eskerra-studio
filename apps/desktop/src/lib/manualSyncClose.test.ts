@@ -78,6 +78,22 @@ describe('handleManualSyncCloseRequest', () => {
     );
   });
 
+  it('can suppress repeated disabled close notifications', async () => {
+    const notify = vi.fn();
+
+    await handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncDisabledReason: 'Git branch unavailable',
+      manualSyncRunning: false,
+      runManualSync: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+      close: vi.fn(),
+      notify,
+      notifyDisabled: false,
+    });
+
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   it('does not start another close sync while sync is running', async () => {
     const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const close = vi.fn();

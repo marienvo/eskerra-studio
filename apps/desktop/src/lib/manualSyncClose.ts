@@ -7,6 +7,7 @@ type HandleManualSyncCloseRequestArgs = {
   runManualSync: () => Promise<boolean>;
   close: () => void;
   notify: (tone: SessionNotificationTone, text: string) => void;
+  notifyDisabled?: boolean;
 };
 
 export async function handleManualSyncCloseRequest({
@@ -16,6 +17,7 @@ export async function handleManualSyncCloseRequest({
   runManualSync,
   close,
   notify,
+  notifyDisabled = true,
 }: HandleManualSyncCloseRequestArgs): Promise<void> {
   if (instant) {
     close();
@@ -27,10 +29,12 @@ export async function handleManualSyncCloseRequest({
   }
 
   if (manualSyncDisabledReason != null) {
-    notify(
-      'error',
-      `Cannot sync before closing: ${manualSyncDisabledReason}. Hold Shift and click close to close instantly.`,
-    );
+    if (notifyDisabled) {
+      notify(
+        'error',
+        `Cannot sync before closing: ${manualSyncDisabledReason}. Hold Shift and click close to close instantly.`,
+      );
+    }
     return;
   }
 

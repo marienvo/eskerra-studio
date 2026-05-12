@@ -502,8 +502,20 @@ export default function App() {
     running: manualGitSync.running,
   });
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
+  const closeSyncDisabledNoticeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (manualSyncDisabledReason == null) {
+      closeSyncDisabledNoticeRef.current = null;
+    }
+  }, [manualSyncDisabledReason]);
   const handleWindowCloseRequest = useCallback(
     (input: {instant: boolean}) => {
+      const notifyDisabled =
+        manualSyncDisabledReason != null &&
+        closeSyncDisabledNoticeRef.current !== manualSyncDisabledReason;
+      if (notifyDisabled) {
+        closeSyncDisabledNoticeRef.current = manualSyncDisabledReason;
+      }
       void handleManualSyncCloseRequest({
         instant: input.instant,
         manualSyncDisabledReason,
@@ -511,6 +523,7 @@ export default function App() {
         runManualSync: manualGitSync.run,
         close: closeDesktopMainWindow,
         notify: pushNotification,
+        notifyDisabled,
       });
     },
     [manualGitSync.run, manualGitSync.running, manualSyncDisabledReason, pushNotification],
@@ -543,7 +556,11 @@ export default function App() {
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
           <div className="app-root-chrome">
-            <WindowTitleBar tiling={tiling} onCloseRequest={handleWindowCloseRequest} />
+            <WindowTitleBar
+              tiling={tiling}
+              closeSyncing={manualGitSync.running}
+              onCloseRequest={handleWindowCloseRequest}
+            />
             <div className="shell setup-shell">
               <h1>{settingsName}</h1>
               <p className="muted">Choose your notes folder (vault root). Settings are stored in `.eskerra/` inside it.</p>
@@ -573,7 +590,11 @@ export default function App() {
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
           <div className="app-root-chrome">
-            <WindowTitleBar tiling={tiling} onCloseRequest={handleWindowCloseRequest} />
+            <WindowTitleBar
+              tiling={tiling}
+              closeSyncing={manualGitSync.running}
+              onCloseRequest={handleWindowCloseRequest}
+            />
             <div className="shell setup-shell">
               <p className="muted">Loading…</p>
             </div>
@@ -601,6 +622,7 @@ export default function App() {
             tiling={tiling}
             onEditorTabsHostRef={setTitleBarEditorTabsHost}
             todayHubSelect={titleBarTodayHubSelect}
+            closeSyncing={manualGitSync.running}
             onCloseRequest={handleWindowCloseRequest}
           />
 

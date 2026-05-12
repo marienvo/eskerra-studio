@@ -126,6 +126,40 @@ describe('useManualVaultGitSync', () => {
     expect(mockRunVaultGitSync).not.toHaveBeenCalled();
   });
 
+  it('returns false without running when vault is unavailable', async () => {
+    const {result} = renderHook(() =>
+      useManualVaultGitSync({
+        vaultPath: null,
+        config,
+        notify: vi.fn(),
+        onSettled: vi.fn(),
+      }),
+    );
+
+    await expect(result.current.run()).resolves.toBe(false);
+
+    expect(mockRunVaultGitSync).not.toHaveBeenCalled();
+  });
+
+  it('returns false instead of throwing when sync setup fails', async () => {
+    const notify = vi.fn();
+    const onSettled = vi.fn();
+    mockAppLocalDataDir.mockRejectedValue(new Error('path unavailable'));
+    const {result} = renderHook(() =>
+      useManualVaultGitSync({
+        vaultPath: '/vault',
+        config,
+        notify,
+        onSettled,
+      }),
+    );
+
+    await expect(result.current.run()).resolves.toBe(false);
+
+    expect(notify).toHaveBeenCalledWith('error', 'path unavailable');
+    expect(onSettled).toHaveBeenCalledTimes(1);
+  });
+
   it('does not start duplicate concurrent sync runs', async () => {
     const pending = deferred<SyncRunResult>();
     mockRunVaultGitSync.mockReturnValue(pending.promise);
