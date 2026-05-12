@@ -9,9 +9,29 @@ type GitStatusChipProps = {
   status: GitStatusResult | null;
   loading?: boolean;
   error?: string | null;
+  syncing?: boolean;
 };
 
-export function GitStatusChip({status, loading = false, error = null}: GitStatusChipProps) {
+export function GitStatusChip({
+  status,
+  loading = false,
+  error = null,
+  syncing = false,
+}: GitStatusChipProps) {
+  if (syncing) {
+    return (
+      <span
+        className="git-status-chip git-status-chip--info"
+        aria-label="Syncing vault"
+        data-tooltip="Syncing vault"
+        data-tooltip-placement="inline-start"
+      >
+        <IconGlyph name="sync" size={12} aria-hidden />
+        Syncing…
+      </span>
+    );
+  }
+
   if (loading) {
     return (
       <span className="git-status-chip git-status-chip--muted" aria-label="Checking sync status">

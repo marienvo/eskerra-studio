@@ -35,6 +35,42 @@ describe('GitStatusChip', () => {
     expect(chip?.getAttribute('data-tooltip')).toBe('Connection refused');
   });
 
+  it('renders syncing state when syncing is true', () => {
+    render(<GitStatusChip status={null} syncing />);
+    expect(screen.getByText('Syncing…')).toBeInstanceOf(HTMLElement);
+  });
+
+  it('syncing overrides clean status', () => {
+    render(<GitStatusChip status={cleanStatus} syncing />);
+    expect(screen.getByText('Syncing…')).toBeInstanceOf(HTMLElement);
+    expect(screen.queryByText('Synced')).toBeNull();
+  });
+
+  it('syncing overrides status loading', () => {
+    render(<GitStatusChip status={cleanStatus} loading syncing />);
+    expect(screen.getByText('Syncing…')).toBeInstanceOf(HTMLElement);
+    expect(screen.queryByText('Checking…')).toBeNull();
+  });
+
+  it('syncing overrides status error', () => {
+    render(<GitStatusChip status={cleanStatus} error="Connection refused" syncing />);
+    expect(screen.getByText('Syncing…')).toBeInstanceOf(HTMLElement);
+    expect(screen.queryByText('Git status error')).toBeNull();
+  });
+
+  it('sets syncing aria-label and tooltip', () => {
+    render(<GitStatusChip status={cleanStatus} syncing />);
+    const chip = screen.getByText('Syncing…').closest('span');
+    expect(chip?.getAttribute('aria-label')).toBe('Syncing vault');
+    expect(chip?.getAttribute('data-tooltip')).toBe('Syncing vault');
+  });
+
+  it('renders syncing with info tone', () => {
+    render(<GitStatusChip status={cleanStatus} syncing />);
+    const chip = screen.getByText('Syncing…').closest('span');
+    expect(chip?.className).toContain('git-status-chip--info');
+  });
+
   it('renders Synced label for a clean status', () => {
     render(<GitStatusChip status={cleanStatus} />);
     expect(screen.getByText('Synced')).toBeInstanceOf(HTMLElement);

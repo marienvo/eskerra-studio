@@ -763,6 +763,7 @@ export default function App() {
                 status={gitStatus}
                 loading={gitStatusLoading}
                 error={gitStatusError}
+                syncing={manualGitSync.running}
               />
             }
           />
