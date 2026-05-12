@@ -54,6 +54,7 @@ impl GitCmd {
 
         if let Some(timeout) = self.timeout {
             let start = Instant::now();
+            let mut poll_interval = Duration::from_millis(10);
             loop {
                 if let Some(_status) =
                     child.try_wait().map_err(|e| SyncError::GitCommandFailed {
@@ -72,7 +73,8 @@ impl GitCmd {
                         secs: timeout.as_secs().try_into().unwrap_or(u32::MAX),
                     });
                 }
-                sleep(Duration::from_millis(10));
+                sleep(poll_interval);
+                poll_interval = next_poll_interval(poll_interval);
             }
         }
 
@@ -89,6 +91,16 @@ impl GitCmd {
             success: output.status.success(),
             exit_code: output.status.code(),
         })
+    }
+}
+
+/// Back-off schedule for the timeout poll loop: 10 ms → 25 ms → 100 ms (cap).
+/// Keeps initial responsiveness while avoiding 3 000 wasted wakeups on a 30 s timeout.
+fn next_poll_interval(current: Duration) -> Duration {
+    if current < Duration::from_millis(25) {
+        Duration::from_millis(25)
+    } else {
+        Duration::from_millis(100)
     }
 }
 
@@ -132,5 +144,16 @@ mod tests {
             .timeout(Duration::from_millis(20))
             .run();
         assert!(matches!(result, Err(SyncError::Timeout { .. })));
+    }
+
+    #[test]
+    fn poll_interval_backs_off_to_cap() {
+        let i0 = Duration::from_millis(10);
+        let i1 = next_poll_interval(i0);
+        let i2 = next_poll_interval(i1);
+        let i3 = next_poll_interval(i2);
+        assert_eq!(i1, Duration::from_millis(25));
+        assert_eq!(i2, Duration::from_millis(100));
+        assert_eq!(i3, Duration::from_millis(100)); // capped
     }
 }
