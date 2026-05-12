@@ -9,6 +9,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import {
+  getVaultGitCurrentBranch,
   getVaultGitStagePlan,
   getVaultGitStatus,
   runVaultGitSync,
@@ -130,6 +131,30 @@ describe('getVaultGitStatus', () => {
     expect(got.isWrongBranch).toBe(true);
     expect(got.branch).toBe('feature');
     expect(got.unsafeState).toBeNull();
+  });
+});
+
+describe('getVaultGitCurrentBranch', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+  });
+
+  it('invokes vault_git_current_branch with correct argument shape', async () => {
+    mockInvoke.mockResolvedValue('main');
+    await getVaultGitCurrentBranch({vaultPath: VAULT});
+    expect(mockInvoke).toHaveBeenCalledWith('vault_git_current_branch', {
+      vaultPath: VAULT,
+    });
+  });
+
+  it('returns the invoke result', async () => {
+    mockInvoke.mockResolvedValue('feature/x');
+    await expect(getVaultGitCurrentBranch({vaultPath: VAULT})).resolves.toBe('feature/x');
+  });
+
+  it('returns null for detached HEAD result', async () => {
+    mockInvoke.mockResolvedValue(null);
+    await expect(getVaultGitCurrentBranch({vaultPath: VAULT})).resolves.toBeNull();
   });
 });
 

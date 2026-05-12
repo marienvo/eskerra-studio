@@ -62,6 +62,32 @@ describe('getManualSyncDisabledReason', () => {
     ).toBe('Git status unavailable');
   });
 
+  it('returns branch loading reason before status checks', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: safeGitStatus,
+        gitStatusLoading: false,
+        gitStatusError: null,
+        branchLoading: true,
+        running: false,
+      }),
+    ).toBe('Checking Git branch');
+  });
+
+  it('returns branch unavailable reason before status checks', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: safeGitStatus,
+        gitStatusLoading: false,
+        gitStatusError: null,
+        branchUnavailable: true,
+        running: false,
+      }),
+    ).toBe('Git branch unavailable');
+  });
+
   it('returns unsafe state reason', () => {
     expect(
       getManualSyncDisabledReason({

@@ -6,7 +6,7 @@ import {getVaultGitStatus} from '../lib/tauriVaultGitSync';
 type UseVaultGitStatusInput = {
   vaultPath: string | null;
   remote: string;
-  branch: string;
+  branch: string | null;
 };
 
 type UseVaultGitStatusResult = {
@@ -28,13 +28,13 @@ export function useVaultGitStatus({
   const requestIdRef = useRef(0);
 
   const load = useCallback(
-    async (path: string) => {
+    async (path: string, expectedBranch: string) => {
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       setLoading(true);
       setError(null);
       try {
-        const result = await getVaultGitStatus({vaultPath: path, remote, branch});
+        const result = await getVaultGitStatus({vaultPath: path, remote, branch: expectedBranch});
         if (requestId !== requestIdRef.current) return;
         setStatus(result);
       } catch (e) {
@@ -44,11 +44,11 @@ export function useVaultGitStatus({
         if (requestId === requestIdRef.current) setLoading(false);
       }
     },
-    [remote, branch],
+    [remote],
   );
 
   useEffect(() => {
-    if (!vaultPath) {
+    if (!vaultPath || !branch) {
       requestIdRef.current += 1;
       setStatus(null);
       setLoading(false);
@@ -56,17 +56,17 @@ export function useVaultGitStatus({
       return;
     }
 
-    void load(vaultPath);
+    void load(vaultPath, branch);
 
     return () => {
       requestIdRef.current += 1;
     };
-  }, [vaultPath, load]);
+  }, [vaultPath, branch, load]);
 
   const refresh = useCallback(() => {
-    if (!vaultPath) return;
-    void load(vaultPath);
-  }, [vaultPath, load]);
+    if (!vaultPath || !branch) return;
+    void load(vaultPath, branch);
+  }, [vaultPath, branch, load]);
 
   return {status, loading, error, refresh};
 }

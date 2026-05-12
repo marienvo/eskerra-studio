@@ -101,6 +101,13 @@ pub fn git_status(
     })
 }
 
+/// Returns the currently checked-out branch name, or None when HEAD is detached.
+pub fn current_branch(vault_path: &Path) -> Result<Option<String>, SyncError> {
+    validate_vault_path(vault_path)?;
+    validate_is_git_repo(vault_path)?;
+    read_branch(vault_path)
+}
+
 // ---------------------------------------------------------------------------
 // Branch
 // ---------------------------------------------------------------------------
@@ -450,6 +457,27 @@ mod tests {
         assert_eq!(result.expected_branch, "main");
     }
 
+    #[test]
+    fn current_branch_reads_main_branch() {
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+
+        let branch = current_branch(repo.path()).unwrap();
+
+        assert_eq!(branch.as_deref(), Some("main"));
+    }
+
+    #[test]
+    fn current_branch_reads_master_branch() {
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+        git(&["checkout", "-b", "master"], repo.path());
+
+        let branch = current_branch(repo.path()).unwrap();
+
+        assert_eq!(branch.as_deref(), Some("master"));
+    }
+
     // -----------------------------------------------------------------------
     // 6. Detached HEAD
     // -----------------------------------------------------------------------
@@ -466,6 +494,17 @@ mod tests {
             Some(GitStatusUnsafeState::DetachedHead)
         );
         assert!(result.branch.is_none());
+    }
+
+    #[test]
+    fn current_branch_returns_none_for_detached_head() {
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+        git(&["checkout", "--detach"], repo.path());
+
+        let branch = current_branch(repo.path()).unwrap();
+
+        assert!(branch.is_none());
     }
 
     // -----------------------------------------------------------------------

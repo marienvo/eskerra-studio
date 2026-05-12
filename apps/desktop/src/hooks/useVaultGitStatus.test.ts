@@ -127,6 +127,19 @@ describe('useVaultGitStatus', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('does not call getVaultGitStatus when branch is null', async () => {
+    const {result} = renderHook(() =>
+      useVaultGitStatus({vaultPath: VAULT, remote: 'origin', branch: null}),
+    );
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10));
+    });
+    expect(mockGetVaultGitStatus).not.toHaveBeenCalled();
+    expect(result.current.status).toBeNull();
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
   it('resets state and does not call getVaultGitStatus when vaultPath becomes null', async () => {
     mockGetVaultGitStatus.mockResolvedValue(cleanResult);
     const {result, rerender} = renderHook(
@@ -146,6 +159,24 @@ describe('useVaultGitStatus', () => {
     expect(result.current.status).toBeNull();
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
+  });
+
+  it('resets state and does not call getVaultGitStatus when branch becomes null', async () => {
+    mockGetVaultGitStatus.mockResolvedValue(cleanResult);
+    const {result, rerender} = renderHook(
+      ({branch}: {branch: string | null}) =>
+        useVaultGitStatus({vaultPath: VAULT, remote: 'origin', branch}),
+      {initialProps: {branch: 'main' as string | null}},
+    );
+
+    await waitFor(() => expect(result.current.status).not.toBeNull());
+
+    rerender({branch: null});
+
+    expect(result.current.status).toBeNull();
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(mockGetVaultGitStatus).toHaveBeenCalledTimes(1);
   });
 
   it('ignores stale result when vaultPath changes before first load resolves', async () => {

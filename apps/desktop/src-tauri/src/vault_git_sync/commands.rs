@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::vault_git_sync::config::SyncConfig;
 use crate::vault_git_sync::errors::SyncError;
 use crate::vault_git_sync::stage_plan::{build_stage_plan, StagePlan};
-use crate::vault_git_sync::status::{git_status, GitStatusResult};
+use crate::vault_git_sync::status::{current_branch, git_status, GitStatusResult};
 use crate::vault_git_sync::sync_run::{sync_fetch_merge_push, SyncRunResult};
 
 #[tauri::command]
@@ -13,6 +13,11 @@ pub fn vault_git_status(
     branch: String,
 ) -> Result<GitStatusResult, SyncError> {
     git_status(&PathBuf::from(vault_path), &branch, &remote)
+}
+
+#[tauri::command]
+pub fn vault_git_current_branch(vault_path: String) -> Result<Option<String>, SyncError> {
+    current_branch(&PathBuf::from(vault_path))
 }
 
 #[tauri::command]

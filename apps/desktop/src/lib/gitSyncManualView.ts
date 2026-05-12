@@ -5,6 +5,8 @@ type ManualSyncDisabledReasonInput = {
   gitStatus: GitStatusResult | null;
   gitStatusLoading: boolean;
   gitStatusError: string | null;
+  branchUnavailable?: boolean;
+  branchLoading?: boolean;
   running: boolean;
 };
 
@@ -13,6 +15,8 @@ export function getManualSyncDisabledReason({
   gitStatus,
   gitStatusLoading,
   gitStatusError,
+  branchUnavailable = false,
+  branchLoading = false,
   running,
 }: ManualSyncDisabledReasonInput): string | null {
   if (running) {
@@ -20,6 +24,12 @@ export function getManualSyncDisabledReason({
   }
   if (vaultPath == null) {
     return 'Sync vault';
+  }
+  if (branchLoading) {
+    return 'Checking Git branch';
+  }
+  if (branchUnavailable) {
+    return 'Git branch unavailable';
   }
   if (gitStatusLoading) {
     return 'Checking Git status';

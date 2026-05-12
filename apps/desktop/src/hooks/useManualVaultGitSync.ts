@@ -13,7 +13,7 @@ import type {SessionNotificationTone} from '../lib/sessionNotifications';
 
 type UseManualVaultGitSyncArgs = {
   vaultPath: string | null;
-  config: SyncConfig;
+  config: SyncConfig | null;
   notify: (tone: SessionNotificationTone, text: string) => void;
   onSettled: () => void;
 };
@@ -28,7 +28,7 @@ export function useManualVaultGitSync({
   const runningRef = useRef(false);
 
   const run = useCallback(async () => {
-    if (vaultPath == null || runningRef.current) {
+    if (vaultPath == null || config == null || runningRef.current) {
       return;
     }
 

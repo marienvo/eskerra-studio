@@ -22,6 +22,7 @@ import {EpisodesPane} from './components/EpisodesPane';
 import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
 import {GitStatusChip} from './components/GitStatusChip';
 import {useManualVaultGitSync} from './hooks/useManualVaultGitSync';
+import {useVaultGitCurrentBranch} from './hooks/useVaultGitCurrentBranch';
 import {useVaultGitStatus} from './hooks/useVaultGitStatus';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
@@ -46,9 +47,9 @@ import {
   type StoredMainWindowUi,
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
+import {buildManualGitSyncConfig, GIT_SYNC_REMOTE} from './lib/gitSyncConfig';
 import {getManualSyncDisabledReason} from './lib/gitSyncManualView';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
-import type {SyncConfig} from './lib/tauriVaultGitSync';
 import {writeVaultSettings} from './lib/vaultBootstrap';
 import {AppThemeShell} from './shell/AppThemeShell';
 import {useAppLayoutWidthPersisters} from './shell/useAppLayoutWidthPersisters';
@@ -141,34 +142,6 @@ function useAppDebouncedPersistMainWindowUi({
   ]);
 }
 
-// TODO: make configurable via vault settings once multi-remote / multi-branch support is needed.
-const GIT_SYNC_REMOTE = 'origin';
-const GIT_SYNC_BRANCH = 'master';
-const MANUAL_GIT_SYNC_CONFIG: SyncConfig = {
-  remote: GIT_SYNC_REMOTE,
-  branch: GIT_SYNC_BRANCH,
-  include: ['**/*.md'],
-  exclude: ['Scripts/**'],
-  backupDirectory: '_sync-backups',
-  conflictPolicies: [{glob: '**/*.md', strategy: 'manual'}],
-  markdownConflictCallout: {
-    enabled: false,
-    calloutKind: 'warning',
-    template: 'Conflict backup: [[{backup_path}]]',
-  },
-  commitMessageTemplate: 'chore: sync {timestamp} {host}',
-  hostLabel: null,
-  backupLocalSubdir: 'local',
-  backupRemoteSubdir: 'remote',
-  timeouts: {
-    fetchSecs: 30,
-    pushSecs: 30,
-    mergeSecs: 30,
-  },
-  allowCreateBackupDirectory: false,
-  skipCommitHooks: true,
-};
-
 export default function App() {
   const {maximized} = useTauriWindowMaximized();
   const {tiling, tilingDebug} = useTauriWindowTiling();
@@ -259,15 +232,22 @@ export default function App() {
     saveSettledNonce,
   } = workspacePersistenceController;
   const {
+    branch: currentGitBranch,
+    loading: currentGitBranchLoading,
+    error: currentGitBranchError,
+    refresh: refreshCurrentGitBranch,
+  } = useVaultGitCurrentBranch({vaultPath: vaultRoot});
+  const {
     status: gitStatus,
     loading: gitStatusLoading,
     error: gitStatusError,
     refresh: refreshGitStatus,
-  } = useVaultGitStatus({vaultPath: vaultRoot, remote: GIT_SYNC_REMOTE, branch: GIT_SYNC_BRANCH});
+  } = useVaultGitStatus({vaultPath: vaultRoot, remote: GIT_SYNC_REMOTE, branch: currentGitBranch});
   useEffect(() => {
     if (saveSettledNonce === 0) return;
+    refreshCurrentGitBranch();
     refreshGitStatus();
-  }, [saveSettledNonce, refreshGitStatus]);
+  }, [saveSettledNonce, refreshCurrentGitBranch, refreshGitStatus]);
   const {
     err,
     setErr,
@@ -481,17 +461,23 @@ export default function App() {
     renameLinkProgress,
     setNotificationsPanelVisible,
   });
+  const manualGitSyncConfig = useMemo(
+    () => (currentGitBranch == null ? null : buildManualGitSyncConfig(currentGitBranch)),
+    [currentGitBranch],
+  );
   const manualGitSync = useManualVaultGitSync({
     vaultPath: vaultRoot,
-    config: MANUAL_GIT_SYNC_CONFIG,
+    config: manualGitSyncConfig,
     notify: pushNotification,
     onSettled: refreshGitStatus,
   });
   const manualSyncDisabledReason = getManualSyncDisabledReason({
     vaultPath: vaultRoot,
     gitStatus,
-    gitStatusLoading,
+    gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
     gitStatusError,
+    branchLoading: currentGitBranchLoading,
+    branchUnavailable: currentGitBranch == null || currentGitBranchError != null,
     running: manualGitSync.running,
   });
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
@@ -764,8 +750,8 @@ export default function App() {
             statusIndicator={
               <GitStatusChip
                 status={gitStatus}
-                loading={gitStatusLoading}
-                error={gitStatusError}
+                loading={currentGitBranchLoading || gitStatusLoading}
+                error={currentGitBranchError ?? gitStatusError}
                 syncing={manualGitSync.running}
               />
             }
