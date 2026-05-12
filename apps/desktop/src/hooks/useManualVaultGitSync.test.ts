@@ -160,6 +160,32 @@ describe('useManualVaultGitSync', () => {
     expect(onSettled).toHaveBeenCalledTimes(1);
   });
 
+  it('does not notify success when silent is true', async () => {
+    const notify = vi.fn();
+    mockRunVaultGitSync.mockResolvedValue(syncResult);
+
+    const {result} = renderHook(() =>
+      useManualVaultGitSync({vaultPath: '/vault', config, notify, onSettled: vi.fn()}),
+    );
+
+    await expect(result.current.run({silent: true})).resolves.toBe(true);
+
+    expect(notify).not.toHaveBeenCalledWith('info', expect.any(String));
+  });
+
+  it('still notifies error when silent is true and sync fails', async () => {
+    const notify = vi.fn();
+    mockRunVaultGitSync.mockRejectedValue({type: 'pushRejected', stderr: 'rejected'});
+
+    const {result} = renderHook(() =>
+      useManualVaultGitSync({vaultPath: '/vault', config, notify, onSettled: vi.fn()}),
+    );
+
+    await expect(result.current.run({silent: true})).resolves.toBe(false);
+
+    expect(notify).toHaveBeenCalledWith('error', 'Push rejected. Local changes remain committed.');
+  });
+
   it('does not start duplicate concurrent sync runs', async () => {
     const pending = deferred<SyncRunResult>();
     mockRunVaultGitSync.mockReturnValue(pending.promise);

@@ -8,7 +8,7 @@ type UseVaultGitStartupSyncArgs = {
   gitStatusError: string | null;
   manualSyncDisabledReason: string | null;
   manualSyncRunning: boolean;
-  runManualSync: () => Promise<boolean>;
+  runManualSync: (opts?: {readonly silent?: boolean}) => Promise<boolean>;
   notify: (tone: SessionNotificationTone, text: string) => void;
 };
 
@@ -48,7 +48,7 @@ export function useVaultGitStartupSync({
     // Mark before the async run to guard against re-entry from intermediate rerenders.
     attemptedVaultPathsRef.current.add(vaultPath);
 
-    void runManualSyncRef.current().then(success => {
+    void runManualSyncRef.current({silent: true}).then(success => {
       if (!success) {
         notifyRef.current('error', 'Startup sync failed. You can retry manually.');
       }
