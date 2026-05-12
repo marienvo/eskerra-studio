@@ -24,6 +24,7 @@ import {GitStatusChip} from './components/GitStatusChip';
 import {useManualVaultGitSync} from './hooks/useManualVaultGitSync';
 import {useVaultGitCurrentBranch} from './hooks/useVaultGitCurrentBranch';
 import {useVaultGitStatus} from './hooks/useVaultGitStatus';
+import {useVaultGitRemoteStatusPolling} from './hooks/useVaultGitRemoteStatusPolling';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
@@ -491,6 +492,14 @@ export default function App() {
     config: manualGitSyncConfig,
     notify: pushNotification,
     onSettled: refreshGitStatus,
+  });
+  useVaultGitRemoteStatusPolling({
+    vaultPath: vaultRoot,
+    remote: GIT_SYNC_REMOTE,
+    branch: currentGitBranch,
+    fetchTimeoutSecs: 30,
+    manualSyncRunning: manualGitSync.running,
+    onRefreshed: refreshGitStatus,
   });
   const manualSyncDisabledReason = getManualSyncDisabledReason({
     vaultPath: vaultRoot,
