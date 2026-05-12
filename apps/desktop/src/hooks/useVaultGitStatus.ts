@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {GitStatusResult, SyncError} from '../lib/tauriVaultGitSync';
 import {getVaultGitStatus} from '../lib/tauriVaultGitSync';
@@ -25,20 +25,23 @@ export function useVaultGitStatus({
   const [status, setStatus] = useState<GitStatusResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const load = useCallback(
-    async (path: string, cancelled: {value: boolean}) => {
+    async (path: string) => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       setLoading(true);
       setError(null);
       try {
         const result = await getVaultGitStatus({vaultPath: path, remote, branch});
-        if (cancelled.value) return;
+        if (requestId !== requestIdRef.current) return;
         setStatus(result);
       } catch (e) {
-        if (cancelled.value) return;
+        if (requestId !== requestIdRef.current) return;
         setError(formatSyncError(e));
       } finally {
-        if (!cancelled.value) setLoading(false);
+        if (requestId === requestIdRef.current) setLoading(false);
       }
     },
     [remote, branch],
@@ -46,24 +49,23 @@ export function useVaultGitStatus({
 
   useEffect(() => {
     if (!vaultPath) {
+      requestIdRef.current += 1;
       setStatus(null);
       setLoading(false);
       setError(null);
       return;
     }
 
-    const cancelled = {value: false};
-    void load(vaultPath, cancelled);
+    void load(vaultPath);
 
     return () => {
-      cancelled.value = true;
+      requestIdRef.current += 1;
     };
   }, [vaultPath, load]);
 
   const refresh = useCallback(() => {
     if (!vaultPath) return;
-    const cancelled = {value: false};
-    void load(vaultPath, cancelled);
+    void load(vaultPath);
   }, [vaultPath, load]);
 
   return {status, loading, error, refresh};
