@@ -100,6 +100,18 @@ describe('getManualSyncDisabledReason', () => {
     ).toBe('Git needs attention');
   });
 
+  it('returns unsafe state reason for detached HEAD', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: {...safeGitStatus, branch: null, unsafeState: 'detachedHead'},
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBe('Git needs attention');
+  });
+
   it('returns wrong branch reason', () => {
     expect(
       getManualSyncDisabledReason({

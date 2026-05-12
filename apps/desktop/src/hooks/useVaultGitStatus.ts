@@ -23,12 +23,14 @@ export function useVaultGitStatus({
   branch,
 }: UseVaultGitStatusInput): UseVaultGitStatusResult {
   const [status, setStatus] = useState<GitStatusResult | null>(null);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
 
   const load = useCallback(
     async (path: string, expectedBranch: string) => {
+      const requestKey = statusRequestKey(path, remote, expectedBranch);
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       setLoading(true);
@@ -37,9 +39,11 @@ export function useVaultGitStatus({
         const result = await getVaultGitStatus({vaultPath: path, remote, branch: expectedBranch});
         if (requestId !== requestIdRef.current) return;
         setStatus(result);
+        setLoadedKey(requestKey);
       } catch (e) {
         if (requestId !== requestIdRef.current) return;
         setError(formatSyncError(e));
+        setLoadedKey(requestKey);
       } finally {
         if (requestId === requestIdRef.current) setLoading(false);
       }
@@ -51,6 +55,7 @@ export function useVaultGitStatus({
     if (!vaultPath || !branch) {
       requestIdRef.current += 1;
       setStatus(null);
+      setLoadedKey(null);
       setLoading(false);
       setError(null);
       return;
@@ -68,7 +73,18 @@ export function useVaultGitStatus({
     void load(vaultPath, branch);
   }, [vaultPath, branch, load]);
 
-  return {status, loading, error, refresh};
+  const currentKey = vaultPath && branch ? statusRequestKey(vaultPath, remote, branch) : null;
+  const hasCurrentStatusResult = currentKey != null && loadedKey === currentKey;
+  return {
+    status: hasCurrentStatusResult ? status : null,
+    loading: currentKey != null && (loading || !hasCurrentStatusResult),
+    error: hasCurrentStatusResult ? error : null,
+    refresh,
+  };
+}
+
+function statusRequestKey(vaultPath: string, remote: string, branch: string): string {
+  return JSON.stringify([vaultPath, remote, branch]);
 }
 
 function formatSyncError(e: unknown): string {

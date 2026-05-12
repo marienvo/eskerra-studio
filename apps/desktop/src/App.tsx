@@ -49,6 +49,7 @@ import {
 } from './lib/mainWindowUiStore';
 import {buildManualGitSyncConfig, GIT_SYNC_REMOTE} from './lib/gitSyncConfig';
 import {getManualSyncDisabledReason} from './lib/gitSyncManualView';
+import type {GitStatusResult} from './lib/tauriVaultGitSync';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {writeVaultSettings} from './lib/vaultBootstrap';
 import {AppThemeShell} from './shell/AppThemeShell';
@@ -233,6 +234,7 @@ export default function App() {
   } = workspacePersistenceController;
   const {
     branch: currentGitBranch,
+    detachedHead: currentGitDetachedHead,
     loading: currentGitBranchLoading,
     error: currentGitBranchError,
     refresh: refreshCurrentGitBranch,
@@ -465,6 +467,23 @@ export default function App() {
     () => (currentGitBranch == null ? null : buildManualGitSyncConfig(currentGitBranch)),
     [currentGitBranch],
   );
+  const gitStatusForDisplay = useMemo<GitStatusResult | null>(() => {
+    if (currentGitDetachedHead) {
+      return {
+        branch: null,
+        expectedBranch: '',
+        hasUncommittedChanges: false,
+        hasStagedChanges: false,
+        hasUntrackedFiles: false,
+        ahead: 0,
+        behind: 0,
+        remoteRefAvailable: false,
+        unsafeState: 'detachedHead',
+        isWrongBranch: false,
+      };
+    }
+    return gitStatus;
+  }, [currentGitDetachedHead, gitStatus]);
   const manualGitSync = useManualVaultGitSync({
     vaultPath: vaultRoot,
     config: manualGitSyncConfig,
@@ -473,11 +492,11 @@ export default function App() {
   });
   const manualSyncDisabledReason = getManualSyncDisabledReason({
     vaultPath: vaultRoot,
-    gitStatus,
+    gitStatus: gitStatusForDisplay,
     gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
     gitStatusError,
     branchLoading: currentGitBranchLoading,
-    branchUnavailable: currentGitBranch == null || currentGitBranchError != null,
+    branchUnavailable: !currentGitDetachedHead && (currentGitBranch == null || currentGitBranchError != null),
     running: manualGitSync.running,
   });
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
@@ -749,9 +768,9 @@ export default function App() {
             manualSyncLabel={manualSyncLabel}
             statusIndicator={
               <GitStatusChip
-                status={gitStatus}
+                status={gitStatusForDisplay}
                 loading={currentGitBranchLoading || gitStatusLoading}
-                error={currentGitBranchError ?? gitStatusError}
+                error={currentGitDetachedHead ? gitStatusError : currentGitBranchError ?? gitStatusError}
                 syncing={manualGitSync.running}
               />
             }

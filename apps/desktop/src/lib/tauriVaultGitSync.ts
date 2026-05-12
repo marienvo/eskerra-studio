@@ -26,6 +26,13 @@ export interface GitStatusResult {
   isWrongBranch: boolean;
 }
 
+// Mirrors vault_git_sync::status::CurrentBranchResult
+// Rust: #[serde(rename_all = "camelCase")]
+export interface GitCurrentBranchResult {
+  branch: string | null;
+  detachedHead: boolean;
+}
+
 // Mirrors vault_git_sync::config::SyncConfig
 // Rust: #[serde(rename_all = "camelCase")]
 export interface SyncConfig {
@@ -161,8 +168,8 @@ export async function getVaultGitStatus(input: {
 
 export async function getVaultGitCurrentBranch(input: {
   vaultPath: string;
-}): Promise<string | null> {
-  return invoke<string | null>('vault_git_current_branch', {
+}): Promise<GitCurrentBranchResult> {
+  return invoke<GitCurrentBranchResult>('vault_git_current_branch', {
     vaultPath: input.vaultPath,
   });
 }

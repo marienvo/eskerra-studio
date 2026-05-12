@@ -13,6 +13,10 @@ import {useVaultGitCurrentBranch} from './useVaultGitCurrentBranch';
 
 const VAULT = '/home/user/vault';
 
+function branchResult(branch: string | null, detachedHead = false) {
+  return {branch, detachedHead};
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(res => {
@@ -27,12 +31,23 @@ describe('useVaultGitCurrentBranch', () => {
   });
 
   it('loads current branch', async () => {
-    mockGetVaultGitCurrentBranch.mockResolvedValue('main');
+    mockGetVaultGitCurrentBranch.mockResolvedValue(branchResult('main'));
 
     const {result} = renderHook(() => useVaultGitCurrentBranch({vaultPath: VAULT}));
 
     await waitFor(() => expect(result.current.branch).toBe('main'));
     expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(result.current.detachedHead).toBe(false);
+  });
+
+  it('represents detached HEAD separately from a load error', async () => {
+    mockGetVaultGitCurrentBranch.mockResolvedValue(branchResult(null, true));
+
+    const {result} = renderHook(() => useVaultGitCurrentBranch({vaultPath: VAULT}));
+
+    await waitFor(() => expect(result.current.detachedHead).toBe(true));
+    expect(result.current.branch).toBeNull();
     expect(result.current.error).toBeNull();
   });
 
@@ -45,12 +60,13 @@ describe('useVaultGitCurrentBranch', () => {
 
     expect(mockGetVaultGitCurrentBranch).not.toHaveBeenCalled();
     expect(result.current.branch).toBeNull();
+    expect(result.current.detachedHead).toBe(false);
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
   it('resets and does not call when vaultPath becomes null', async () => {
-    mockGetVaultGitCurrentBranch.mockResolvedValue('main');
+    mockGetVaultGitCurrentBranch.mockResolvedValue(branchResult('main'));
     const {result, rerender} = renderHook(
       ({vaultPath}: {vaultPath: string | null}) => useVaultGitCurrentBranch({vaultPath}),
       {initialProps: {vaultPath: VAULT as string | null}},
@@ -60,15 +76,16 @@ describe('useVaultGitCurrentBranch', () => {
     rerender({vaultPath: null});
 
     expect(result.current.branch).toBeNull();
+    expect(result.current.detachedHead).toBe(false);
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
   it('stale request cannot overwrite newer branch', async () => {
-    const first = deferred<string | null>();
+    const first = deferred<ReturnType<typeof branchResult>>();
     mockGetVaultGitCurrentBranch
       .mockImplementationOnce(() => first.promise)
-      .mockResolvedValueOnce('feature');
+      .mockResolvedValueOnce(branchResult('feature'));
 
     const {result, rerender} = renderHook(
       ({vaultPath}: {vaultPath: string}) => useVaultGitCurrentBranch({vaultPath}),
@@ -78,16 +95,37 @@ describe('useVaultGitCurrentBranch', () => {
     rerender({vaultPath: '/other/vault'});
     await waitFor(() => expect(result.current.branch).toBe('feature'));
 
-    await act(async () => { first.resolve('main'); });
+    await act(async () => { first.resolve(branchResult('main')); });
 
     expect(result.current.branch).toBe('feature');
   });
 
-  it('refresh uses latest-request-wins', async () => {
-    const firstRefresh = deferred<string | null>();
-    const secondRefresh = deferred<string | null>();
+  it('hides stale branch while a new vault branch is loading', async () => {
+    const second = deferred<ReturnType<typeof branchResult>>();
     mockGetVaultGitCurrentBranch
-      .mockResolvedValueOnce('main')
+      .mockResolvedValueOnce(branchResult('main'))
+      .mockImplementationOnce(() => second.promise);
+
+    const {result, rerender} = renderHook(
+      ({vaultPath}: {vaultPath: string}) => useVaultGitCurrentBranch({vaultPath}),
+      {initialProps: {vaultPath: VAULT}},
+    );
+    await waitFor(() => expect(result.current.branch).toBe('main'));
+
+    rerender({vaultPath: '/other/vault'});
+
+    expect(result.current.branch).toBeNull();
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => { second.resolve(branchResult('feature')); });
+    await waitFor(() => expect(result.current.branch).toBe('feature'));
+  });
+
+  it('refresh uses latest-request-wins', async () => {
+    const firstRefresh = deferred<ReturnType<typeof branchResult>>();
+    const secondRefresh = deferred<ReturnType<typeof branchResult>>();
+    mockGetVaultGitCurrentBranch
+      .mockResolvedValueOnce(branchResult('main'))
       .mockImplementationOnce(() => firstRefresh.promise)
       .mockImplementationOnce(() => secondRefresh.promise);
 
@@ -100,10 +138,10 @@ describe('useVaultGitCurrentBranch', () => {
     });
     await waitFor(() => expect(mockGetVaultGitCurrentBranch).toHaveBeenCalledTimes(3));
 
-    await act(async () => { secondRefresh.resolve('latest'); });
+    await act(async () => { secondRefresh.resolve(branchResult('latest')); });
     await waitFor(() => expect(result.current.branch).toBe('latest'));
 
-    await act(async () => { firstRefresh.resolve('stale'); });
+    await act(async () => { firstRefresh.resolve(branchResult('stale')); });
 
     expect(result.current.branch).toBe('latest');
   });

@@ -48,6 +48,15 @@ pub struct GitStatusResult {
     pub is_wrong_branch: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentBranchResult {
+    /// Current branch name, or None when HEAD is detached.
+    pub branch: Option<String>,
+    /// True when HEAD is detached and therefore unsafe for manual sync.
+    pub detached_head: bool,
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -101,11 +110,16 @@ pub fn git_status(
     })
 }
 
-/// Returns the currently checked-out branch name, or None when HEAD is detached.
-pub fn current_branch(vault_path: &Path) -> Result<Option<String>, SyncError> {
+/// Returns the currently checked-out branch state.
+pub fn current_branch(vault_path: &Path) -> Result<CurrentBranchResult, SyncError> {
     validate_vault_path(vault_path)?;
     validate_is_git_repo(vault_path)?;
-    read_branch(vault_path)
+    let branch = read_branch(vault_path)?;
+    let detached_head = branch.is_none();
+    Ok(CurrentBranchResult {
+        branch,
+        detached_head,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -462,9 +476,10 @@ mod tests {
         let repo = Repo::new();
         repo.commit("f.txt", "a", "init");
 
-        let branch = current_branch(repo.path()).unwrap();
+        let result = current_branch(repo.path()).unwrap();
 
-        assert_eq!(branch.as_deref(), Some("main"));
+        assert_eq!(result.branch.as_deref(), Some("main"));
+        assert!(!result.detached_head);
     }
 
     #[test]
@@ -473,9 +488,10 @@ mod tests {
         repo.commit("f.txt", "a", "init");
         git(&["checkout", "-b", "master"], repo.path());
 
-        let branch = current_branch(repo.path()).unwrap();
+        let result = current_branch(repo.path()).unwrap();
 
-        assert_eq!(branch.as_deref(), Some("master"));
+        assert_eq!(result.branch.as_deref(), Some("master"));
+        assert!(!result.detached_head);
     }
 
     // -----------------------------------------------------------------------
@@ -502,9 +518,10 @@ mod tests {
         repo.commit("f.txt", "a", "init");
         git(&["checkout", "--detach"], repo.path());
 
-        let branch = current_branch(repo.path()).unwrap();
+        let result = current_branch(repo.path()).unwrap();
 
-        assert!(branch.is_none());
+        assert!(result.branch.is_none());
+        assert!(result.detached_head);
     }
 
     // -----------------------------------------------------------------------

@@ -179,6 +179,33 @@ describe('useVaultGitStatus', () => {
     expect(mockGetVaultGitStatus).toHaveBeenCalledTimes(1);
   });
 
+  it('hides stale status while a new branch status is loading', async () => {
+    const featureLoad = deferred<GitStatusResult>();
+    mockGetVaultGitStatus
+      .mockResolvedValueOnce(cleanResult)
+      .mockImplementationOnce(() => featureLoad.promise);
+
+    const {result, rerender} = renderHook(
+      ({branch}: {branch: string}) =>
+        useVaultGitStatus({vaultPath: VAULT, remote: 'origin', branch}),
+      {initialProps: {branch: 'main'}},
+    );
+    await waitFor(() => expect(result.current.status).toEqual(cleanResult));
+
+    rerender({branch: 'feature'});
+
+    expect(result.current.status).toBeNull();
+    expect(result.current.loading).toBe(true);
+
+    const featureResult: GitStatusResult = {
+      ...cleanResult,
+      branch: 'feature',
+      expectedBranch: 'feature',
+    };
+    await act(async () => { featureLoad.resolve(featureResult); });
+    await waitFor(() => expect(result.current.status).toEqual(featureResult));
+  });
+
   it('ignores stale result when vaultPath changes before first load resolves', async () => {
     const firstLoad = deferred<GitStatusResult>();
     const firstResult: GitStatusResult = {...cleanResult, branch: 'first'};

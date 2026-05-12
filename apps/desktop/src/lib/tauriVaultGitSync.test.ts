@@ -140,7 +140,7 @@ describe('getVaultGitCurrentBranch', () => {
   });
 
   it('invokes vault_git_current_branch with correct argument shape', async () => {
-    mockInvoke.mockResolvedValue('main');
+    mockInvoke.mockResolvedValue({branch: 'main', detachedHead: false});
     await getVaultGitCurrentBranch({vaultPath: VAULT});
     expect(mockInvoke).toHaveBeenCalledWith('vault_git_current_branch', {
       vaultPath: VAULT,
@@ -148,13 +148,19 @@ describe('getVaultGitCurrentBranch', () => {
   });
 
   it('returns the invoke result', async () => {
-    mockInvoke.mockResolvedValue('feature/x');
-    await expect(getVaultGitCurrentBranch({vaultPath: VAULT})).resolves.toBe('feature/x');
+    mockInvoke.mockResolvedValue({branch: 'feature/x', detachedHead: false});
+    await expect(getVaultGitCurrentBranch({vaultPath: VAULT})).resolves.toEqual({
+      branch: 'feature/x',
+      detachedHead: false,
+    });
   });
 
-  it('returns null for detached HEAD result', async () => {
-    mockInvoke.mockResolvedValue(null);
-    await expect(getVaultGitCurrentBranch({vaultPath: VAULT})).resolves.toBeNull();
+  it('returns detached HEAD result', async () => {
+    mockInvoke.mockResolvedValue({branch: null, detachedHead: true});
+    await expect(getVaultGitCurrentBranch({vaultPath: VAULT})).resolves.toEqual({
+      branch: null,
+      detachedHead: true,
+    });
   });
 });
 

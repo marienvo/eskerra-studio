@@ -9,6 +9,7 @@ type UseVaultGitCurrentBranchInput = {
 
 type UseVaultGitCurrentBranchResult = {
   branch: string | null;
+  detachedHead: boolean;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -18,6 +19,8 @@ export function useVaultGitCurrentBranch({
   vaultPath,
 }: UseVaultGitCurrentBranchInput): UseVaultGitCurrentBranchResult {
   const [branch, setBranch] = useState<string | null>(null);
+  const [detachedHead, setDetachedHead] = useState(false);
+  const [loadedVaultPath, setLoadedVaultPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -30,10 +33,14 @@ export function useVaultGitCurrentBranch({
     try {
       const result = await getVaultGitCurrentBranch({vaultPath: path});
       if (requestId !== requestIdRef.current) return;
-      setBranch(result);
+      setBranch(result.branch);
+      setDetachedHead(result.detachedHead);
+      setLoadedVaultPath(path);
     } catch (e) {
       if (requestId !== requestIdRef.current) return;
       setBranch(null);
+      setDetachedHead(false);
+      setLoadedVaultPath(path);
       setError(formatBranchError(e));
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
@@ -44,6 +51,8 @@ export function useVaultGitCurrentBranch({
     if (!vaultPath) {
       requestIdRef.current += 1;
       setBranch(null);
+      setDetachedHead(false);
+      setLoadedVaultPath(null);
       setLoading(false);
       setError(null);
       return;
@@ -61,7 +70,14 @@ export function useVaultGitCurrentBranch({
     void load(vaultPath);
   }, [vaultPath, load]);
 
-  return {branch, loading, error, refresh};
+  const hasCurrentVaultResult = vaultPath != null && loadedVaultPath === vaultPath;
+  return {
+    branch: hasCurrentVaultResult ? branch : null,
+    detachedHead: hasCurrentVaultResult ? detachedHead : false,
+    loading: vaultPath != null && (loading || !hasCurrentVaultResult),
+    error: hasCurrentVaultResult ? error : null,
+    refresh,
+  };
 }
 
 function formatBranchError(e: unknown): string {
