@@ -50,7 +50,6 @@ import {
 } from './lib/mainWindowUiStore';
 import {buildManualGitSyncConfig, GIT_SYNC_REMOTE} from './lib/gitSyncConfig';
 import {getManualSyncDisabledReason} from './lib/gitSyncManualView';
-import {closeDesktopMainWindow} from './lib/desktopTauriWindow';
 import {handleManualSyncCloseRequest} from './lib/manualSyncClose';
 import type {GitStatusResult} from './lib/tauriVaultGitSync';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
@@ -63,6 +62,7 @@ import {useAppNotificationSession} from './shell/useAppNotificationSession';
 import {useAppOnMountLayoutHydration} from './shell/useAppOnMountLayoutHydration';
 import {useAppRootClassName} from './shell/useAppRootClassName';
 import {useAppTauriCloseAndFocusSave} from './shell/useAppTauriCloseAndFocusSave';
+import {useAppOsCloseSync} from './shell/useAppOsCloseSync';
 import {useAppTauriDocumentChrome} from './shell/useAppTauriDocumentChrome';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
 import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
@@ -449,7 +449,7 @@ export default function App() {
     persistNotificationsWidthPx,
   } = useAppLayoutWidthPersisters(setLayouts);
 
-  useAppTauriCloseAndFocusSave(desktopPlaybackRef, flushInboxSave);
+  useAppTauriCloseAndFocusSave(flushInboxSave);
 
   const {
     items: notificationItems,
@@ -511,6 +511,14 @@ export default function App() {
     running: manualGitSync.running,
   });
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
+  const {programmaticClose} = useAppOsCloseSync({
+    desktopPlaybackRef,
+    flushInboxSave,
+    manualSyncDisabledReason,
+    manualSyncRunning: manualGitSync.running,
+    runManualSync: manualGitSync.run,
+    notify: pushNotification,
+  });
   const closeSyncDisabledNoticeRef = useRef<string | null>(null);
   useEffect(() => {
     if (manualSyncDisabledReason == null) {
@@ -530,12 +538,13 @@ export default function App() {
         manualSyncDisabledReason,
         manualSyncRunning: manualGitSync.running,
         runManualSync: manualGitSync.run,
-        close: closeDesktopMainWindow,
+        close: programmaticClose,
         notify: pushNotification,
         notifyDisabled,
+        showCloseSyncFeedback: true,
       });
     },
-    [manualGitSync.run, manualGitSync.running, manualSyncDisabledReason, pushNotification],
+    [manualGitSync.run, manualGitSync.running, manualSyncDisabledReason, programmaticClose, pushNotification],
   );
 
   useAppMainWindowKeyboardEffects({
