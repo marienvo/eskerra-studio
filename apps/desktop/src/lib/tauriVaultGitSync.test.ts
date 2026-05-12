@@ -12,6 +12,7 @@ import {
   getVaultGitCurrentBranch,
   getVaultGitStagePlan,
   getVaultGitStatus,
+  refreshVaultGitRemoteStatus,
   runVaultGitSync,
   type GitStatusResult,
   type StagePlan,
@@ -190,6 +191,52 @@ describe('getVaultGitStagePlan', () => {
     await expect(getVaultGitStagePlan({vaultPath: VAULT, config: syncConfig})).rejects.toEqual(
       error,
     );
+  });
+});
+
+describe('refreshVaultGitRemoteStatus', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+  });
+
+  it('invokes vault_git_remote_status with correct argument shape', async () => {
+    mockInvoke.mockResolvedValue(cleanResult);
+    await refreshVaultGitRemoteStatus({
+      vaultPath: VAULT,
+      remote: 'origin',
+      branch: 'main',
+      fetchTimeoutSecs: 30,
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('vault_git_remote_status', {
+      vaultPath: VAULT,
+      remote: 'origin',
+      branch: 'main',
+      fetchTimeoutSecs: 30,
+    });
+  });
+
+  it('returns the invoke result', async () => {
+    mockInvoke.mockResolvedValue(cleanResult);
+    const result = await refreshVaultGitRemoteStatus({
+      vaultPath: VAULT,
+      remote: 'origin',
+      branch: 'main',
+      fetchTimeoutSecs: 30,
+    });
+    expect(result).toEqual(cleanResult);
+  });
+
+  it('propagates fetchFailed rejection as-is', async () => {
+    const error = {type: 'fetchFailed', stderr: 'fatal: authentication failed'};
+    mockInvoke.mockRejectedValue(error);
+    await expect(
+      refreshVaultGitRemoteStatus({
+        vaultPath: VAULT,
+        remote: 'origin',
+        branch: 'main',
+        fetchTimeoutSecs: 30,
+      }),
+    ).rejects.toEqual(error);
   });
 });
 

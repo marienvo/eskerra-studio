@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::Serialize;
 
@@ -120,6 +121,43 @@ pub fn current_branch(vault_path: &Path) -> Result<CurrentBranchResult, SyncErro
         branch,
         detached_head,
     })
+}
+
+/// Fetches `remote/expected_branch` (updating the local remote-tracking ref),
+/// then returns the current local status.
+///
+/// HEAD and the working tree are never modified — only
+/// `refs/remotes/{remote}/{expected_branch}` is updated.
+pub fn remote_status(
+    vault_path: &Path,
+    expected_branch: &str,
+    remote: &str,
+    fetch_timeout_secs: u32,
+) -> Result<GitStatusResult, SyncError> {
+    validate_vault_path(vault_path)?;
+    validate_is_git_repo(vault_path)?;
+    fetch_remote(vault_path, remote, expected_branch, fetch_timeout_secs)?;
+    git_status(vault_path, expected_branch, remote)
+}
+
+// ---------------------------------------------------------------------------
+// Remote fetch
+// ---------------------------------------------------------------------------
+
+fn fetch_remote(
+    vault_path: &Path,
+    remote: &str,
+    branch: &str,
+    timeout_secs: u32,
+) -> Result<(), SyncError> {
+    let timeout = Duration::from_secs(u64::from(timeout_secs));
+    let out = GitCmd::new(vault_path, &["fetch", "--quiet", remote, branch])
+        .timeout(timeout)
+        .run()?;
+    if !out.success {
+        return Err(SyncError::FetchFailed { stderr: out.stderr });
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -749,6 +787,69 @@ mod tests {
     fn parse_rev_list_count_space_separated() {
         // git sometimes outputs space-separated on some platforms
         assert_eq!(parse_rev_list_count("2 5").unwrap(), (2, 5));
+    }
+
+    // -----------------------------------------------------------------------
+    // GitStatusResult serialization — verifies camelCase field names
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    // 15. remote_status fetches and detects behind
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn remote_status_detects_behind_after_remote_advance() {
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+        let _remote = repo.add_remote_origin();
+
+        // Advance remote via a second clone — do NOT fetch locally beforehand.
+        let remote_path = _remote.path().to_path_buf();
+        let other = tempfile::tempdir().unwrap();
+        git(
+            &[
+                "clone",
+                remote_path.to_str().unwrap(),
+                other.path().to_str().unwrap(),
+            ],
+            Path::new("/tmp"),
+        );
+        git(&["config", "user.email", "t@t.com"], other.path());
+        git(&["config", "user.name", "T"], other.path());
+        git(&["config", "commit.gpgsign", "false"], other.path());
+        std::fs::write(other.path().join("f.txt"), "remote").unwrap();
+        git(&["add", "f.txt"], other.path());
+        git(
+            &["commit", "--no-gpg-sign", "-m", "remote commit"],
+            other.path(),
+        );
+        git(&["push", "origin", "main"], other.path());
+
+        let head_before = git(&["rev-parse", "HEAD"], repo.path());
+        let result = remote_status(repo.path(), "main", "origin", 30).unwrap();
+        let head_after = git(&["rev-parse", "HEAD"], repo.path());
+
+        assert_eq!(result.behind, 1);
+        assert_eq!(result.ahead, 0);
+        assert!(result.remote_ref_available);
+        assert_eq!(
+            head_before.stdout, head_after.stdout,
+            "HEAD must not change"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // 16. remote_status errors on missing remote branch
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn remote_status_errors_on_missing_remote_branch() {
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+        let _remote = repo.add_remote_origin();
+
+        let result = remote_status(repo.path(), "nonexistent-branch", "origin", 30);
+        assert!(matches!(result, Err(SyncError::FetchFailed { .. })));
     }
 
     // -----------------------------------------------------------------------

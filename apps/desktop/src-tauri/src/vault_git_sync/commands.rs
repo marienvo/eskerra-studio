@@ -4,7 +4,7 @@ use crate::vault_git_sync::config::SyncConfig;
 use crate::vault_git_sync::errors::SyncError;
 use crate::vault_git_sync::stage_plan::{build_stage_plan, StagePlan};
 use crate::vault_git_sync::status::{
-    current_branch, git_status, CurrentBranchResult, GitStatusResult,
+    current_branch, git_status, remote_status, CurrentBranchResult, GitStatusResult,
 };
 use crate::vault_git_sync::sync_run::{sync_fetch_merge_push, SyncRunResult};
 
@@ -28,6 +28,21 @@ pub fn vault_git_stage_plan(
     config: SyncConfig,
 ) -> Result<StagePlan, SyncError> {
     build_stage_plan(&PathBuf::from(vault_path), &config)
+}
+
+#[tauri::command]
+pub fn vault_git_remote_status(
+    vault_path: String,
+    remote: String,
+    branch: String,
+    fetch_timeout_secs: u32,
+) -> Result<GitStatusResult, SyncError> {
+    remote_status(
+        &PathBuf::from(vault_path),
+        &branch,
+        &remote,
+        fetch_timeout_secs,
+    )
 }
 
 #[tauri::command]

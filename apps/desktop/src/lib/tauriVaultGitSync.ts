@@ -195,3 +195,17 @@ export async function runVaultGitSync(input: {
     config: input.config,
   });
 }
+
+export async function refreshVaultGitRemoteStatus(input: {
+  vaultPath: string;
+  remote: string;
+  branch: string;
+  fetchTimeoutSecs: number;
+}): Promise<GitStatusResult> {
+  return invoke<GitStatusResult>('vault_git_remote_status', {
+    vaultPath: input.vaultPath,
+    remote: input.remote,
+    branch: input.branch,
+    fetchTimeoutSecs: input.fetchTimeoutSecs,
+  });
+}
