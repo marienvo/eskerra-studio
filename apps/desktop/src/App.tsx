@@ -25,6 +25,7 @@ import {useManualVaultGitSync} from './hooks/useManualVaultGitSync';
 import {useVaultGitCurrentBranch} from './hooks/useVaultGitCurrentBranch';
 import {useVaultGitStatus} from './hooks/useVaultGitStatus';
 import {useVaultGitRemoteStatusPolling} from './hooks/useVaultGitRemoteStatusPolling';
+import {useVaultGitStartupSync} from './hooks/useVaultGitStartupSync';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
@@ -546,6 +547,16 @@ export default function App() {
     },
     [manualGitSync.run, manualGitSync.running, manualSyncDisabledReason, programmaticClose, pushNotification],
   );
+
+  useVaultGitStartupSync({
+    vaultPath: vaultRoot,
+    gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
+    gitStatusError,
+    manualSyncDisabledReason,
+    manualSyncRunning: manualGitSync.running,
+    runManualSync: manualGitSync.run,
+    notify: pushNotification,
+  });
 
   useAppMainWindowKeyboardEffects({
     vaultRoot,
