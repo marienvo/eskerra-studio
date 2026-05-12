@@ -49,6 +49,8 @@ import {
 } from './lib/mainWindowUiStore';
 import {buildManualGitSyncConfig, GIT_SYNC_REMOTE} from './lib/gitSyncConfig';
 import {getManualSyncDisabledReason} from './lib/gitSyncManualView';
+import {closeDesktopMainWindow} from './lib/desktopTauriWindow';
+import {handleManualSyncCloseRequest} from './lib/manualSyncClose';
 import type {GitStatusResult} from './lib/tauriVaultGitSync';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {writeVaultSettings} from './lib/vaultBootstrap';
@@ -500,6 +502,19 @@ export default function App() {
     running: manualGitSync.running,
   });
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
+  const handleWindowCloseRequest = useCallback(
+    (input: {instant: boolean}) => {
+      void handleManualSyncCloseRequest({
+        instant: input.instant,
+        manualSyncDisabledReason,
+        manualSyncRunning: manualGitSync.running,
+        runManualSync: manualGitSync.run,
+        close: closeDesktopMainWindow,
+        notify: pushNotification,
+      });
+    },
+    [manualGitSync.run, manualGitSync.running, manualSyncDisabledReason, pushNotification],
+  );
 
   useAppMainWindowKeyboardEffects({
     vaultRoot,
@@ -528,7 +543,7 @@ export default function App() {
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
           <div className="app-root-chrome">
-            <WindowTitleBar tiling={tiling} />
+            <WindowTitleBar tiling={tiling} onCloseRequest={handleWindowCloseRequest} />
             <div className="shell setup-shell">
               <h1>{settingsName}</h1>
               <p className="muted">Choose your notes folder (vault root). Settings are stored in `.eskerra/` inside it.</p>
@@ -538,6 +553,10 @@ export default function App() {
               {err ? <p className="error">{err}</p> : null}
             </div>
             <AppSetupTagline />
+            <ToastStack
+              items={notificationItems}
+              onDismiss={dismissNotification}
+            />
           </div>
         </div>
       </AppThemeShell>
@@ -554,11 +573,15 @@ export default function App() {
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
           <div className="app-root-chrome">
-            <WindowTitleBar tiling={tiling} />
+            <WindowTitleBar tiling={tiling} onCloseRequest={handleWindowCloseRequest} />
             <div className="shell setup-shell">
               <p className="muted">Loading…</p>
             </div>
             <AppSetupTagline />
+            <ToastStack
+              items={notificationItems}
+              onDismiss={dismissNotification}
+            />
           </div>
         </div>
       </AppThemeShell>
@@ -578,6 +601,7 @@ export default function App() {
             tiling={tiling}
             onEditorTabsHostRef={setTitleBarEditorTabsHost}
             todayHubSelect={titleBarTodayHubSelect}
+            onCloseRequest={handleWindowCloseRequest}
           />
 
           <div className="app-body">

@@ -1,4 +1,5 @@
 import type {WindowTilingState} from '../lib/windowTiling';
+import {useEffect, useState, type MouseEvent} from 'react';
 import {
   closeDesktopMainWindow,
   isDesktopTauriHost,
@@ -32,22 +33,59 @@ type WindowTitleBarProps = {
   /** Mount point for editor open-note tabs (React portal target). */
   onEditorTabsHostRef?: (el: HTMLDivElement | null) => void;
   todayHubSelect?: WindowTitleBarTodayHubSelect;
+  onCloseRequest?: (input: {instant: boolean}) => void;
 };
 
 export function WindowTitleBar({
   tiling = 'none',
   onEditorTabsHostRef,
   todayHubSelect = null,
+  onCloseRequest,
 }: WindowTitleBarProps) {
   const tauri = isDesktopTauriHost();
+  const [shiftHeld, setShiftHeld] = useState(false);
 
   const onMinimize = () => {
     minimizeDesktopMainWindow();
   };
 
-  const onClose = () => {
+  const onClose = (event: MouseEvent<HTMLButtonElement>) => {
+    const instant = event.shiftKey || shiftHeld;
+    if (onCloseRequest != null) {
+      onCloseRequest({instant});
+      return;
+    }
     closeDesktopMainWindow();
   };
+
+  useEffect(() => {
+    if (!tauri) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setShiftHeld(true);
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setShiftHeld(false);
+      }
+    };
+    const onBlur = () => {
+      setShiftHeld(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [tauri]);
+
+  const closeLabel = shiftHeld ? 'Close instantly' : 'Sync and close';
 
   return (
     <header className="window-title-bar" data-window-tiling={tiling}>
@@ -97,8 +135,8 @@ export function WindowTitleBar({
             <button
               type="button"
               className="window-ctrl app-tooltip-trigger window-ctrl-close"
-              aria-label="Close"
-              data-tooltip="Close"
+              aria-label={closeLabel}
+              data-tooltip={closeLabel}
               data-tooltip-placement="inline-start"
               onClick={onClose}
             >

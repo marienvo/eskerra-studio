@@ -27,9 +27,9 @@ export function useManualVaultGitSync({
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (): Promise<boolean> => {
     if (vaultPath == null || config == null || runningRef.current) {
-      return;
+      return false;
     }
 
     runningRef.current = true;
@@ -38,8 +38,10 @@ export function useManualVaultGitSync({
       const locksDir = await join(await appLocalDataDir(), 'locks');
       const result = await runVaultGitSync({vaultPath, locksDir, config});
       notify('info', formatVaultGitSyncSuccess(result));
+      return true;
     } catch (error) {
       notify('error', formatVaultGitSyncError(error));
+      return false;
     } finally {
       onSettled();
       runningRef.current = false;
