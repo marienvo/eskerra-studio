@@ -1018,6 +1018,11 @@ export function useMainWindowWorkspace(options: {
     [fs],
   );
 
+  const [vaultWriteSettledNonce, setVaultWriteSettledNonce] = useState(0);
+  const markVaultWriteSettled = useCallback(() => {
+    setVaultWriteSettledNonce(n => n + 1);
+  }, []);
+
   const {
     saveChainRef,
     saveActiveRef,
@@ -1027,7 +1032,6 @@ export function useMainWindowWorkspace(options: {
     enqueuePersistOutgoingNoteMarkdown,
     flushInboxSave,
     onInboxSaveShortcut,
-    saveSettledNonce,
   } = useWorkspacePersistence({
     fs,
     vaultRoot,
@@ -1052,6 +1056,7 @@ export function useMainWindowWorkspace(options: {
     setErr,
     setInboxContentByUri,
     refreshNotes,
+    onVaultWriteSettled: markVaultWriteSettled,
     loadFullMarkdownIntoInboxEditor,
     scheduleBacklinksDeferOneFrameAfterLoad,
   });
@@ -1205,6 +1210,7 @@ export function useMainWindowWorkspace(options: {
             try {
               if (await fs.exists(norm)) {
                 await deleteVaultMarkdownNote(root, norm, fs);
+                markVaultWriteSettled();
                 subtreeMarkdownCache.invalidateForMutation(
                   root,
                   norm,
@@ -1236,6 +1242,7 @@ export function useMainWindowWorkspace(options: {
             return;
           }
           await saveNoteMarkdown(norm, fs, md);
+          markVaultWriteSettled();
           subtreeMarkdownCache.invalidateForMutation(root, norm, 'file');
           todayHubRowLastPersistedRef.current.set(norm, md);
           const nextCache = mergeInboxNoteBodyIntoCache(
@@ -1264,7 +1271,7 @@ export function useMainWindowWorkspace(options: {
       saveChainRef.current = next.catch(() => undefined);
       await next;
     },
-    [fs, refreshNotes, subtreeMarkdownCache, saveActiveRef, saveChainRef],
+    [fs, refreshNotes, subtreeMarkdownCache, saveActiveRef, saveChainRef, markVaultWriteSettled],
   );
 
   const resolveDiskConflictReloadFromDisk = useCallback(() => {
@@ -2699,6 +2706,7 @@ export function useMainWindowWorkspace(options: {
       setErr(null);
       try {
         const created = await createInboxMarkdownNote(vaultRoot, fs, title, body);
+        markVaultWriteSettled();
         subtreeMarkdownCache.invalidateForMutation(
           vaultRoot,
           created.uri,
@@ -2713,7 +2721,7 @@ export function useMainWindowWorkspace(options: {
         setBusy(false);
       }
     },
-    [vaultRoot, fs, refreshNotes, openMarkdownInEditor, subtreeMarkdownCache],
+    [vaultRoot, fs, refreshNotes, openMarkdownInEditor, subtreeMarkdownCache, markVaultWriteSettled],
   );
 
   const startNewEntry = useCallback(() => {
@@ -4037,7 +4045,7 @@ export function useMainWindowWorkspace(options: {
       onInboxSaveShortcut,
       onCleanNoteInbox,
       flushInboxSave,
-      saveSettledNonce,
+      saveSettledNonce: vaultWriteSettledNonce,
     },
     linkController,
     treeController: {

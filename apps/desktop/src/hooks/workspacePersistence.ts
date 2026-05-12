@@ -3,7 +3,6 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
-  useState,
   type Dispatch,
   type MutableRefObject,
   type RefObject,
@@ -93,6 +92,7 @@ export function useWorkspacePersistence(args: {
   setErr: (value: string | null) => void;
   setInboxContentByUri: Dispatch<SetStateAction<Record<string, string>>>;
   refreshNotes: (root: string) => Promise<void>;
+  onVaultWriteSettled: () => void;
   loadFullMarkdownIntoInboxEditor: (
     markdown: string,
     uri: string,
@@ -112,7 +112,6 @@ export function useWorkspacePersistence(args: {
   enqueueInboxPersist: () => Promise<void>;
   flushInboxSave: () => Promise<void>;
   onInboxSaveShortcut: () => void;
-  saveSettledNonce: number;
 } {
   const {
     fs,
@@ -138,6 +137,7 @@ export function useWorkspacePersistence(args: {
     setErr,
     setInboxContentByUri,
     refreshNotes,
+    onVaultWriteSettled,
     loadFullMarkdownIntoInboxEditor,
     scheduleBacklinksDeferOneFrameAfterLoad,
   } = args;
@@ -147,7 +147,6 @@ export function useWorkspacePersistence(args: {
     createInboxAutosaveScheduler(INBOX_AUTOSAVE_DEBOUNCE_MS),
   );
   const flushInboxSaveRef = useRef<() => Promise<void>>(async () => {});
-  const [saveSettledNonce, setSaveSettledNonce] = useState(0);
 
   /** Merge a known-good body for `norm` into the inbox content cache (state + ref). No-op if no change. */
   const mergeInboxNoteBodyCacheRefAndState = useCallback(
@@ -205,7 +204,7 @@ export function useWorkspacePersistence(args: {
           return;
         }
         await saveNoteMarkdown(norm, fs, md);
-        setSaveSettledNonce(n => n + 1);
+        onVaultWriteSettled();
         refreshNotes(root).catch(() => undefined);
 
         const activeSel = selectedUriRef.current;
@@ -246,6 +245,7 @@ export function useWorkspacePersistence(args: {
       lastPersistedRef,
       lastPersistedExternalMutationSeqRef,
       setErr,
+      onVaultWriteSettled,
     ],
   );
 
@@ -285,7 +285,7 @@ export function useWorkspacePersistence(args: {
           scheduleBacklinksDeferOneFrameAfterLoad();
         }
         await saveNoteMarkdown(uri, fs, md);
-        setSaveSettledNonce(n => n + 1);
+        onVaultWriteSettled();
         await refreshNotes(root);
         if (selectedUriRef.current !== uri || composingNewEntryRef.current) {
           return;
@@ -332,6 +332,7 @@ export function useWorkspacePersistence(args: {
     inboxContentByUriRef,
     setErr,
     setInboxContentByUri,
+    onVaultWriteSettled,
   ]);
 
   const flushInboxSave = useCallback(async () => {
@@ -428,6 +429,5 @@ export function useWorkspacePersistence(args: {
     enqueueInboxPersist,
     flushInboxSave,
     onInboxSaveShortcut,
-    saveSettledNonce,
   };
 }
