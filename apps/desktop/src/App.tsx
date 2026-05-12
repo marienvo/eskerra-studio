@@ -376,20 +376,6 @@ export default function App() {
   const [quickOpenOpen, setQuickOpenOpen] = useState(false);
   const [vaultSearchOpen, setVaultSearchOpen] = useState(false);
 
-  useAppMainWindowKeyboardEffects({
-    vaultRoot,
-    busy,
-    canReopenClosedEditorTab: workspaceTabsController.canReopenClosedEditorTab,
-    reopenLastClosedEditorTab: workspaceTabsController.reopenLastClosedEditorTab,
-    composingNewEntry,
-    selectedUri,
-    onCleanNoteInbox,
-    quickOpenOpen,
-    setQuickOpenOpen,
-    vaultSearchOpen,
-    setVaultSearchOpen,
-  });
-
   const [layouts, setLayouts] = useState<StoredLayouts>(DEFAULT_LAYOUTS);
   const [notificationsPanelVisible, setNotificationsPanelVisible] = useState(true);
 
@@ -509,6 +495,23 @@ export default function App() {
     running: manualGitSync.running,
   });
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
+
+  useAppMainWindowKeyboardEffects({
+    vaultRoot,
+    busy,
+    canReopenClosedEditorTab: workspaceTabsController.canReopenClosedEditorTab,
+    reopenLastClosedEditorTab: workspaceTabsController.reopenLastClosedEditorTab,
+    composingNewEntry,
+    selectedUri,
+    onCleanNoteInbox,
+    quickOpenOpen,
+    setQuickOpenOpen,
+    vaultSearchOpen,
+    setVaultSearchOpen,
+    manualSyncDisabled: manualSyncDisabledReason != null,
+    manualSyncRunning: manualGitSync.running,
+    onManualSync: manualGitSync.run,
+  });
 
   if (!vaultRoot) {
     return (

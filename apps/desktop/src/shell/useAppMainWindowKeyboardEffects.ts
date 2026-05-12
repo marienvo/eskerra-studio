@@ -22,6 +22,9 @@ type AppMainWindowKeyboardEffectsArgs = {
   setQuickOpenOpen: (open: boolean) => void;
   vaultSearchOpen: boolean;
   setVaultSearchOpen: (open: boolean) => void;
+  manualSyncDisabled?: boolean;
+  manualSyncRunning?: boolean;
+  onManualSync?: () => void;
 };
 
 export function useAppMainWindowKeyboardEffects({
@@ -36,6 +39,9 @@ export function useAppMainWindowKeyboardEffects({
   setQuickOpenOpen,
   vaultSearchOpen,
   setVaultSearchOpen,
+  manualSyncDisabled = true,
+  manualSyncRunning = false,
+  onManualSync,
 }: AppMainWindowKeyboardEffectsArgs) {
   const canReopenClosedEditorTabRef = useRef(canReopenClosedEditorTab);
   const reopenLastClosedEditorTabRef = useRef(reopenLastClosedEditorTab);
@@ -57,6 +63,44 @@ export function useAppMainWindowKeyboardEffects({
   useLayoutEffect(() => {
     vaultSearchOpenRef.current = vaultSearchOpen;
   }, [vaultSearchOpen]);
+
+  const onManualSyncRef = useRef(onManualSync);
+  const manualSyncDisabledRef = useRef(manualSyncDisabled);
+  const manualSyncRunningRef = useRef(manualSyncRunning);
+  useLayoutEffect(() => {
+    onManualSyncRef.current = onManualSync;
+    manualSyncDisabledRef.current = manualSyncDisabled;
+    manualSyncRunningRef.current = manualSyncRunning;
+  }, [onManualSync, manualSyncDisabled, manualSyncRunning]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!vaultRoot) {
+        return;
+      }
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod || e.shiftKey || e.altKey) {
+        return;
+      }
+      if (e.key !== 's' && e.key !== 'S') {
+        return;
+      }
+      if (
+        manualSyncDisabledRef.current ||
+        manualSyncRunningRef.current ||
+        !onManualSyncRef.current
+      ) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      onManualSyncRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [vaultRoot]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
