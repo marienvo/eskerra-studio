@@ -46,6 +46,8 @@ export type UseAppGitSyncOrchestrationResult = {
   currentGitBranchError: Error | null | undefined;
   gitStatusError: Error | null | undefined;
   handleWindowCloseRequest: (input: {instant: boolean}) => void;
+  /** True while an OS-close-triggered sync is in flight. Used for the close progress overlay. */
+  closeSyncInProgress: boolean;
 };
 
 /**
@@ -145,7 +147,7 @@ export function useAppGitSyncOrchestration({
     () => buildCloseSyncRunner(manualGitSync.run),
     [manualGitSync.run],
   );
-  const {programmaticClose} = useAppOsCloseSync({
+  const {programmaticClose, closeSyncInProgress} = useAppOsCloseSync({
     desktopPlaybackRef,
     flushInboxSave,
     manualSyncRequired: vaultPath != null,
@@ -153,6 +155,7 @@ export function useAppGitSyncOrchestration({
     manualSyncRunning: manualGitSync.running,
     runManualSync: runManualSyncForClose,
     notify,
+    gitStatus: gitStatusForDisplay,
   });
   const closeSyncDisabledNoticeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -177,15 +180,17 @@ export function useAppGitSyncOrchestration({
         notify,
         notifyDisabled,
         showCloseSyncFeedback: true,
+        gitStatus: gitStatusForDisplay,
       });
     },
-    [manualGitSync.running, manualSyncDisabledReason, notify, programmaticClose, runManualSyncForClose],
+    [gitStatusForDisplay, manualGitSync.running, manualSyncDisabledReason, notify, programmaticClose, runManualSyncForClose],
   );
 
   useVaultGitStartupSync({
     vaultPath,
     gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
     gitStatusError,
+    gitStatus: gitStatusForDisplay,
     manualSyncDisabledReason,
     manualSyncRunning: manualGitSync.running,
     runManualSync: manualGitSync.run,
@@ -197,6 +202,7 @@ export function useAppGitSyncOrchestration({
     vaultPath,
     gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
     gitStatusError,
+    gitStatus: gitStatusForDisplay,
     manualSyncDisabledReason,
     manualSyncRunning: manualGitSync.running,
     runManualSync: manualGitSync.run,
@@ -216,5 +222,6 @@ export function useAppGitSyncOrchestration({
     currentGitBranchError,
     gitStatusError,
     handleWindowCloseRequest,
+    closeSyncInProgress,
   };
 }

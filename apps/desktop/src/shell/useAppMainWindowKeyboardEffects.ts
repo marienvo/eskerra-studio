@@ -2,6 +2,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  type MutableRefObject,
 } from 'react';
 
 import {
@@ -9,6 +10,8 @@ import {
   reduceDoubleShiftKeyDown,
   reduceDoubleShiftKeyUp,
 } from '../lib/doubleShiftKeySequence';
+import {shouldRunVaultGitSync} from '../lib/gitSyncPreflight';
+import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 type AppMainWindowKeyboardEffectsArgs = {
   vaultRoot: string | null;
@@ -25,6 +28,8 @@ type AppMainWindowKeyboardEffectsArgs = {
   manualSyncDisabled?: boolean;
   manualSyncRunning?: boolean;
   onManualSync?: () => void;
+  /** Ref holding the current GitStatusResult for preflight checks. Kept as a ref to avoid re-registering the listener. */
+  gitStatusRef?: MutableRefObject<GitStatusResult | null>;
 };
 
 export function useAppMainWindowKeyboardEffects({
@@ -42,6 +47,7 @@ export function useAppMainWindowKeyboardEffects({
   manualSyncDisabled = true,
   manualSyncRunning = false,
   onManualSync,
+  gitStatusRef,
 }: AppMainWindowKeyboardEffectsArgs) {
   const canReopenClosedEditorTabRef = useRef(canReopenClosedEditorTab);
   const reopenLastClosedEditorTabRef = useRef(reopenLastClosedEditorTab);
@@ -67,11 +73,14 @@ export function useAppMainWindowKeyboardEffects({
   const onManualSyncRef = useRef(onManualSync);
   const manualSyncDisabledRef = useRef(manualSyncDisabled);
   const manualSyncRunningRef = useRef(manualSyncRunning);
+  // Hold a stable ref to the gitStatusRef pointer so we avoid listing it as an effect dep.
+  const gitStatusRefHolderRef = useRef(gitStatusRef);
   useLayoutEffect(() => {
     onManualSyncRef.current = onManualSync;
     manualSyncDisabledRef.current = manualSyncDisabled;
     manualSyncRunningRef.current = manualSyncRunning;
-  }, [onManualSync, manualSyncDisabled, manualSyncRunning]);
+    gitStatusRefHolderRef.current = gitStatusRef;
+  }, [onManualSync, manualSyncDisabled, manualSyncRunning, gitStatusRef]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -90,6 +99,12 @@ export function useAppMainWindowKeyboardEffects({
         manualSyncRunningRef.current ||
         !onManualSyncRef.current
       ) {
+        return;
+      }
+      // Preflight: skip sync silently if status says nothing to do.
+      // Only applies when a gitStatusRef is wired up; absent ref means "no preflight" (legacy callers).
+      const currentGitStatusRef = gitStatusRefHolderRef.current;
+      if (currentGitStatusRef != null && !shouldRunVaultGitSync(currentGitStatusRef.current, 'keyboard')) {
         return;
       }
       e.preventDefault();

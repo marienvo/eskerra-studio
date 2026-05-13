@@ -1,5 +1,32 @@
 import {useEffect, useEffectEvent, useRef, type MutableRefObject} from 'react';
 
+import {shouldRunVaultGitSync} from '../lib/gitSyncPreflight';
+import type {GitStatusResult} from '../lib/tauriVaultGitSync';
+
+type AutosyncPreflightResult = 'run' | 'skip-keep-pending' | 'skip-clear-pending';
+
+/**
+ * Checks whether an autosync should run given the current git status.
+ * Returns 'run' to proceed, 'skip-clear-pending' when repo is clean (discard pending),
+ * or 'skip-keep-pending' when status is unknown/error (retry next interval).
+ * Returns 'run' when gitStatus is undefined (no preflight wired up yet).
+ */
+function autosyncPreflight(gitStatus: GitStatusResult | null | undefined): AutosyncPreflightResult {
+  if (gitStatus === undefined) return 'run';
+  if (shouldRunVaultGitSync(gitStatus, 'autosync')) return 'run';
+  // Preflight says skip. Decide whether to clear or keep pending.
+  const isCleanSynced =
+    gitStatus != null &&
+    gitStatus.unsafeState == null &&
+    !gitStatus.isWrongBranch &&
+    !gitStatus.hasUncommittedChanges &&
+    !gitStatus.hasStagedChanges &&
+    !gitStatus.hasUntrackedFiles &&
+    gitStatus.ahead === 0 &&
+    gitStatus.behind === 0;
+  return isCleanSynced ? 'skip-clear-pending' : 'skip-keep-pending';
+}
+
 export const AUTOSYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 type UseVaultGitAutosyncSchedulerArgs = {
@@ -7,6 +34,7 @@ type UseVaultGitAutosyncSchedulerArgs = {
   vaultPath: string | null;
   gitStatusLoading: boolean;
   gitStatusError: string | null;
+  gitStatus?: GitStatusResult | null;
   manualSyncDisabledReason: string | null;
   manualSyncRunning: boolean;
   runManualSync: (opts?: {readonly silent?: boolean}) => Promise<boolean>;
@@ -23,6 +51,7 @@ export function useVaultGitAutosyncScheduler({
   vaultPath,
   gitStatusLoading,
   gitStatusError,
+  gitStatus,
   manualSyncDisabledReason,
   manualSyncRunning,
   runManualSync,
@@ -53,6 +82,15 @@ export function useVaultGitAutosyncScheduler({
     if (manualSyncDisabledReason != null) return;
     if (manualSyncRunning) return;
     if (gitOperationBusyRef?.current) return;
+
+    const preflight = autosyncPreflight(gitStatus);
+    if (preflight === 'skip-clear-pending') {
+      syncedGenerationRef.current = pendingGenerationRef.current;
+      return;
+    }
+    if (preflight === 'skip-keep-pending') {
+      return;
+    }
 
     inFlightRef.current = true;
     if (gitOperationBusyRef) {

@@ -1,6 +1,26 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {handleOsCloseRequest} from './manualSyncClose';
+import type {GitStatusResult} from './tauriVaultGitSync';
+
+function cleanStatus(): GitStatusResult {
+  return {
+    branch: 'main',
+    expectedBranch: 'main',
+    hasUncommittedChanges: false,
+    hasStagedChanges: false,
+    hasUntrackedFiles: false,
+    ahead: 0,
+    behind: 0,
+    remoteRefAvailable: true,
+    unsafeState: null,
+    isWrongBranch: false,
+  };
+}
+
+function localChangesStatus(): GitStatusResult {
+  return {...cleanStatus(), hasUncommittedChanges: true};
+}
 
 describe('handleOsCloseRequest', () => {
   afterEach(() => {
@@ -215,5 +235,47 @@ describe('handleOsCloseRequest', () => {
     });
 
     expect(closeSyncInProgressRef.current).toBe(false);
+  });
+
+  describe('preflight', () => {
+    it('closes immediately without running sync when status is clean', async () => {
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const close = vi.fn();
+      const notify = vi.fn();
+      const closeSyncInProgressRef = {current: false};
+
+      await handleOsCloseRequest({
+        manualSyncDisabledReason: null,
+        manualSyncRunning: false,
+        runManualSync,
+        notify,
+        close,
+        closeSyncInProgressRef,
+        gitStatus: cleanStatus(),
+      });
+
+      expect(runManualSync).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('runs sync when local changes are present', async () => {
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const close = vi.fn();
+      const closeSyncInProgressRef = {current: false};
+
+      await handleOsCloseRequest({
+        manualSyncDisabledReason: null,
+        manualSyncRunning: false,
+        runManualSync,
+        notify: vi.fn(),
+        close,
+        closeSyncInProgressRef,
+        gitStatus: localChangesStatus(),
+      });
+
+      expect(runManualSync).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledTimes(1);
+    });
   });
 });

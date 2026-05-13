@@ -2,10 +2,30 @@ import {act, renderHook} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 
 import {useVaultGitStartupSync} from './useVaultGitStartupSync';
+import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 type HookArgs = Parameters<typeof useVaultGitStartupSync>[0];
 
 const VAULT = '/home/user/vault';
+
+function cleanStatus(): GitStatusResult {
+  return {
+    branch: 'main',
+    expectedBranch: 'main',
+    hasUncommittedChanges: false,
+    hasStagedChanges: false,
+    hasUntrackedFiles: false,
+    ahead: 0,
+    behind: 0,
+    remoteRefAvailable: true,
+    unsafeState: null,
+    isWrongBranch: false,
+  };
+}
+
+function localChangesStatus(): GitStatusResult {
+  return {...cleanStatus(), hasUncommittedChanges: true};
+}
 
 function ready(overrides: Partial<HookArgs> = {}): HookArgs {
   return {
@@ -168,5 +188,25 @@ describe('useVaultGitStartupSync', () => {
     rerender(ready({vaultPath: VAULT, runManualSync, notify}));
     await act(async () => { await Promise.resolve(); });
     expect(runManualSync).toHaveBeenCalledTimes(2);
+  });
+
+  describe('preflight', () => {
+    it('does not run sync when status is clean (nothing to do)', async () => {
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      render(ready({runManualSync, gitStatus: cleanStatus()}));
+
+      await act(async () => { await Promise.resolve(); });
+
+      expect(runManualSync).not.toHaveBeenCalled();
+    });
+
+    it('runs sync when git status shows local changes', async () => {
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      render(ready({runManualSync, gitStatus: localChangesStatus()}));
+
+      await act(async () => { await Promise.resolve(); });
+
+      expect(runManualSync).toHaveBeenCalledTimes(1);
+    });
   });
 });

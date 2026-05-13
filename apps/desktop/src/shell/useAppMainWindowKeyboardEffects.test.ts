@@ -2,6 +2,26 @@ import {act, renderHook} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 
 import {useAppMainWindowKeyboardEffects} from './useAppMainWindowKeyboardEffects';
+import type {GitStatusResult} from '../lib/tauriVaultGitSync';
+
+function cleanStatus(): GitStatusResult {
+  return {
+    branch: 'main',
+    expectedBranch: 'main',
+    hasUncommittedChanges: false,
+    hasStagedChanges: false,
+    hasUntrackedFiles: false,
+    ahead: 0,
+    behind: 0,
+    remoteRefAvailable: true,
+    unsafeState: null,
+    isWrongBranch: false,
+  };
+}
+
+function localChangesStatus(): GitStatusResult {
+  return {...cleanStatus(), hasUncommittedChanges: true};
+}
 
 function renderKeyboardEffects(
   overrides: Partial<Parameters<typeof useAppMainWindowKeyboardEffects>[0]> = {},
@@ -110,6 +130,26 @@ describe('useAppMainWindowKeyboardEffects manual sync shortcut', () => {
       manualSyncRunning: false,
       onManualSync,
     });
+
+    dispatchModS({ctrlKey: true});
+
+    expect(onManualSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a silent no-op when git status is clean (preflight returns false)', () => {
+    const onManualSync = vi.fn();
+    const gitStatusRef = {current: cleanStatus()};
+    renderKeyboardEffects({onManualSync, gitStatusRef});
+
+    dispatchModS({ctrlKey: true});
+
+    expect(onManualSync).not.toHaveBeenCalled();
+  });
+
+  it('calls sync when git status shows local changes', () => {
+    const onManualSync = vi.fn();
+    const gitStatusRef = {current: localChangesStatus()};
+    renderKeyboardEffects({onManualSync, gitStatusRef});
 
     dispatchModS({ctrlKey: true});
 

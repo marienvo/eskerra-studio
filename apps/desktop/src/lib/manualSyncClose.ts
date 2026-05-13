@@ -1,4 +1,6 @@
+import {shouldRunVaultGitSync} from './gitSyncPreflight';
 import type {SessionNotificationTone} from './sessionNotifications';
+import type {GitStatusResult} from './tauriVaultGitSync';
 
 type ManualSyncRunner = (opts?: {readonly silent?: boolean}) => Promise<boolean>;
 
@@ -16,6 +18,8 @@ type HandleManualSyncCloseRequestArgs = {
   notifyDisabled?: boolean;
   /** When true, shows failure context when sync-before-close fails. */
   showCloseSyncFeedback?: boolean;
+  /** Most recent git status; used for preflight to skip sync when nothing to do. */
+  gitStatus?: GitStatusResult | null;
 };
 
 export async function handleManualSyncCloseRequest({
@@ -27,6 +31,7 @@ export async function handleManualSyncCloseRequest({
   notify,
   notifyDisabled = true,
   showCloseSyncFeedback = false,
+  gitStatus,
 }: HandleManualSyncCloseRequestArgs): Promise<void> {
   if (instant) {
     close();
@@ -44,6 +49,12 @@ export async function handleManualSyncCloseRequest({
         `Cannot sync before closing: ${manualSyncDisabledReason}. Hold Shift and click close to close instantly.`,
       );
     }
+    return;
+  }
+
+  // Preflight: if status is explicitly provided and shows nothing to sync, close immediately.
+  if (gitStatus !== undefined && !shouldRunVaultGitSync(gitStatus, 'close')) {
+    close();
     return;
   }
 
@@ -69,6 +80,8 @@ type HandleOsCloseRequestArgs = {
   /** Ref shared with the caller; prevents duplicate runs on repeated close attempts. */
   closeSyncInProgressRef: {current: boolean};
   timeoutMs?: number;
+  /** Most recent git status; used for preflight to skip sync when nothing to do. */
+  gitStatus?: GitStatusResult | null;
 };
 
 /**
@@ -86,6 +99,7 @@ export async function handleOsCloseRequest({
   close,
   closeSyncInProgressRef,
   timeoutMs = CLOSE_SYNC_TIMEOUT_MS,
+  gitStatus,
 }: HandleOsCloseRequestArgs): Promise<void> {
   if (closeSyncInProgressRef.current) {
     return;
@@ -105,6 +119,12 @@ export async function handleOsCloseRequest({
   }
 
   if (manualSyncRunning) {
+    return;
+  }
+
+  // Preflight: if status is explicitly provided and shows nothing to sync, close immediately.
+  if (gitStatus !== undefined && !shouldRunVaultGitSync(gitStatus, 'close')) {
+    close();
     return;
   }
 

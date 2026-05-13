@@ -1,11 +1,14 @@
 import {useEffect, useEffectEvent, useRef} from 'react';
 
+import {shouldRunVaultGitSync} from '../lib/gitSyncPreflight';
 import type {SessionNotificationTone} from '../lib/sessionNotifications';
+import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 type UseVaultGitStartupSyncArgs = {
   vaultPath: string | null;
   gitStatusLoading: boolean;
   gitStatusError: string | null;
+  gitStatus?: GitStatusResult | null;
   manualSyncDisabledReason: string | null;
   manualSyncRunning: boolean;
   runManualSync: (opts?: {readonly silent?: boolean}) => Promise<boolean>;
@@ -21,6 +24,7 @@ export function useVaultGitStartupSync({
   vaultPath,
   gitStatusLoading,
   gitStatusError,
+  gitStatus,
   manualSyncDisabledReason,
   manualSyncRunning,
   runManualSync,
@@ -43,6 +47,9 @@ export function useVaultGitStartupSync({
     if (manualSyncDisabledReason != null) return;
     if (manualSyncRunning) return;
 
+    // Preflight: skip silently if status is provided and shows nothing to sync.
+    if (gitStatus !== undefined && !shouldRunVaultGitSync(gitStatus, 'startup')) return;
+
     // Already ran (or is running) for this vault — do not repeat.
     if (attemptedVaultPathsRef.current.has(vaultPath)) return;
 
@@ -50,5 +57,5 @@ export function useVaultGitStartupSync({
     attemptedVaultPathsRef.current.add(vaultPath);
 
     runStartupSync();
-  }, [vaultPath, gitStatusLoading, gitStatusError, manualSyncDisabledReason, manualSyncRunning]);
+  }, [vaultPath, gitStatusLoading, gitStatusError, gitStatus, manualSyncDisabledReason, manualSyncRunning]);
 }

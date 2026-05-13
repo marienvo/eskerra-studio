@@ -53,6 +53,7 @@ import {useAppGitSyncOrchestration} from './shell/useAppGitSyncOrchestration';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
 import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
+import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
 
 import './App.css';
 
@@ -372,6 +373,7 @@ export default function App() {
     currentGitBranchError,
     gitStatusError,
     handleWindowCloseRequest,
+    closeSyncInProgress,
   } = useAppGitSyncOrchestration({
     vaultPath: vaultRoot,
     saveSettledNonce,
@@ -379,6 +381,13 @@ export default function App() {
     desktopPlaybackRef,
     flushInboxSave,
   });
+
+  // Keep a ref to gitStatusForDisplay so keyboard effects can check preflight
+  // without re-registering the listener on every status update.
+  const gitStatusRef = useRef(gitStatusForDisplay);
+  useLayoutEffect(() => {
+    gitStatusRef.current = gitStatusForDisplay;
+  }, [gitStatusForDisplay]);
 
   useAppMainWindowKeyboardEffects({
     vaultRoot,
@@ -395,6 +404,7 @@ export default function App() {
     manualSyncDisabled: manualSyncUnavailable,
     manualSyncRunning: manualGitSync.running,
     onManualSync: manualGitSync.run,
+    gitStatusRef,
   });
 
   if (!vaultRoot) {
@@ -406,6 +416,7 @@ export default function App() {
         fs={fs}>
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
+          <CloseSyncProgressOverlay visible={closeSyncInProgress} />
           <div className="app-root-chrome">
             <WindowTitleBar
               tiling={tiling}
@@ -440,6 +451,7 @@ export default function App() {
         fs={fs}>
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
+          <CloseSyncProgressOverlay visible={closeSyncInProgress} />
           <div className="app-root-chrome">
             <WindowTitleBar
               tiling={tiling}
@@ -468,6 +480,7 @@ export default function App() {
       fs={fs}>
       <div ref={appRootRef} className={appRootClassName}>
         <ThemedChromeBackground />
+        <CloseSyncProgressOverlay visible={closeSyncInProgress} />
         <div className="app-root-chrome">
           <WindowTitleBar
             tiling={tiling}

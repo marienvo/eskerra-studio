@@ -9,6 +9,7 @@ import {
   useEffect,
   useEffectEvent,
   useRef,
+  useState,
   type MutableRefObject,
 } from 'react';
 
@@ -16,6 +17,7 @@ import type {useDesktopPodcastPlayback} from '../hooks/useDesktopPodcastPlayback
 import {PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS} from '../lib/podcasts/playbackPersistTimeout';
 import type {SessionNotificationTone} from '../lib/sessionNotifications';
 import {handleOsCloseRequest} from '../lib/manualSyncClose';
+import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 type UseAppOsCloseSyncArgs = {
   desktopPlaybackRef: MutableRefObject<ReturnType<typeof useDesktopPodcastPlayback>>;
@@ -25,6 +27,7 @@ type UseAppOsCloseSyncArgs = {
   manualSyncRunning: boolean;
   runManualSync: () => Promise<boolean>;
   notify: (tone: SessionNotificationTone, text: string) => void;
+  gitStatus?: GitStatusResult | null;
 };
 
 type UseAppOsCloseSyncResult = {
@@ -34,6 +37,8 @@ type UseAppOsCloseSyncResult = {
    * OS-close interceptor skips the sync step and proceeds directly to shutdown.
    */
   programmaticClose: () => void;
+  /** True while an OS-close-triggered sync is in flight. */
+  closeSyncInProgress: boolean;
 };
 
 /**
@@ -49,9 +54,11 @@ export function useAppOsCloseSync({
   manualSyncRunning,
   runManualSync,
   notify,
+  gitStatus = null,
 }: UseAppOsCloseSyncArgs): UseAppOsCloseSyncResult {
   const allowCloseRef = useRef(false);
   const closeSyncInProgressRef = useRef(false);
+  const [closeSyncInProgress, setCloseSyncInProgress] = useState(false);
 
   const programmaticClose = useCallback((): void => {
     allowCloseRef.current = true;
@@ -83,14 +90,24 @@ export function useAppOsCloseSync({
   });
 
   const onOsCloseRequested = useEffectEvent(async () => {
+    // Track reactive state alongside the ref so the overlay can render.
+    const wrappedRunManualSync = async (): Promise<boolean> => {
+      setCloseSyncInProgress(true);
+      try {
+        return await runManualSync();
+      } finally {
+        setCloseSyncInProgress(false);
+      }
+    };
     await handleOsCloseRequest({
       manualSyncRequired,
       manualSyncDisabledReason,
       manualSyncRunning,
-      runManualSync,
+      runManualSync: wrappedRunManualSync,
       notify,
       close: programmaticClose,
       closeSyncInProgressRef,
+      gitStatus,
     });
   });
 
@@ -138,5 +155,5 @@ export function useAppOsCloseSync({
     };
   }, []);
 
-  return {programmaticClose};
+  return {programmaticClose, closeSyncInProgress};
 }

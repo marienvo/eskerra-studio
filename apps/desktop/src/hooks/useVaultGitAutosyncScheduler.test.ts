@@ -2,11 +2,31 @@ import {act, renderHook} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {useVaultGitAutosyncScheduler} from './useVaultGitAutosyncScheduler';
+import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 type HookArgs = Parameters<typeof useVaultGitAutosyncScheduler>[0];
 
 const VAULT = '/home/user/vault';
 const INTERVAL_MS = 1000;
+
+function cleanStatus(): GitStatusResult {
+  return {
+    branch: 'main',
+    expectedBranch: 'main',
+    hasUncommittedChanges: false,
+    hasStagedChanges: false,
+    hasUntrackedFiles: false,
+    ahead: 0,
+    behind: 0,
+    remoteRefAvailable: true,
+    unsafeState: null,
+    isWrongBranch: false,
+  };
+}
+
+function errorStatus(): GitStatusResult {
+  return {...cleanStatus(), unsafeState: 'merge' as const};
+}
 
 function ready(overrides: Partial<HookArgs> = {}): HookArgs {
   return {
@@ -194,5 +214,58 @@ describe('useVaultGitAutosyncScheduler', () => {
     await act(async () => { vi.advanceTimersByTime(INTERVAL_MS); });
 
     expect(runManualSync).toHaveBeenCalledTimes(2);
+  });
+
+  describe('preflight', () => {
+    it('does not run sync AND clears pending when status is clean/synced', async () => {
+      vi.useFakeTimers();
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const {rerender} = render(ready({runManualSync, gitStatus: cleanStatus()}));
+
+      // Mark a pending save
+      rerender(ready({saveSettledNonce: 1, runManualSync, gitStatus: cleanStatus()}));
+      await act(async () => { vi.advanceTimersByTime(INTERVAL_MS); });
+
+      // Sync should not have run (clean status)
+      expect(runManualSync).not.toHaveBeenCalled();
+
+      // Pending should be cleared: another interval should also not trigger sync
+      await act(async () => { vi.advanceTimersByTime(INTERVAL_MS); });
+      expect(runManualSync).not.toHaveBeenCalled();
+    });
+
+    it('does not run sync AND keeps pending when status is unknown (null)', async () => {
+      vi.useFakeTimers();
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      // gitStatus = null (unknown/loading)
+      const {rerender} = render(ready({runManualSync, gitStatus: null}));
+
+      rerender(ready({saveSettledNonce: 1, runManualSync, gitStatus: null}));
+      await act(async () => { vi.advanceTimersByTime(INTERVAL_MS); });
+      expect(runManualSync).not.toHaveBeenCalled();
+
+      // When status becomes actionable (local changes), sync should run
+      rerender(ready({saveSettledNonce: 1, runManualSync, gitStatus: {
+        branch: 'main', expectedBranch: 'main',
+        hasUncommittedChanges: true, hasStagedChanges: false, hasUntrackedFiles: false,
+        ahead: 0, behind: 0, remoteRefAvailable: true, unsafeState: null, isWrongBranch: false,
+      }}));
+      await act(async () => { vi.advanceTimersByTime(INTERVAL_MS); });
+      expect(runManualSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not run sync AND keeps pending when status has error/unsafe state', async () => {
+      vi.useFakeTimers();
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const {rerender} = render(ready({runManualSync, gitStatus: errorStatus()}));
+
+      rerender(ready({saveSettledNonce: 1, runManualSync, gitStatus: errorStatus()}));
+      await act(async () => { vi.advanceTimersByTime(INTERVAL_MS); });
+      expect(runManualSync).not.toHaveBeenCalled();
+
+      // Multiple intervals should not clear the pending either
+      await act(async () => { vi.advanceTimersByTime(INTERVAL_MS * 3); });
+      expect(runManualSync).not.toHaveBeenCalled();
+    });
   });
 });

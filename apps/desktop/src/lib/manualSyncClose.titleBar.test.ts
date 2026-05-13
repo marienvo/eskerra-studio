@@ -4,6 +4,26 @@ import {
   buildCloseSyncRunner,
   handleManualSyncCloseRequest,
 } from './manualSyncClose';
+import type {GitStatusResult} from './tauriVaultGitSync';
+
+function cleanStatus(): GitStatusResult {
+  return {
+    branch: 'main',
+    expectedBranch: 'main',
+    hasUncommittedChanges: false,
+    hasStagedChanges: false,
+    hasUntrackedFiles: false,
+    ahead: 0,
+    behind: 0,
+    remoteRefAvailable: true,
+    unsafeState: null,
+    isWrongBranch: false,
+  };
+}
+
+function localChangesStatus(): GitStatusResult {
+  return {...cleanStatus(), hasUncommittedChanges: true};
+}
 
 describe('buildCloseSyncRunner', () => {
   it('runs manual sync silently for close flows', async () => {
@@ -127,6 +147,46 @@ describe('handleManualSyncCloseRequest', () => {
     expect(runManualSync).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  describe('preflight', () => {
+    it('closes immediately without running sync when status is clean', async () => {
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const close = vi.fn();
+      const notify = vi.fn();
+
+      await handleManualSyncCloseRequest({
+        instant: false,
+        manualSyncDisabledReason: null,
+        manualSyncRunning: false,
+        runManualSync,
+        close,
+        notify,
+        gitStatus: cleanStatus(),
+      });
+
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(runManualSync).not.toHaveBeenCalled();
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('runs sync and shows overlay path when local changes are present', async () => {
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const close = vi.fn();
+
+      await handleManualSyncCloseRequest({
+        instant: false,
+        manualSyncDisabledReason: null,
+        manualSyncRunning: false,
+        runManualSync,
+        close,
+        notify: vi.fn(),
+        gitStatus: localChangesStatus(),
+      });
+
+      expect(runManualSync).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('showCloseSyncFeedback', () => {
