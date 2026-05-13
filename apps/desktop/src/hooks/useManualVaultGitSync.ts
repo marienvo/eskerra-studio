@@ -47,7 +47,9 @@ export function useManualVaultGitSync({
       }
       return true;
     } catch (error) {
-      notify('error', formatVaultGitSyncError(error));
+      if (opts?.silent !== true) {
+        notify('error', formatVaultGitSyncError(error));
+      }
       return false;
     } finally {
       onSettled();

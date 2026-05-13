@@ -196,7 +196,7 @@ describe('useManualVaultGitSync', () => {
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
-  it('still notifies error when silent is true and sync fails', async () => {
+  it('does not notify error when silent is true and sync fails', async () => {
     const notify = vi.fn();
     mockRunVaultGitSync.mockRejectedValue({type: 'pushRejected', stderr: 'rejected'});
 
@@ -206,7 +206,7 @@ describe('useManualVaultGitSync', () => {
 
     await expect(result.current.run({silent: true})).resolves.toBe(false);
 
-    expect(notify).toHaveBeenCalledWith('error', 'Push rejected. Local changes remain committed.');
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('does not start duplicate concurrent sync runs', async () => {
