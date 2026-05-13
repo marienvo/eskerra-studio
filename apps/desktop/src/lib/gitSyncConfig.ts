@@ -7,7 +7,7 @@ export function buildManualGitSyncConfig(branch: string): SyncConfig {
     remote: GIT_SYNC_REMOTE,
     branch,
     include: ['**/*.md'],
-    exclude: ['Scripts/**'],
+    exclude: [],
     backupDirectory: '_sync-backups',
     conflictPolicies: [{glob: '**/*.md', strategy: 'manual'}],
     markdownConflictCallout: {
