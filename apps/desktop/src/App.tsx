@@ -55,7 +55,7 @@ import {
   formatVaultGitSyncSuccessChip,
   getManualSyncDisabledReason,
 } from './lib/gitSyncManualView';
-import {handleManualSyncCloseRequest} from './lib/manualSyncClose';
+import {buildCloseSyncRunner, handleManualSyncCloseRequest} from './lib/manualSyncClose';
 import type {GitStatusResult, SyncRunResult} from './lib/tauriVaultGitSync';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {writeVaultSettings} from './lib/vaultBootstrap';
@@ -530,13 +530,17 @@ export default function App() {
   });
   const manualSyncUnavailable = vaultRoot == null || manualSyncDisabledReason != null;
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
+  const runManualSyncForClose = useMemo(
+    () => buildCloseSyncRunner(manualGitSync.run),
+    [manualGitSync.run],
+  );
   const {programmaticClose} = useAppOsCloseSync({
     desktopPlaybackRef,
     flushInboxSave,
     manualSyncRequired: vaultRoot != null,
     manualSyncDisabledReason,
     manualSyncRunning: manualGitSync.running,
-    runManualSync: manualGitSync.run,
+    runManualSync: runManualSyncForClose,
     notify: pushNotification,
   });
   const closeSyncDisabledNoticeRef = useRef<string | null>(null);
@@ -557,14 +561,14 @@ export default function App() {
         instant: input.instant,
         manualSyncDisabledReason,
         manualSyncRunning: manualGitSync.running,
-        runManualSync: manualGitSync.run,
+        runManualSync: runManualSyncForClose,
         close: programmaticClose,
         notify: pushNotification,
         notifyDisabled,
         showCloseSyncFeedback: true,
       });
     },
-    [manualGitSync.run, manualGitSync.running, manualSyncDisabledReason, programmaticClose, pushNotification],
+    [manualGitSync.running, manualSyncDisabledReason, programmaticClose, pushNotification, runManualSyncForClose],
   );
 
   useVaultGitStartupSync({

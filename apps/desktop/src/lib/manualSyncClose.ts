@@ -1,5 +1,11 @@
 import type {SessionNotificationTone} from './sessionNotifications';
 
+type ManualSyncRunner = (opts?: {readonly silent?: boolean}) => Promise<boolean>;
+
+export function buildCloseSyncRunner(runManualSync: ManualSyncRunner): () => Promise<boolean> {
+  return () => runManualSync({silent: true});
+}
+
 type HandleManualSyncCloseRequestArgs = {
   instant: boolean;
   manualSyncDisabledReason: string | null;

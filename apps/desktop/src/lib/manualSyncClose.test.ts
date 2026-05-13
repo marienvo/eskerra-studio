@@ -1,6 +1,23 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import {handleManualSyncCloseRequest, handleOsCloseRequest} from './manualSyncClose';
+import {
+  buildCloseSyncRunner,
+  handleManualSyncCloseRequest,
+  handleOsCloseRequest,
+} from './manualSyncClose';
+
+describe('buildCloseSyncRunner', () => {
+  it('runs manual sync silently for close flows', async () => {
+    const runManualSync = vi.fn<(opts?: {readonly silent?: boolean}) => Promise<boolean>>()
+      .mockResolvedValue(false);
+    const runManualSyncForClose = buildCloseSyncRunner(runManualSync);
+
+    await expect(runManualSyncForClose()).resolves.toBe(false);
+
+    expect(runManualSync).toHaveBeenCalledTimes(1);
+    expect(runManualSync).toHaveBeenCalledWith({silent: true});
+  });
+});
 
 describe('handleManualSyncCloseRequest', () => {
   it('closes immediately with Shift bypass and does not run sync', async () => {
