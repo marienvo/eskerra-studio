@@ -36,6 +36,7 @@ export function useVaultGitStatus({
       try {
         const result = await getVaultGitStatus({vaultPath: path, remote, branch: expectedBranch});
         if (requestId !== requestIdRef.current) return;
+        setError(null);
         setStatus(result);
         setLoadedKey(requestKey);
       } catch (e) {
@@ -61,6 +62,7 @@ export function useVaultGitStatus({
     getVaultGitStatus({vaultPath, remote, branch})
       .then(result => {
         if (requestId !== requestIdRef.current) return;
+        setError(null);
         setStatus(result);
         setLoadedKey(requestKey);
       })

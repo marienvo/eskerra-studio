@@ -31,6 +31,7 @@ export function useVaultGitCurrentBranch({
     try {
       const result = await getVaultGitCurrentBranch({vaultPath: path});
       if (requestId !== requestIdRef.current) return;
+      setError(null);
       setBranch(result.branch);
       setDetachedHead(result.detachedHead);
       setLoadedVaultPath(path);
@@ -56,6 +57,7 @@ export function useVaultGitCurrentBranch({
     getVaultGitCurrentBranch({vaultPath})
       .then(result => {
         if (requestId !== requestIdRef.current) return;
+        setError(null);
         setBranch(result.branch);
         setDetachedHead(result.detachedHead);
         setLoadedVaultPath(vaultPath);

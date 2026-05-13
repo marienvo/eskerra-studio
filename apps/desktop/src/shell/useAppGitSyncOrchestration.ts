@@ -43,8 +43,8 @@ export type UseAppGitSyncOrchestrationResult = {
   currentGitBranchLoading: boolean;
   gitStatusLoading: boolean;
   currentGitDetachedHead: boolean;
-  currentGitBranchError: Error | null | undefined;
-  gitStatusError: Error | null | undefined;
+  currentGitBranchError: string | null;
+  gitStatusError: string | null;
   handleWindowCloseRequest: (input: {instant: boolean}) => void;
   /** True while an OS-close-triggered sync is in flight. Used for the close progress overlay. */
   closeSyncInProgress: boolean;

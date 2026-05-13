@@ -121,6 +121,24 @@ describe('useVaultGitCurrentBranch', () => {
     await waitFor(() => expect(result.current.branch).toBe('feature'));
   });
 
+  it('clears a failed vault error when another vault branch loads successfully', async () => {
+    mockGetVaultGitCurrentBranch
+      .mockRejectedValueOnce({type: 'notGitRepository'})
+      .mockResolvedValueOnce(branchResult('main'));
+
+    const {result, rerender} = renderHook(
+      ({vaultPath}: {vaultPath: string}) => useVaultGitCurrentBranch({vaultPath}),
+      {initialProps: {vaultPath: VAULT}},
+    );
+    await waitFor(() => expect(result.current.error).toBe('Not a Git repository'));
+
+    rerender({vaultPath: '/other/vault'});
+
+    await waitFor(() => expect(result.current.branch).toBe('main'));
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
   it('refresh uses latest-request-wins', async () => {
     const firstRefresh = deferred<ReturnType<typeof branchResult>>();
     const secondRefresh = deferred<ReturnType<typeof branchResult>>();

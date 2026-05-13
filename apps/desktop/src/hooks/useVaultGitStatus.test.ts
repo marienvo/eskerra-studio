@@ -94,6 +94,25 @@ describe('useVaultGitStatus', () => {
     expect(result.current.status).toBeNull();
   });
 
+  it('clears a failed status error when status later loads successfully', async () => {
+    mockGetVaultGitStatus
+      .mockRejectedValueOnce({type: 'notGitRepository'})
+      .mockResolvedValueOnce(cleanResult);
+
+    const {result, rerender} = renderHook(
+      ({branch}: {branch: string}) =>
+        useVaultGitStatus({vaultPath: VAULT, remote: 'origin', branch}),
+      {initialProps: {branch: 'main'}},
+    );
+    await waitFor(() => expect(result.current.error).toBe('Not a Git repository'));
+
+    rerender({branch: 'feature'});
+
+    await waitFor(() => expect(result.current.status).toEqual(cleanResult));
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
   it('formats lockAlreadyHeld error', async () => {
     mockGetVaultGitStatus.mockRejectedValue({type: 'lockAlreadyHeld'});
     const {result} = renderGitStatus();
@@ -340,17 +359,17 @@ describe('useVaultGitStatus', () => {
     expect(result.current.loading).toBe(false);
   });
 
-  it('refresh triggers a new load', async () => {
-    const first: GitStatusResult = {...cleanResult, ahead: 0};
+  it('refresh triggers a new load and clears a prior error', async () => {
     const second: GitStatusResult = {...cleanResult, ahead: 3};
     mockGetVaultGitStatus
-      .mockResolvedValueOnce(first)
+      .mockRejectedValueOnce({type: 'notGitRepository'})
       .mockResolvedValueOnce(second);
 
     const {result} = renderGitStatus();
-    await waitFor(() => expect(result.current.status).toEqual(first));
+    await waitFor(() => expect(result.current.error).toBe('Not a Git repository'));
 
     act(() => { result.current.refresh(); });
     await waitFor(() => expect(result.current.status).toEqual(second));
+    expect(result.current.error).toBeNull();
   });
 });
