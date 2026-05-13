@@ -151,7 +151,7 @@ fn fetch_remote(
     timeout_secs: u32,
 ) -> Result<(), SyncError> {
     let timeout = Duration::from_secs(u64::from(timeout_secs));
-    let out = GitCmd::new(vault_path, &["fetch", "--quiet", remote, branch])
+    let out = GitCmd::new(vault_path, &["fetch", "--quiet", "--prune", remote, branch])
         .timeout(timeout)
         .run()?;
     if !out.success {
@@ -872,6 +872,47 @@ mod tests {
 
         let result = remote_status(repo.path(), "nonexistent-branch", "origin", 30);
         assert!(matches!(result, Err(SyncError::FetchFailed { .. })));
+    }
+
+    // -----------------------------------------------------------------------
+    // 17. remote_status does not return stale data when tracked branch deleted
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn remote_status_fails_not_stale_after_tracked_branch_deleted() {
+        // When the remote branch we track is deleted, fetch_remote runs
+        // `git fetch --quiet --prune origin <branch>`.  The fetch itself
+        // fails because the refspec can no longer be resolved; --prune
+        // additionally removes refs/remotes/origin/<branch> if it lingers
+        // after a successful fetch that no longer sees the branch.
+        // Either way the function must return an error rather than reading
+        // the stale local tracking ref and reporting "Synced".
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+        let remote = repo.add_remote_origin();
+
+        // First call: main exists on remote — succeeds and establishes the
+        // remote-tracking ref.
+        let first = remote_status(repo.path(), "main", "origin", 30).unwrap();
+        assert!(first.remote_ref_available, "main remote ref must be available initially");
+
+        // Push a second branch so we can change HEAD on the bare repo, which
+        // is required before deleting its current HEAD branch (main).
+        git(&["checkout", "-b", "other"], repo.path());
+        repo.commit("g.txt", "b", "other commit");
+        git(&["push", "origin", "other"], repo.path());
+        git(&["symbolic-ref", "HEAD", "refs/heads/other"], remote.path());
+        git(&["branch", "-D", "main"], remote.path());
+        git(&["checkout", "main"], repo.path());
+
+        // Second call: main is gone from remote. Must fail — not silently
+        // read refs/remotes/origin/main and report ahead/behind as if up
+        // to date.
+        let second = remote_status(repo.path(), "main", "origin", 30);
+        assert!(
+            matches!(second, Err(SyncError::FetchFailed { .. })),
+            "expected FetchFailed after upstream branch deletion, got: {second:?}"
+        );
     }
 
     // -----------------------------------------------------------------------
