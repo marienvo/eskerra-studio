@@ -37,6 +37,18 @@ type WindowTitleBarProps = {
   onCloseRequest?: (input: {instant: boolean}) => void;
 };
 
+function deriveCloseLabel({
+  shiftHeld,
+  closeSyncing,
+}: {
+  shiftHeld: boolean;
+  closeSyncing: boolean;
+}): string {
+  if (shiftHeld) return 'Close instantly';
+  if (closeSyncing) return 'Syncing before close';
+  return 'Sync and close';
+}
+
 export function WindowTitleBar({
   tiling = 'none',
   onEditorTabsHostRef,
@@ -87,7 +99,7 @@ export function WindowTitleBar({
     };
   }, [tauri]);
 
-  const closeLabel = shiftHeld ? 'Close instantly' : closeSyncing ? 'Syncing before close' : 'Sync and close';
+  const closeLabel = deriveCloseLabel({shiftHeld, closeSyncing});
 
   return (
     <header className="window-title-bar" data-window-tiling={tiling}>
