@@ -4,7 +4,13 @@ import {
   saveWindowState,
   StateFlags,
 } from '@tauri-apps/plugin-window-state';
-import {useCallback, useEffect, useRef, type MutableRefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  type MutableRefObject,
+} from 'react';
 
 import type {useDesktopPodcastPlayback} from '../hooks/useDesktopPodcastPlayback';
 import {PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS} from '../lib/podcasts/playbackPersistTimeout';
@@ -47,26 +53,46 @@ export function useAppOsCloseSync({
   const allowCloseRef = useRef(false);
   const closeSyncInProgressRef = useRef(false);
 
-  // Stable refs so the effect (registered once) always reads current values.
-  const manualSyncDisabledReasonRef = useRef(manualSyncDisabledReason);
-  const manualSyncRunningRef = useRef(manualSyncRunning);
-  const runManualSyncRef = useRef(runManualSync);
-  const notifyRef = useRef(notify);
-  const flushInboxSaveRef = useRef(flushInboxSave);
-
-  manualSyncDisabledReasonRef.current = manualSyncDisabledReason;
-  manualSyncRunningRef.current = manualSyncRunning;
-  runManualSyncRef.current = runManualSync;
-  notifyRef.current = notify;
-  flushInboxSaveRef.current = flushInboxSave;
-
   const programmaticClose = useCallback((): void => {
     allowCloseRef.current = true;
     if (!isTauri()) {
       return;
     }
-    void getCurrentWindow().close();
+    getCurrentWindow().close().catch(() => undefined);
   }, []);
+
+  const flushBeforeShutdown = useEffectEvent(async () => {
+    try {
+      await desktopPlaybackRef.current.pauseIfPlaying();
+      await desktopPlaybackRef.current.waitForPersistFlushed(
+        PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS,
+      );
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.error('[eskerra] shutdown pause/flush failed', e);
+      }
+    }
+    await flushInboxSave();
+    try {
+      await saveWindowState(StateFlags.ALL);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.error('[eskerra] saveWindowState failed', e);
+      }
+    }
+  });
+
+  const onOsCloseRequested = useEffectEvent(async () => {
+    await handleOsCloseRequest({
+      manualSyncRequired,
+      manualSyncDisabledReason,
+      manualSyncRunning,
+      runManualSync,
+      notify,
+      close: programmaticClose,
+      closeSyncInProgressRef,
+    });
+  });
 
   useEffect(() => {
     if (!isTauri()) {
@@ -78,24 +104,7 @@ export function useAppOsCloseSync({
 
     const performShutdown = async (): Promise<void> => {
       try {
-        try {
-          await desktopPlaybackRef.current.pauseIfPlaying();
-          await desktopPlaybackRef.current.waitForPersistFlushed(
-            PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS,
-          );
-        } catch (e) {
-          if (import.meta.env.DEV) {
-            console.error('[eskerra] shutdown pause/flush failed', e);
-          }
-        }
-        await flushInboxSaveRef.current();
-        try {
-          await saveWindowState(StateFlags.ALL);
-        } catch (e) {
-          if (import.meta.env.DEV) {
-            console.error('[eskerra] saveWindowState failed', e);
-          }
-        }
+        await flushBeforeShutdown();
       } finally {
         /* Avoid awaiting destroy inside onCloseRequested (Tauri can deadlock). */
         win.destroy();
@@ -112,15 +121,7 @@ export function useAppOsCloseSync({
 
         event.preventDefault();
 
-        await handleOsCloseRequest({
-          manualSyncRequired,
-          manualSyncDisabledReason: manualSyncDisabledReasonRef.current,
-          manualSyncRunning: manualSyncRunningRef.current,
-          runManualSync: runManualSyncRef.current,
-          notify: notifyRef.current,
-          close: programmaticClose,
-          closeSyncInProgressRef,
-        });
+        await onOsCloseRequested();
       })
       .then(fn => {
         if (cancelled) {
@@ -135,7 +136,7 @@ export function useAppOsCloseSync({
       cancelled = true;
       unlisten?.();
     };
-  }, [desktopPlaybackRef, manualSyncRequired, programmaticClose]);
+  }, []);
 
   return {programmaticClose};
 }
