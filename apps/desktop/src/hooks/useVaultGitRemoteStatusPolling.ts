@@ -1,9 +1,8 @@
-import {useEffect, useRef} from 'react';
+import {useEffect, useEffectEvent} from 'react';
 
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 import {useVaultGitRemoteRefresh} from './useVaultGitRemoteRefresh';
 
-// TODO: make configurable via vault settings UI
 export const REMOTE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
 type UseVaultGitRemoteStatusPollingInput = {
@@ -40,21 +39,17 @@ export function useVaultGitRemoteStatusPolling({
     onRefreshed,
   });
 
-  // Keep a stable ref so interval/visibility effects never need to re-register.
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
+  const triggerRefresh = useEffectEvent(() => refresh());
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      refreshRef.current();
-    }, REMOTE_POLL_INTERVAL_MS);
+    const id = window.setInterval(triggerRefresh, REMOTE_POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, []);
 
   useEffect(() => {
     const onVisibilityChange = () => {
       if (!document.hidden) {
-        refreshRef.current();
+        triggerRefresh();
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
