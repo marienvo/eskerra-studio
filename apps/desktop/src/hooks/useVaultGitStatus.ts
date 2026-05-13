@@ -33,8 +33,6 @@ export function useVaultGitStatus({
       const requestKey = statusRequestKey(path, remote, expectedBranch);
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
-      setLoading(true);
-      setError(null);
       try {
         const result = await getVaultGitStatus({vaultPath: path, remote, branch: expectedBranch});
         if (requestId !== requestIdRef.current) return;
@@ -54,23 +52,37 @@ export function useVaultGitStatus({
   useEffect(() => {
     if (!vaultPath || !branch) {
       requestIdRef.current += 1;
-      setStatus(null);
-      setLoadedKey(null);
-      setLoading(false);
-      setError(null);
       return;
     }
 
-    void load(vaultPath, branch);
+    const requestKey = statusRequestKey(vaultPath, remote, branch);
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    getVaultGitStatus({vaultPath, remote, branch})
+      .then(result => {
+        if (requestId !== requestIdRef.current) return;
+        setStatus(result);
+        setLoadedKey(requestKey);
+      })
+      .catch((e: unknown) => {
+        if (requestId !== requestIdRef.current) return;
+        setError(formatSyncError(e));
+        setLoadedKey(requestKey);
+      })
+      .finally(() => {
+        if (requestId === requestIdRef.current) setLoading(false);
+      });
 
     return () => {
       requestIdRef.current += 1;
     };
-  }, [vaultPath, branch, load]);
+  }, [vaultPath, remote, branch, load]);
 
   const refresh = useCallback(() => {
     if (!vaultPath || !branch) return;
-    void load(vaultPath, branch);
+    setLoading(true);
+    setError(null);
+    load(vaultPath, branch).catch(() => undefined);
   }, [vaultPath, branch, load]);
 
   const currentKey = vaultPath && branch ? statusRequestKey(vaultPath, remote, branch) : null;

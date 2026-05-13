@@ -28,8 +28,6 @@ export function useVaultGitCurrentBranch({
   const load = useCallback(async (path: string) => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setLoading(true);
-    setError(null);
     try {
       const result = await getVaultGitCurrentBranch({vaultPath: path});
       if (requestId !== requestIdRef.current) return;
@@ -50,15 +48,28 @@ export function useVaultGitCurrentBranch({
   useEffect(() => {
     if (!vaultPath) {
       requestIdRef.current += 1;
-      setBranch(null);
-      setDetachedHead(false);
-      setLoadedVaultPath(null);
-      setLoading(false);
-      setError(null);
       return;
     }
 
-    void load(vaultPath);
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    getVaultGitCurrentBranch({vaultPath})
+      .then(result => {
+        if (requestId !== requestIdRef.current) return;
+        setBranch(result.branch);
+        setDetachedHead(result.detachedHead);
+        setLoadedVaultPath(vaultPath);
+      })
+      .catch((e: unknown) => {
+        if (requestId !== requestIdRef.current) return;
+        setBranch(null);
+        setDetachedHead(false);
+        setLoadedVaultPath(vaultPath);
+        setError(formatBranchError(e));
+      })
+      .finally(() => {
+        if (requestId === requestIdRef.current) setLoading(false);
+      });
 
     return () => {
       requestIdRef.current += 1;
@@ -67,7 +78,9 @@ export function useVaultGitCurrentBranch({
 
   const refresh = useCallback(() => {
     if (!vaultPath) return;
-    void load(vaultPath);
+    setLoading(true);
+    setError(null);
+    load(vaultPath).catch(() => undefined);
   }, [vaultPath, load]);
 
   const hasCurrentVaultResult = vaultPath != null && loadedVaultPath === vaultPath;
