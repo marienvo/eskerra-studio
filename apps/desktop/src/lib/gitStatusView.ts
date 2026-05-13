@@ -48,7 +48,7 @@ export function mapGitStatusToView(status: GitStatusResult): GitStatusView {
     return {
       label: 'Diverged',
       tone: 'warning',
-      description: `${status.ahead} local commit${status.ahead !== 1 ? 's' : ''}, ${status.behind} remote commit${status.behind !== 1 ? 's' : ''}`,
+      description: `${status.ahead} local commit${pluralSuffix(status.ahead)}, ${status.behind} remote commit${pluralSuffix(status.behind)}`,
       icon: 'swap_vert',
     };
   }
@@ -57,7 +57,7 @@ export function mapGitStatusToView(status: GitStatusResult): GitStatusView {
     return {
       label: 'Not pushed',
       tone: 'warning',
-      description: `${status.ahead} local commit${status.ahead !== 1 ? 's' : ''} not pushed`,
+      description: `${status.ahead} local commit${pluralSuffix(status.ahead)} not pushed`,
       icon: 'arrow_upward',
     };
   }
@@ -66,7 +66,7 @@ export function mapGitStatusToView(status: GitStatusResult): GitStatusView {
     return {
       label: 'Remote changes',
       tone: 'info',
-      description: `${status.behind} remote commit${status.behind !== 1 ? 's' : ''} available`,
+      description: `${status.behind} remote commit${pluralSuffix(status.behind)} available`,
       icon: 'arrow_downward',
     };
   }
@@ -95,6 +95,10 @@ export function mapGitStatusToView(status: GitStatusResult): GitStatusView {
     description: null,
     icon: 'check_circle',
   };
+}
+
+function pluralSuffix(count: number): string {
+  return count === 1 ? '' : 's';
 }
 
 function describeUnsafeState(state: GitStatusUnsafeState): string {
