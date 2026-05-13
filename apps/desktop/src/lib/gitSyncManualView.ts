@@ -37,6 +37,9 @@ export function getManualSyncDisabledReason({
   if (gitStatus?.unsafeState != null) {
     return 'Git needs attention';
   }
+  if (gitStatus?.hasStagedChanges === true) {
+    return 'Staged changes need committing';
+  }
   if (gitStatus?.isWrongBranch === true) {
     return 'Wrong Git branch';
   }

@@ -113,6 +113,42 @@ describe('getManualSyncDisabledReason', () => {
     ).toBe('Git needs attention');
   });
 
+  it('returns staged changes reason', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: {...safeGitStatus, hasStagedChanges: true},
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBe('Staged changes need committing');
+  });
+
+  it('returns staged changes reason before wrong branch reason', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: {...safeGitStatus, hasStagedChanges: true, isWrongBranch: true},
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBe('Staged changes need committing');
+  });
+
+  it('returns unsafe state reason before staged changes reason', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: {...safeGitStatus, unsafeState: 'merge', hasStagedChanges: true},
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBe('Git needs attention');
+  });
+
   it('returns wrong branch reason', () => {
     expect(
       getManualSyncDisabledReason({
