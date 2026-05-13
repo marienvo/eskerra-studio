@@ -56,7 +56,7 @@ pub fn sync_fetch_merge_push(
 }
 
 fn fetch(vault_path: &Path, config: &SyncConfig) -> Result<(), SyncError> {
-    let out = GitCmd::new(vault_path, &["fetch", &config.remote])
+    let out = GitCmd::new(vault_path, &["fetch", "--prune", &config.remote])
         .timeout(Duration::from_secs(config.timeouts.fetch_secs.into()))
         .run()?;
     if out.success {
@@ -214,12 +214,7 @@ fn finish_merge_failure_recovery(
     };
 
     Ok(SyncError::MergeFailed {
-        stderr: merge_failed_stderr(
-            merge_stderr,
-            snapshot_error,
-            unresolved_error,
-            abort_error,
-        ),
+        stderr: merge_failed_stderr(merge_stderr, snapshot_error, unresolved_error, abort_error),
         snapshot_branch,
         pre_merge_sha: Some(pre_merge_sha.to_string()),
     })
@@ -450,6 +445,15 @@ mod tests {
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     }
 
+    fn remote_branch_exists(remote: &Path, branch: &str) -> bool {
+        git(
+            &["rev-parse", "--verify", &format!("refs/heads/{branch}")],
+            remote,
+        )
+        .status
+        .success()
+    }
+
     fn merge_head_exists(repo: &Path) -> bool {
         repo.join(".git/MERGE_HEAD").exists()
     }
@@ -594,6 +598,36 @@ mod tests {
                 branch
             }) if remote == "origin" && branch == "missing"
         ));
+    }
+
+    #[test]
+    fn deleted_remote_branch_returns_remote_branch_missing_via_prune() {
+        let f = Fixture::new();
+        let other = f.remote_clone();
+        git(&["switch", "-c", "tmp"], other.path());
+        commit(other.path(), "tmp.md", "tmp", "tmp");
+        git(&["push", "-u", "origin", "tmp"], other.path());
+
+        git(&["fetch", "origin"], f.local_path());
+        git(&["switch", "-c", "tmp", "origin/tmp"], f.local_path());
+        let mut config = f.config();
+        config.branch = "tmp".into();
+        sync_fetch_merge_push(f.local_path(), f.locks_path(), &config).unwrap();
+        assert!(remote_branch_exists(f.remote.path(), "tmp"));
+
+        git(&["push", "origin", "--delete", "tmp"], other.path());
+        assert!(!remote_branch_exists(f.remote.path(), "tmp"));
+
+        let result = sync_fetch_merge_push(f.local_path(), f.locks_path(), &config);
+
+        assert!(matches!(
+            result,
+            Err(SyncError::RemoteBranchMissing {
+                remote,
+                branch
+            }) if remote == "origin" && branch == "tmp"
+        ));
+        assert!(!remote_branch_exists(f.remote.path(), "tmp"));
     }
 
     #[test]
