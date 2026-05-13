@@ -202,6 +202,27 @@ describe('handleOsCloseRequest', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  it('closes without notifying when manual sync is not required even if sync is disabled', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
+    const close = vi.fn();
+    const notify = vi.fn();
+    const closeSyncInProgressRef = {current: false};
+
+    await handleOsCloseRequest({
+      manualSyncRequired: false,
+      manualSyncDisabledReason: 'Git branch unavailable',
+      manualSyncRunning: false,
+      runManualSync,
+      notify,
+      close,
+      closeSyncInProgressRef,
+    });
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   it('keeps app open and does not start a second sync when manual sync is already running', async () => {
     const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const close = vi.fn();

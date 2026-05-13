@@ -28,6 +28,8 @@ type UseAppOsCloseSyncArgs = {
   runManualSync: () => Promise<boolean>;
   notify: (tone: SessionNotificationTone, text: string) => void;
   gitStatus?: GitStatusResult | null;
+  fetchFreshGitStatusForClose?: () => Promise<GitStatusResult | null>;
+  closeSyncTimeoutMs?: number;
 };
 
 type UseAppOsCloseSyncResult = {
@@ -55,6 +57,8 @@ export function useAppOsCloseSync({
   runManualSync,
   notify,
   gitStatus = null,
+  fetchFreshGitStatusForClose,
+  closeSyncTimeoutMs,
 }: UseAppOsCloseSyncArgs): UseAppOsCloseSyncResult {
   const allowCloseRef = useRef(false);
   const closeSyncInProgressRef = useRef(false);
@@ -90,6 +94,16 @@ export function useAppOsCloseSync({
   });
 
   const onOsCloseRequested = useEffectEvent(async () => {
+    await Promise.resolve(flushInboxSave()).catch(() => undefined);
+    let gitStatusForClose = gitStatus;
+    if (fetchFreshGitStatusForClose) {
+      try {
+        gitStatusForClose = await fetchFreshGitStatusForClose();
+      } catch {
+        gitStatusForClose = gitStatus;
+      }
+    }
+
     // Track reactive state alongside the ref so the overlay can render.
     const wrappedRunManualSync = async (): Promise<boolean> => {
       setCloseSyncInProgress(true);
@@ -99,16 +113,21 @@ export function useAppOsCloseSync({
         setCloseSyncInProgress(false);
       }
     };
-    await handleOsCloseRequest({
-      manualSyncRequired,
-      manualSyncDisabledReason,
-      manualSyncRunning,
-      runManualSync: wrappedRunManualSync,
-      notify,
-      close: programmaticClose,
-      closeSyncInProgressRef,
-      gitStatus,
-    });
+    try {
+      await handleOsCloseRequest({
+        manualSyncRequired,
+        manualSyncDisabledReason,
+        manualSyncRunning,
+        runManualSync: wrappedRunManualSync,
+        notify,
+        close: programmaticClose,
+        closeSyncInProgressRef,
+        timeoutMs: closeSyncTimeoutMs,
+        gitStatus: gitStatusForClose,
+      });
+    } finally {
+      setCloseSyncInProgress(false);
+    }
   });
 
   useEffect(() => {

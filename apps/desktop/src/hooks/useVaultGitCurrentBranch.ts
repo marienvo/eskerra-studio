@@ -12,6 +12,7 @@ type UseVaultGitCurrentBranchResult = {
   detachedHead: boolean;
   loading: boolean;
   error: string | null;
+  isNotGitRepository: boolean;
   refresh: () => void;
 };
 
@@ -23,6 +24,7 @@ export function useVaultGitCurrentBranch({
   const [loadedVaultPath, setLoadedVaultPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isNotGitRepository, setIsNotGitRepository] = useState(false);
   const requestIdRef = useRef(0);
 
   const load = useCallback(async (path: string) => {
@@ -32,6 +34,7 @@ export function useVaultGitCurrentBranch({
       const result = await getVaultGitCurrentBranch({vaultPath: path});
       if (requestId !== requestIdRef.current) return;
       setError(null);
+      setIsNotGitRepository(false);
       setBranch(result.branch);
       setDetachedHead(result.detachedHead);
       setLoadedVaultPath(path);
@@ -41,6 +44,7 @@ export function useVaultGitCurrentBranch({
       setDetachedHead(false);
       setLoadedVaultPath(path);
       setError(formatBranchError(e));
+      setIsNotGitRepository(isNotGitRepositoryError(e));
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
@@ -58,6 +62,7 @@ export function useVaultGitCurrentBranch({
       .then(result => {
         if (requestId !== requestIdRef.current) return;
         setError(null);
+        setIsNotGitRepository(false);
         setBranch(result.branch);
         setDetachedHead(result.detachedHead);
         setLoadedVaultPath(vaultPath);
@@ -68,6 +73,7 @@ export function useVaultGitCurrentBranch({
         setDetachedHead(false);
         setLoadedVaultPath(vaultPath);
         setError(formatBranchError(e));
+        setIsNotGitRepository(isNotGitRepositoryError(e));
       })
       .finally(() => {
         if (requestId === requestIdRef.current) setLoading(false);
@@ -82,6 +88,7 @@ export function useVaultGitCurrentBranch({
     if (!vaultPath) return;
     setLoading(true);
     setError(null);
+    setIsNotGitRepository(false);
     load(vaultPath).catch(() => undefined);
   }, [vaultPath, load]);
 
@@ -91,8 +98,13 @@ export function useVaultGitCurrentBranch({
     detachedHead: hasCurrentVaultResult ? detachedHead : false,
     loading: vaultPath != null && (loading || !hasCurrentVaultResult),
     error: hasCurrentVaultResult ? error : null,
+    isNotGitRepository: hasCurrentVaultResult ? isNotGitRepository : false,
     refresh,
   };
+}
+
+function isNotGitRepositoryError(e: unknown): boolean {
+  return typeof e === 'object' && e != null && 'type' in e && e.type === 'notGitRepository';
 }
 
 function formatBranchError(e: unknown): string {

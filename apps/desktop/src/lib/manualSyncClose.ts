@@ -10,6 +10,7 @@ export function buildCloseSyncRunner(runManualSync: ManualSyncRunner): () => Pro
 
 type HandleManualSyncCloseRequestArgs = {
   instant: boolean;
+  manualSyncRequired?: boolean;
   manualSyncDisabledReason: string | null;
   manualSyncRunning: boolean;
   runManualSync: () => Promise<boolean>;
@@ -24,6 +25,7 @@ type HandleManualSyncCloseRequestArgs = {
 
 export async function handleManualSyncCloseRequest({
   instant,
+  manualSyncRequired = true,
   manualSyncDisabledReason,
   manualSyncRunning,
   runManualSync,
@@ -39,6 +41,11 @@ export async function handleManualSyncCloseRequest({
   }
 
   if (manualSyncRunning) {
+    return;
+  }
+
+  if (!manualSyncRequired) {
+    close();
     return;
   }
 

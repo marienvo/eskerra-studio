@@ -39,6 +39,7 @@ describe('useVaultGitCurrentBranch', () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
     expect(result.current.detachedHead).toBe(false);
+    expect(result.current.isNotGitRepository).toBe(false);
   });
 
   it('represents detached HEAD separately from a load error', async () => {
@@ -63,6 +64,7 @@ describe('useVaultGitCurrentBranch', () => {
     expect(result.current.detachedHead).toBe(false);
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
+    expect(result.current.isNotGitRepository).toBe(false);
   });
 
   it('resets and does not call when vaultPath becomes null', async () => {
@@ -79,6 +81,25 @@ describe('useVaultGitCurrentBranch', () => {
     expect(result.current.detachedHead).toBe(false);
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
+    expect(result.current.isNotGitRepository).toBe(false);
+  });
+
+  it('exposes not-git repository errors as a structured flag', async () => {
+    mockGetVaultGitCurrentBranch.mockRejectedValue({type: 'notGitRepository'});
+
+    const {result} = renderHook(() => useVaultGitCurrentBranch({vaultPath: VAULT}));
+
+    await waitFor(() => expect(result.current.error).toBe('Not a Git repository'));
+    expect(result.current.isNotGitRepository).toBe(true);
+  });
+
+  it('keeps the not-git repository flag false for other branch errors', async () => {
+    mockGetVaultGitCurrentBranch.mockRejectedValue({type: 'lockAlreadyHeld'});
+
+    const {result} = renderHook(() => useVaultGitCurrentBranch({vaultPath: VAULT}));
+
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(result.current.isNotGitRepository).toBe(false);
   });
 
   it('stale request cannot overwrite newer branch', async () => {
@@ -136,7 +157,26 @@ describe('useVaultGitCurrentBranch', () => {
 
     await waitFor(() => expect(result.current.branch).toBe('main'));
     expect(result.current.error).toBeNull();
+    expect(result.current.isNotGitRepository).toBe(false);
     expect(result.current.loading).toBe(false);
+  });
+
+  it('resets the not-git repository flag when another vault branch loads successfully', async () => {
+    mockGetVaultGitCurrentBranch
+      .mockRejectedValueOnce({type: 'notGitRepository'})
+      .mockResolvedValueOnce(branchResult('main'));
+
+    const {result, rerender} = renderHook(
+      ({vaultPath}: {vaultPath: string}) => useVaultGitCurrentBranch({vaultPath}),
+      {initialProps: {vaultPath: VAULT}},
+    );
+    await waitFor(() => expect(result.current.isNotGitRepository).toBe(true));
+
+    rerender({vaultPath: '/other/vault'});
+
+    expect(result.current.isNotGitRepository).toBe(false);
+    await waitFor(() => expect(result.current.branch).toBe('main'));
+    expect(result.current.isNotGitRepository).toBe(false);
   });
 
   it('refresh uses latest-request-wins', async () => {

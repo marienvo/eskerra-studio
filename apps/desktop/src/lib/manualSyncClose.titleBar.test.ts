@@ -149,6 +149,46 @@ describe('handleManualSyncCloseRequest', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  it('closes immediately without notifying or syncing when manual sync is not required', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+
+    await handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncRequired: false,
+      manualSyncDisabledReason: 'Git branch unavailable',
+      manualSyncRunning: false,
+      runManualSync,
+      close,
+      notify,
+    });
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('does not close while manual sync is running even when manual sync is not required', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+
+    await handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncRequired: false,
+      manualSyncDisabledReason: 'Git branch unavailable',
+      manualSyncRunning: true,
+      runManualSync,
+      close,
+      notify,
+    });
+
+    expect(close).not.toHaveBeenCalled();
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   describe('preflight', () => {
     it('closes immediately without running sync when status is clean', async () => {
       const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);

@@ -20,7 +20,7 @@ import {
   getManualSyncDisabledReason,
 } from '../lib/gitSyncManualView';
 import {buildCloseSyncRunner, handleManualSyncCloseRequest} from '../lib/manualSyncClose';
-import type {GitStatusResult, SyncRunResult} from '../lib/tauriVaultGitSync';
+import {getVaultGitStatus, type GitStatusResult, type SyncRunResult} from '../lib/tauriVaultGitSync';
 import type {SessionNotificationTone} from '../lib/sessionNotifications';
 import type {useDesktopPodcastPlayback} from '../hooks/useDesktopPodcastPlayback';
 import {useAppOsCloseSync} from './useAppOsCloseSync';
@@ -67,6 +67,7 @@ export function useAppGitSyncOrchestration({
     detachedHead: currentGitDetachedHead,
     loading: currentGitBranchLoading,
     error: currentGitBranchError,
+    isNotGitRepository: vaultIsNotGitRepository,
   } = useVaultGitCurrentBranch({vaultPath});
   const {
     status: gitStatus,
@@ -143,19 +144,31 @@ export function useAppGitSyncOrchestration({
   });
   const manualSyncUnavailable = vaultPath == null || manualSyncDisabledReason != null;
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
+  const vaultGitSyncApplies = vaultPath != null && !vaultIsNotGitRepository;
   const runManualSyncForClose = useMemo(
     () => buildCloseSyncRunner(manualGitSync.run),
     [manualGitSync.run],
   );
+  const fetchFreshGitStatusForClose = useCallback(async (): Promise<GitStatusResult | null> => {
+    if (vaultPath == null || currentGitBranch == null) {
+      return gitStatusForDisplay;
+    }
+    try {
+      return await getVaultGitStatus({vaultPath, remote: GIT_SYNC_REMOTE, branch: currentGitBranch});
+    } catch {
+      return gitStatusForDisplay;
+    }
+  }, [currentGitBranch, gitStatusForDisplay, vaultPath]);
   const {programmaticClose, closeSyncInProgress} = useAppOsCloseSync({
     desktopPlaybackRef,
     flushInboxSave,
-    manualSyncRequired: vaultPath != null,
+    manualSyncRequired: vaultGitSyncApplies,
     manualSyncDisabledReason,
     manualSyncRunning: manualGitSync.running,
     runManualSync: runManualSyncForClose,
     notify,
     gitStatus: gitStatusForDisplay,
+    fetchFreshGitStatusForClose,
   });
   const closeSyncDisabledNoticeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -165,25 +178,43 @@ export function useAppGitSyncOrchestration({
   }, [manualSyncDisabledReason]);
   const handleWindowCloseRequest = useCallback(
     (input: {instant: boolean}) => {
-      const notifyDisabled =
-        manualSyncDisabledReason != null &&
-        closeSyncDisabledNoticeRef.current !== manualSyncDisabledReason;
-      if (notifyDisabled) {
-        closeSyncDisabledNoticeRef.current = manualSyncDisabledReason;
-      }
-      void handleManualSyncCloseRequest({
-        instant: input.instant,
-        manualSyncDisabledReason,
-        manualSyncRunning: manualGitSync.running,
-        runManualSync: runManualSyncForClose,
-        close: programmaticClose,
-        notify,
-        notifyDisabled,
-        showCloseSyncFeedback: true,
-        gitStatus: gitStatusForDisplay,
-      });
+      void (async () => {
+        const notifyDisabled =
+          manualSyncDisabledReason != null &&
+          closeSyncDisabledNoticeRef.current !== manualSyncDisabledReason;
+        if (notifyDisabled) {
+          closeSyncDisabledNoticeRef.current = manualSyncDisabledReason;
+        }
+        let gitStatusForClose = gitStatusForDisplay;
+        if (!input.instant) {
+          await Promise.resolve(flushInboxSave()).catch(() => undefined);
+          gitStatusForClose = await fetchFreshGitStatusForClose();
+        }
+        await handleManualSyncCloseRequest({
+          instant: input.instant,
+          manualSyncRequired: vaultGitSyncApplies,
+          manualSyncDisabledReason,
+          manualSyncRunning: manualGitSync.running,
+          runManualSync: runManualSyncForClose,
+          close: programmaticClose,
+          notify,
+          notifyDisabled,
+          showCloseSyncFeedback: true,
+          gitStatus: gitStatusForClose,
+        });
+      })();
     },
-    [gitStatusForDisplay, manualGitSync.running, manualSyncDisabledReason, notify, programmaticClose, runManualSyncForClose],
+    [
+      fetchFreshGitStatusForClose,
+      flushInboxSave,
+      gitStatusForDisplay,
+      manualGitSync.running,
+      manualSyncDisabledReason,
+      notify,
+      programmaticClose,
+      runManualSyncForClose,
+      vaultGitSyncApplies,
+    ],
   );
 
   useVaultGitStartupSync({
