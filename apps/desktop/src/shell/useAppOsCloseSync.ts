@@ -14,6 +14,7 @@ import {handleOsCloseRequest} from '../lib/manualSyncClose';
 type UseAppOsCloseSyncArgs = {
   desktopPlaybackRef: MutableRefObject<ReturnType<typeof useDesktopPodcastPlayback>>;
   flushInboxSave: () => void | Promise<void>;
+  manualSyncRequired?: boolean;
   manualSyncDisabledReason: string | null;
   manualSyncRunning: boolean;
   runManualSync: () => Promise<boolean>;
@@ -37,6 +38,7 @@ type UseAppOsCloseSyncResult = {
 export function useAppOsCloseSync({
   desktopPlaybackRef,
   flushInboxSave,
+  manualSyncRequired = true,
   manualSyncDisabledReason,
   manualSyncRunning,
   runManualSync,
@@ -111,6 +113,7 @@ export function useAppOsCloseSync({
         event.preventDefault();
 
         await handleOsCloseRequest({
+          manualSyncRequired,
           manualSyncDisabledReason: manualSyncDisabledReasonRef.current,
           manualSyncRunning: manualSyncRunningRef.current,
           runManualSync: runManualSyncRef.current,
@@ -132,7 +135,7 @@ export function useAppOsCloseSync({
       cancelled = true;
       unlisten?.();
     };
-  }, [desktopPlaybackRef, programmaticClose]);
+  }, [desktopPlaybackRef, manualSyncRequired, programmaticClose]);
 
   return {programmaticClose};
 }

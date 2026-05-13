@@ -124,6 +124,7 @@ describe('useVaultGitStartupSync', () => {
 
     await act(async () => { await Promise.resolve(); });
 
+    expect(notify).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledWith('error', 'Startup sync failed. You can retry manually.');
   });
 

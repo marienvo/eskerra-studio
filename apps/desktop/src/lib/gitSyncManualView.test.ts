@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  formatVaultGitSyncSuccessChip,
   formatVaultGitSyncError,
   formatVaultGitSyncSuccess,
   getManualSyncDisabledReason,
@@ -112,6 +113,42 @@ describe('getManualSyncDisabledReason', () => {
     ).toBe('Git needs attention');
   });
 
+  it('returns staged changes reason', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: {...safeGitStatus, hasStagedChanges: true},
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBe('Staged changes need committing');
+  });
+
+  it('returns staged changes reason before wrong branch reason', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: {...safeGitStatus, hasStagedChanges: true, isWrongBranch: true},
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBe('Staged changes need committing');
+  });
+
+  it('returns unsafe state reason before staged changes reason', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: '/vault',
+        gitStatus: {...safeGitStatus, unsafeState: 'merge', hasStagedChanges: true},
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBe('Git needs attention');
+  });
+
   it('returns wrong branch reason', () => {
     expect(
       getManualSyncDisabledReason({
@@ -134,6 +171,18 @@ describe('getManualSyncDisabledReason', () => {
         running: true,
       }),
     ).toBe('Syncing vault');
+  });
+
+  it('returns null when no vault path', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: null,
+        gitStatus: null,
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBeNull();
   });
 
   it('returns null when Git status is clean and safe', () => {
@@ -165,6 +214,34 @@ describe('formatVaultGitSyncSuccess', () => {
 
   it('formats success without commit', () => {
     expect(formatVaultGitSyncSuccess(syncRunResult)).toBe('Vault sync complete.');
+  });
+});
+
+describe('formatVaultGitSyncSuccessChip', () => {
+  it('formats transient success with commit short SHA', () => {
+    expect(
+      formatVaultGitSyncSuccessChip({
+        ...syncRunResult,
+        localCommit: {
+          ...syncRunResult.localCommit,
+          commit: {sha: 'abcdef1234567890', message: 'chore: sync'},
+          mutated: true,
+        },
+      }),
+    ).toEqual({
+      tone: 'success',
+      label: 'Synced • abcdef1',
+      icon: 'check_circle',
+      description: 'Committed abcdef1',
+    });
+  });
+
+  it('formats transient success without commit', () => {
+    expect(formatVaultGitSyncSuccessChip(syncRunResult)).toEqual({
+      tone: 'success',
+      label: 'Synced',
+      icon: 'check_circle',
+    });
   });
 });
 

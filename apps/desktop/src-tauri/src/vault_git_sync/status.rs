@@ -236,6 +236,13 @@ fn git_dir(vault_path: &Path) -> Result<PathBuf, SyncError> {
 /// Ref: git-status(1) "Porcelain Format Version 2"
 fn parse_porcelain(vault_path: &Path) -> Result<(bool, bool, bool), SyncError> {
     let out = GitCmd::new(vault_path, &["status", "--porcelain=v2", "-z"]).run()?;
+    if !out.success {
+        return Err(SyncError::GitCommandFailed {
+            command: "git status --porcelain=v2 -z".into(),
+            exit_code: out.exit_code,
+            stderr: out.stderr,
+        });
+    }
 
     // -z: records are NUL-terminated (and renamed entries have a second NUL-separated path)
     // We only need the first token of each record to identify type and XY.
@@ -477,6 +484,21 @@ mod tests {
 
         let result = git_status(repo.path(), "main", "origin").unwrap();
         assert!(result.has_staged_changes);
+    }
+
+    #[test]
+    fn git_status_propagates_porcelain_failure() {
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+        std::fs::write(repo.path().join(".git").join("index"), b"corrupt-index").unwrap();
+
+        let result = git_status(repo.path(), "main", "origin");
+
+        assert!(matches!(
+            result,
+            Err(SyncError::GitCommandFailed { command, .. })
+                if command == "git status --porcelain=v2 -z"
+        ));
     }
 
     // -----------------------------------------------------------------------

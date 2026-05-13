@@ -1,6 +1,23 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import {handleManualSyncCloseRequest, handleOsCloseRequest} from './manualSyncClose';
+import {
+  buildCloseSyncRunner,
+  handleManualSyncCloseRequest,
+  handleOsCloseRequest,
+} from './manualSyncClose';
+
+describe('buildCloseSyncRunner', () => {
+  it('runs manual sync silently for close flows', async () => {
+    const runManualSync = vi.fn<(opts?: {readonly silent?: boolean}) => Promise<boolean>>()
+      .mockResolvedValue(false);
+    const runManualSyncForClose = buildCloseSyncRunner(runManualSync);
+
+    await expect(runManualSyncForClose()).resolves.toBe(false);
+
+    expect(runManualSync).toHaveBeenCalledTimes(1);
+    expect(runManualSync).toHaveBeenCalledWith({silent: true});
+  });
+});
 
 describe('handleManualSyncCloseRequest', () => {
   it('closes immediately with Shift bypass and does not run sync', async () => {
@@ -114,7 +131,7 @@ describe('handleManualSyncCloseRequest', () => {
   });
 
   describe('showCloseSyncFeedback', () => {
-    it('notifies "Syncing before close…" before sync starts', async () => {
+    it('does not notify before sync starts', async () => {
       const notify = vi.fn();
       await handleManualSyncCloseRequest({
         instant: false,
@@ -126,7 +143,7 @@ describe('handleManualSyncCloseRequest', () => {
         showCloseSyncFeedback: true,
       });
 
-      expect(notify).toHaveBeenCalledWith('info', 'Syncing before close…');
+      expect(notify).not.toHaveBeenCalledWith('info', expect.any(String));
     });
 
     it('does not notify start when showCloseSyncFeedback is false', async () => {
@@ -213,7 +230,7 @@ describe('handleOsCloseRequest', () => {
     expect(runManualSync).toHaveBeenCalledTimes(1);
   });
 
-  it('notifies "Syncing before close…" when sync starts', async () => {
+  it('does not notify when sync starts', async () => {
     const notify = vi.fn();
     const closeSyncInProgressRef = {current: false};
 
@@ -226,7 +243,7 @@ describe('handleOsCloseRequest', () => {
       closeSyncInProgressRef,
     });
 
-    expect(notify).toHaveBeenCalledWith('info', 'Syncing before close…');
+    expect(notify).not.toHaveBeenCalledWith('info', expect.any(String));
   });
 
   it('calls close after successful sync', async () => {
@@ -348,6 +365,27 @@ describe('handleOsCloseRequest', () => {
       'error',
       'Cannot sync before closing: Git branch unavailable. Use the close button while holding Shift to close instantly.',
     );
+  });
+
+  it('closes without sync or notify when manual sync is not required', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
+    const close = vi.fn();
+    const notify = vi.fn();
+    const closeSyncInProgressRef = {current: false};
+
+    await handleOsCloseRequest({
+      manualSyncRequired: false,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: false,
+      runManualSync,
+      notify,
+      close,
+      closeSyncInProgressRef,
+    });
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('keeps app open and does not start a second sync when manual sync is already running', async () => {

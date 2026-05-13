@@ -78,11 +78,12 @@ describe('useManualVaultGitSync', () => {
 
   it('returns true after successful sync', async () => {
     const notify = vi.fn();
+    const onSuccess = vi.fn();
     const onSettled = vi.fn();
     mockRunVaultGitSync.mockResolvedValue(syncResult);
 
     const {result} = renderHook(() =>
-      useManualVaultGitSync({vaultPath: '/vault', config, notify, onSettled}),
+      useManualVaultGitSync({vaultPath: '/vault', config, notify, onSuccess, onSettled}),
     );
 
     await expect(result.current.run()).resolves.toBe(true);
@@ -92,8 +93,28 @@ describe('useManualVaultGitSync', () => {
       locksDir: '/app-data/locks',
       config,
     });
-    expect(notify).toHaveBeenCalledWith('info', 'Vault sync complete.');
+    expect(notify).not.toHaveBeenCalledWith('info', expect.any(String));
+    expect(onSuccess).toHaveBeenCalledWith(syncResult);
     expect(onSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onStart when a sync run starts', async () => {
+    const onStart = vi.fn();
+    mockRunVaultGitSync.mockResolvedValue(syncResult);
+
+    const {result} = renderHook(() =>
+      useManualVaultGitSync({
+        vaultPath: '/vault',
+        config,
+        notify: vi.fn(),
+        onStart,
+        onSettled: vi.fn(),
+      }),
+    );
+
+    await expect(result.current.run()).resolves.toBe(true);
+
+    expect(onStart).toHaveBeenCalledTimes(1);
   });
 
   it('returns false and keeps existing error notification on failure', async () => {
@@ -162,18 +183,20 @@ describe('useManualVaultGitSync', () => {
 
   it('does not notify success when silent is true', async () => {
     const notify = vi.fn();
+    const onSuccess = vi.fn();
     mockRunVaultGitSync.mockResolvedValue(syncResult);
 
     const {result} = renderHook(() =>
-      useManualVaultGitSync({vaultPath: '/vault', config, notify, onSettled: vi.fn()}),
+      useManualVaultGitSync({vaultPath: '/vault', config, notify, onSuccess, onSettled: vi.fn()}),
     );
 
     await expect(result.current.run({silent: true})).resolves.toBe(true);
 
     expect(notify).not.toHaveBeenCalledWith('info', expect.any(String));
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
-  it('still notifies error when silent is true and sync fails', async () => {
+  it('does not notify error when silent is true and sync fails', async () => {
     const notify = vi.fn();
     mockRunVaultGitSync.mockRejectedValue({type: 'pushRejected', stderr: 'rejected'});
 
@@ -183,7 +206,7 @@ describe('useManualVaultGitSync', () => {
 
     await expect(result.current.run({silent: true})).resolves.toBe(false);
 
-    expect(notify).toHaveBeenCalledWith('error', 'Push rejected. Local changes remain committed.');
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('does not start duplicate concurrent sync runs', async () => {

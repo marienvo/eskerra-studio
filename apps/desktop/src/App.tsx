@@ -21,6 +21,7 @@ import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEdi
 import {EpisodesPane} from './components/EpisodesPane';
 import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
 import {GitStatusChip} from './components/GitStatusChip';
+import {useGitSyncTransientStatus} from './hooks/useGitSyncTransientStatus';
 import {useManualVaultGitSync} from './hooks/useManualVaultGitSync';
 import {useVaultGitCurrentBranch} from './hooks/useVaultGitCurrentBranch';
 import {useVaultGitStatus} from './hooks/useVaultGitStatus';
@@ -50,9 +51,12 @@ import {
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
 import {buildManualGitSyncConfig, GIT_SYNC_REMOTE} from './lib/gitSyncConfig';
-import {getManualSyncDisabledReason} from './lib/gitSyncManualView';
-import {handleManualSyncCloseRequest} from './lib/manualSyncClose';
-import type {GitStatusResult} from './lib/tauriVaultGitSync';
+import {
+  formatVaultGitSyncSuccessChip,
+  getManualSyncDisabledReason,
+} from './lib/gitSyncManualView';
+import {buildCloseSyncRunner, handleManualSyncCloseRequest} from './lib/manualSyncClose';
+import type {GitStatusResult, SyncRunResult} from './lib/tauriVaultGitSync';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {writeVaultSettings} from './lib/vaultBootstrap';
 import {AppThemeShell} from './shell/AppThemeShell';
@@ -488,10 +492,23 @@ export default function App() {
     }
     return gitStatus;
   }, [currentGitDetachedHead, gitStatus]);
+  const {
+    transient: transientGitStatus,
+    show: showTransientGitStatus,
+    clear: clearTransientGitStatus,
+  } = useGitSyncTransientStatus();
+  const showManualGitSyncSuccess = useCallback(
+    (result: SyncRunResult) => {
+      showTransientGitStatus(formatVaultGitSyncSuccessChip(result));
+    },
+    [showTransientGitStatus],
+  );
   const manualGitSync = useManualVaultGitSync({
     vaultPath: vaultRoot,
     config: manualGitSyncConfig,
     notify: pushNotification,
+    onStart: clearTransientGitStatus,
+    onSuccess: showManualGitSyncSuccess,
     onSettled: refreshGitStatus,
   });
   useVaultGitRemoteStatusPolling({
@@ -511,13 +528,19 @@ export default function App() {
     branchUnavailable: !currentGitDetachedHead && (currentGitBranch == null || currentGitBranchError != null),
     running: manualGitSync.running,
   });
+  const manualSyncUnavailable = vaultRoot == null || manualSyncDisabledReason != null;
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
+  const runManualSyncForClose = useMemo(
+    () => buildCloseSyncRunner(manualGitSync.run),
+    [manualGitSync.run],
+  );
   const {programmaticClose} = useAppOsCloseSync({
     desktopPlaybackRef,
     flushInboxSave,
+    manualSyncRequired: vaultRoot != null,
     manualSyncDisabledReason,
     manualSyncRunning: manualGitSync.running,
-    runManualSync: manualGitSync.run,
+    runManualSync: runManualSyncForClose,
     notify: pushNotification,
   });
   const closeSyncDisabledNoticeRef = useRef<string | null>(null);
@@ -538,14 +561,14 @@ export default function App() {
         instant: input.instant,
         manualSyncDisabledReason,
         manualSyncRunning: manualGitSync.running,
-        runManualSync: manualGitSync.run,
+        runManualSync: runManualSyncForClose,
         close: programmaticClose,
         notify: pushNotification,
         notifyDisabled,
         showCloseSyncFeedback: true,
       });
     },
-    [manualGitSync.run, manualGitSync.running, manualSyncDisabledReason, programmaticClose, pushNotification],
+    [manualGitSync.running, manualSyncDisabledReason, programmaticClose, pushNotification, runManualSyncForClose],
   );
 
   useVaultGitStartupSync({
@@ -570,7 +593,7 @@ export default function App() {
     setQuickOpenOpen,
     vaultSearchOpen,
     setVaultSearchOpen,
-    manualSyncDisabled: manualSyncDisabledReason != null,
+    manualSyncDisabled: manualSyncUnavailable,
     manualSyncRunning: manualGitSync.running,
     onManualSync: manualGitSync.run,
   });
@@ -839,7 +862,7 @@ export default function App() {
             onOpenSettings={() => setActivePage('settings')}
             onManualSync={() => void manualGitSync.run()}
             manualSyncBusy={manualGitSync.running}
-            manualSyncDisabled={manualSyncDisabledReason != null}
+            manualSyncDisabled={manualSyncUnavailable}
             manualSyncLabel={manualSyncLabel}
             statusIndicator={
               <GitStatusChip
@@ -847,6 +870,7 @@ export default function App() {
                 loading={currentGitBranchLoading || gitStatusLoading}
                 error={currentGitDetachedHead ? gitStatusError : currentGitBranchError ?? gitStatusError}
                 syncing={manualGitSync.running}
+                transient={transientGitStatus}
               />
             }
           />

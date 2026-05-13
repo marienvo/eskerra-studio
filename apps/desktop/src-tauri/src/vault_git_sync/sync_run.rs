@@ -114,6 +114,14 @@ fn abort_merge(vault_path: &Path) -> Result<(), SyncError> {
     })
 }
 
+fn merge_in_progress(vault_path: &Path) -> Result<bool, SyncError> {
+    let out = GitCmd::new(vault_path, &["rev-parse", "--absolute-git-dir"]).run()?;
+    if !out.success {
+        return Err(SyncError::NotGitRepository);
+    }
+    Ok(Path::new(out.stdout.trim()).join("MERGE_HEAD").exists())
+}
+
 fn create_snapshot_branch_with_timestamp(
     vault_path: &Path,
     pre_merge_sha: &str,
@@ -199,10 +207,19 @@ fn finish_merge_failure_recovery(
         Err(err) => (None, Some(err)),
     };
 
-    abort_merge(vault_path)?;
+    let abort_error = if merge_in_progress(vault_path)? {
+        abort_merge(vault_path).err()
+    } else {
+        None
+    };
 
     Ok(SyncError::MergeFailed {
-        stderr: merge_failed_stderr(merge_stderr, snapshot_error, unresolved_error),
+        stderr: merge_failed_stderr(
+            merge_stderr,
+            snapshot_error,
+            unresolved_error,
+            abort_error,
+        ),
         snapshot_branch,
         pre_merge_sha: Some(pre_merge_sha.to_string()),
     })
@@ -212,6 +229,7 @@ fn merge_failed_stderr(
     mut merge_stderr: String,
     snapshot_error: Option<SyncError>,
     unresolved_error: Option<SyncError>,
+    abort_error: Option<SyncError>,
 ) -> String {
     if let Some(err) = snapshot_error {
         merge_stderr.push_str("\nSnapshot branch creation failed: ");
@@ -219,6 +237,10 @@ fn merge_failed_stderr(
     }
     if let Some(err) = unresolved_error {
         merge_stderr.push_str("\nUnresolved path inspection failed: ");
+        merge_stderr.push_str(&format!("{err:?}"));
+    }
+    if let Some(err) = abort_error {
+        merge_stderr.push_str("\nMerge abort failed: ");
         merge_stderr.push_str(&format!("{err:?}"));
     }
     merge_stderr
@@ -674,7 +696,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_abort_failure_is_reported_clearly() {
+    fn merge_failure_without_merge_state_returns_merge_failed() {
         let f = Fixture::new();
         let pre_merge_sha = head(f.local_path());
 
@@ -685,10 +707,56 @@ mod tests {
             "fixed",
         );
 
-        assert!(matches!(
-            result,
-            Err(SyncError::GitCommandFailed { command, .. }) if command == "git merge --abort"
-        ));
+        let SyncError::MergeFailed {
+            snapshot_branch,
+            pre_merge_sha: reported_pre_merge_sha,
+            ..
+        } = result.unwrap()
+        else {
+            panic!("expected MergeFailed");
+        };
+        assert_eq!(
+            snapshot_branch.as_deref(),
+            Some("eskerra/sync-snapshot-fixed")
+        );
+        assert_eq!(
+            reported_pre_merge_sha.as_deref(),
+            Some(pre_merge_sha.as_str())
+        );
+    }
+
+    #[test]
+    fn merge_abort_failure_is_preserved_in_merge_failed_stderr() {
+        let f = Fixture::new();
+        let pre_merge_sha = put_local_repo_in_merge_conflict(&f);
+        std::fs::write(f.local_path().join(".git/index"), b"corrupt-index").unwrap();
+
+        let result = recover_after_merge_failure_with_snapshot_timestamp(
+            f.local_path(),
+            &pre_merge_sha,
+            "merge failed".into(),
+            "fixed",
+        )
+        .unwrap();
+
+        let SyncError::MergeFailed {
+            stderr,
+            snapshot_branch,
+            pre_merge_sha: reported_pre_merge_sha,
+        } = result
+        else {
+            panic!("expected MergeFailed");
+        };
+        assert_eq!(
+            snapshot_branch.as_deref(),
+            Some("eskerra/sync-snapshot-fixed")
+        );
+        assert_eq!(
+            reported_pre_merge_sha.as_deref(),
+            Some(pre_merge_sha.as_str())
+        );
+        assert!(stderr.contains("Merge abort failed"));
+        assert!(stderr.contains("git merge --abort"));
     }
 
     #[test]

@@ -4,12 +4,14 @@ import './GitStatusChip.css';
 
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 import {mapGitStatusToView} from '../lib/gitStatusView';
+import type {TransientGitStatus} from '../hooks/useGitSyncTransientStatus';
 
 type GitStatusChipProps = {
   status: GitStatusResult | null;
   loading?: boolean;
   error?: string | null;
   syncing?: boolean;
+  transient?: TransientGitStatus | null;
 };
 
 export function GitStatusChip({
@@ -17,6 +19,7 @@ export function GitStatusChip({
   loading = false,
   error = null,
   syncing = false,
+  transient = null,
 }: GitStatusChipProps) {
   if (syncing) {
     return (
@@ -51,6 +54,24 @@ export function GitStatusChip({
       >
         <IconGlyph name="error_outline" size={12} aria-hidden />
         Git status error
+      </span>
+    );
+  }
+
+  if (transient != null) {
+    return (
+      <span
+        className={`git-status-chip git-status-chip--${transient.tone}`}
+        aria-label={
+          transient.description != null
+            ? `${transient.label}: ${transient.description}`
+            : transient.label
+        }
+        data-tooltip={transient.description ?? undefined}
+        data-tooltip-placement="inline-start"
+      >
+        <IconGlyph name={transient.icon} size={12} aria-hidden />
+        {transient.label}
       </span>
     );
   }

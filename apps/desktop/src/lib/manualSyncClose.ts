@@ -1,5 +1,11 @@
 import type {SessionNotificationTone} from './sessionNotifications';
 
+type ManualSyncRunner = (opts?: {readonly silent?: boolean}) => Promise<boolean>;
+
+export function buildCloseSyncRunner(runManualSync: ManualSyncRunner): () => Promise<boolean> {
+  return () => runManualSync({silent: true});
+}
+
 type HandleManualSyncCloseRequestArgs = {
   instant: boolean;
   manualSyncDisabledReason: string | null;
@@ -8,7 +14,7 @@ type HandleManualSyncCloseRequestArgs = {
   close: () => void;
   notify: (tone: SessionNotificationTone, text: string) => void;
   notifyDisabled?: boolean;
-  /** When true, shows "Syncing before close…" on start and failure context on failure. */
+  /** When true, shows failure context when sync-before-close fails. */
   showCloseSyncFeedback?: boolean;
 };
 
@@ -41,10 +47,6 @@ export async function handleManualSyncCloseRequest({
     return;
   }
 
-  if (showCloseSyncFeedback) {
-    notify('info', 'Syncing before close…');
-  }
-
   const synced = await runManualSync();
   if (synced) {
     close();
@@ -57,6 +59,7 @@ export async function handleManualSyncCloseRequest({
 export const CLOSE_SYNC_TIMEOUT_MS = 30_000;
 
 type HandleOsCloseRequestArgs = {
+  manualSyncRequired?: boolean;
   manualSyncDisabledReason: string | null;
   manualSyncRunning: boolean;
   runManualSync: () => Promise<boolean>;
@@ -71,11 +74,11 @@ type HandleOsCloseRequestArgs = {
 /**
  * Handles an OS/window-manager close event:
  * - Guards against duplicate runs via closeSyncInProgressRef.
- * - Notifies the user before sync starts.
  * - Races sync against a timeout.
  * - Calls close() on success; notifies on failure or timeout.
  */
 export async function handleOsCloseRequest({
+  manualSyncRequired = true,
   manualSyncDisabledReason,
   manualSyncRunning,
   runManualSync,
@@ -85,6 +88,11 @@ export async function handleOsCloseRequest({
   timeoutMs = CLOSE_SYNC_TIMEOUT_MS,
 }: HandleOsCloseRequestArgs): Promise<void> {
   if (closeSyncInProgressRef.current) {
+    return;
+  }
+
+  if (!manualSyncRequired) {
+    close();
     return;
   }
 
@@ -101,7 +109,6 @@ export async function handleOsCloseRequest({
   }
 
   closeSyncInProgressRef.current = true;
-  notify('info', 'Syncing before close…');
 
   try {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;

@@ -1,4 +1,5 @@
 import type {GitStatusResult, SyncError, SyncRunResult} from './tauriVaultGitSync';
+import type {TransientGitStatus} from '../hooks/useGitSyncTransientStatus';
 
 type ManualSyncDisabledReasonInput = {
   vaultPath: string | null;
@@ -11,7 +12,6 @@ type ManualSyncDisabledReasonInput = {
 };
 
 export function getManualSyncDisabledReason({
-  vaultPath,
   gitStatus,
   gitStatusLoading,
   gitStatusError,
@@ -21,9 +21,6 @@ export function getManualSyncDisabledReason({
 }: ManualSyncDisabledReasonInput): string | null {
   if (running) {
     return 'Syncing vault';
-  }
-  if (vaultPath == null) {
-    return 'Sync vault';
   }
   if (branchLoading) {
     return 'Checking Git branch';
@@ -40,6 +37,9 @@ export function getManualSyncDisabledReason({
   if (gitStatus?.unsafeState != null) {
     return 'Git needs attention';
   }
+  if (gitStatus?.hasStagedChanges === true) {
+    return 'Staged changes need committing';
+  }
   if (gitStatus?.isWrongBranch === true) {
     return 'Wrong Git branch';
   }
@@ -52,6 +52,20 @@ export function formatVaultGitSyncSuccess(result: SyncRunResult): string {
     return 'Vault sync complete.';
   }
   return `Vault sync complete. Committed ${sha.slice(0, 7)}.`;
+}
+
+export function formatVaultGitSyncSuccessChip(result: SyncRunResult): TransientGitStatus {
+  const sha = result.localCommit.commit?.sha;
+  if (sha != null && sha.trim() !== '') {
+    const shortSha = sha.slice(0, 7);
+    return {
+      tone: 'success',
+      label: `Synced • ${shortSha}`,
+      icon: 'check_circle',
+      description: `Committed ${shortSha}`,
+    };
+  }
+  return {tone: 'success', label: 'Synced', icon: 'check_circle'};
 }
 
 function hasType(value: unknown): value is {type: string} {
