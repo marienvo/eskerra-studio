@@ -6,7 +6,6 @@
 import {open} from '@tauri-apps/plugin-dialog';
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -21,14 +20,6 @@ import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEdi
 import {EpisodesPane} from './components/EpisodesPane';
 import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
 import {GitStatusChip} from './components/GitStatusChip';
-import {useGitSyncTransientStatus} from './hooks/useGitSyncTransientStatus';
-import {useManualVaultGitSync} from './hooks/useManualVaultGitSync';
-import {useVaultGitCurrentBranch} from './hooks/useVaultGitCurrentBranch';
-import {useVaultGitStatus} from './hooks/useVaultGitStatus';
-import {useVaultGitRemoteStatusPolling} from './hooks/useVaultGitRemoteStatusPolling';
-import {useVaultGitStartupSync} from './hooks/useVaultGitStartupSync';
-import {useVaultGitAutosyncScheduler} from './hooks/useVaultGitAutosyncScheduler';
-import {useVaultGitLocalWriteStatusRefresh} from './hooks/useVaultGitLocalWriteStatusRefresh';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
@@ -39,26 +30,14 @@ import {useEditorHistoryMouseButtons} from './hooks/useEditorHistoryMouseButtons
 import {useMainWindowWorkspace} from './hooks/useMainWindowWorkspace';
 import {usePreventMiddleClickPaste} from './hooks/usePreventMiddleClickPaste';
 import {ThemedChromeBackground} from './theme/ThemedChromeBackground';
-import type {EditorWorkspaceTab} from './lib/editorWorkspaceTabs';
-
 import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
 } from './lib/layoutStore';
 import {
-  buildStoredMainWindowInboxForPersist,
   DEFAULT_MAIN_WINDOW_PANE_VISIBILITY,
-  saveMainWindowUi,
-  type StoredMainWindowUi,
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
-import {buildManualGitSyncConfig, GIT_SYNC_REMOTE} from './lib/gitSyncConfig';
-import {
-  formatVaultGitSyncSuccessChip,
-  getManualSyncDisabledReason,
-} from './lib/gitSyncManualView';
-import {buildCloseSyncRunner, handleManualSyncCloseRequest} from './lib/manualSyncClose';
-import type {GitStatusResult, SyncRunResult} from './lib/tauriVaultGitSync';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {writeVaultSettings} from './lib/vaultBootstrap';
 import {AppThemeShell} from './shell/AppThemeShell';
@@ -69,89 +48,15 @@ import {useAppNotificationSession} from './shell/useAppNotificationSession';
 import {useAppOnMountLayoutHydration} from './shell/useAppOnMountLayoutHydration';
 import {useAppRootClassName} from './shell/useAppRootClassName';
 import {useAppTauriCloseAndFocusSave} from './shell/useAppTauriCloseAndFocusSave';
-import {useAppOsCloseSync} from './shell/useAppOsCloseSync';
 import {useAppTauriDocumentChrome} from './shell/useAppTauriDocumentChrome';
+import {useAppGitSyncOrchestration} from './shell/useAppGitSyncOrchestration';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
 import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
+import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 
 import './App.css';
 
 type AppPage = 'vault' | 'settings';
-
-type UseAppDebouncedPersistMainWindowUiArgs = {
-  vaultRoot: string | null;
-  inboxShellRestored: boolean;
-  vaultPaneVisible: boolean;
-  episodesPaneVisible: boolean;
-  inboxPaneVisible: boolean;
-  notificationsPanelVisible: boolean;
-  composingNewEntry: boolean;
-  selectedUri: string | null;
-  activeTodayHubUri: string | null;
-  persistenceTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
-  vaultMarkdownRefs: readonly {uri: string; name: string}[];
-  editorWorkspaceTabs: readonly EditorWorkspaceTab[];
-  activeEditorTabId: string | null;
-};
-
-function useAppDebouncedPersistMainWindowUi({
-  vaultRoot,
-  inboxShellRestored,
-  vaultPaneVisible,
-  episodesPaneVisible,
-  inboxPaneVisible,
-  notificationsPanelVisible,
-  composingNewEntry,
-  selectedUri,
-  activeTodayHubUri,
-  persistenceTodayHubWorkspaces,
-  vaultMarkdownRefs,
-  editorWorkspaceTabs,
-  activeEditorTabId,
-}: UseAppDebouncedPersistMainWindowUiArgs) {
-  useEffect(() => {
-    if (!vaultRoot || !inboxShellRestored) {
-      return;
-    }
-    const inbox = buildStoredMainWindowInboxForPersist({
-      composingNewEntry,
-      selectedUri,
-      activeTodayHubUri,
-      todayHubWorkspaces: persistenceTodayHubWorkspaces,
-      vaultMarkdownRefs,
-      editorWorkspaceTabs,
-      activeEditorTabId,
-    });
-    const payload: StoredMainWindowUi = {
-      vaultRoot,
-      vaultPaneVisible,
-      episodesPaneVisible,
-      inboxPaneVisible,
-      notificationsPanelVisible,
-      inbox,
-    };
-    const t = window.setTimeout(() => {
-      void saveMainWindowUi(payload);
-    }, 200);
-    return () => {
-      window.clearTimeout(t);
-    };
-  }, [
-    vaultRoot,
-    vaultPaneVisible,
-    episodesPaneVisible,
-    inboxPaneVisible,
-    notificationsPanelVisible,
-    selectedUri,
-    composingNewEntry,
-    activeTodayHubUri,
-    persistenceTodayHubWorkspaces,
-    inboxShellRestored,
-    vaultMarkdownRefs,
-    editorWorkspaceTabs,
-    activeEditorTabId,
-  ]);
-}
 
 export default function App() {
   const {maximized} = useTauriWindowMaximized();
@@ -242,22 +147,6 @@ export default function App() {
     flushInboxSave,
     saveSettledNonce,
   } = workspacePersistenceController;
-  const {
-    branch: currentGitBranch,
-    detachedHead: currentGitDetachedHead,
-    loading: currentGitBranchLoading,
-    error: currentGitBranchError,
-  } = useVaultGitCurrentBranch({vaultPath: vaultRoot});
-  const {
-    status: gitStatus,
-    loading: gitStatusLoading,
-    error: gitStatusError,
-    refresh: refreshGitStatus,
-  } = useVaultGitStatus({vaultPath: vaultRoot, remote: GIT_SYNC_REMOTE, branch: currentGitBranch});
-  useVaultGitLocalWriteStatusRefresh({
-    saveSettledNonce,
-    refreshGitStatus,
-  });
   const {
     err,
     setErr,
@@ -471,127 +360,24 @@ export default function App() {
     renameLinkProgress,
     setNotificationsPanelVisible,
   });
-  const manualGitSyncConfig = useMemo(
-    () => (currentGitBranch == null ? null : buildManualGitSyncConfig(currentGitBranch)),
-    [currentGitBranch],
-  );
-  const gitStatusForDisplay = useMemo<GitStatusResult | null>(() => {
-    if (currentGitDetachedHead) {
-      return {
-        branch: null,
-        expectedBranch: '',
-        hasUncommittedChanges: false,
-        hasStagedChanges: false,
-        hasUntrackedFiles: false,
-        ahead: 0,
-        behind: 0,
-        remoteRefAvailable: false,
-        unsafeState: 'detachedHead',
-        isWrongBranch: false,
-      };
-    }
-    return gitStatus;
-  }, [currentGitDetachedHead, gitStatus]);
   const {
-    transient: transientGitStatus,
-    show: showTransientGitStatus,
-    clear: clearTransientGitStatus,
-  } = useGitSyncTransientStatus();
-  const showManualGitSyncSuccess = useCallback(
-    (result: SyncRunResult) => {
-      showTransientGitStatus(formatVaultGitSyncSuccessChip(result));
-    },
-    [showTransientGitStatus],
-  );
-  const manualGitSync = useManualVaultGitSync({
-    vaultPath: vaultRoot,
-    config: manualGitSyncConfig,
-    notify: pushNotification,
-    onStart: clearTransientGitStatus,
-    onSuccess: showManualGitSyncSuccess,
-    onSettled: refreshGitStatus,
-  });
-  const backgroundGitOperationBusyRef = useRef(false);
-  useVaultGitRemoteStatusPolling({
-    vaultPath: vaultRoot,
-    remote: GIT_SYNC_REMOTE,
-    branch: currentGitBranch,
-    fetchTimeoutSecs: 30,
-    manualSyncRunning: manualGitSync.running,
-    onRefreshed: refreshGitStatus,
-    gitOperationBusyRef: backgroundGitOperationBusyRef,
-  });
-  const manualSyncDisabledReason = getManualSyncDisabledReason({
-    vaultPath: vaultRoot,
-    gitStatus: gitStatusForDisplay,
-    gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
+    manualGitSync,
+    manualSyncUnavailable,
+    manualSyncLabel,
+    gitStatusForDisplay,
+    transientGitStatus,
+    currentGitBranchLoading,
+    gitStatusLoading,
+    currentGitDetachedHead,
+    currentGitBranchError,
     gitStatusError,
-    branchLoading: currentGitBranchLoading,
-    branchUnavailable: !currentGitDetachedHead && (currentGitBranch == null || currentGitBranchError != null),
-    running: manualGitSync.running,
-  });
-  const manualSyncUnavailable = vaultRoot == null || manualSyncDisabledReason != null;
-  const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
-  const runManualSyncForClose = useMemo(
-    () => buildCloseSyncRunner(manualGitSync.run),
-    [manualGitSync.run],
-  );
-  const {programmaticClose} = useAppOsCloseSync({
+    handleWindowCloseRequest,
+  } = useAppGitSyncOrchestration({
+    vaultPath: vaultRoot,
+    saveSettledNonce,
+    notify: pushNotification,
     desktopPlaybackRef,
     flushInboxSave,
-    manualSyncRequired: vaultRoot != null,
-    manualSyncDisabledReason,
-    manualSyncRunning: manualGitSync.running,
-    runManualSync: runManualSyncForClose,
-    notify: pushNotification,
-  });
-  const closeSyncDisabledNoticeRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (manualSyncDisabledReason == null) {
-      closeSyncDisabledNoticeRef.current = null;
-    }
-  }, [manualSyncDisabledReason]);
-  const handleWindowCloseRequest = useCallback(
-    (input: {instant: boolean}) => {
-      const notifyDisabled =
-        manualSyncDisabledReason != null &&
-        closeSyncDisabledNoticeRef.current !== manualSyncDisabledReason;
-      if (notifyDisabled) {
-        closeSyncDisabledNoticeRef.current = manualSyncDisabledReason;
-      }
-      void handleManualSyncCloseRequest({
-        instant: input.instant,
-        manualSyncDisabledReason,
-        manualSyncRunning: manualGitSync.running,
-        runManualSync: runManualSyncForClose,
-        close: programmaticClose,
-        notify: pushNotification,
-        notifyDisabled,
-        showCloseSyncFeedback: true,
-      });
-    },
-    [manualGitSync.running, manualSyncDisabledReason, programmaticClose, pushNotification, runManualSyncForClose],
-  );
-
-  useVaultGitStartupSync({
-    vaultPath: vaultRoot,
-    gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
-    gitStatusError,
-    manualSyncDisabledReason,
-    manualSyncRunning: manualGitSync.running,
-    runManualSync: manualGitSync.run,
-    notify: pushNotification,
-  });
-
-  useVaultGitAutosyncScheduler({
-    saveSettledNonce,
-    vaultPath: vaultRoot,
-    gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
-    gitStatusError,
-    manualSyncDisabledReason,
-    manualSyncRunning: manualGitSync.running,
-    runManualSync: manualGitSync.run,
-    gitOperationBusyRef: backgroundGitOperationBusyRef,
   });
 
   useAppMainWindowKeyboardEffects({
