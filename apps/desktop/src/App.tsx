@@ -860,7 +860,9 @@ export default function App() {
 
           <AppStatusBar
             onOpenSettings={() => setActivePage('settings')}
-            onManualSync={() => void manualGitSync.run()}
+            onManualSync={() => {
+              manualGitSync.run().catch(() => undefined);
+            }}
             manualSyncBusy={manualGitSync.running}
             manualSyncDisabled={manualSyncUnavailable}
             manualSyncLabel={manualSyncLabel}
