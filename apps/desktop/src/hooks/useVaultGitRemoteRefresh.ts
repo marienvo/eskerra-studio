@@ -29,8 +29,6 @@ export function useVaultGitRemoteRefresh({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<SyncError | null>(null);
   const requestIdRef = useRef(0);
-  const onRefreshedRef = useRef(onRefreshed);
-  onRefreshedRef.current = onRefreshed;
 
   const refresh = useCallback(() => {
     if (manualSyncRunning || vaultPath == null || branch == null) {
@@ -45,14 +43,14 @@ export function useVaultGitRemoteRefresh({
       .then((result) => {
         if (requestId !== requestIdRef.current) return;
         setLoading(false);
-        onRefreshedRef.current?.(result);
+        onRefreshed?.(result);
       })
       .catch((err: unknown) => {
         if (requestId !== requestIdRef.current) return;
         setLoading(false);
         setError(err as SyncError);
       });
-  }, [vaultPath, remote, branch, fetchTimeoutSecs, manualSyncRunning]);
+  }, [vaultPath, remote, branch, fetchTimeoutSecs, manualSyncRunning, onRefreshed]);
 
   return {refresh, loading, error};
 }
