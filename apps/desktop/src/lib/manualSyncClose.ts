@@ -8,7 +8,7 @@ type HandleManualSyncCloseRequestArgs = {
   close: () => void;
   notify: (tone: SessionNotificationTone, text: string) => void;
   notifyDisabled?: boolean;
-  /** When true, shows "Syncing before close…" on start and failure context on failure. */
+  /** When true, shows failure context when sync-before-close fails. */
   showCloseSyncFeedback?: boolean;
 };
 
@@ -41,10 +41,6 @@ export async function handleManualSyncCloseRequest({
     return;
   }
 
-  if (showCloseSyncFeedback) {
-    notify('info', 'Syncing before close…');
-  }
-
   const synced = await runManualSync();
   if (synced) {
     close();
@@ -71,7 +67,6 @@ type HandleOsCloseRequestArgs = {
 /**
  * Handles an OS/window-manager close event:
  * - Guards against duplicate runs via closeSyncInProgressRef.
- * - Notifies the user before sync starts.
  * - Races sync against a timeout.
  * - Calls close() on success; notifies on failure or timeout.
  */
@@ -101,7 +96,6 @@ export async function handleOsCloseRequest({
   }
 
   closeSyncInProgressRef.current = true;
-  notify('info', 'Syncing before close…');
 
   try {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;

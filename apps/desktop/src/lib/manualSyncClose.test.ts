@@ -114,7 +114,7 @@ describe('handleManualSyncCloseRequest', () => {
   });
 
   describe('showCloseSyncFeedback', () => {
-    it('notifies "Syncing before close…" before sync starts', async () => {
+    it('does not notify before sync starts', async () => {
       const notify = vi.fn();
       await handleManualSyncCloseRequest({
         instant: false,
@@ -126,7 +126,7 @@ describe('handleManualSyncCloseRequest', () => {
         showCloseSyncFeedback: true,
       });
 
-      expect(notify).toHaveBeenCalledWith('info', 'Syncing before close…');
+      expect(notify).not.toHaveBeenCalledWith('info', expect.any(String));
     });
 
     it('does not notify start when showCloseSyncFeedback is false', async () => {
@@ -213,7 +213,7 @@ describe('handleOsCloseRequest', () => {
     expect(runManualSync).toHaveBeenCalledTimes(1);
   });
 
-  it('notifies "Syncing before close…" when sync starts', async () => {
+  it('does not notify when sync starts', async () => {
     const notify = vi.fn();
     const closeSyncInProgressRef = {current: false};
 
@@ -226,7 +226,7 @@ describe('handleOsCloseRequest', () => {
       closeSyncInProgressRef,
     });
 
-    expect(notify).toHaveBeenCalledWith('info', 'Syncing before close…');
+    expect(notify).not.toHaveBeenCalledWith('info', expect.any(String));
   });
 
   it('calls close after successful sync', async () => {

@@ -1,4 +1,5 @@
 import type {GitStatusResult, SyncError, SyncRunResult} from './tauriVaultGitSync';
+import type {TransientGitStatus} from '../hooks/useGitSyncTransientStatus';
 
 type ManualSyncDisabledReasonInput = {
   vaultPath: string | null;
@@ -52,6 +53,20 @@ export function formatVaultGitSyncSuccess(result: SyncRunResult): string {
     return 'Vault sync complete.';
   }
   return `Vault sync complete. Committed ${sha.slice(0, 7)}.`;
+}
+
+export function formatVaultGitSyncSuccessChip(result: SyncRunResult): TransientGitStatus {
+  const sha = result.localCommit.commit?.sha;
+  if (sha != null && sha.trim() !== '') {
+    const shortSha = sha.slice(0, 7);
+    return {
+      tone: 'success',
+      label: `Synced • ${shortSha}`,
+      icon: 'check_circle',
+      description: `Committed ${shortSha}`,
+    };
+  }
+  return {tone: 'success', label: 'Synced', icon: 'check_circle'};
 }
 
 function hasType(value: unknown): value is {type: string} {

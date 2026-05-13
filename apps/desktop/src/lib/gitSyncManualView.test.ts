@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  formatVaultGitSyncSuccessChip,
   formatVaultGitSyncError,
   formatVaultGitSyncSuccess,
   getManualSyncDisabledReason,
@@ -165,6 +166,34 @@ describe('formatVaultGitSyncSuccess', () => {
 
   it('formats success without commit', () => {
     expect(formatVaultGitSyncSuccess(syncRunResult)).toBe('Vault sync complete.');
+  });
+});
+
+describe('formatVaultGitSyncSuccessChip', () => {
+  it('formats transient success with commit short SHA', () => {
+    expect(
+      formatVaultGitSyncSuccessChip({
+        ...syncRunResult,
+        localCommit: {
+          ...syncRunResult.localCommit,
+          commit: {sha: 'abcdef1234567890', message: 'chore: sync'},
+          mutated: true,
+        },
+      }),
+    ).toEqual({
+      tone: 'success',
+      label: 'Synced • abcdef1',
+      icon: 'check_circle',
+      description: 'Committed abcdef1',
+    });
+  });
+
+  it('formats transient success without commit', () => {
+    expect(formatVaultGitSyncSuccessChip(syncRunResult)).toEqual({
+      tone: 'success',
+      label: 'Synced',
+      icon: 'check_circle',
+    });
   });
 });
 

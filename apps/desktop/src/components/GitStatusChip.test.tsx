@@ -35,6 +35,34 @@ describe('GitStatusChip', () => {
     expect(chip?.getAttribute('data-tooltip')).toBe('Connection refused');
   });
 
+  it('renders transient status when provided', () => {
+    render(
+      <GitStatusChip
+        status={cleanStatus}
+        transient={{
+          tone: 'success',
+          label: 'Synced • abcdef1',
+          icon: 'check_circle',
+          description: 'Committed abcdef1',
+        }}
+      />,
+    );
+    const chip = screen.getByText('Synced • abcdef1').closest('span');
+    expect(chip?.className).toContain('git-status-chip--success');
+    expect(chip?.getAttribute('aria-label')).toBe('Synced • abcdef1: Committed abcdef1');
+    expect(chip?.getAttribute('data-tooltip')).toBe('Committed abcdef1');
+  });
+
+  it('renders transient status even when status is null', () => {
+    render(
+      <GitStatusChip
+        status={null}
+        transient={{tone: 'success', label: 'Synced', icon: 'check_circle'}}
+      />,
+    );
+    expect(screen.getByText('Synced')).toBeInstanceOf(HTMLElement);
+  });
+
   it('renders syncing state when syncing is true', () => {
     render(<GitStatusChip status={null} syncing />);
     expect(screen.getByText('Syncing…')).toBeInstanceOf(HTMLElement);
@@ -56,6 +84,30 @@ describe('GitStatusChip', () => {
     render(<GitStatusChip status={cleanStatus} error="Connection refused" syncing />);
     expect(screen.getByText('Syncing…')).toBeInstanceOf(HTMLElement);
     expect(screen.queryByText('Git status error')).toBeNull();
+  });
+
+  it('syncing overrides transient status', () => {
+    render(
+      <GitStatusChip
+        status={cleanStatus}
+        syncing
+        transient={{tone: 'success', label: 'Synced • abcdef1', icon: 'check_circle'}}
+      />,
+    );
+    expect(screen.getByText('Syncing…')).toBeInstanceOf(HTMLElement);
+    expect(screen.queryByText('Synced • abcdef1')).toBeNull();
+  });
+
+  it('error overrides transient status', () => {
+    render(
+      <GitStatusChip
+        status={cleanStatus}
+        error="Connection refused"
+        transient={{tone: 'success', label: 'Synced • abcdef1', icon: 'check_circle'}}
+      />,
+    );
+    expect(screen.getByText('Git status error')).toBeInstanceOf(HTMLElement);
+    expect(screen.queryByText('Synced • abcdef1')).toBeNull();
   });
 
   it('sets syncing aria-label and tooltip', () => {

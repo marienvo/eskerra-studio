@@ -21,6 +21,7 @@ import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEdi
 import {EpisodesPane} from './components/EpisodesPane';
 import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
 import {GitStatusChip} from './components/GitStatusChip';
+import {useGitSyncTransientStatus} from './hooks/useGitSyncTransientStatus';
 import {useManualVaultGitSync} from './hooks/useManualVaultGitSync';
 import {useVaultGitCurrentBranch} from './hooks/useVaultGitCurrentBranch';
 import {useVaultGitStatus} from './hooks/useVaultGitStatus';
@@ -50,9 +51,12 @@ import {
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
 import {buildManualGitSyncConfig, GIT_SYNC_REMOTE} from './lib/gitSyncConfig';
-import {getManualSyncDisabledReason} from './lib/gitSyncManualView';
+import {
+  formatVaultGitSyncSuccessChip,
+  getManualSyncDisabledReason,
+} from './lib/gitSyncManualView';
 import {handleManualSyncCloseRequest} from './lib/manualSyncClose';
-import type {GitStatusResult} from './lib/tauriVaultGitSync';
+import type {GitStatusResult, SyncRunResult} from './lib/tauriVaultGitSync';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {writeVaultSettings} from './lib/vaultBootstrap';
 import {AppThemeShell} from './shell/AppThemeShell';
@@ -488,10 +492,23 @@ export default function App() {
     }
     return gitStatus;
   }, [currentGitDetachedHead, gitStatus]);
+  const {
+    transient: transientGitStatus,
+    show: showTransientGitStatus,
+    clear: clearTransientGitStatus,
+  } = useGitSyncTransientStatus();
+  const showManualGitSyncSuccess = useCallback(
+    (result: SyncRunResult) => {
+      showTransientGitStatus(formatVaultGitSyncSuccessChip(result));
+    },
+    [showTransientGitStatus],
+  );
   const manualGitSync = useManualVaultGitSync({
     vaultPath: vaultRoot,
     config: manualGitSyncConfig,
     notify: pushNotification,
+    onStart: clearTransientGitStatus,
+    onSuccess: showManualGitSyncSuccess,
     onSettled: refreshGitStatus,
   });
   useVaultGitRemoteStatusPolling({
@@ -847,6 +864,7 @@ export default function App() {
                 loading={currentGitBranchLoading || gitStatusLoading}
                 error={currentGitDetachedHead ? gitStatusError : currentGitBranchError ?? gitStatusError}
                 syncing={manualGitSync.running}
+                transient={transientGitStatus}
               />
             }
           />
