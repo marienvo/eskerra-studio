@@ -12,7 +12,6 @@ type ManualSyncDisabledReasonInput = {
 };
 
 export function getManualSyncDisabledReason({
-  vaultPath,
   gitStatus,
   gitStatusLoading,
   gitStatusError,
@@ -22,9 +21,6 @@ export function getManualSyncDisabledReason({
 }: ManualSyncDisabledReasonInput): string | null {
   if (running) {
     return 'Syncing vault';
-  }
-  if (vaultPath == null) {
-    return 'Sync vault';
   }
   if (branchLoading) {
     return 'Checking Git branch';

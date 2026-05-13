@@ -137,6 +137,18 @@ describe('getManualSyncDisabledReason', () => {
     ).toBe('Syncing vault');
   });
 
+  it('returns null when no vault path', () => {
+    expect(
+      getManualSyncDisabledReason({
+        vaultPath: null,
+        gitStatus: null,
+        gitStatusLoading: false,
+        gitStatusError: null,
+        running: false,
+      }),
+    ).toBeNull();
+  });
+
   it('returns null when Git status is clean and safe', () => {
     expect(
       getManualSyncDisabledReason({

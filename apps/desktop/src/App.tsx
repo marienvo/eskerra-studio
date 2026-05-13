@@ -528,10 +528,12 @@ export default function App() {
     branchUnavailable: !currentGitDetachedHead && (currentGitBranch == null || currentGitBranchError != null),
     running: manualGitSync.running,
   });
+  const manualSyncUnavailable = vaultRoot == null || manualSyncDisabledReason != null;
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
   const {programmaticClose} = useAppOsCloseSync({
     desktopPlaybackRef,
     flushInboxSave,
+    manualSyncRequired: vaultRoot != null,
     manualSyncDisabledReason,
     manualSyncRunning: manualGitSync.running,
     runManualSync: manualGitSync.run,
@@ -587,7 +589,7 @@ export default function App() {
     setQuickOpenOpen,
     vaultSearchOpen,
     setVaultSearchOpen,
-    manualSyncDisabled: manualSyncDisabledReason != null,
+    manualSyncDisabled: manualSyncUnavailable,
     manualSyncRunning: manualGitSync.running,
     onManualSync: manualGitSync.run,
   });
@@ -856,7 +858,7 @@ export default function App() {
             onOpenSettings={() => setActivePage('settings')}
             onManualSync={() => void manualGitSync.run()}
             manualSyncBusy={manualGitSync.running}
-            manualSyncDisabled={manualSyncDisabledReason != null}
+            manualSyncDisabled={manualSyncUnavailable}
             manualSyncLabel={manualSyncLabel}
             statusIndicator={
               <GitStatusChip

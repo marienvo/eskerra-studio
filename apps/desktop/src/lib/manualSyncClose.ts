@@ -53,6 +53,7 @@ export async function handleManualSyncCloseRequest({
 export const CLOSE_SYNC_TIMEOUT_MS = 30_000;
 
 type HandleOsCloseRequestArgs = {
+  manualSyncRequired?: boolean;
   manualSyncDisabledReason: string | null;
   manualSyncRunning: boolean;
   runManualSync: () => Promise<boolean>;
@@ -71,6 +72,7 @@ type HandleOsCloseRequestArgs = {
  * - Calls close() on success; notifies on failure or timeout.
  */
 export async function handleOsCloseRequest({
+  manualSyncRequired = true,
   manualSyncDisabledReason,
   manualSyncRunning,
   runManualSync,
@@ -80,6 +82,11 @@ export async function handleOsCloseRequest({
   timeoutMs = CLOSE_SYNC_TIMEOUT_MS,
 }: HandleOsCloseRequestArgs): Promise<void> {
   if (closeSyncInProgressRef.current) {
+    return;
+  }
+
+  if (!manualSyncRequired) {
+    close();
     return;
   }
 
