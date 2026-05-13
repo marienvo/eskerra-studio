@@ -39,8 +39,13 @@ pub fn sync_fetch_merge_push(
     verify_remote_branch(vault_path, config, &remote_ref)?;
 
     if let Err(err) = merge_remote(vault_path, config, &remote_ref) {
-        let merge_error = recover_after_merge_failure(vault_path, &pre_merge_sha, err)?;
-        return Err(merge_error);
+        match err {
+            MergeError::Sync(sync_err) => return Err(sync_err),
+            MergeError::NonZero(stderr) => {
+                let merge_error = recover_after_merge_failure(vault_path, &pre_merge_sha, stderr)?;
+                return Err(merge_error);
+            }
+        }
     }
 
     push(vault_path, config)?;
@@ -80,15 +85,24 @@ fn verify_remote_branch(
     })
 }
 
-fn merge_remote(vault_path: &Path, config: &SyncConfig, remote_ref: &str) -> Result<(), String> {
+enum MergeError {
+    Sync(SyncError),
+    NonZero(String),
+}
+
+fn merge_remote(
+    vault_path: &Path,
+    config: &SyncConfig,
+    remote_ref: &str,
+) -> Result<(), MergeError> {
     let out = GitCmd::new(vault_path, &["merge", "--no-edit", remote_ref])
         .timeout(Duration::from_secs(config.timeouts.merge_secs.into()))
         .run()
-        .map_err(|err| format!("{err:?}"))?;
+        .map_err(MergeError::Sync)?;
     if out.success {
         return Ok(());
     }
-    Err(out.stderr)
+    Err(MergeError::NonZero(out.stderr))
 }
 
 fn push(vault_path: &Path, config: &SyncConfig) -> Result<(), SyncError> {
@@ -628,6 +642,40 @@ mod tests {
             }) if remote == "origin" && branch == "tmp"
         ));
         assert!(!remote_branch_exists(f.remote.path(), "tmp"));
+    }
+
+    #[test]
+    fn merge_step_timeout_returns_timeout_error_not_merge_failed() {
+        let f = Fixture::new();
+        git(
+            &["config", "merge.slow.name", "slow test merge"],
+            f.local_path(),
+        );
+        git(&["config", "merge.slow.driver", "sleep 2"], f.local_path());
+        std::fs::write(
+            f.local_path().join(".git/info/attributes"),
+            "slow.md merge=slow\n",
+        )
+        .unwrap();
+
+        commit(f.local_path(), "slow.md", "base\n", "add slow");
+        git(&["push", "origin", "main"], f.local_path());
+
+        let other = f.remote_clone();
+        commit(other.path(), "slow.md", "remote\n", "remote");
+        git(&["push", "origin", "main"], other.path());
+        commit(f.local_path(), "slow.md", "local\n", "local");
+
+        let mut config = f.config();
+        config.timeouts.merge_secs = 1;
+
+        let result = sync_fetch_merge_push(f.local_path(), f.locks_path(), &config);
+
+        assert!(matches!(
+            result,
+            Err(SyncError::Timeout { step, secs }) if step.starts_with("git merge") && secs == 1
+        ));
+        assert!(!merge_head_exists(f.local_path()));
     }
 
     #[test]
