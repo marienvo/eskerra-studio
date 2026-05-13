@@ -1,6 +1,8 @@
 import {act, waitFor} from '@testing-library/react';
 import {beforeEach, describe, expect, it} from 'vitest';
 
+import type {VaultTreeBulkItem} from '../lib/vaultTreeBulkPlan';
+
 import {
   getDesktopMainWindowIntegrationMocks,
   mountHydratedMainWindowWorkspace,
@@ -115,6 +117,164 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (vaultWriteSettled)', ()
 
     await waitFor(() => {
       expect(result.current.persistenceController.saveSettledNonce).toBe(before + 2);
+    });
+
+    unmount();
+  });
+
+  // --- tree mutation callbacks ---
+
+  it('increments the vault write settled signal once after deleteNote', async () => {
+    const noteUri = '/vault/Inbox/ToDelete.md';
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Inbox'],
+      files: {[noteUri]: 'delete me\n'},
+    });
+
+    const before = result.current.persistenceController.saveSettledNonce;
+
+    await act(async () => {
+      await result.current.treeController.deleteNote(noteUri);
+    });
+
+    await waitFor(() => {
+      expect(result.current.persistenceController.saveSettledNonce).toBe(before + 1);
+    });
+
+    unmount();
+  });
+
+  it('does not increment the vault write settled signal when deleteNote fails', async () => {
+    const noteUri = '/vault/Inbox/ToDelete.md';
+    const {fs, result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Inbox'],
+      files: {[noteUri]: 'delete me\n'},
+    });
+
+    const originalUnlink = fs.unlink;
+    fs.unlink = async () => {
+      throw new Error('disk error');
+    };
+
+    const before = result.current.persistenceController.saveSettledNonce;
+
+    await act(async () => {
+      await result.current.treeController.deleteNote(noteUri);
+    });
+
+    expect(result.current.persistenceController.saveSettledNonce).toBe(before);
+
+    fs.unlink = originalUnlink;
+    unmount();
+  });
+
+  it('increments the vault write settled signal once after deleteFolder', async () => {
+    const folderUri = '/vault/UserNotes';
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', folderUri],
+      files: {[`${folderUri}/Note.md`]: 'note\n'},
+    });
+
+    const before = result.current.persistenceController.saveSettledNonce;
+
+    await act(async () => {
+      await result.current.treeController.deleteFolder(folderUri);
+    });
+
+    await waitFor(() => {
+      expect(result.current.persistenceController.saveSettledNonce).toBe(before + 1);
+    });
+
+    unmount();
+  });
+
+  it('increments the vault write settled signal once after renameFolder', async () => {
+    const folderUri = '/vault/OldName';
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', folderUri],
+      files: {[`${folderUri}/Note.md`]: 'note\n'},
+    });
+
+    const before = result.current.persistenceController.saveSettledNonce;
+
+    await act(async () => {
+      await result.current.treeController.renameFolder(folderUri, 'NewName');
+    });
+
+    await waitFor(() => {
+      expect(result.current.persistenceController.saveSettledNonce).toBe(before + 1);
+    });
+
+    unmount();
+  });
+
+  it('increments the vault write settled signal once after moveVaultTreeItem', async () => {
+    const sourceUri = '/vault/Source/Note.md';
+    const targetDir = '/vault/Target';
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Source', targetDir],
+      files: {[sourceUri]: 'note\n'},
+    });
+
+    const before = result.current.persistenceController.saveSettledNonce;
+
+    await act(async () => {
+      await result.current.treeController.moveVaultTreeItem(sourceUri, 'article', targetDir);
+    });
+
+    await waitFor(() => {
+      expect(result.current.persistenceController.saveSettledNonce).toBe(before + 1);
+    });
+
+    unmount();
+  });
+
+  it('increments the vault write settled signal exactly once after bulkDeleteVaultTreeItems (batch of two)', async () => {
+    const noteA = '/vault/Inbox/NoteA.md';
+    const noteB = '/vault/Inbox/NoteB.md';
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Inbox'],
+      files: {[noteA]: 'a\n', [noteB]: 'b\n'},
+    });
+
+    const before = result.current.persistenceController.saveSettledNonce;
+    const items: VaultTreeBulkItem[] = [
+      {uri: noteA, kind: 'article'},
+      {uri: noteB, kind: 'article'},
+    ];
+
+    await act(async () => {
+      await result.current.treeController.bulkDeleteVaultTreeItems(items);
+    });
+
+    await waitFor(() => {
+      expect(result.current.persistenceController.saveSettledNonce).toBe(before + 1);
+    });
+
+    unmount();
+  });
+
+  it('increments the vault write settled signal exactly once after bulkMoveVaultTreeItems (batch of two)', async () => {
+    const noteA = '/vault/Source/NoteA.md';
+    const noteB = '/vault/Source/NoteB.md';
+    const targetDir = '/vault/Target';
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: ['/vault', '/vault/Source', targetDir],
+      files: {[noteA]: 'a\n', [noteB]: 'b\n'},
+    });
+
+    const before = result.current.persistenceController.saveSettledNonce;
+    const items: VaultTreeBulkItem[] = [
+      {uri: noteA, kind: 'article'},
+      {uri: noteB, kind: 'article'},
+    ];
+
+    await act(async () => {
+      await result.current.treeController.bulkMoveVaultTreeItems(items, targetDir);
+    });
+
+    await waitFor(() => {
+      expect(result.current.persistenceController.saveSettledNonce).toBe(before + 1);
     });
 
     unmount();

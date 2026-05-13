@@ -3058,6 +3058,7 @@ export function useMainWindowWorkspace(options: {
           delete next[uri];
           return next;
         });
+        markVaultWriteSettled();
         await refreshNotes(vaultRoot);
         setFsRefreshNonce(n => n + 1);
       } catch (e) {
@@ -3077,6 +3078,7 @@ export function useMainWindowWorkspace(options: {
       mirrorShadowActiveTab,
       mirrorShadowHomeSurface,
       saveChainRef,
+      markVaultWriteSettled,
     ],
   );
 
@@ -3184,6 +3186,7 @@ export function useMainWindowWorkspace(options: {
             await openMarkdownInEditor(nextUri, {skipHistory: true});
           }
         }
+        markVaultWriteSettled();
         await refreshNotes(vaultRoot);
         setFsRefreshNonce(n => n + 1);
       } catch (e) {
@@ -3203,6 +3206,7 @@ export function useMainWindowWorkspace(options: {
       mirrorShadowActiveTab,
       mirrorShadowHomeSurface,
       saveChainRef,
+      markVaultWriteSettled,
     ],
   );
 
@@ -3283,6 +3287,7 @@ export function useMainWindowWorkspace(options: {
           setEditorWorkspaceTabs,
         });
         remapHomeStatesPrefix(oldUri, normalizedNext);
+        markVaultWriteSettled();
         await refreshNotes(vaultRoot);
         setFsRefreshNonce(n => n + 1);
       } catch (e) {
@@ -3300,6 +3305,7 @@ export function useMainWindowWorkspace(options: {
       remapHomeStatesPrefix,
       autosaveSchedulerRef,
       flushInboxSaveRef,
+      markVaultWriteSettled,
     ],
   );
 
@@ -3429,6 +3435,7 @@ export function useMainWindowWorkspace(options: {
           targetDirectoryUri,
         });
         commitMoveVaultTreeResult(result);
+        markVaultWriteSettled();
         await refreshNotes(vaultRoot);
         setFsRefreshNonce(n => n + 1);
       } catch (e) {
@@ -3444,6 +3451,7 @@ export function useMainWindowWorkspace(options: {
       commitMoveVaultTreeResult,
       autosaveSchedulerRef,
       flushInboxSaveRef,
+      markVaultWriteSettled,
     ],
   );
 
@@ -3548,6 +3556,7 @@ export function useMainWindowWorkspace(options: {
             await openMarkdownInEditor(nextUri, {skipHistory: true});
           }
         }
+        markVaultWriteSettled();
         await refreshNotes(vaultRoot);
         setFsRefreshNonce(n => n + 1);
         setVaultTreeSelectionClearNonce(n => n + 1);
@@ -3566,6 +3575,7 @@ export function useMainWindowWorkspace(options: {
       clearInboxSelection,
       autosaveSchedulerRef,
       saveChainRef,
+      markVaultWriteSettled,
     ],
   );
 
@@ -3592,6 +3602,7 @@ export function useMainWindowWorkspace(options: {
           });
           commitMoveVaultTreeResult(result);
         }
+        markVaultWriteSettled();
         await refreshNotes(vaultRoot);
         setFsRefreshNonce(n => n + 1);
         setVaultTreeSelectionClearNonce(n => n + 1);
@@ -3608,6 +3619,7 @@ export function useMainWindowWorkspace(options: {
       commitMoveVaultTreeResult,
       autosaveSchedulerRef,
       flushInboxSaveRef,
+      markVaultWriteSettled,
     ],
   );
 
