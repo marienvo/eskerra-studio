@@ -1,4 +1,4 @@
-import {useEffect, useRef} from 'react';
+import {useEffect, useEffectEvent, useRef} from 'react';
 
 import type {SessionNotificationTone} from '../lib/sessionNotifications';
 
@@ -29,11 +29,12 @@ export function useVaultGitStartupSync({
   // Tracks all vault paths that have already triggered startup sync this session.
   const attemptedVaultPathsRef = useRef(new Set<string>());
 
-  // Stable refs so the effect never needs to re-register when callbacks change identity.
-  const runManualSyncRef = useRef(runManualSync);
-  runManualSyncRef.current = runManualSync;
-  const notifyRef = useRef(notify);
-  notifyRef.current = notify;
+  const runStartupSync = useEffectEvent(async () => {
+    const success = await runManualSync({silent: true});
+    if (!success) {
+      notify('error', 'Startup sync failed. You can retry manually.');
+    }
+  });
 
   useEffect(() => {
     if (vaultPath == null) return;
@@ -48,10 +49,6 @@ export function useVaultGitStartupSync({
     // Mark before the async run to guard against re-entry from intermediate rerenders.
     attemptedVaultPathsRef.current.add(vaultPath);
 
-    void runManualSyncRef.current({silent: true}).then(success => {
-      if (!success) {
-        notifyRef.current('error', 'Startup sync failed. You can retry manually.');
-      }
-    });
+    runStartupSync();
   }, [vaultPath, gitStatusLoading, gitStatusError, manualSyncDisabledReason, manualSyncRunning]);
 }
