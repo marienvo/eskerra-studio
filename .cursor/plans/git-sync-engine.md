@@ -104,7 +104,7 @@ Next recommended phases:
 7. Add low-noise remote polling and remote-change status. ✅ **Done**
 8. Add sync-on-close with Shift bypass. ✅ **Done** (custom title-bar path only; see Phase H status note)
 9. Add sync-on-startup after the safer manual-close path exists. ✅ **Done**
-10. Defer batched autosync / sync-needed scheduling until conflict handling and settings are ready.
+10. Add batched autosync / sync-needed scheduling. ✅ **Done**
 11. Track `GitStatusChip` Storybook coverage in the UI polish/documentation lane.
 12. Defer settings/config UI and conflict backup/policy resolution as separate follow-up phases.
 
@@ -112,17 +112,24 @@ Next recommended phases:
 
 Last audited: 2026-05-12.
 
-### Phase A — Refresh Git status after every successful vault write ✅ Implemented
+### Phase A — Shared save-settled signal after every successful vault write ✅ Implemented
 
-**Files:** `useMainWindowWorkspace.ts`, `workspacePersistence.ts`, `App.tsx`
+**Files:** `useMainWindowWorkspace.ts`, `workspacePersistence.ts`, `App.tsx`, `useVaultGitLocalWriteStatusRefresh.ts`
 
 `useMainWindowWorkspace` owns `vaultWriteSettledNonce` (a counter that increments on every successful disk write). `markVaultWriteSettled()` is called from two paths:
 - `workspacePersistence.ts` at every successful `saveNoteMarkdown` call (normal note autosave and manual save).
 - Directly inside `useMainWindowWorkspace` at every TodayHub row persist and TodayHub row delete.
 
-`App.tsx` has a `useEffect` on `saveSettledNonce` that calls both `refreshCurrentGitBranch()` and `refreshGitStatus()` (skipping the initial zero value).
+As of the Phase J/G hardening pass, `App.tsx` also wires `saveSettledNonce` into `useVaultGitLocalWriteStatusRefresh`. When the nonce advances, the hook calls only the existing local `refreshGitStatus()` path so the status chip learns about local uncommitted changes shortly after note and TodayHub saves.
 
-**Tests:** `workspacePersistence.test.ts` covers persistence paths. No dedicated integration test asserting "TodayHub write triggers git status refresh" as an observable end-to-end signal, but the code path is correctly wired.
+This write-settled refresh is status-only:
+- no `manualGitSync.run()`
+- no `vault_git_sync_run`
+- no remote fetch
+
+Vault writes still only mark sync-needed for actual Git sync. Batched autosync remains responsible for consuming pending work at most once per interval.
+
+**Tests:** `workspacePersistence.test.ts` covers persistence paths, `useMainWindowWorkspace.hydrateVault.test.ts` covers nonce increments for note and TodayHub writes, and `useVaultGitLocalWriteStatusRefresh.test.ts` covers local status refresh without sync.
 
 ---
 
@@ -187,12 +194,14 @@ The `GitCmd` timeout loop was updated to use a back-off strategy: 10 ms initial 
 
 **Part 2 — Polling scheduler (frontend only):**
 - New `useVaultGitRemoteStatusPolling` hook: 5-minute interval (`REMOTE_POLL_INTERVAL_MS = 5 * 60 * 1000`) plus `visibilitychange` refresh when window becomes visible.
-- No polling while `manualSyncRunning`, `vaultPath == null`, or `branch == null` (guarded in `useVaultGitRemoteRefresh`).
+- No polling while `manualSyncRunning`, `vaultPath == null`, `branch == null`, or a shared frontend Git operation busy ref is set (guarded in `useVaultGitRemoteRefresh`).
 - On failure, last-known status is preserved; no toast notification.
 - No autosync, no `vault_git_sync_run` invocation, no background commit/push.
 - Wired in `App.tsx`; `onRefreshed` calls `refreshGitStatus` to update the status chip via remote-tracking refs.
 
-**Note:** The status chip shows "Remote changes" based on `behind > 0` from remote-tracking refs. Remote polling keeps this state fresh without requiring a manual sync first. The 5-minute interval is hardcoded with a TODO and should stay conservative until per-vault settings (Phase L) exist.
+**Phase J/G hardening:** `App.tsx` owns a shared frontend `backgroundGitOperationBusyRef` used by remote polling and autosync. Remote polling sets the ref while `vault_git_remote_status` is in flight; autosync checks the same ref before starting. This prevents same-tick interval overlap between remote fetch/status refresh and background autosync. Skipped remote polls are silent and do not clear or mutate the last-known status.
+
+**Note:** The status chip shows "Remote changes" based on `behind > 0` from remote-tracking refs. Remote polling keeps this state fresh without requiring a manual sync first. The 5-minute interval is hardcoded with a TODO and should stay conservative until per-vault settings (Phase L) exist. The Phase J/G hardening did not change this interval.
 
 ---
 
@@ -252,9 +261,32 @@ The `GitCmd` timeout loop was updated to use a back-off strategy: 10 ms initial 
 
 ---
 
-### Phase J — Batched autosync / sync-needed scheduler ❌ Not implemented
+### Phase J — Batched autosync / sync-needed scheduler ✅ Implemented
 
-No throttled/coalesced Git sync scheduler exists for local changes. The `saveSettledNonce` signal exists (Phase A) and is the required foundation for marking sync-needed, but no scheduler or autosync hook reads it to run Git sync at most once per configured interval.
+**Files:** `useVaultGitAutosyncScheduler.ts`, `useVaultGitAutosyncScheduler.test.ts`, `useVaultGitLocalWriteStatusRefresh.ts`, `useVaultGitRemoteRefresh.ts`, `useVaultGitRemoteStatusPolling.ts`, `App.tsx`
+
+Vault writes advance the existing `saveSettledNonce` signal. `useVaultGitAutosyncScheduler` treats each non-zero nonce change as "sync needed" and coalesces all pending writes behind a fixed interval (`AUTOSYNC_INTERVAL_MS = 5 * 60 * 1000`).
+
+The Phase J/G hardening restored immediate local status visibility separately from autosync: `useVaultGitLocalWriteStatusRefresh` calls only `refreshGitStatus()` when `saveSettledNonce` advances. This keeps the status chip current for note and TodayHub local changes after saves without starting a sync, fetching remotes, or calling `vault_git_sync_run`.
+
+The scheduler is the only autosync trigger for local writes. It runs `useManualVaultGitSync.run({ silent: true })` at most once per interval and only when the normal manual-sync gates are open:
+- vault path exists
+- Git status/branch are not loading
+- Git status has no error
+- manual sync is not disabled
+- manual sync is not already running
+- no autosync run is already in flight
+- no shared frontend Git operation is in flight
+
+Successful autosync clears only the write generation that was current when the run started. If another vault write settles during the sync, the scheduler leaves sync-needed pending for the next interval. Failed sync attempts keep sync-needed pending and retry on later intervals. Switching vault paths resets pending sync-needed state so writes from one vault do not trigger autosync in another vault. If autosync skips because remote polling is currently refreshing, pending sync-needed work is preserved for a later interval. Success and failure notifications are silent for this background path.
+
+**Shared frontend busy gate:** `App.tsx` owns `backgroundGitOperationBusyRef` and passes it to both `useVaultGitRemoteStatusPolling` / `useVaultGitRemoteRefresh` and `useVaultGitAutosyncScheduler`.
+- Remote polling skips while manual/autosync sync is running.
+- Autosync skips while remote polling is refreshing.
+- Skips are silent and do not create notifications.
+- The autosync and remote-poll intervals remain unchanged.
+
+**Tests:** `useVaultGitAutosyncScheduler.test.ts` covers no mount sync, save-only marking, interval sync, coalescing, no-op without pending writes, gate preservation, retry after failure, no overlapping runs, vault-switch reset, preserving newer writes during an in-flight sync, and preserving pending work when a remote refresh is in flight. `useVaultGitRemoteRefresh.test.ts` and `useVaultGitRemoteStatusPolling.test.ts` cover the shared busy gate. `useVaultGitLocalWriteStatusRefresh.test.ts` covers write-settled local status refresh without sync.
 
 ---
 
@@ -270,6 +302,37 @@ No `GitStatusChip.stories.tsx` exists. The chip states (loading, error, syncing,
 
 ---
 
+### Phase N — Manual/close sync preflight + close progress overlay ✅ Implemented
+
+**Files:** `gitSyncPreflight.ts`, `gitSyncPreflight.test.ts`, `CloseSyncProgressOverlay.tsx`, `manualSyncClose.ts`, `useVaultGitStartupSync.ts`, `useVaultGitAutosyncScheduler.ts`, `useAppMainWindowKeyboardEffects.ts`, `useAppOsCloseSync.ts`, `useAppGitSyncOrchestration.ts`, `App.tsx`
+
+`shouldRunVaultGitSync(status, intent)` is a pure preflight helper. It returns `false` (skip sync) when:
+- status is null and intent is not `manual`
+- status is clean/synced (nothing to do) for any intent including `manual`
+- status has unsafeState or isWrongBranch and intent is not `manual`
+- status is behind-only and intent is `close`, `startup`, or `autosync`
+- status has an error (unsafeState) and intent is not `manual`
+
+The helper is wired into Ctrl/Cmd+S (keyboard intent, silent no-op when false), close sync in both custom-titlebar and OS-close paths (close immediately when false), startup sync (skip silently when false), and autosync scheduler (clear pending when clean/synced, keep pending when unknown/error). The manual button is not gated by preflight.
+
+`CloseSyncProgressOverlay` renders a full-window semi-transparent overlay with "Syncing before close…" text when `visible` is true. It is wired into `useAppOsCloseSync` via reactive `closeSyncInProgress` state, exposed through `useAppGitSyncOrchestration`, and rendered in all three `App.tsx` branches.
+
+All hooks use an `undefined`-sentinel pattern for the optional `gitStatus` parameter: when `gitStatus` is `undefined` (not passed by callers that have not yet wired preflight), the preflight check is skipped and the hook behaves as before.
+
+**Tests:** 35 tests in `gitSyncPreflight.test.ts`; 8 tests in `useAppMainWindowKeyboardEffects.test.ts` (+2 new); 14 tests in `manualSyncClose.titleBar.test.ts` (+2 new); 13 tests in `manualSyncClose.os.test.ts` (+2 new); 15 tests in `useVaultGitStartupSync.test.ts` (+2 new); 14 tests in `useVaultGitAutosyncScheduler.test.ts` (+3 new). 1433 Vitest tests total pass. `tsc --noEmit` clean, lint clean, `check-module-budgets.mjs` clean.
+
+Implementation summary:
+- Ctrl/Cmd+S now silently no-ops when preflight says there is nothing to sync.
+- Close sync now skips sync and closes immediately when status is clean/no-op; behind-only does not block close.
+- Startup sync now skips silently when status is clean/no-op.
+- Autosync skips full sync when status is clean and clears pending; preserves pending for unknown/error status.
+- Manual sync button remains explicit and is not gated by preflight.
+- Diverged state still runs through the existing conservative sync path for all intents.
+- Close sync now shows a centered blocking progress overlay (`CloseSyncProgressOverlay`) while actually syncing before close; the overlay is not shown for clean/no-op close or Shift bypass; cleared on failure or timeout when the app remains open.
+- No Rust changes. No settings UI. No conflict policy/backup behavior. No autosync interval change.
+
+---
+
 ### Recommended next implementation order
 
 Given the above, the recommended order is:
@@ -278,15 +341,16 @@ Given the above, the recommended order is:
 2. **Phase G** — Remote polling + "Remote changes" chip state. ✅ **Done** (5-minute interval + visibilitychange; no autosync)
 3. **Phase H OS gap** — OS-level close interception via `onCloseRequested`. ✅ **Done** (30 s timeout; allow-close guard; dedup; shared `programmaticClose`)
 4. **Phase I** — Sync on startup (custom-close and OS-close now both stable; Phase G exists). ✅ **Done**
-5. **Phase K** — GitStatusChip Storybook coverage (independent; can happen any time, low risk, good to do before the chip grows more states).
-6. **Phase L** — Settings/config UI (prerequisite for batched autosync and per-vault config).
-7. **Phase M** — Conflict backup and policy handling (prerequisite for enabling batched autosync safely).
-8. **Phase J** — Batched autosync / sync-needed scheduler (last; depends on L and M).
-9. **Phase 8** — Code quality review of all touched files (final cleanup pass per the plan).
+5. **Phase J** — Batched autosync / sync-needed scheduler. ✅ **Done** (interval-batched; local write status refresh restored separately; remote polling/autosync overlap guarded by shared frontend busy ref)
+6. **Phase K** — GitStatusChip Storybook coverage (independent; can happen any time, low risk, good to do before the chip grows more states).
+7. **Phase L** — Settings/config UI (still not implemented; needed for persisted/per-vault sync configuration).
+8. **Phase M** — Conflict backup and policy handling (still not implemented; needed before richer background conflict behavior).
+9. **Phase N** — Manual/close sync preflight + close progress overlay. ✅ **Done** (preflight helper + close overlay + wiring into Ctrl/S, close, startup, autosync paths)
+10. **Phase 8** — Code quality review of all touched files (final cleanup pass per the plan).
 
 ## Next sync UX phases
 
-This section plans the next desktop UX and orchestration work after the manual sync milestone. This pass is intentionally documentation-only: no autosync implementation, no code changes, no conflict handling changes, and no replacement of the temporary hardcoded remote/branch/config yet.
+This section originally planned the desktop UX and orchestration work after the manual sync milestone. It is retained as a historical planning appendix; the current implementation status above is authoritative.
 
 Recommended implementation order:
 A. Fix status refresh for all vault writes, including TodayHub. ✅ **Done**
@@ -298,17 +362,24 @@ F. Clean up `GitCmd` timeout wait behavior. ✅ **Done**
 G. Add remote polling / remote changes refresh strategy. ✅ **Done**
 H. Add sync on close with Shift bypass. ✅ **Done** (custom title bar + OS/window close; 30 s timeout; see Phase H status)
 I. Add sync on startup. ✅ **Done** (once per vault per session; silent on success including no-op; error on failure; see Phase I status)
-J. Later: batched autosync / sync-needed scheduler.
+J. Batched autosync / sync-needed scheduler. ✅ **Done** (interval-batched; no sync-after-save; Phase J/G hardening added local status refresh and shared remote/autosync busy gate)
 K. UI polish/documentation: add `GitStatusChip` Storybook coverage.
 L. Later: settings/config UI.
 M. Later: conflict backup/policy resolution.
+N. UX hardening: manual/close sync preflight + close progress overlay.
 
-### Phase A — Refresh Git status after every successful vault write
+### Phase A — Refresh Git status after every successful vault write ✅ Implemented
 
 Goal:
 - Make the Git status chip reflect any successful persisted vault change, not only normal note saves.
-- Fix the observed TodayHub bug where edits leave the chip at "Synced" until a normal note is edited.
+- Fix the observed TodayHub bug where edits could leave the chip at "Synced" until a normal note was edited. ✅ Resolved by routing note and TodayHub writes through `saveSettledNonce` plus `useVaultGitLocalWriteStatusRefresh`.
 - Move the refresh trigger to the shared persistence/save-settled path so normal notes, TodayHub writes, and future vault writers all get the same behavior.
+
+Current behavior:
+- Successful vault writes advance `saveSettledNonce`.
+- `useVaultGitLocalWriteStatusRefresh` observes that nonce and calls only `refreshGitStatus()`.
+- This is local status-only: no sync run, no remote fetch, no notification.
+- The same nonce also marks sync-needed for Phase J autosync; actual Git sync remains interval-batched.
 
 Files likely touched:
 - `apps/desktop/src/hooks/` save orchestration and persistence hooks.
@@ -638,26 +709,27 @@ Recommended safe default:
 - Show only chip in-progress state during the run; show a notification only on actionable failure or when local/remote changes were actually synchronized.
 - Make it internally feature-flag/config-ready so a later settings phase can expose "sync on startup".
 
-### Phase J — Later batched autosync / sync-needed scheduler
+### Phase J — Batched autosync / sync-needed scheduler ✅ Implemented
 
 Goal:
-- Eventually add a throttled/coalesced scheduler that syncs local changes at most once per configured interval.
-- Build it on the same save-settled signal from Phase A so TodayHub and normal note writes can mark sync-needed identically.
-- Keep batched autosync opt-in or config-gated until conflict handling and settings exist.
+- Add a throttled/coalesced scheduler that syncs local changes at most once per configured interval. ✅ Implemented.
+- Build it on the same save-settled signal from Phase A so TodayHub and normal note writes can mark sync-needed identically. ✅ Implemented.
+- Keep future configurability ready for settings/config UI, which is still not implemented.
 - Preserve frequent local disk persistence. Vault writes may mark a dirty/sync-needed flag, but must not immediately run Git sync each time.
 
 Files likely touched:
 - Shared save-settled signal from Phase A.
-- Git sync-needed scheduler/throttler in `apps/desktop/src/features/gitSync/`.
-- Settings/config store once Phase L exists.
+- Git sync-needed scheduler/throttler in `apps/desktop/src/hooks/useVaultGitAutosyncScheduler.ts`.
+- Local write status refresh in `apps/desktop/src/hooks/useVaultGitLocalWriteStatusRefresh.ts`.
+- Remote/autosync overlap gate in `useVaultGitRemoteRefresh.ts`, `useVaultGitRemoteStatusPolling.ts`, and `App.tsx`.
+- Settings/config store once Phase L exists. ❌ Not implemented.
 - Notification policy and status chip.
 
 Explicit non-goals:
-- Do not add batched autosync before the preceding UX and safety phases.
 - Do not sync on every keystroke.
 - Do not sync after every save/write/letter.
 - Do not run Git sync immediately for every vault write.
-- Do not autosync while unsafe, wrong branch, missing config, status loading/error, offline/auth failing repeatedly, manual sync is running, or another autosync is already running.
+- Do not autosync while unsafe, wrong branch, missing config, status loading/error, offline/auth failing repeatedly, manual sync is running, another autosync is already running, or remote polling is currently refreshing.
 - Do not invent conflict-resolution UX in the batched autosync scheduler.
 
 Tests:
@@ -665,20 +737,20 @@ Tests:
 - TodayHub writes and note saves mark sync-needed through the same signal.
 - Failed writes do not mark sync-needed.
 - Autosync runs at most once per configured interval and never overlaps itself.
-- Autosync pauses/backoffs after repeated failures.
+- Autosync failures keep pending work for a later interval.
 - Manual sync remains available immediately and cancels, clears, or supersedes a pending autosync without duplicate runs.
 - Autosync does not run while manual sync is running and refreshes Git status after completion/failure.
+- Autosync skips while remote polling is refreshing and preserves pending work.
+- Remote polling skips while manual/autosync sync is running without clearing status or showing a toast.
 
 Risks:
-- Batched autosync without conflict policy/settings can surprise users by surfacing merge failures in the background.
+- Conflict backup/policy handling is still not implemented, so richer background conflict behavior remains deferred.
 - Repeated network/auth failures can become noisy.
-- Save bursts from imports or refactors can cause too many sync attempts without a robust scheduler.
+- Save bursts from imports or refactors are coalesced by the interval scheduler, but future settings should make the interval configurable.
 
 Recommendation:
-- Do not implement batched autosync yet.
-- Treat older wording such as "autosync after saves" as inaccurate: disk persistence remains frequent and local; Git sync must be batched/throttled/coalesced.
-- Add only the save-settled/sync-needed signal foundation now.
-- Revisit after remote-change display, close/startup behavior, settings, and conflict backup/policy decisions are in place.
+- Treat wording such as "autosync after saves" as inaccurate: disk persistence remains frequent and local; Git sync is batched/throttled/coalesced.
+- Keep settings/config UI and conflict backup/policy decisions as separate follow-up phases.
 
 ### Phase K — UI polish/documentation: `GitStatusChip` Storybook coverage
 
@@ -771,6 +843,75 @@ Risks:
 - Conflict policy mistakes can overwrite user-visible note content.
 - Backup/callout behavior needs clear defaults before batched autosync.
 - Rename, binary, symlink, and delete conflicts need conservative handling.
+
+### Phase N — Manual/close sync preflight + close progress overlay ✅ Implemented
+
+Status: ✅ Implemented. See implementation summary in § "Current implementation status" above.
+
+Goal:
+- Stop Ctrl/Cmd+S from running a full sync when there is nothing meaningful to sync.
+- Stop close/exit sync from running when there is no local work to commit/push and no other clearly actionable sync state.
+- When close sync does need to run, give the user a clear central/blocking progress UI instead of relying on the small status-bar chip.
+
+Files likely touched:
+- `apps/desktop/src/features/gitSync/` — preflight helper (e.g., `shouldRunSyncForStatus(status)`) and any orchestrator that calls it from Ctrl/Cmd+S and close paths.
+- `apps/desktop/src/hooks/` — keyboard shortcut hook (manual sync entry from Ctrl/Cmd+S) and close-sync orchestrator/hook.
+- `apps/desktop/src/App.tsx` or a sibling shell component for hosting the close progress overlay.
+- New presentational component for the close progress overlay (DS-aligned; central modal-style surface, not a chip).
+- Tests next to each touched file (preflight helper, keyboard hook, close orchestrator, overlay component).
+
+Explicit non-goals:
+- Do not change the Rust sync engine or `vault_git_sync_run` contract.
+- Do not change the manual sync button's behavior: it remains an intentionally explicit "force a sync/check" entry point.
+- Do not remove or replace the existing `GitStatusChip` syncing state; the chip stays as the ambient indicator. The overlay is additive for the close path only.
+- Do not introduce a new long-running scheduler. Preflight is a pure decision over the most recent `GitStatusResult`.
+- Do not auto-merge or auto-pull remote-only changes as part of close behavior.
+
+Preflight design:
+- Reuse the existing `GitStatusResult` shape — no new Rust call, no extra `vault_git_sync_run` round trip just to discover there is nothing to do.
+- Add a small pure helper, e.g. `shouldRunSyncForStatus(status: GitStatusResult): boolean`, that returns true when at least one of the following is true:
+  - local (working-tree) changes are present
+  - staged changes are present (if surfaced by status)
+  - untracked files are present
+  - `ahead > 0`
+  - the repo is in a diverged state that the plan treats as actionable on this path
+- Remote-only behind state (`behind > 0`, `ahead === 0`, clean working tree) should not block close. Closing is allowed to proceed without sync; remote changes will be picked up by startup sync / remote polling on next launch.
+- Unsafe states (merge/rebase/cherry-pick in progress, wrong branch, detached HEAD, missing config) should not trigger close sync — they already disable manual sync, and the user needs to resolve them explicitly.
+- Stale-or-unavailable status fallback: if the latest status is loading, errored, or missing (`null`), the safe choice is to **skip close sync and close immediately**, and document this fallback inline. Rationale: the user just asked to close; a stale status is not strong enough evidence to delay exit. (Manual Ctrl/Cmd+S in the same situation may still no-op silently for parity.)
+- Ctrl/Cmd+S consults the same helper. When it returns false, the shortcut is a silent no-op (no toast, no chip flash). The manual sync button does **not** consult the helper and always runs.
+
+Close progress overlay:
+- Renders centrally over the app surface while a close sync is in flight (after preflight has said "yes, sync"). It should not be a small chip-sized affordance.
+- Suggested content:
+  - Title: "Syncing before close…"
+  - Body: "Eskerra is saving your vault before closing."
+  - Secondary hint: "Hold Shift next time to close instantly."
+  - Optional minimal spinner/progress indication consistent with the design system.
+- The overlay is shown only for close-driven sync. Background autosync and manual Ctrl/Cmd+S keep using the existing chip.
+- Failure path: on close sync failure, hide the overlay and keep the app open (consistent with the existing close-failure policy). Surface the failure via the existing error path (toast/chip), not the overlay.
+- Timeout path: on close sync timeout, hide the overlay and keep the app open. Same surfacing as failure.
+- Shift-close still bypasses sync entirely and therefore never shows the overlay.
+
+Tests:
+- Ctrl/Cmd+S with clean/synced status does not call `vault_git_sync_run`.
+- Ctrl/Cmd+S with local changes calls `vault_git_sync_run`.
+- Close with clean/synced status closes without running sync and without showing the overlay.
+- Close with local changes shows the close progress overlay and runs sync.
+- Close sync failure hides the overlay and keeps the app open.
+- Close sync timeout hides the overlay and keeps the app open.
+- Shift-close still bypasses sync and the overlay regardless of status.
+- The manual sync button still runs `vault_git_sync_run` on a clean/synced status (intentionally explicit).
+- Stale/unknown status on close path takes the documented safe fallback (close immediately) and is asserted in a test.
+
+Risks:
+- A too-eager preflight could skip a sync that the user actually expected (e.g., a state the helper does not yet recognize as actionable). Mitigation: keep the predicate explicit and easy to read; cover each "yes" condition with a dedicated test.
+- An overlay that is hard to dismiss on failure can feel like the app is stuck closing. Mitigation: always hide overlay on failure/timeout and keep the app interactive.
+- Divergence between Ctrl/Cmd+S preflight and close preflight could surprise users. Mitigation: a single shared helper used by both.
+- Adding the overlay component close to shell rendering risks coupling sync logic into UI. Mitigation: keep the overlay presentational; let the close orchestrator own state.
+
+Open questions:
+- Exact visual treatment of the central overlay (modal vs. inline central card) — to be resolved against the design system before implementation.
+- Whether the overlay should expose a "Cancel and close anyway" affordance, given that the current policy keeps the app open on failure. Default for first cut: no cancel button; rely on Shift-close as the documented bypass.
 
 Open questions and decisions to carry forward:
 - Remote polling should start with narrow fetch-based refresh because it updates local remote-tracking refs and keeps status comparison simple. The polling interval should be conservative, around 3-5 minutes while visible/focused, plus focus-return refresh with cooldown.
