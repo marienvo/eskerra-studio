@@ -1,4 +1,4 @@
-import {useEffect, useEffectEvent} from 'react';
+import {useEffect, useEffectEvent, type MutableRefObject} from 'react';
 
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 import {useVaultGitRemoteRefresh} from './useVaultGitRemoteRefresh';
@@ -12,6 +12,7 @@ type UseVaultGitRemoteStatusPollingInput = {
   fetchTimeoutSecs: number;
   manualSyncRunning: boolean;
   onRefreshed?: (result: GitStatusResult) => void;
+  gitOperationBusyRef?: MutableRefObject<boolean>;
 };
 
 /**
@@ -29,6 +30,7 @@ export function useVaultGitRemoteStatusPolling({
   fetchTimeoutSecs,
   manualSyncRunning,
   onRefreshed,
+  gitOperationBusyRef,
 }: UseVaultGitRemoteStatusPollingInput): void {
   const {refresh} = useVaultGitRemoteRefresh({
     vaultPath,
@@ -37,6 +39,7 @@ export function useVaultGitRemoteStatusPolling({
     fetchTimeoutSecs,
     manualSyncRunning,
     onRefreshed,
+    gitOperationBusyRef,
   });
 
   const triggerRefresh = useEffectEvent(() => refresh());

@@ -27,6 +27,8 @@ import {useVaultGitCurrentBranch} from './hooks/useVaultGitCurrentBranch';
 import {useVaultGitStatus} from './hooks/useVaultGitStatus';
 import {useVaultGitRemoteStatusPolling} from './hooks/useVaultGitRemoteStatusPolling';
 import {useVaultGitStartupSync} from './hooks/useVaultGitStartupSync';
+import {useVaultGitAutosyncScheduler} from './hooks/useVaultGitAutosyncScheduler';
+import {useVaultGitLocalWriteStatusRefresh} from './hooks/useVaultGitLocalWriteStatusRefresh';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
@@ -245,7 +247,6 @@ export default function App() {
     detachedHead: currentGitDetachedHead,
     loading: currentGitBranchLoading,
     error: currentGitBranchError,
-    refresh: refreshCurrentGitBranch,
   } = useVaultGitCurrentBranch({vaultPath: vaultRoot});
   const {
     status: gitStatus,
@@ -253,11 +254,10 @@ export default function App() {
     error: gitStatusError,
     refresh: refreshGitStatus,
   } = useVaultGitStatus({vaultPath: vaultRoot, remote: GIT_SYNC_REMOTE, branch: currentGitBranch});
-  useEffect(() => {
-    if (saveSettledNonce === 0) return;
-    refreshCurrentGitBranch();
-    refreshGitStatus();
-  }, [saveSettledNonce, refreshCurrentGitBranch, refreshGitStatus]);
+  useVaultGitLocalWriteStatusRefresh({
+    saveSettledNonce,
+    refreshGitStatus,
+  });
   const {
     err,
     setErr,
@@ -511,6 +511,7 @@ export default function App() {
     onSuccess: showManualGitSyncSuccess,
     onSettled: refreshGitStatus,
   });
+  const backgroundGitOperationBusyRef = useRef(false);
   useVaultGitRemoteStatusPolling({
     vaultPath: vaultRoot,
     remote: GIT_SYNC_REMOTE,
@@ -518,6 +519,7 @@ export default function App() {
     fetchTimeoutSecs: 30,
     manualSyncRunning: manualGitSync.running,
     onRefreshed: refreshGitStatus,
+    gitOperationBusyRef: backgroundGitOperationBusyRef,
   });
   const manualSyncDisabledReason = getManualSyncDisabledReason({
     vaultPath: vaultRoot,
@@ -579,6 +581,17 @@ export default function App() {
     manualSyncRunning: manualGitSync.running,
     runManualSync: manualGitSync.run,
     notify: pushNotification,
+  });
+
+  useVaultGitAutosyncScheduler({
+    saveSettledNonce,
+    vaultPath: vaultRoot,
+    gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
+    gitStatusError,
+    manualSyncDisabledReason,
+    manualSyncRunning: manualGitSync.running,
+    runManualSync: manualGitSync.run,
+    gitOperationBusyRef: backgroundGitOperationBusyRef,
   });
 
   useAppMainWindowKeyboardEffects({

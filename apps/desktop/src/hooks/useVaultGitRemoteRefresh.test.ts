@@ -136,6 +136,33 @@ describe('useVaultGitRemoteRefresh', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('is a no-op when another frontend Git operation is running', async () => {
+    const gitOperationBusyRef = {current: true};
+    const {result, onRefreshed} = renderRemoteRefresh({gitOperationBusyRef});
+
+    act(() => { result.current.refresh(); });
+
+    await act(async () => { await new Promise(r => setTimeout(r, 10)); });
+    expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
+    expect(onRefreshed).not.toHaveBeenCalled();
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(gitOperationBusyRef.current).toBe(true);
+  });
+
+  it('marks the frontend Git operation busy only while refresh is in flight', async () => {
+    const gitOperationBusyRef = {current: false};
+    const load = deferred<GitStatusResult>();
+    mockRefreshVaultGitRemoteStatus.mockImplementation(() => load.promise);
+    const {result} = renderRemoteRefresh({gitOperationBusyRef});
+
+    act(() => { result.current.refresh(); });
+
+    expect(gitOperationBusyRef.current).toBe(true);
+    await act(async () => { load.resolve(cleanResult); });
+    await waitFor(() => expect(gitOperationBusyRef.current).toBe(false));
+  });
+
   it('is a no-op when vaultPath is null', async () => {
     const {result} = renderRemoteRefresh({vaultPath: null});
 

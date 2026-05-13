@@ -101,6 +101,19 @@ describe('useVaultGitRemoteStatusPolling', () => {
     expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
   });
 
+  it('does not poll when another frontend Git operation is running', async () => {
+    vi.useFakeTimers();
+    const gitOperationBusyRef = {current: true};
+    const onRefreshed = vi.fn();
+    renderPolling({gitOperationBusyRef, onRefreshed});
+
+    await act(async () => { vi.advanceTimersByTime(REMOTE_POLL_INTERVAL_MS); });
+
+    expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
+    expect(onRefreshed).not.toHaveBeenCalled();
+    expect(gitOperationBusyRef.current).toBe(true);
+  });
+
   it('does not poll when vaultPath is null', async () => {
     vi.useFakeTimers();
     renderPolling({vaultPath: null});
