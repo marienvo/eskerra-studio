@@ -248,6 +248,22 @@ No dropped dependencies, no stale closures, no mutation paths missed, no danger-
 
 ---
 
+## PR #2 candidate selection — 2026-05-14 — cycle 1
+
+**Selected candidate:** Candidate C — `popNextReopenableClosedTabRecord`.
+
+Reasoning:
+
+- **Risk:** C stays on the closed-tab stack and does not touch the cache / persistence / watcher / editor-save quadrangle. B is also low-risk, but it sits in dev/test persistence divergence diagnostics immediately adjacent to PR #1's persistence-map work; doing another persistence-adjacent extraction next would concentrate review risk in the same area.
+- **LOC reduction:** B likely removes more lines from `useMainWindowWorkspace.ts`; C removes fewer. For PR #2, the smaller reduction is acceptable because the loop is still validating extraction discipline after PR #1.
+- **Testability:** C has the sharper test matrix: empty stack, first record reopenable, stale records before a valid record, and all stale. PR #1's review exposed that loose assertions can miss branch-specific behavior, so PR #2 should prefer the candidate whose expected mutations and return values are easiest to assert exactly.
+- **Merge-conflict reduction:** B would reduce future conflict around dev diagnostics; C reduces conflicts around editor closed-tab behavior and moves that logic toward `editorClosedTabStack.ts`, where related predicates already live. C's reduction is smaller but cleaner.
+- **Loop decision:** continue the two-week loop. PR #1 was accepted after tiny test/comment follow-ups; no process weakness warrants a pause. The adjustment for PR #2 is to write exact-value tests from the start, not just existence checks.
+
+**Why B waits:** `collectShadowDivergenceDevDiagnostics` remains a good PR #3 candidate, but it is more coupled to the shadow-model persistence comparison context and will need careful tests around diagnostic suppression and pending projection hubs. Let C go next as the more mechanical extraction; return to B once the loop has two low-risk extractions through review.
+
+---
+
 ## Baseline — 2026-05-14 — cycle 1
 
 **Branch:** `cleaning-things-up`
