@@ -165,7 +165,7 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 ## Baseline — 2026-05-14 — cycle 1
 
 **Branch:** `cleaning-things-up`
-**Commit:** `1290736b`
+**Commit:** `c21891f7`
 
 Measurements:
 
