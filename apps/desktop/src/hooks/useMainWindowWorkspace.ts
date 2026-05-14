@@ -111,6 +111,7 @@ import {
   deriveTodayHubSettings,
   deriveTodayHubSelectorItems,
   deriveTodayHubWorkspacesPersistFiltered,
+  injectActiveHubIntoTodayHubPersistMap,
   mergeHomeHistoryIntoHubSnapshotsForPersist,
 } from './workspaceTodayHubDerived';
 import {useWorkspaceTodayHubSwitch} from './workspaceTodayHubSwitch';
@@ -852,33 +853,13 @@ export function useMainWindowWorkspace(options: {
       filtered,
       homeStatesByHub,
     );
-    if (activeTodayHubUri == null) {
-      return merged;
-    }
-    const hub = activeTodayHubUri;
-    const prior = merged[hub];
-    if (!prior) {
-      const home = homeStatesByHub[hub] ?? createWorkspaceHomeState(hub);
-      return {
-        ...merged,
-        [hub]: {
-          editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
-          activeEditorTabId,
-          homeHistory: {
-            entries: [...home.history.entries],
-            index: home.history.index,
-          },
-        },
-      };
-    }
-    return {
-      ...merged,
-      [hub]: {
-        ...prior,
-        editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
-        activeEditorTabId,
-      },
-    };
+    return injectActiveHubIntoTodayHubPersistMap({
+      merged,
+      activeTodayHubUri,
+      homeStatesByHub,
+      editorWorkspaceTabs,
+      activeEditorTabId,
+    });
   }, [
     vaultMarkdownRefs,
     todayHubWorkspacesForSave,
