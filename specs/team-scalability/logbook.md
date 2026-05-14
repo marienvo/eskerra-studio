@@ -162,6 +162,50 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## PR — 2026-05-14 — #TBD — extract injectActiveHubIntoTodayHubPersistMap
+
+**Cycle:** 1
+**Type:** pure refactor
+**Author session:** opus 4.7 — cycle-1 extraction session
+
+**What moved**
+
+- From: `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (inline block inside `legacyTodayHubWorkspacesPersistFiltered` useMemo, lines ~855–881)
+- To: `apps/desktop/src/hooks/workspaceTodayHubDerived.ts` (new exported function at end of file)
+- LOC delta source: 4118 → 4099 (`wc -l`; script-counted cap lowered from 4119 → 4100)
+- LOC new module: `workspaceTodayHubDerived.ts` grew from 107 → 153 (+46)
+- Tests added: 4 new unit tests in `workspaceTodayHubDerived.test.ts` (`injectActiveHubIntoTodayHubPersistMap` describe block)
+
+**Module budget**
+
+- Baseline entries changed: `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (4119 → 4100)
+- Direction: down only? yes
+- New file respects NEW_FILE_MAX_LINES (400)? yes (`workspaceTodayHubDerived.ts` is 153 LOC)
+
+**Behavior**
+
+- Behavior change: no
+
+**Verification**
+
+- `npm run lint`: pass
+- `npm test` (relevant workspace — `workspaceTodayHubDerived.test.ts`): pass (22 tests)
+- `npm run check:architecture`: pass
+- Manual smoke test: n/a — pure refactor with no UI surface; useMemo dependency array unchanged
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+The inline block after `mergeHomeHistoryIntoHubSnapshotsForPersist(...)` was a pure derivation reading five already-in-scope values and returning a new map. Moving it to `workspaceTodayHubDerived.ts` completes the trio: `deriveTodayHubWorkspacesPersistFiltered` → `mergeHomeHistoryIntoHubSnapshotsForPersist` → `injectActiveHubIntoTodayHubPersistMap`. The useMemo body shrinks from ~28 lines to ~8 lines; dependency array is unchanged.
+
+Budget discrepancy note: `wc -l` reports 4099; the budget script (`split(/\r?\n/).length`) counts 4100 due to the trailing newline making one extra segment. The baseline was lowered to 4100 (script-compatible unit) to match the actual enforced number.
+
+---
+
 ## Baseline — 2026-05-14 — cycle 1
 
 **Branch:** `cleaning-things-up`

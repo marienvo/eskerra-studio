@@ -7,6 +7,10 @@ import {
 } from '@eskerra/core';
 
 import {editorOpenTabPillLabel} from '../lib/editorOpenTabPillLabel';
+import {
+  tabsToStored,
+  type EditorWorkspaceTab,
+} from '../lib/editorWorkspaceTabs';
 import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
 import {
   createWorkspaceHomeState,
@@ -104,4 +108,47 @@ export function mergeHomeHistoryIntoHubSnapshotsForPersist(
     };
   }
   return out;
+}
+
+/**
+ * Overlays the live editor-tab state for the active hub onto an already-merged
+ * persist map. Pure: reads params only, returning `merged` unchanged when no
+ * active hub is selected.
+ */
+export function injectActiveHubIntoTodayHubPersistMap(params: {
+  merged: Record<string, TodayHubWorkspaceSnapshot>;
+  activeTodayHubUri: string | null;
+  homeStatesByHub: Record<string, WorkspaceHomeState>;
+  editorWorkspaceTabs: EditorWorkspaceTab[];
+  activeEditorTabId: string | null;
+}): Record<string, TodayHubWorkspaceSnapshot> {
+  const {merged, activeTodayHubUri, homeStatesByHub, editorWorkspaceTabs, activeEditorTabId} =
+    params;
+  if (activeTodayHubUri == null) {
+    return merged;
+  }
+  const hub = activeTodayHubUri;
+  const prior = merged[hub];
+  if (!prior) {
+    const home = homeStatesByHub[hub] ?? createWorkspaceHomeState(hub);
+    return {
+      ...merged,
+      [hub]: {
+        editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
+        activeEditorTabId,
+        homeHistory: {
+          entries: [...home.history.entries],
+          index: home.history.index,
+        },
+      },
+    };
+  }
+  return {
+    ...merged,
+    [hub]: {
+      ...prior,
+      editorWorkspaceTabs: tabsToStored(editorWorkspaceTabs),
+      activeEditorTabId,
+    },
+  };
 }
