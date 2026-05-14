@@ -79,3 +79,23 @@ export function pushClosedTabsFromCloseAll(
     }
   }
 }
+
+/**
+ * Pops records from `stack` until a reopenable record is found or the stack is exhausted.
+ * Mutates `stack` in place (LIFO pop semantics).
+ */
+export function popNextReopenableClosedTabRecord(
+  stack: ClosedEditorTabRecord[],
+  vaultRoot: string | null,
+  noteUriSet: ReadonlySet<string>,
+): {record: ClosedEditorTabRecord | null; popped: number} {
+  let popped = 0;
+  while (stack.length > 0) {
+    const rec = stack.pop()!;
+    popped += 1;
+    if (isEditorClosedTabReopenable(rec.uri, vaultRoot, noteUriSet)) {
+      return {record: rec, popped};
+    }
+  }
+  return {record: null, popped};
+}

@@ -162,6 +162,51 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## PR — 2026-05-14 — #TBD — extract popNextReopenableClosedTabRecord
+
+**Cycle:** 1
+**Type:** pure refactor
+**Author session:** sonnet 4.6 — cycle-1 extraction session
+
+**What moved**
+
+- From: `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (inline `while` loop inside `reopenLastClosedEditorTab` callback, lines ~2251–2265)
+- To: `apps/desktop/src/lib/editorClosedTabStack.ts` (new exported function, collocated with `isEditorClosedTabReopenable`)
+- LOC delta source: 4099 → 4099 (`wc -l`; script-counted cap unchanged at 4100)
+- LOC new module: `editorClosedTabStack.ts` grew from 81 → 101 (+20)
+- Tests added: 4 new unit tests in `editorClosedTabStack.test.ts` (`popNextReopenableClosedTabRecord` describe block)
+
+**Module budget**
+
+- Baseline entries changed: none (LOC delta in `useMainWindowWorkspace.ts` is 0 — the while loop removal is offset by the hoisted `noteSet` computation and the function call; the cap of 4100 is met but not undercut)
+- Direction: down only? yes (no entry raised; cap held)
+- New file respects NEW_FILE_MAX_LINES (400)? yes (`editorClosedTabStack.ts` is 101 LOC; not tracked in the baseline JSON)
+
+**Behavior**
+
+- Behavior change: no
+- **Intentional coalescing of `bumpEditorClosedStack()` calls.** The original loop called `bumpEditorClosedStack()` once per pop (N calls for N pops). The new caller calls it once when `popped > 0` (at most one call per invocation). This is not callback-identical to the original, but is explicitly behavior-neutral: `bumpEditorClosedStack` only snapshots `editorClosedTabsStackRef.current` into state (`setEditorClosedTabsStackSnapshot([...ref.current])`). All N calls within a single synchronous async-IIFE run are batched by React's automatic batching into one render with the final snapshot — the same result as one call after all pops. The coalescing is intentional and documented here rather than preserved via `for (let i = 0; i < popped; i++) bumpEditorClosedStack()`, which would be misleading about the actual effect.
+
+**Verification**
+
+- `npm run lint`: pass
+- `npm test` (relevant workspace — `editorClosedTabStack.test.ts`): pass (10 tests)
+- `npm run check:architecture`: pass
+- Manual smoke test: n/a — pure refactor with no UI surface; callback dependency array unchanged
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+The inline while loop read from `editorClosedTabsStackRef.current` (the closed-tab LIFO stack, distinct from the danger-zone persistence surface) and mutated it via `pop()`. The extracted helper encapsulates that mutation — caller retains ownership of `bumpEditorClosedStack()` and `openMarkdownInEditor`. Positional parameter style was chosen over a params object to match the existing convention in `editorClosedTabStack.ts` (`isEditorClosedTabReopenable` uses positional params).
+
+The LOC-neutral delta on `useMainWindowWorkspace.ts` is expected: the while loop (15 lines) is replaced by a one-line call, but the `noteSet` computation was hoisted out of the loop (saving 3 repeat allocations per call), the `popped` guard was added, and the `openMarkdownInEditor` branch gained an explicit `if (record)` check. Net: 0. The baseline cap is held at 4100 but not lowered this cycle.
+
+---
+
 ## PR — 2026-05-14 — #TBD — extract injectActiveHubIntoTodayHubPersistMap
 
 **Cycle:** 1

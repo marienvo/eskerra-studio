@@ -87,6 +87,7 @@ import {
 import {
   type ClosedEditorTabRecord,
   isEditorClosedTabReopenable,
+  popNextReopenableClosedTabRecord,
 } from '../lib/editorClosedTabStack';
 import {
   createEditorWorkspaceTab,
@@ -2248,20 +2249,19 @@ export function useMainWindowWorkspace(options: {
     void (async () => {
       const root = vaultRootRef.current;
       const stack = editorClosedTabsStackRef.current;
-      while (stack.length > 0) {
-        const rec = stack.pop()!;
+      const noteSet = new Set(
+        notesRef.current.map(n => n.uri.replace(/\\/g, '/')),
+      );
+      const {record, popped} = popNextReopenableClosedTabRecord(stack, root, noteSet);
+      if (popped > 0) {
         bumpEditorClosedStack();
-        const noteSet = new Set(
-          notesRef.current.map(n => n.uri.replace(/\\/g, '/')),
-        );
-        if (isEditorClosedTabReopenable(rec.uri, root, noteSet)) {
-          await openMarkdownInEditor(rec.uri, {
-            newTab: true,
-            activateNewTab: true,
-            insertAtIndex: rec.index,
-          });
-          return;
-        }
+      }
+      if (record) {
+        await openMarkdownInEditor(record.uri, {
+          newTab: true,
+          activateNewTab: true,
+          insertAtIndex: record.index,
+        });
       }
     })();
   }, [openMarkdownInEditor, bumpEditorClosedStack]);

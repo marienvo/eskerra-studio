@@ -1,7 +1,9 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  type ClosedEditorTabRecord,
   isEditorClosedTabReopenable,
+  popNextReopenableClosedTabRecord,
   pushClosedTabsFromCloseAll,
   pushClosedTabsFromCloseOther,
 } from './editorClosedTabStack';
@@ -47,5 +49,50 @@ describe('pushClosedTabsFromCloseAll', () => {
     const s: string[] = [];
     pushClosedTabsFromCloseAll(s, ['/a.md', '/b.md'], null);
     expect(s).toEqual(['/b.md', '/a.md']);
+  });
+});
+
+describe('popNextReopenableClosedTabRecord', () => {
+  const vault = '/vault';
+  // Any URI under /vault ending in .md is reopenable; URIs outside /vault are stale.
+  const noteSet = new Set<string>();
+
+  const rec = (uri: string, index: number): ClosedEditorTabRecord => ({uri, index});
+
+  it('returns { record: null, popped: 0 } and leaves an empty stack unchanged', () => {
+    const stack: ClosedEditorTabRecord[] = [];
+    expect(popNextReopenableClosedTabRecord(stack, vault, noteSet))
+      .toEqual({record: null, popped: 0});
+    expect(stack).toEqual([]);
+  });
+
+  it('pops the top entry and returns popped: 1 when it is reopenable', () => {
+    const stack = [rec('/vault/Other.md', 1), rec('/vault/Note.md', 0)];
+    const result = popNextReopenableClosedTabRecord(stack, vault, noteSet);
+    expect(result).toEqual({record: rec('/vault/Note.md', 0), popped: 1});
+    expect(stack).toEqual([rec('/vault/Other.md', 1)]);
+  });
+
+  it('skips stale top entries and returns the first reopenable one with correct popped count', () => {
+    const stack = [
+      rec('/vault/Untouched.md', 3),
+      rec('/vault/Reopenable.md', 2),
+      rec('/outside/stale2.md', 1),
+      rec('/outside/stale1.md', 0),
+    ];
+    const result = popNextReopenableClosedTabRecord(stack, vault, noteSet);
+    expect(result).toEqual({record: rec('/vault/Reopenable.md', 2), popped: 3});
+    expect(stack).toEqual([rec('/vault/Untouched.md', 3)]);
+  });
+
+  it('pops all entries and returns { record: null, popped: N } when all are stale', () => {
+    const stack = [
+      rec('/outside/c.md', 2),
+      rec('/outside/b.md', 1),
+      rec('/outside/a.md', 0),
+    ];
+    const result = popNextReopenableClosedTabRecord(stack, vault, noteSet);
+    expect(result).toEqual({record: null, popped: 3});
+    expect(stack).toEqual([]);
   });
 });
