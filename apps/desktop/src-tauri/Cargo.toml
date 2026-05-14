@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.35.0"
+version = "0.35.3"
 description = "Desktop companion for your local Eskerra vault — notes, podcasts, and playback."
 authors = ["Eskerra contributors"]
 license = "AGPL-3.0-only"
@@ -19,6 +19,9 @@ tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 serde_json = "1.0"
+fs2 = "0.4"
+glob = "0.3"
+sha2 = "0.10"
 serde_yaml = "0.9"
 regex = "1"
 serde = { version = "1.0", features = ["derive"] }

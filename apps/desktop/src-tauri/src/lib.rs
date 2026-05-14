@@ -1,14 +1,15 @@
 mod crash_log;
 mod link_rich_metadata;
-mod r2_http;
-mod tiling;
 #[cfg(target_os = "linux")]
 mod linux_app_identity;
+mod r2_http;
+mod tiling;
 #[cfg(target_os = "linux")]
 mod tiling_gdk;
 mod tiling_score;
 mod vault;
 mod vault_frontmatter_index;
+mod vault_git_sync;
 mod vault_search;
 mod vault_search_index;
 mod vault_watch;
@@ -106,6 +107,11 @@ pub fn run() {
             vault_frontmatter_index::vault_frontmatter_index_values_for_key,
             vault_frontmatter_index::vault_frontmatter_index_touch_paths,
             vault_watch::vault_start_watch,
+            vault_git_sync::commands::vault_git_current_branch,
+            vault_git_sync::commands::vault_git_status,
+            vault_git_sync::commands::vault_git_remote_status,
+            vault_git_sync::commands::vault_git_stage_plan,
+            vault_git_sync::commands::vault_git_sync_run,
             crash_log::eskerra_append_crash_log,
         ])
         .run(tauri::generate_context!())

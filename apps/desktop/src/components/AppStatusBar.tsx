@@ -1,4 +1,7 @@
+import type {ReactNode} from 'react';
+
 import {MaterialIcon} from './MaterialIcon';
+import './AppStatusBar.css';
 
 /** Shared with {@link AppSetupTagline} and main {@link AppStatusBar}. */
 export const APP_SHELL_TAGLINE = 'Think. Compose. Nothing else.';
@@ -14,9 +17,21 @@ export function AppSetupTagline() {
 
 type AppStatusBarProps = {
   onOpenSettings: () => void;
+  onManualSync?: () => void;
+  manualSyncBusy?: boolean;
+  manualSyncDisabled?: boolean;
+  manualSyncLabel?: string;
+  statusIndicator?: ReactNode;
 };
 
-export function AppStatusBar({onOpenSettings}: AppStatusBarProps) {
+export function AppStatusBar({
+  onOpenSettings,
+  onManualSync,
+  manualSyncBusy = false,
+  manualSyncDisabled = false,
+  manualSyncLabel = 'Sync vault',
+  statusIndicator,
+}: AppStatusBarProps) {
   return (
     <footer className="app-status-bar">
       <div className="app-status-bar-center-stack">
@@ -25,6 +40,20 @@ export function AppStatusBar({onOpenSettings}: AppStatusBarProps) {
         </p>
       </div>
       <div className="app-status-bar-trailing">
+        {statusIndicator}
+        {onManualSync ? (
+          <button
+            type="button"
+            className="app-status-bar-icon-tile app-tooltip-trigger icon-btn-ghost"
+            aria-label={manualSyncLabel}
+            data-tooltip={manualSyncLabel}
+            data-tooltip-placement="inline-start"
+            disabled={manualSyncBusy || manualSyncDisabled}
+            onClick={onManualSync}
+          >
+            <MaterialIcon name="sync" size={12} />
+          </button>
+        ) : null}
         <button
           type="button"
           className="app-status-bar-icon-tile app-tooltip-trigger icon-btn-ghost"

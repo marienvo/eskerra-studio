@@ -2,6 +2,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  type MutableRefObject,
 } from 'react';
 
 import {
@@ -9,6 +10,8 @@ import {
   reduceDoubleShiftKeyDown,
   reduceDoubleShiftKeyUp,
 } from '../lib/doubleShiftKeySequence';
+import {shouldRunVaultGitSync} from '../lib/gitSyncPreflight';
+import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 type AppMainWindowKeyboardEffectsArgs = {
   vaultRoot: string | null;
@@ -22,6 +25,11 @@ type AppMainWindowKeyboardEffectsArgs = {
   setQuickOpenOpen: (open: boolean) => void;
   vaultSearchOpen: boolean;
   setVaultSearchOpen: (open: boolean) => void;
+  manualSyncDisabled?: boolean;
+  manualSyncRunning?: boolean;
+  onManualSync?: () => void;
+  /** Ref holding the current GitStatusResult for preflight checks. Kept as a ref to avoid re-registering the listener. */
+  gitStatusRef?: MutableRefObject<GitStatusResult | null>;
 };
 
 export function useAppMainWindowKeyboardEffects({
@@ -36,6 +44,10 @@ export function useAppMainWindowKeyboardEffects({
   setQuickOpenOpen,
   vaultSearchOpen,
   setVaultSearchOpen,
+  manualSyncDisabled = true,
+  manualSyncRunning = false,
+  onManualSync,
+  gitStatusRef,
 }: AppMainWindowKeyboardEffectsArgs) {
   const canReopenClosedEditorTabRef = useRef(canReopenClosedEditorTab);
   const reopenLastClosedEditorTabRef = useRef(reopenLastClosedEditorTab);
@@ -57,6 +69,53 @@ export function useAppMainWindowKeyboardEffects({
   useLayoutEffect(() => {
     vaultSearchOpenRef.current = vaultSearchOpen;
   }, [vaultSearchOpen]);
+
+  const onManualSyncRef = useRef(onManualSync);
+  const manualSyncDisabledRef = useRef(manualSyncDisabled);
+  const manualSyncRunningRef = useRef(manualSyncRunning);
+  // Hold a stable ref to the gitStatusRef pointer so we avoid listing it as an effect dep.
+  const gitStatusRefHolderRef = useRef(gitStatusRef);
+  useLayoutEffect(() => {
+    onManualSyncRef.current = onManualSync;
+    manualSyncDisabledRef.current = manualSyncDisabled;
+    manualSyncRunningRef.current = manualSyncRunning;
+    gitStatusRefHolderRef.current = gitStatusRef;
+  }, [onManualSync, manualSyncDisabled, manualSyncRunning, gitStatusRef]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!vaultRoot) {
+        return;
+      }
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod || e.shiftKey || e.altKey) {
+        return;
+      }
+      if (e.key !== 's' && e.key !== 'S') {
+        return;
+      }
+      if (
+        manualSyncDisabledRef.current ||
+        manualSyncRunningRef.current ||
+        !onManualSyncRef.current
+      ) {
+        return;
+      }
+      // Preflight: skip sync silently if status says nothing to do.
+      // Only applies when a gitStatusRef is wired up; absent ref means "no preflight" (legacy callers).
+      const currentGitStatusRef = gitStatusRefHolderRef.current;
+      if (currentGitStatusRef != null && !shouldRunVaultGitSync(currentGitStatusRef.current, 'keyboard')) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      onManualSyncRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [vaultRoot]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

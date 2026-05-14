@@ -10,6 +10,7 @@ import {
   statusMessageSignature,
   upsertRenameProgressItem,
   type SessionNotification,
+  type SessionNotificationTone,
 } from '../lib/sessionNotifications';
 
 function hasStatusNotificationWithMessage(
@@ -157,6 +158,18 @@ export function useSessionNotifications(
     setItems([]);
   }, []);
 
+  const pushItem = useCallback((tone: SessionNotificationTone, text: string) => {
+    const id = crypto.randomUUID();
+    setItems(prev =>
+      appendNotification(prev, {
+        id,
+        tone,
+        text,
+        source: 'manualGitSync',
+      }),
+    );
+  }, []);
+
   const openPanelAndHighlight = useCallback((id: string) => {
     onOpenPanelRef.current();
     setHighlightId(id);
@@ -199,6 +212,7 @@ export function useSessionNotifications(
     items,
     dismissItem,
     clearAll,
+    pushItem,
     highlightId,
     linkedNotificationId,
     openPanelAndHighlight,

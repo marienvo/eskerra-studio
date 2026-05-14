@@ -6,7 +6,6 @@
 import {open} from '@tauri-apps/plugin-dialog';
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -20,6 +19,7 @@ import {VaultTab} from './components/VaultTab.tsx';
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
 import {EpisodesPane} from './components/EpisodesPane';
 import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
+import {GitStatusChip} from './components/GitStatusChip';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
@@ -30,17 +30,12 @@ import {useEditorHistoryMouseButtons} from './hooks/useEditorHistoryMouseButtons
 import {useMainWindowWorkspace} from './hooks/useMainWindowWorkspace';
 import {usePreventMiddleClickPaste} from './hooks/usePreventMiddleClickPaste';
 import {ThemedChromeBackground} from './theme/ThemedChromeBackground';
-import type {EditorWorkspaceTab} from './lib/editorWorkspaceTabs';
-
 import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
 } from './lib/layoutStore';
 import {
-  buildStoredMainWindowInboxForPersist,
   DEFAULT_MAIN_WINDOW_PANE_VISIBILITY,
-  saveMainWindowUi,
-  type StoredMainWindowUi,
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
@@ -54,87 +49,15 @@ import {useAppOnMountLayoutHydration} from './shell/useAppOnMountLayoutHydration
 import {useAppRootClassName} from './shell/useAppRootClassName';
 import {useAppTauriCloseAndFocusSave} from './shell/useAppTauriCloseAndFocusSave';
 import {useAppTauriDocumentChrome} from './shell/useAppTauriDocumentChrome';
+import {useAppGitSyncOrchestration} from './shell/useAppGitSyncOrchestration';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
 import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
+import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
+import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
 
 import './App.css';
 
 type AppPage = 'vault' | 'settings';
-
-type UseAppDebouncedPersistMainWindowUiArgs = {
-  vaultRoot: string | null;
-  inboxShellRestored: boolean;
-  vaultPaneVisible: boolean;
-  episodesPaneVisible: boolean;
-  inboxPaneVisible: boolean;
-  notificationsPanelVisible: boolean;
-  composingNewEntry: boolean;
-  selectedUri: string | null;
-  activeTodayHubUri: string | null;
-  persistenceTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
-  vaultMarkdownRefs: readonly {uri: string; name: string}[];
-  editorWorkspaceTabs: readonly EditorWorkspaceTab[];
-  activeEditorTabId: string | null;
-};
-
-function useAppDebouncedPersistMainWindowUi({
-  vaultRoot,
-  inboxShellRestored,
-  vaultPaneVisible,
-  episodesPaneVisible,
-  inboxPaneVisible,
-  notificationsPanelVisible,
-  composingNewEntry,
-  selectedUri,
-  activeTodayHubUri,
-  persistenceTodayHubWorkspaces,
-  vaultMarkdownRefs,
-  editorWorkspaceTabs,
-  activeEditorTabId,
-}: UseAppDebouncedPersistMainWindowUiArgs) {
-  useEffect(() => {
-    if (!vaultRoot || !inboxShellRestored) {
-      return;
-    }
-    const inbox = buildStoredMainWindowInboxForPersist({
-      composingNewEntry,
-      selectedUri,
-      activeTodayHubUri,
-      todayHubWorkspaces: persistenceTodayHubWorkspaces,
-      vaultMarkdownRefs,
-      editorWorkspaceTabs,
-      activeEditorTabId,
-    });
-    const payload: StoredMainWindowUi = {
-      vaultRoot,
-      vaultPaneVisible,
-      episodesPaneVisible,
-      inboxPaneVisible,
-      notificationsPanelVisible,
-      inbox,
-    };
-    const t = window.setTimeout(() => {
-      void saveMainWindowUi(payload);
-    }, 200);
-    return () => {
-      window.clearTimeout(t);
-    };
-  }, [
-    vaultRoot,
-    vaultPaneVisible,
-    episodesPaneVisible,
-    inboxPaneVisible,
-    notificationsPanelVisible,
-    selectedUri,
-    composingNewEntry,
-    activeTodayHubUri,
-    persistenceTodayHubWorkspaces,
-    inboxShellRestored,
-    vaultMarkdownRefs,
-    editorWorkspaceTabs,
-    activeEditorTabId,
-  ]);
-}
 
 export default function App() {
   const {maximized} = useTauriWindowMaximized();
@@ -223,6 +146,7 @@ export default function App() {
     onInboxSaveShortcut,
     onCleanNoteInbox,
     flushInboxSave,
+    saveSettledNonce,
   } = workspacePersistenceController;
   const {
     err,
@@ -332,20 +256,6 @@ export default function App() {
   const [quickOpenOpen, setQuickOpenOpen] = useState(false);
   const [vaultSearchOpen, setVaultSearchOpen] = useState(false);
 
-  useAppMainWindowKeyboardEffects({
-    vaultRoot,
-    busy,
-    canReopenClosedEditorTab: workspaceTabsController.canReopenClosedEditorTab,
-    reopenLastClosedEditorTab: workspaceTabsController.reopenLastClosedEditorTab,
-    composingNewEntry,
-    selectedUri,
-    onCleanNoteInbox,
-    quickOpenOpen,
-    setQuickOpenOpen,
-    vaultSearchOpen,
-    setVaultSearchOpen,
-  });
-
   const [layouts, setLayouts] = useState<StoredLayouts>(DEFAULT_LAYOUTS);
   const [notificationsPanelVisible, setNotificationsPanelVisible] = useState(true);
 
@@ -434,13 +344,14 @@ export default function App() {
     persistNotificationsWidthPx,
   } = useAppLayoutWidthPersisters(setLayouts);
 
-  useAppTauriCloseAndFocusSave(desktopPlaybackRef, flushInboxSave);
+  useAppTauriCloseAndFocusSave(flushInboxSave);
 
   const {
     items: notificationItems,
     dismissItem: dismissNotification,
     clearAll: clearAllNotifications,
     highlightId: notificationHighlightId,
+    pushItem: pushNotification,
   } = useAppNotificationSession({
     err,
     diskConflict,
@@ -449,6 +360,51 @@ export default function App() {
     statusBarCenter,
     renameLinkProgress,
     setNotificationsPanelVisible,
+  });
+  const {
+    manualGitSync,
+    manualSyncUnavailable,
+    manualSyncLabel,
+    gitStatusForDisplay,
+    transientGitStatus,
+    currentGitBranchLoading,
+    gitStatusLoading,
+    currentGitDetachedHead,
+    currentGitBranchError,
+    gitStatusError,
+    handleWindowCloseRequest,
+    closeSyncInProgress,
+  } = useAppGitSyncOrchestration({
+    vaultPath: vaultRoot,
+    saveSettledNonce,
+    notify: pushNotification,
+    desktopPlaybackRef,
+    flushInboxSave,
+  });
+
+  // Keep a ref to gitStatusForDisplay so keyboard effects can check preflight
+  // without re-registering the listener on every status update.
+  const gitStatusRef = useRef(gitStatusForDisplay);
+  useLayoutEffect(() => {
+    gitStatusRef.current = gitStatusForDisplay;
+  }, [gitStatusForDisplay]);
+
+  useAppMainWindowKeyboardEffects({
+    vaultRoot,
+    busy,
+    canReopenClosedEditorTab: workspaceTabsController.canReopenClosedEditorTab,
+    reopenLastClosedEditorTab: workspaceTabsController.reopenLastClosedEditorTab,
+    composingNewEntry,
+    selectedUri,
+    onCleanNoteInbox,
+    quickOpenOpen,
+    setQuickOpenOpen,
+    vaultSearchOpen,
+    setVaultSearchOpen,
+    manualSyncDisabled: manualSyncUnavailable,
+    manualSyncRunning: manualGitSync.running,
+    onManualSync: manualGitSync.run,
+    gitStatusRef,
   });
 
   if (!vaultRoot) {
@@ -460,8 +416,13 @@ export default function App() {
         fs={fs}>
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
+          <CloseSyncProgressOverlay visible={closeSyncInProgress} />
           <div className="app-root-chrome">
-            <WindowTitleBar tiling={tiling} />
+            <WindowTitleBar
+              tiling={tiling}
+              closeSyncing={manualGitSync.running}
+              onCloseRequest={handleWindowCloseRequest}
+            />
             <div className="shell setup-shell">
               <h1>{settingsName}</h1>
               <p className="muted">Choose your notes folder (vault root). Settings are stored in `.eskerra/` inside it.</p>
@@ -471,6 +432,10 @@ export default function App() {
               {err ? <p className="error">{err}</p> : null}
             </div>
             <AppSetupTagline />
+            <ToastStack
+              items={notificationItems}
+              onDismiss={dismissNotification}
+            />
           </div>
         </div>
       </AppThemeShell>
@@ -486,12 +451,21 @@ export default function App() {
         fs={fs}>
         <div ref={appRootRef} className={appRootClassName}>
           <ThemedChromeBackground />
+          <CloseSyncProgressOverlay visible={closeSyncInProgress} />
           <div className="app-root-chrome">
-            <WindowTitleBar tiling={tiling} />
+            <WindowTitleBar
+              tiling={tiling}
+              closeSyncing={manualGitSync.running}
+              onCloseRequest={handleWindowCloseRequest}
+            />
             <div className="shell setup-shell">
               <p className="muted">Loading…</p>
             </div>
             <AppSetupTagline />
+            <ToastStack
+              items={notificationItems}
+              onDismiss={dismissNotification}
+            />
           </div>
         </div>
       </AppThemeShell>
@@ -506,11 +480,14 @@ export default function App() {
       fs={fs}>
       <div ref={appRootRef} className={appRootClassName}>
         <ThemedChromeBackground />
+        <CloseSyncProgressOverlay visible={closeSyncInProgress} />
         <div className="app-root-chrome">
           <WindowTitleBar
             tiling={tiling}
             onEditorTabsHostRef={setTitleBarEditorTabsHost}
             todayHubSelect={titleBarTodayHubSelect}
+            closeSyncing={manualGitSync.running}
+            onCloseRequest={handleWindowCloseRequest}
           />
 
           <div className="app-body">
@@ -695,6 +672,21 @@ export default function App() {
 
           <AppStatusBar
             onOpenSettings={() => setActivePage('settings')}
+            onManualSync={() => {
+              manualGitSync.run().catch(() => undefined);
+            }}
+            manualSyncBusy={manualGitSync.running}
+            manualSyncDisabled={manualSyncUnavailable}
+            manualSyncLabel={manualSyncLabel}
+            statusIndicator={
+              <GitStatusChip
+                status={gitStatusForDisplay}
+                loading={currentGitBranchLoading || gitStatusLoading}
+                error={currentGitDetachedHead ? gitStatusError : currentGitBranchError ?? gitStatusError}
+                syncing={manualGitSync.running}
+                transient={transientGitStatus}
+              />
+            }
           />
           <ToastStack
             items={notificationItems}
