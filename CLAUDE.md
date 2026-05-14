@@ -173,6 +173,10 @@ Verify on a real device or emulator (not RN-Web alone) when touching:
 - `react-native-saf-x`, file pickers
 - Fonts, safe area, TalkBack order, haptics, AMOLED appearance
 
+## Desktop: Component CSS (L3)
+
+- **New** UI in `apps/desktop/src/`: prefer **CSS Modules** (`*.module.css`). Policy: `specs/architecture/desktop-component-css.md`. Colocation, `App.css` boundaries, and exceptions: `.cursor/rules/css-colocation.mdc`.
+
 ## Desktop: CodeMirror layout
 
 Applies to: `apps/desktop/src/**/*.css`, `apps/desktop/src/editor/noteEditor/**`.

@@ -9,37 +9,58 @@ alwaysApply: false
 
 # CSS colocation — desktop app components
 
-## Four conventions for component-local CSS
+## Defaults for new work (`apps/desktop/src/`)
 
-1. **Same folder** as the component file.
-2. **Same basename** as the component file (`GitStatusChip.tsx` → `GitStatusChip.css`).
-3. **Imported once** by the component — no other file imports it.
-4. **Classes prefixed** with the component name in kebab-case (`GitStatusChip` → `.git-status-chip`, `.git-status-chip--modifier`).
+**Prefer CSS Modules** for new React components:
+
+- **Same folder** as the component file.
+- **Same basename** with the `.module.css` suffix (`GitStatusChip.tsx` → `GitStatusChip.module.css`).
+- **Imported once** by the component — no other file imports it.
+- Use **`import styles from './GitStatusChip.module.css'`** and **`className={styles.root}`** (or equivalent camelCase keys from the module).
 
 ```
 src/components/GitStatusChip.tsx
-src/components/GitStatusChip.css   ← same folder, same basename
+src/components/GitStatusChip.module.css   ← same folder, same basename
 ```
 
 ```tsx
 // GitStatusChip.tsx — single import, no re-import elsewhere
-import './GitStatusChip.css';
+import styles from './GitStatusChip.module.css';
 ```
 
 ```css
-/* GitStatusChip.css — all classes start with the component prefix */
-.git-status-chip { … }
-.git-status-chip--danger { … }
-.git-status-chip__icon { … }
+/* GitStatusChip.module.css — class names are scoped by build; keep names clear within the file */
+.root { … }
+.danger { … }
+.icon { … }
 ```
 
-## CSS Modules
+### Class naming inside modules
 
-The app uses **both** plain `.css` imports (`FrontmatterEditor.css`) and CSS Modules (`FileTreeNode.module.css`).
+Two patterns already exist in the repo; pick one and stay consistent within a file:
 
-- Default to **plain `.css`** for new app-level components (`apps/desktop/src/`).
-- Use **`.module.css`** only when local class scoping is genuinely needed (name collision risk, deeply nested selectors).
-- The design-system packages (`packages/eskerra-ds-*`) always use CSS Modules — keep that consistent.
+1. **Short semantic names** (e.g. `.row`, `.iconCell` in `FileTreeNode.module.css`) — fine because the bundler scopes selectors.
+2. **BEM-style names** (`root`, `root__icon`, `root--danger`) — optional when it helps readability across larger components.
+
+There is **no** requirement to repeat a kebab-case component prefix on every selector inside a module.
+
+### `:global(...)`
+
+Use **sparingly** inside `*.module.css`. For **CodeMirror** token classes (`cm-*`), **shell-wide** utilities, and other **stable global contracts**, prefer [`App.css`](apps/desktop/src/App.css) or an existing global stylesheet rather than sprinkling `:global`.
+
+## Plain `.css` (non-module) — when it is still OK
+
+The app also uses **plain** colocated `.css` (e.g. `FrontmatterEditor.css` with `import './FrontmatterEditor.css'`). Use plain `.css` when:
+
+- The file **predates** modules and you are not otherwise refactoring it.
+- Styles must match **fixed global class strings** wired from TypeScript or third-party markup without going through a `styles` map.
+- You intentionally add **global** utilities shared across many unrelated call sites (rare; consider `App.css` if truly global).
+
+For **new** isolated component styling, default to **`.module.css`**, not plain `.css`.
+
+## Design system packages
+
+**`packages/eskerra-ds-*`** always use CSS Modules — keep that consistent.
 
 ## App.css scope
 
