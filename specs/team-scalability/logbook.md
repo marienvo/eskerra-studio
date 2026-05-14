@@ -162,6 +162,105 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Phase 2 vault PR #1 — 2026-05-14 — move pure vault helpers into lib/vault/
+
+**Cycle:** phase 2
+**Type:** pure refactor (file move + import update)
+**Author session:** sonnet 4.6 — phase-2-vault-pr1 session
+
+**What moved**
+
+- From: `apps/desktop/src/lib/` (root)
+- To: `apps/desktop/src/lib/vault/` (new folder)
+- Files moved:
+  - `vaultBacklinkBodySeed.ts`
+  - `vaultBacklinkBodySeed.test.ts`
+  - `countInboxVaultMarkdownRefs.ts`
+  - `countInboxVaultMarkdownRefs.test.ts`
+- `apps/desktop/src/lib/` root-level file count: 122 → 118 (−4)
+- Import call sites updated: 2
+  - `apps/desktop/src/components/VaultTab.tsx` (1 import: `countInboxVaultMarkdownRefs`)
+  - `apps/desktop/src/hooks/workspaceBacklinks.ts` (1 import: `vaultBacklinkBodySeed`)
+- Internal imports inside moved source files: none required — both import only from `@eskerra/core`; no relative cross-file references
+- Test sibling imports (`./vaultBacklinkBodySeed`, `./countInboxVaultMarkdownRefs`) unchanged as co-located siblings in `vault/`
+
+**Module budget**
+
+- Baseline entries changed: none (moved files were not in the budget baseline JSON)
+- Direction: down only? n/a — domain-clustering move, no extractions
+- No barrel file (`index.ts`) added or changed
+- No ESLint deep-import restrictions added
+
+**Behavior**
+
+- Behavior change: no
+- `resolveVaultLinkBaseMarkdownUri.ts` stayed root-level: confirmed
+- `vaultBootstrap.ts`, save, watcher, merge/write, and attachment/image persistence files not touched: confirmed
+- No editor paste, editor state, attachment persistence, or vault persistence behavior changed
+
+**Verification**
+
+- `npm run lint`: pass
+- `npm run check:architecture`: pass
+- `npx vitest run` (2 moved test files, 8 tests): pass
+- Manual smoke test: not run — import-only move; no logic changes
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+No `index.ts` added. No ESLint deep-import restrictions added. Both source files were pure (`vaultBacklinkBodySeed.ts` is a single spread-merge; `countInboxVaultMarkdownRefs.ts` is pure counting with no side effects). Direct updated paths used for both call sites.
+
+---
+
+## Phase 2 vault PR #1 prep — 2026-05-14 — tiny pure-helper vault move
+
+**Branch:** `cleaning-things-up-pt-5`
+
+**Baseline**
+
+- `apps/desktop/src/lib/` root-level file count: 122
+- Proposed target folder: `apps/desktop/src/lib/vault/`
+- `npm run check:architecture` before move: pass (from phase 2 PR #3)
+
+**Exact files to move**
+
+- `apps/desktop/src/lib/vaultBacklinkBodySeed.ts`
+- `apps/desktop/src/lib/vaultBacklinkBodySeed.test.ts`
+- `apps/desktop/src/lib/countInboxVaultMarkdownRefs.ts`
+- `apps/desktop/src/lib/countInboxVaultMarkdownRefs.test.ts`
+
+**Files explicitly excluded**
+
+- `resolveVaultLinkBaseMarkdownUri.ts`: no exact tests; defer until tests exist or a separate prep entry accepts moving an untested pure helper.
+- All vault tree helpers, watcher helpers, merge/write helpers, attachment/image persistence files, and `vaultBootstrap.ts`: excluded per the vault domain audit.
+
+**Import call sites needing mechanical updates**
+
+- `apps/desktop/src/components/VaultTab.tsx` imports `../lib/countInboxVaultMarkdownRefs`
+- `apps/desktop/src/hooks/workspaceBacklinks.ts` imports `../lib/vaultBacklinkBodySeed`
+- Moved tests import sibling modules via `./vaultBacklinkBodySeed` and `./countInboxVaultMarkdownRefs`; these remain sibling imports after the move.
+- Internal imports inside moved source files: none — both import only from `@eskerra/core`; no relative cross-file references.
+
+**Targeted tests for the move PR**
+
+- `npx vitest run src/lib/vault/vaultBacklinkBodySeed.test.ts src/lib/vault/countInboxVaultMarkdownRefs.test.ts`
+- `npm run check:architecture`
+- `npm run lint`
+
+**Non-goals**
+
+- No behavior changes.
+- Do not move `resolveVaultLinkBaseMarkdownUri.ts`.
+- Do not move vault tree, watcher, merge/write, attachment/image, or bootstrap files.
+- No barrel or `index.ts`.
+- No deep-import ESLint restrictions.
+- No `.git-blame-ignore-revs` change until after the move commit exists.
+- No module-budget update.
+
 ## Planning — 2026-05-14 — phase 2 vault domain audit
 
 Created `specs/team-scalability/phase-2-vault-domain-audit.md` as a documentation-only audit for a future `vault/` migration. The safest first vault PR, if the team continues, is limited to the tested pure helpers `vaultBacklinkBodySeed.*` and `countInboxVaultMarkdownRefs.*`; `vaultBootstrap.ts`, `saveNoteMarkdown`, watcher planning, merge/write paths, and attachment/image persistence remain paused pending separate high-effort prep.

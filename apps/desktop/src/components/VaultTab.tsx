@@ -19,7 +19,7 @@ import {
 import {createPortal} from 'react-dom';
 
 import {createNoteInboxAttachmentHost} from '../lib/noteInboxAttachmentHost';
-import {countInboxVaultMarkdownRefs} from '../lib/countInboxVaultMarkdownRefs';
+import {countInboxVaultMarkdownRefs} from '../lib/vault/countInboxVaultMarkdownRefs';
 import {fireInboxClearedConfetti} from '../lib/fireInboxClearedConfetti';
 import {resolveVaultImagePreviewUrl} from '../lib/resolveVaultImagePreviewUrl';
 
