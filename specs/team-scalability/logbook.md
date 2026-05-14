@@ -162,6 +162,211 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Reassessment — 2026-05-14 — phase 2 domain clustering after PR #3
+
+**Phase 2 window:** 2026-05-14 to 2026-05-14
+**PRs completed:** PR #1 `layout/`; PR #2 `todayHub/`; PR #3 `clipboard/`
+
+**Metric movement**
+
+- `apps/desktop/src/lib/` root-level file count: 142 -> 122
+- Domains created/filled: `layout/`, `todayHub/`, `clipboard/`
+- Files moved: 20 total
+- Behavior changes: 0
+- Danger-zone touches: 0
+- Barrels/index files added: 0
+- ESLint deep-import restrictions added: 0
+
+**What went well:** Prep entries with exact file lists and import call sites continued to work. The `clipboard/` move proved a medium-risk domain can still be moved safely when the scope is narrow, tests are colocated, and review checks body/constant/test equivalence instead of assuming import churn is harmless.
+
+**What was harder than expected:** `clipboard/` needed sharper boundaries than the first two moves. It was movable only because prep separated clipboard helpers from attachment persistence, vault preview, and storage files. The move also surfaced an extra test-harness import in `vitest.setup.ts`, which reinforces that prep audits should include test setup and reset hooks for modules with singletons.
+
+**Process lessons:** File-move reviews must keep checking function bodies, constants, defaults, persisted values, and test assertions. Manual/editor smoke-test expectations should be recorded explicitly for UI-adjacent moves, even when the final PR is import-only. Remaining domains are heavier and should not be started casually: `vault/`, `editor/`, `gitSync/`, `workspaceModel/`, and `tauri/`.
+
+**Decision:** pause phase 2 after three successful moves.
+
+**Reasoning:** Phase 2 has now reduced the flat `src/lib/` root by 20 files without behavior changes or new boundary restrictions. The remaining candidate groups are materially higher risk and need a fresh high-effort audit before any move. Do not add contributor-process docs yet unless the next PR will involve another human contributor, and do not return to phase 1 hook extraction without a separate fresh audit.
+
+## Review — 2026-05-14 — phase 2 PR #3 — move clipboard helpers into lib/clipboard/
+
+**Reviewer session:** sonnet 4.6 — phase-2-pr3 review session
+**Review prompt:** Close phase 2 PR #3; verdict accept with no findings; confirm file scope, import mechanics, no content changes, no added files or restrictions.
+
+**Files reviewed**
+
+- `apps/desktop/src/lib/clipboard/clipboardImageFiles.ts`
+- `apps/desktop/src/lib/clipboard/clipboardImageFiles.test.ts`
+- `apps/desktop/src/lib/clipboard/clipboardImagePng.ts`
+- `apps/desktop/src/lib/clipboard/clipboardImagePng.test.ts`
+- `apps/desktop/src/lib/clipboard/htmlClipboardToMarkdown.ts`
+- `apps/desktop/src/lib/clipboard/htmlClipboardToMarkdown.test.ts`
+- `apps/desktop/src/lib/clipboard/formatVaultImageMarkdown.ts`
+- `apps/desktop/src/lib/clipboard/formatVaultImageMarkdown.test.ts`
+- 5 updated import call sites (`NoteMarkdownEditor.tsx`, `noteMarkdownCellEditor.ts`, `noteInboxAttachmentHost.ts`, `persistTransientMarkdownImages.ts`, `vitest.setup.ts`)
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Checklist**
+
+- Only eight approved clipboard files moved: confirmed — no other files added or removed from `src/lib/` root
+- Attachment persistence files left untouched: confirmed — `noteInboxAttachmentHost.ts`, `persistTransientMarkdownImages.ts`, and `desktopVaultAttachments.ts` were not moved; only their import paths updated mechanically
+- Vault preview file left untouched: confirmed — `resolveVaultImagePreviewUrl.ts` was not moved
+- Table-editor clipboard file left untouched: confirmed — `eskerraTableClipboard.ts` was not moved
+- Imports mechanical: confirmed — only path strings updated; no imports added or removed
+- Function bodies unchanged: confirmed — all helpers (`clipboardDataProbablyHasVaultImage`, `htmlClipboardToMarkdown`, `tryClipboardHtmlToMarkdownInsert`, `formatVaultImageMarkdownForInsert`, `rgbaOrRgbToImageDataPixels`, `rgbaImageToPngBytes`, etc.) identical to pre-move
+- Constants unchanged: confirmed — `CLIPBOARD_HTML_MAX_CHARS`, `VAULT_IMAGE_MARKDOWN_ALT`, `STRUCTURAL_HTML_MARKERS`, and singleton `turndownSingleton` all identical
+- Test assertions unchanged: confirmed — all 43 test assertions identical to pre-move
+- Editor paste behavior unchanged: confirmed — no logic in `NoteMarkdownEditor.tsx` or `noteMarkdownCellEditor.ts` changed; only import path strings updated
+- Editor state unchanged: confirmed — no state mutations, refs, hooks, or callbacks changed
+- Attachment persistence behavior unchanged: confirmed — `noteInboxAttachmentHost.ts` and `persistTransientMarkdownImages.ts` bodies untouched
+- Vault persistence behavior unchanged: confirmed — no vault write paths touched
+- No `index.ts` or barrel added or changed: confirmed
+- No ESLint deep-import restrictions added: confirmed
+- No CODEOWNERS, CONTRIBUTING.md, or PR template changes: confirmed
+- `src/lib/` root-level file count: confirmed 130 → 122 (−8)
+- Extra call site (`vitest.setup.ts`) found and updated correctly: confirmed — path-only change; `__resetForTests` reset behavior unchanged
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
+## Phase 2 PR #3 — 2026-05-14 — move clipboard helpers into lib/clipboard/
+
+**Cycle:** phase 2
+**Type:** pure refactor (file move + import update)
+**Author session:** sonnet 4.6 — phase-2-pr3 session
+
+**What moved**
+
+- From: `apps/desktop/src/lib/` (root)
+- To: `apps/desktop/src/lib/clipboard/` (new folder)
+- Files moved:
+  - `clipboardImageFiles.ts`
+  - `clipboardImageFiles.test.ts`
+  - `clipboardImagePng.ts`
+  - `clipboardImagePng.test.ts`
+  - `htmlClipboardToMarkdown.ts`
+  - `htmlClipboardToMarkdown.test.ts`
+  - `formatVaultImageMarkdown.ts`
+  - `formatVaultImageMarkdown.test.ts`
+- `apps/desktop/src/lib/` root-level file count: 130 → 122 (−8)
+- Import call sites updated: 5
+  - `apps/desktop/src/editor/noteEditor/NoteMarkdownEditor.tsx` (3 imports: `clipboardImageFiles`, `formatVaultImageMarkdown`, `htmlClipboardToMarkdown`)
+  - `apps/desktop/src/editor/noteEditor/noteMarkdownCellEditor.ts` (3 imports: `clipboardImageFiles`, `formatVaultImageMarkdown`, `htmlClipboardToMarkdown`)
+  - `apps/desktop/src/lib/noteInboxAttachmentHost.ts` (2 imports: `clipboardImageFiles`, `clipboardImagePng`)
+  - `apps/desktop/src/lib/persistTransientMarkdownImages.ts` (1 import: `clipboardImageFiles`)
+  - `apps/desktop/vitest.setup.ts` (1 import: `htmlClipboardToMarkdown` — not in prep entry; discovered during move)
+- Internal imports inside moved files: none required (all source files import only from `@eskerra/core`, `@tauri-apps/api/image`, `turndown`, `turndown-plugin-gfm` — no relative cross-file references)
+- Test sibling imports (`./clipboardImageFiles`, `./clipboardImagePng`, `./htmlClipboardToMarkdown`, `./formatVaultImageMarkdown`) unchanged as co-located siblings in `clipboard/`
+
+**Module budget**
+
+- Baseline entries changed: none (moved files were not in the budget baseline JSON)
+- Direction: down only? n/a — domain-clustering move, no extractions
+- No barrel file (`index.ts`) added or changed
+- No ESLint deep-import restrictions added
+
+**Behavior**
+
+- Behavior change: no
+- No editor paste refactor
+- No attachment persistence changes
+- No vault persistence changes
+- No editor state changes
+- Attachment persistence files (`noteInboxAttachmentHost.ts`, `persistTransientMarkdownImages.ts`, `desktopVaultAttachments.ts`) not moved; only their import paths updated
+- Vault preview file (`resolveVaultImagePreviewUrl.ts`) not moved
+- Table-editor clipboard file (`eskerraTableClipboard.ts`) not moved
+
+**Verification**
+
+- `npm run lint`: pass
+- `npm run check:architecture`: pass
+- `npx vitest run` (4 moved test files, 43 tests): pass
+- `npx vitest run` (3 call-site adjacent test files, 9 tests): pass
+- Manual smoke test: not run — import-only move; no logic changes; manual paste/drop smoke check requires running desktop app, which is out of scope for an import-only PR
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? `NoteMarkdownEditor.tsx` import path updated only; no logic lines touched
+
+**Notes**
+
+The prep entry listed 4 external call sites. A 5th was found during the move: `apps/desktop/vitest.setup.ts` imports `__resetForTests` from `htmlClipboardToMarkdown` for test teardown. The path was updated mechanically. No `index.ts` added. No ESLint deep-import restrictions added.
+
+---
+
+## Phase 2 PR #3 prep — 2026-05-14 — clipboard domain migration
+
+**Branch:** `cleaning-things-up-pt-5`
+**Commit:** `4e04c343`
+
+**Baseline**
+
+- `apps/desktop/src/lib/` root-level file count: 130
+- Proposed target folder: `apps/desktop/src/lib/clipboard/`
+- `npm run check:architecture` before move: pass. Note: `check-module-budgets` reported no merge base and skipped git-based new/growth checks, then exited successfully.
+
+**Exact files to move**
+
+- `apps/desktop/src/lib/clipboardImageFiles.ts`
+- `apps/desktop/src/lib/clipboardImageFiles.test.ts`
+- `apps/desktop/src/lib/clipboardImagePng.ts`
+- `apps/desktop/src/lib/clipboardImagePng.test.ts`
+- `apps/desktop/src/lib/htmlClipboardToMarkdown.ts`
+- `apps/desktop/src/lib/htmlClipboardToMarkdown.test.ts`
+- `apps/desktop/src/lib/formatVaultImageMarkdown.ts`
+- `apps/desktop/src/lib/formatVaultImageMarkdown.test.ts`
+
+**Files explicitly excluded**
+
+- `apps/desktop/src/lib/noteInboxAttachmentHost.ts` and test: shell-owned Tauri clipboard/drop adapter; it performs attachment import orchestration and should not move with pure clipboard detection/format helpers.
+- `apps/desktop/src/lib/persistTransientMarkdownImages.ts` and test: vault attachment persistence/write path; leave out to avoid changing persistence behavior.
+- `apps/desktop/src/lib/desktopVaultAttachments.ts`: Tauri vault attachment save/import boundary.
+- `apps/desktop/src/lib/resolveVaultImagePreviewUrl.ts` and test: preview URL resolution, not clipboard ingestion.
+- `apps/desktop/src/editor/noteEditor/eskerraTableV1/eskerraTableClipboard.ts` and test: table-editor clipboard parsing, not a root `src/lib/` domain move.
+
+**Import call sites needing mechanical updates**
+
+- `apps/desktop/src/editor/noteEditor/NoteMarkdownEditor.tsx` imports `clipboardImageFiles`, `formatVaultImageMarkdown`, and `htmlClipboardToMarkdown`.
+- `apps/desktop/src/editor/noteEditor/noteMarkdownCellEditor.ts` imports `clipboardImageFiles`, `formatVaultImageMarkdown`, and `htmlClipboardToMarkdown`.
+- `apps/desktop/src/lib/noteInboxAttachmentHost.ts` imports `clipboardImageFiles` and `clipboardImagePng`.
+- `apps/desktop/src/lib/persistTransientMarkdownImages.ts` imports `clipboardImageFiles`.
+- Moved tests should keep sibling imports after the move.
+
+**Targeted tests for the move PR**
+
+- `npm run test -w @eskerra/desktop -- clipboardImageFiles.test.ts clipboardImagePng.test.ts htmlClipboardToMarkdown.test.ts formatVaultImageMarkdown.test.ts noteMarkdownCellEditor.test.ts noteInboxAttachmentHost.test.ts persistTransientMarkdownImages.test.ts`
+- `npm run check:architecture`
+- `npm run lint`
+
+**Manual smoke test needed**
+
+- Paste structured HTML into the main note editor and a table cell; confirm Markdown conversion still happens and URL-only paste still falls through to link handling.
+- Paste or drop an image into the editor in the desktop app; confirm the attachment import still inserts the same vault image Markdown and no duplicate/default browser paste appears.
+
+**Risk notes**
+
+- `formatVaultImageMarkdown.ts` stays in scope because it formats the Markdown inserted by clipboard/drop image flows and does not perform vault writes.
+- This PR is medium risk because call sites are in editor paste/import paths; the review must compare bodies, constants, defaults, and test assertions and verify call-site path-only changes.
+
+**Non-goals**
+
+- No behavior changes.
+- No editor paste refactor.
+- No attachment persistence changes.
+- No vault persistence changes.
+- No editor state changes.
+- No barrel or `index.ts` changes.
+- No deep-import ESLint restrictions.
+- No `.git-blame-ignore-revs` change until after the move commit exists.
+- No module-budget update for this planning entry.
+
 ## Reassessment — 2026-05-14 — phase 2 domain clustering after PR #2
 
 **Phase 2 window:** 2026-05-14 to 2026-05-14

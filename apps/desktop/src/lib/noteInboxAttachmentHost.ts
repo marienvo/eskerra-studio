@@ -15,8 +15,8 @@ import {
   extractClipboardImageUrlsFromHtml,
   dotExtensionForClipboardBytes,
   collectClipboardImageFilesFromFileList,
-} from './clipboardImageFiles';
-import {rgbaImageToPngBytes} from './clipboardImagePng';
+} from './clipboard/clipboardImageFiles';
+import {rgbaImageToPngBytes} from './clipboard/clipboardImagePng';
 import {
   extensionFromFileNameOrMime,
   saveVaultImageBytes,
