@@ -162,6 +162,90 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## PR — 2026-05-14 — #TBD — extract collectShadowDivergenceDevDiagnostics
+
+**Cycle:** 2
+**Type:** pure refactor
+**Author session:** sonnet 4.6 — cycle-2 extraction session
+
+**What moved**
+
+- From: `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (body of the dev/test-only `useEffect` that compares model-derived persistence to legacy runtime persistence, lines ~878–919)
+- To: `apps/desktop/src/hooks/workspacePersistenceBridge.ts` (new exported function, alongside `describeFilteredLegacyVsModelPersistenceDivergence`)
+- LOC delta source: 4099 → 4087 (`wc -l`; script-counted cap lowered from 4100 → 4088)
+- LOC helper file: `workspacePersistenceBridge.ts` grew from 32 → 81 (+49)
+- Tests added: 6 new unit tests in new `workspacePersistenceBridge.test.ts` (`collectShadowDivergenceDevDiagnostics` describe block)
+
+**Module budget**
+
+- Baseline entries changed: `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (4100 → 4088)
+- Direction: down only? yes
+- Existing helper file `workspacePersistenceBridge.ts` grew from 32 → 81 LOC (+49); not tracked in the baseline JSON (below GROWTH_TRACK_MIN_LINES)
+- New test file `workspacePersistenceBridge.test.ts` at 109 LOC respects NEW_FILE_MAX_LINES (400)
+
+**Behavior**
+
+- Behavior change: no
+- Warning output (`console.warn('[workspaceModel] persistence legacy divergence', diffs)`) remains owned by the hook. The helper returns `{diffs, suppress}` and never calls `console.warn` directly.
+- The `import.meta.env.DEV || import.meta.env.MODE === 'test'` check is lifted out of the helper as `isDevOrTest: boolean` so the helper is testable without Vite env stubs. The hook passes the resolved boolean; behavior is identical.
+
+**Verification**
+
+- `npm run lint`: pass
+- `npm test` (relevant workspace — `workspacePersistenceBridge.test.ts`): pass (6 tests)
+- `npm run check:architecture`: pass
+- Manual smoke test: n/a — dev/test-only diagnostic; no UI surface; useEffect dependency array unchanged
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no (this `useEffect` is read-only diagnostic telemetry; no writes to `lastPersistedRef`, `inboxContentByUri`, or `saveNoteMarkdown`)
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+The extracted helper encapsulates all three suppress conditions (`!inboxShellRestored`, `!isDevOrTest`, `shadowModelActiveHub === null`) and the `hasPendingProjectionHubs` computation, shrinking the `useEffect` body from ~32 lines to ~19 lines. The helper sits alongside `describeFilteredLegacyVsModelPersistenceDivergence` in `workspacePersistenceBridge.ts`, which already owns the divergence comparison logic.
+
+---
+
+## Baseline — 2026-05-14 — cycle 2
+
+**Branch:** `cleaning-things-up-pt-3`
+**Commit:** `995233d0`
+
+Measurements:
+
+- `useMainWindowWorkspace.ts` LOC: **4099**
+- Workspace-related sibling hooks LOC sum: **4902** (21 files matching `apps/desktop/src/hooks/workspace*.ts`, excluding `*.test.ts`)
+- `react-hooks/exhaustive-deps` warnings in `useMainWindowWorkspace.ts`: **0** (`npx eslint` emitted no warnings)
+- `eslint-disable` occurrences under `apps/desktop/src/`: **13** (raw lines)
+- Test file count under `apps/desktop/src/`: **178** (`*.test.ts` + `*.test.tsx`)
+- `apps/desktop/src/lib/` root-level file count: **142** (regular files only, subdirectories excluded)
+- `npm run check:architecture` status: **pass** (exit 0)
+
+Commands used:
+
+```bash
+git rev-parse --abbrev-ref HEAD
+git rev-parse --short HEAD
+wc -l apps/desktop/src/hooks/useMainWindowWorkspace.ts
+find apps/desktop/src/hooks -maxdepth 1 -name "workspace*.ts" ! -name "*.test.ts" -print0 | xargs -0 wc -l
+cd apps/desktop && npx eslint src/hooks/useMainWindowWorkspace.ts
+rg -n "eslint-disable" apps/desktop/src -g "*.ts" -g "*.tsx" | wc -l
+find apps/desktop/src -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) | wc -l
+find apps/desktop/src/lib -maxdepth 1 -type f | wc -l
+npm run check:architecture
+```
+
+### Selected candidate for cycle 2 PR #1
+
+**Candidate B — `collectShadowDivergenceDevDiagnostics`.**
+
+Reason: carried forward from cycle 1; low-risk dev/test diagnostic extraction; no persistence writes; requires exact tests around suppression and pending projection hubs.
+
+Caveat: this is persistence-diagnostics-adjacent, so review must be strict about no writes, no cache touches, and warning behavior only.
+
+---
+
 ## Reassessment — 2026-05-14 — end of cycle 1
 
 **Cycle window:** 2026-05-14 -> 2026-05-14
