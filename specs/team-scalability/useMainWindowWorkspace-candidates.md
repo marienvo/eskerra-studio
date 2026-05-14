@@ -4,7 +4,7 @@ Date: 2026-05-14
 
 ## Anti-Growth Policy
 
-- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` must not grow above the current module-budget cap (`4088` script-counted lines; `wc -l` currently reports `4076`).
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` must not grow above the current module-budget cap (`4088` script-counted lines; `wc -l` currently reports `4062`).
 - New behavior should land in focused helpers, hooks, or modules first.
 - The main hook should only wire dependencies, own React orchestration, and delegate focused logic.
 - Raising the budget requires an explicit logbook note, a reason, and a temporary follow-up plan to lower it again.

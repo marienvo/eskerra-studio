@@ -231,6 +231,65 @@ function describeWorkspaceStateDivergence(
   return out;
 }
 
+export type ResolveModelBackedLegacyTabStripResult = {
+  nextTabs: EditorWorkspaceTab[];
+  derivedTabs: EditorWorkspaceTab[] | null;
+  matched: boolean;
+  mismatch:
+    | null
+    | {kind: 'signature'; legacySig: string; derivedSig: string | null}
+    | {kind: 'ids'; legacyIds: string[]; derivedIds: string[]};
+};
+
+/**
+ * Selects between the model-derived tab strip and the legacy computed strip.
+ *
+ * 'signature' (background open): full history comparison via {@link legacyEditorWorkspaceTabsSignature}.
+ * 'ids' (close tab): id/order-only comparison.
+ *
+ * Returns legacy tabs when no active hub/workspace is present in the model.
+ * Does not call console.warn or read process.env — leave those side effects to the caller.
+ */
+export function resolveModelBackedLegacyTabStrip(
+  nextModel: WorkspaceModel,
+  nextTabsLegacy: EditorWorkspaceTab[],
+  match: 'signature' | 'ids',
+): ResolveModelBackedLegacyTabStripResult {
+  const hub = nextModel.activeHub;
+  const derivedTabs =
+    hub != null && nextModel.workspaces[hub] != null
+      ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
+      : null;
+
+  if (derivedTabs == null) {
+    return {nextTabs: nextTabsLegacy, derivedTabs: null, matched: false, mismatch: null};
+  }
+
+  if (match === 'signature') {
+    const legacySig = legacyEditorWorkspaceTabsSignature(nextTabsLegacy);
+    const derivedSig = legacyEditorWorkspaceTabsSignature(derivedTabs);
+    const matched = derivedSig === legacySig;
+    return {
+      nextTabs: matched ? derivedTabs : nextTabsLegacy,
+      derivedTabs,
+      matched,
+      mismatch: matched ? null : {kind: 'signature', legacySig, derivedSig},
+    };
+  }
+
+  const legacyIds = nextTabsLegacy.map(t => t.id);
+  const derivedIds = derivedTabs.map(t => t.id);
+  const matched =
+    derivedIds.length === legacyIds.length &&
+    derivedIds.every((id, i) => id === legacyIds[i]);
+  return {
+    nextTabs: matched ? derivedTabs : nextTabsLegacy,
+    derivedTabs,
+    matched,
+    mismatch: matched ? null : {kind: 'ids', legacyIds, derivedIds},
+  };
+}
+
 export function describeWorkspaceModelDivergence(
   expected: WorkspaceModel,
   actual: WorkspaceModel,

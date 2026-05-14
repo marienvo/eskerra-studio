@@ -15,7 +15,7 @@
     "apps/desktop/src/hooks/workspaceFsWatchReconcile.ts": 596,
     "apps/desktop/src/hooks/workspaceLinkRouting.ts": 509,
     "apps/desktop/src/hooks/workspacePersistence.ts": 434,
-    "apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts": 814,
+    "apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts": 912,
     "apps/desktop/src/hooks/workspaceTodayHubSwitch.ts": 301,
     "apps/desktop/src/hooks/workspaceVaultWatchEffects.ts": 547,
     "apps/desktop/src/lib/__tests__/workspacePersistenceShadow.test.ts": 686,

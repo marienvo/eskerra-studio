@@ -21,6 +21,7 @@ import {
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
   projectWorkspaceRuntimeToModel,
+  resolveModelBackedLegacyTabStrip,
   workspaceStateForIncomingHubSwitch,
 } from './workspaceRuntimeProjection';
 
@@ -809,5 +810,102 @@ describe('projectWorkspaceRuntimeToModel', () => {
       active: {kind: 'home'},
       homeHistory: {entries: [HUB_B], index: 0},
     });
+  });
+});
+
+describe('resolveModelBackedLegacyTabStrip', () => {
+  const hubNorm = normalizeWorkspaceUri(HUB_A);
+  const noteA = normalizeWorkspaceUri(NOTE_A);
+  const noteB = normalizeWorkspaceUri(NOTE_B);
+
+  function modelWith(tabs: {id: string; entries: string[]; index?: number}[]): WorkspaceModel {
+    return {
+      activeHub: hubNorm,
+      workspaces: {
+        [hubNorm]: {
+          tabs: tabs.map(t => ({
+            id: t.id,
+            history: {entries: t.entries, index: t.index ?? t.entries.length - 1},
+          })),
+          active: tabs.length > 0 ? {kind: 'tab', id: tabs[0]!.id} : {kind: 'home'},
+          homeHistory: {entries: [hubNorm], index: 0},
+        },
+      },
+    };
+  }
+
+  it('signature match returns derived tabs and mismatch null', () => {
+    const legacy = [runtimeTab('t1', [noteA])];
+    const model = modelWith([{id: 't1', entries: [noteA]}]);
+    const result = resolveModelBackedLegacyTabStrip(model, legacy, 'signature');
+    expect(result.matched).toBe(true);
+    expect(result.mismatch).toBeNull();
+    expect(result.derivedTabs).not.toBeNull();
+    expect(result.nextTabs.map(t => t.id)).toEqual(['t1']);
+    expect(result.nextTabs).toBe(result.derivedTabs);
+  });
+
+  it('signature mismatch returns legacy tabs and exact signature mismatch payload', () => {
+    const legacy = [runtimeTab('t1', [noteA])];
+    const model = modelWith([{id: 't1', entries: [noteA, noteB]}]);
+    const result = resolveModelBackedLegacyTabStrip(model, legacy, 'signature');
+    expect(result.matched).toBe(false);
+    expect(result.nextTabs).toBe(legacy);
+    expect(result.mismatch?.kind).toBe('signature');
+    const m = result.mismatch as Extract<typeof result.mismatch, {kind: 'signature'}>;
+    expect(typeof m.legacySig).toBe('string');
+    expect(typeof m.derivedSig).toBe('string');
+    expect(m.legacySig).not.toBe(m.derivedSig);
+  });
+
+  it('ids match returns derived tabs even when full histories differ', () => {
+    const legacy = [runtimeTab('t1', [noteA]), runtimeTab('t2', [noteB])];
+    const model = modelWith([
+      {id: 't1', entries: [noteA, noteB]},
+      {id: 't2', entries: [noteB]},
+    ]);
+    const result = resolveModelBackedLegacyTabStrip(model, legacy, 'ids');
+    expect(result.matched).toBe(true);
+    expect(result.mismatch).toBeNull();
+    expect(result.nextTabs.map(t => t.id)).toEqual(['t1', 't2']);
+    expect(result.nextTabs).toBe(result.derivedTabs);
+  });
+
+  it('ids mismatch returns legacy tabs and exact ids mismatch payload', () => {
+    const legacy = [runtimeTab('t1', [noteA])];
+    const model = modelWith([{id: 't2', entries: [noteA]}]);
+    const result = resolveModelBackedLegacyTabStrip(model, legacy, 'ids');
+    expect(result.matched).toBe(false);
+    expect(result.nextTabs).toBe(legacy);
+    expect(result.mismatch?.kind).toBe('ids');
+    const m = result.mismatch as Extract<typeof result.mismatch, {kind: 'ids'}>;
+    expect(m.legacyIds).toEqual(['t1']);
+    expect(m.derivedIds).toEqual(['t2']);
+  });
+
+  it('missing active hub returns legacy tabs, derivedTabs null, matched false, mismatch null', () => {
+    const legacy = [runtimeTab('t1', [noteA])];
+    const result = resolveModelBackedLegacyTabStrip(
+      {activeHub: null, workspaces: {}},
+      legacy,
+      'signature',
+    );
+    expect(result.nextTabs).toBe(legacy);
+    expect(result.derivedTabs).toBeNull();
+    expect(result.matched).toBe(false);
+    expect(result.mismatch).toBeNull();
+  });
+
+  it('missing workspace for active hub returns legacy tabs, derivedTabs null, matched false, mismatch null', () => {
+    const legacy = [runtimeTab('t1', [noteA])];
+    const result = resolveModelBackedLegacyTabStrip(
+      {activeHub: hubNorm, workspaces: {}},
+      legacy,
+      'ids',
+    );
+    expect(result.nextTabs).toBe(legacy);
+    expect(result.derivedTabs).toBeNull();
+    expect(result.matched).toBe(false);
+    expect(result.mismatch).toBeNull();
   });
 });

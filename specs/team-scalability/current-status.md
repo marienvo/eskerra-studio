@@ -16,7 +16,7 @@ Date: 2026-05-14
 
 ## Current Metrics
 
-- `useMainWindowWorkspace.ts`: 4118 -> 4087 -> 4076 LOC
+- `useMainWindowWorkspace.ts`: 4118 -> 4087 -> 4076 -> 4062 LOC
 - `apps/desktop/src/lib/` root files: 142 -> 118
 
 ## Process Notes
@@ -27,14 +27,15 @@ Date: 2026-05-14
 - `clipboard/` was movable because prep separated clipboard helpers from attachment persistence, vault preview, and storage files.
 - `vault/` was started with only the two safest tested pure helpers; the rest of the vault group remains paused.
 - `hasReopenableClosedEditorTab` extracted cleanly: useMemo body moved to `editorClosedTabStack.ts`, hook delegates with plain values, 7 new unit tests.
+- `resolveModelBackedLegacyTabStrip` extracted cleanly: both model-vs-legacy tab resolution blocks unified in `workspaceRuntimeProjection.ts`, 6 new unit tests, all side effects kept in hook.
 
 ## Current Decision
 
-`hasReopenableClosedEditorTab` extraction complete (cleaning-things-up-pt-7).
+Two extractions complete on cleaning-things-up-pt-7: `hasReopenableClosedEditorTab` and `resolveModelBackedLegacyTabStrip`.
 
-Anti-growth cap remains at `4088`; hook is now at 4074 LOC.
+Anti-growth cap remains at `4088`; hook is now at 4062 LOC.
 
-Next extraction candidate per audit: `resolveModelBackedLegacyTabStrip` (risk: medium, defer until next cleanup cycle) or `normalizeWorkspaceVaultRootPath` (risk: low, low value).
+Next extraction candidate per audit: `normalizeWorkspaceVaultRootPath` (risk: low, low value) or `useWorkspaceVaultMarkdownRefs` (risk: medium, defer).
 
 A vault-specific audit exists at `specs/team-scalability/phase-2-vault-domain-audit.md`. It keeps save, watcher, merge, bootstrap, and attachment/image persistence paths paused. Tree helpers, URI/path helpers, and link/rename/merge helpers each need a separate prep entry before any move.
 

@@ -162,6 +162,53 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## PR — 2026-05-14 — resolveModelBackedLegacyTabStrip extraction
+
+**Cycle:** cleaning-things-up-pt-7
+**Type:** pure refactor
+**Author session:** sonnet 4.6 high
+
+**What moved**
+
+- From: `apps/desktop/src/hooks/useMainWindowWorkspace.ts`
+  - `applyBackgroundNewTabOpen` ~lines 1469-1489: model-derived vs legacy signature comparison block
+  - `closeEditorTab` ~lines 2052-2075: model-derived vs legacy id/order comparison block
+- To: `apps/desktop/src/hooks/workspaceRuntimeProjection.ts` — new `resolveModelBackedLegacyTabStrip` export + `ResolveModelBackedLegacyTabStripResult` type
+- LOC delta source: 4076 → 4062 (−14)
+- LOC new function: ~55 lines added to `workspaceRuntimeProjection.ts` (257 → 315)
+- Tests added: 6 new tests in `workspaceRuntimeProjection.test.ts` covering signature match, signature mismatch, ids match (histories differ), ids mismatch, missing activeHub, missing workspace for active hub (`wc -l`: 813 → 911)
+
+**Module budget**
+
+- Baseline entries changed: `workspaceRuntimeProjection.test.ts` budget cap raised from 814 → 912 (new test coverage; cap = `wc -l` + 1 per tool convention)
+- `useMainWindowWorkspace.ts` anti-growth cap (4088) not raised; hook is now 4062
+- New function fits in existing file (315 lines, well under NEW_FILE_MAX_LINES)
+
+**Behavior**
+
+- Behavior change: no
+- `legacyEditorWorkspaceTabsSignature` import removed from `useMainWindowWorkspace.ts` (now called only inside `workspaceRuntimeProjection.ts`)
+- Warning messages, payload field names (`legacySig`, `derivedSig`, `tabId`, `legacyIds`, `derivedIds`), and warn-gate (`process.env.NODE_ENV !== 'production'`) unchanged
+- Callback order and all side effects (assignLegacyEditorWorkspaceTabs, prefetch cache, closed-tab stack, refocus, save flush) unchanged
+
+**Verification**
+
+- `npm run lint`: pass
+- `npx vitest run apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts` (37 tests): pass
+- `npm run check:architecture`: pass
+- Manual smoke test: not run — pure derivation with no side effects
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+Anti-growth cap (4088) not raised. The two duplicated model-vs-legacy resolution blocks are now a single typed helper. Call sites retain all side effects: `console.warn`, `process.env` guard, `assignLegacyEditorWorkspaceTabs`, prefetch cache, closed-tab stack, and `refocusAfterClosingActiveTab`. The `tabStripMismatch?.kind === 'signature'/'ids'` narrowing at each call site preserves the original `!derivedMatchesLegacy && derived != null` guard exactly.
+
+---
+
 ## PR — 2026-05-14 — hasReopenableClosedEditorTab extraction
 
 **Cycle:** cleaning-things-up-pt-7
