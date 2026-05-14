@@ -237,7 +237,7 @@ export type ResolveModelBackedLegacyTabStripResult = {
   matched: boolean;
   mismatch:
     | null
-    | {kind: 'signature'; legacySig: string; derivedSig: string | null}
+    | {kind: 'signature'; legacySig: string; derivedSig: string}
     | {kind: 'ids'; legacyIds: string[]; derivedIds: string[]};
 };
 

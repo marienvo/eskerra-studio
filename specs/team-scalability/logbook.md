@@ -188,7 +188,10 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 **Findings**
 
 Blocking: none
-Tiny follow-ups: none
+
+Tiny follow-ups (resolved before acceptance):
+1. `derivedSig` typed `string | null` in `ResolveModelBackedLegacyTabStripResult` — but the early-return for `derivedTabs == null` means every code path reaching the signature branch has a non-null `derivedTabs`, so `legacyEditorWorkspaceTabsSignature(derivedTabs)` always returns `string`. Narrowed to `string` to remove the spurious `| null`. Fixed in `workspaceRuntimeProjection.ts`.
+2. `App.tsx` budget cap dropped from 767 → 713 in `module-budget-baseline.json` without a logbook entry. Confirmed intentional catch-up maintenance: `wc -l App.tsx` = 712, so the new cap is accurate. Not part of this extraction PR; no further action needed.
 
 **Verdict:** accept
 
