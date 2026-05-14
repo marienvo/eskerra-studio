@@ -162,6 +162,45 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Baseline — 2026-05-14 — cycle 2
+
+**Branch:** `cleaning-things-up-pt-3`
+**Commit:** `995233d0`
+
+Measurements:
+
+- `useMainWindowWorkspace.ts` LOC: **4099**
+- Workspace-related sibling hooks LOC sum: **4902** (21 files matching `apps/desktop/src/hooks/workspace*.ts`, excluding `*.test.ts`)
+- `react-hooks/exhaustive-deps` warnings in `useMainWindowWorkspace.ts`: **0** (`npx eslint` emitted no warnings)
+- `eslint-disable` occurrences under `apps/desktop/src/`: **13** (raw lines)
+- Test file count under `apps/desktop/src/`: **178** (`*.test.ts` + `*.test.tsx`)
+- `apps/desktop/src/lib/` root-level file count: **142** (regular files only, subdirectories excluded)
+- `npm run check:architecture` status: **pass** (exit 0)
+
+Commands used:
+
+```bash
+git rev-parse --abbrev-ref HEAD
+git rev-parse --short HEAD
+wc -l apps/desktop/src/hooks/useMainWindowWorkspace.ts
+find apps/desktop/src/hooks -maxdepth 1 -name "workspace*.ts" ! -name "*.test.ts" -print0 | xargs -0 wc -l
+cd apps/desktop && npx eslint src/hooks/useMainWindowWorkspace.ts
+rg -n "eslint-disable" apps/desktop/src -g "*.ts" -g "*.tsx" | wc -l
+find apps/desktop/src -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) | wc -l
+find apps/desktop/src/lib -maxdepth 1 -type f | wc -l
+npm run check:architecture
+```
+
+### Selected candidate for cycle 2 PR #1
+
+**Candidate B — `collectShadowDivergenceDevDiagnostics`.**
+
+Reason: carried forward from cycle 1; low-risk dev/test diagnostic extraction; no persistence writes; requires exact tests around suppression and pending projection hubs.
+
+Caveat: this is persistence-diagnostics-adjacent, so review must be strict about no writes, no cache touches, and warning behavior only.
+
+---
+
 ## Reassessment — 2026-05-14 — end of cycle 1
 
 **Cycle window:** 2026-05-14 -> 2026-05-14
