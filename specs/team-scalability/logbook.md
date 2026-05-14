@@ -162,6 +162,50 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Review — 2026-05-14 — phase 2 vault PR #1 — move pure vault helpers into lib/vault/
+
+**Reviewer session:** sonnet 4.6 — phase-2-vault-pr1 review session
+**Review prompt:** Close phase 2 vault PR #1; verdict accept with no findings; confirm file scope, import mechanics, no content changes, no added files or restrictions.
+
+**Files reviewed**
+
+- `apps/desktop/src/lib/vault/vaultBacklinkBodySeed.ts`
+- `apps/desktop/src/lib/vault/vaultBacklinkBodySeed.test.ts`
+- `apps/desktop/src/lib/vault/countInboxVaultMarkdownRefs.ts`
+- `apps/desktop/src/lib/vault/countInboxVaultMarkdownRefs.test.ts`
+- 2 updated import call sites (`VaultTab.tsx`, `workspaceBacklinks.ts`)
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Checklist**
+
+- Only four approved files moved: confirmed — no other files added or removed from `src/lib/` root
+- `resolveVaultLinkBaseMarkdownUri.ts` stayed root-level: confirmed
+- `vaultBootstrap.ts` not moved: confirmed
+- `saveNoteMarkdown` not touched: confirmed
+- Watcher planning files not touched: confirmed
+- Merge/write paths not touched: confirmed
+- Attachment/image persistence files not touched: confirmed
+- Imports mechanical: confirmed — only path strings updated; no imports added or removed
+- Function bodies unchanged: confirmed — `mergeVaultBacklinkBodySeed` (single spread-merge) and `countInboxVaultMarkdownRefs` (pure counting loop) identical to pre-move
+- Constants unchanged: confirmed — no constants, defaults, or persisted values in either file
+- Test assertions unchanged: confirmed — all 8 test assertions identical to pre-move
+- No `index.ts` or barrel added or changed: confirmed
+- No ESLint deep-import restrictions added: confirmed
+- No CODEOWNERS, CONTRIBUTING.md, or PR template changes: confirmed
+- `src/lib/` root-level file count: confirmed 122 → 118 (−4)
+- Targeted tests (8 tests, 2 files): pass
+- `npm run check:architecture`: pass
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
 ## Phase 2 vault PR #1 — 2026-05-14 — move pure vault helpers into lib/vault/
 
 **Cycle:** phase 2
