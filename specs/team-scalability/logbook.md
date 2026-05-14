@@ -162,6 +162,49 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## PR — 2026-05-14 — hasReopenableClosedEditorTab extraction
+
+**Cycle:** cleaning-things-up-pt-7
+**Type:** pure refactor
+**Author session:** sonnet 4.6 medium
+
+**What moved**
+
+- From: `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (`canReopenClosedEditorTab` useMemo body, lines ~680-698)
+- To: `apps/desktop/src/lib/editorClosedTabStack.ts` (new `hasReopenableClosedEditorTab` export)
+- LOC delta source: 4087 → 4076 (−11)
+- LOC new function: ~20 lines added to `editorClosedTabStack.ts` (101 → 121)
+- Tests added: 7 new tests in `editorClosedTabStack.test.ts` covering null vaultRoot, empty stack, top-entry reopenable, non-top-entry reopenable, all-stale, note-set membership, and no-mutation guarantee (10 → 17 total tests)
+
+**Module budget**
+
+- Baseline entries changed: `useMainWindowWorkspace.ts` (4087 cap → now 4074, cap still 4088)
+- Direction: down only? yes
+- New function respects NEW_FILE_MAX_LINES: n/a — added to existing file; file is 121 lines
+
+**Behavior**
+
+- Behavior change: no
+- `isEditorClosedTabReopenable` removed from the hook's direct import (delegated via `hasReopenableClosedEditorTab`)
+
+**Verification**
+
+- `npm run lint`: pass
+- `npx vitest run apps/desktop/src/lib/editorClosedTabStack.test.ts` (17 tests): pass
+- `npm run check:architecture`: pass
+- Manual smoke test: not run — pure derivation with no side effects
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+Anti-growth cap not raised (remains 4088). The useMemo now delegates all scan logic to the helper; the hook only builds the `noteSet` from React state and passes plain values. No closures, refs, or deps changed.
+
+---
+
 ## Audit — 2026-05-14 — useMainWindowWorkspace anti-growth policy and next candidates
 
 **Scope:** docs-only audit; no application code, refactor, file move, or module-budget change.

@@ -16,7 +16,7 @@ Date: 2026-05-14
 
 ## Current Metrics
 
-- `useMainWindowWorkspace.ts`: 4118 -> 4087 LOC
+- `useMainWindowWorkspace.ts`: 4118 -> 4087 -> 4076 LOC
 - `apps/desktop/src/lib/` root files: 142 -> 118
 
 ## Process Notes
@@ -26,19 +26,15 @@ Date: 2026-05-14
 - Existing domain folders were safer early targets than broad new domain moves.
 - `clipboard/` was movable because prep separated clipboard helpers from attachment persistence, vault preview, and storage files.
 - `vault/` was started with only the two safest tested pure helpers; the rest of the vault group remains paused.
+- `hasReopenableClosedEditorTab` extracted cleanly: useMemo body moved to `editorClosedTabStack.ts`, hook delegates with plain values, 7 new unit tests.
 
 ## Current Decision
 
-Pause phase 2 after four successful domain moves.
+`hasReopenableClosedEditorTab` extraction complete (cleaning-things-up-pt-7).
 
-Next candidates require a fresh high-effort audit first.
+Anti-growth cap remains at `4088`; hook is now at 4074 LOC.
 
-Fresh audit completed in `specs/team-scalability/useMainWindowWorkspace-candidates.md`.
-Anti-growth policy is now explicit: `useMainWindowWorkspace.ts` must not exceed the current
-module-budget cap (`4088` script-counted lines), new behavior should land in focused helpers
-first, and any budget raise must be logged as temporary.
-
-Recommended next extraction, if the loop resumes: `hasReopenableClosedEditorTab`.
+Next extraction candidate per audit: `resolveModelBackedLegacyTabStrip` (risk: medium, defer until next cleanup cycle) or `normalizeWorkspaceVaultRootPath` (risk: low, low value).
 
 A vault-specific audit exists at `specs/team-scalability/phase-2-vault-domain-audit.md`. It keeps save, watcher, merge, bootstrap, and attachment/image persistence paths paused. Tree helpers, URI/path helpers, and link/rename/merge helpers each need a separate prep entry before any move.
 
