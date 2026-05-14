@@ -162,6 +162,104 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Phase 2 PR #2 prep — 2026-05-14 — Today Hub root helper migration
+
+**Branch:** `cleaning-things-up-pt-4`
+**Commit:** `e7002796`
+
+**Baseline**
+
+- `apps/desktop/src/lib/` root-level file count: 136
+- Target folder: `apps/desktop/src/lib/todayHub/`
+- `npm run check:architecture` before move: pass. Note: `check-module-budgets` reported no merge base and skipped git-based new/growth checks, then exited successfully.
+
+**Exact files to move**
+
+- `apps/desktop/src/lib/todayHubCellStaticPointer.ts`
+- `apps/desktop/src/lib/todayHubCellStaticPointer.test.ts`
+- `apps/desktop/src/lib/todayHubCellStaticView.ts`
+- `apps/desktop/src/lib/todayHubCellStaticView.test.ts`
+- `apps/desktop/src/lib/todayHubWorkspaceRestore.ts`
+- `apps/desktop/src/lib/todayHubWorkspaceRestore.test.ts`
+
+**Import call sites needing mechanical updates**
+
+- `apps/desktop/src/components/TodayHubCellStaticRichText.tsx` imports `../lib/todayHubCellStaticView` and `../lib/todayHubCellStaticPointer`
+- `apps/desktop/src/components/TodayHubCanvas.tsx` imports `../lib/todayHubCellStaticPointer`
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` imports `../lib/todayHubWorkspaceRestore`
+- `apps/desktop/src/hooks/inboxShellRestoreHelpers.ts` imports `../lib/todayHubWorkspaceRestore`
+- `apps/desktop/src/lib/workspaceModel/persistence.ts` imports `../todayHubWorkspaceRestore`
+- Moved tests currently import sibling modules via `./todayHubCellStaticPointer`, `./todayHubCellStaticView`, and `./todayHubWorkspaceRestore`; these should remain sibling imports after the move.
+- Internal imports inside moved files also need path-only updates: `todayHubCellStaticView*` imports from `../editor/...` should become `../../editor/...`; `todayHubWorkspaceRestore.ts` imports `./mainWindowUiStore` and should become `../mainWindowUiStore`.
+
+**Existing tests to run for the move PR**
+
+- `npm run test -w @eskerra/desktop -- todayHubCellStaticPointer.test.ts todayHubCellStaticView.test.ts todayHubWorkspaceRestore.test.ts todayHubCanvasCellLayout.test.ts todayHubWarmLru.test.ts`
+- `npm run check:architecture`
+
+**Non-goals**
+
+- No behavior changes.
+- No Today Hub rendering refactor.
+- No workspace model changes beyond the mechanical import path in `workspaceModel/persistence.ts`.
+- No editor tab model changes.
+- No barrel or `index.ts` changes unless implementation proves they are required; current audit found no requirement.
+- No deep-import ESLint restrictions.
+- No `.git-blame-ignore-revs` change until after the move commit exists.
+- No module-budget update for this planning entry.
+
+## Checkpoint — 2026-05-14 — phase 2 after PR #1
+
+**Phase 2 PR #1 result:** accepted. The `layout/` move landed as a pure file move plus mechanical import updates: six approved files moved, `windowTiling.ts` stayed root-level, no barrel was added, and `src/lib/` root-level files moved 142 -> 136.
+
+**Migration mechanics:** worked. The prep entry was specific enough to review the diff quickly, and the review found no behavior changes, no assertion changes, no persisted-key/default changes, and no added restrictions or contributor-process files.
+
+**Process lesson:** keep each domain move anchored by a prep entry with exact files, import call sites, targeted tests, and non-goals. For file moves, the review should keep comparing bodies/constants/tests against the pre-move versions rather than treating the diff as harmless import churn.
+
+**Decision:** continue phase 2 with one more small domain move, but require a fresh prep entry before implementation.
+
+**Recommended next candidate:** `todayHub/`. The plan already has an existing `apps/desktop/src/lib/todayHub/` folder, a small set of root files to consider (`todayHubCellStaticPointer*`, `todayHubCellStaticView*`, `todayHubWorkspaceRestore*`), and colocated tests. `clipboard/` remains a plausible later candidate, but it carries editor paste/import risk and should wait until after the Today Hub prep audit. Avoid `vault/`, `editor/`, `gitSync/`, `workspaceModel/`, and `tauri/` for now.
+
+**Next step:** write a Phase 2 PR #2 prep entry before any move. It should confirm the exact Today Hub file list, import call sites, whether the existing `todayHub/index.ts` boundary changes or stays untouched, and targeted tests.
+
+## Review — 2026-05-14 — phase 2 PR #1 — move layout helpers into lib/layout/
+
+**Reviewer session:** sonnet 4.6 — phase-2-pr1 review session
+**Review prompt:** Close phase 2 PR #1; verdict accept with no findings; confirm file scope, import mechanics, no content changes, no added files or restrictions.
+
+**Files reviewed**
+- `apps/desktop/src/lib/layout/desktopHorizontalSplitClamp.ts`
+- `apps/desktop/src/lib/layout/desktopHorizontalSplitClamp.test.ts`
+- `apps/desktop/src/lib/layout/desktopVerticalSplitClamp.ts`
+- `apps/desktop/src/lib/layout/desktopVerticalSplitClamp.test.ts`
+- `apps/desktop/src/lib/layout/layoutStore.ts`
+- `apps/desktop/src/lib/layout/layoutStore.test.ts`
+- 9 updated import call sites (App.tsx, VaultTabSideColumn.tsx, DesktopHorizontalSplit.tsx, DesktopHorizontalSplitEnd.tsx, DesktopVerticalSplit.tsx, MainWorkspaceSplit.tsx, VaultTab.tsx, useAppLayoutWidthPersisters.ts, useAppOnMountLayoutHydration.ts)
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Checklist**
+
+- Only six approved files moved: confirmed — no other files added or removed from `src/lib/` root
+- `windowTiling.ts` stayed root-level: confirmed
+- Imports mechanical: confirmed — only path strings updated; no imports added or removed
+- Function bodies unchanged: confirmed — all clamp helpers, sanitizers, migrate/parse functions, load/save functions identical
+- Constants unchanged: confirmed — persisted store key names (`layoutPanelsV4`, `layoutPanelsV3`), default values, and clamp constants all identical
+- Test assertions unchanged: confirmed — all 20 test assertions identical to pre-move
+- No `index.ts` or barrel added: confirmed
+- No ESLint deep-import restrictions added: confirmed
+- No CODEOWNERS, CONTRIBUTING.md, or PR template changes: confirmed
+- `src/lib/` root-level file count: confirmed 142 → 136
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
 ## Phase 2 PR #1 — 2026-05-14 — move layout helpers into lib/layout/
 
 **Cycle:** phase 2
