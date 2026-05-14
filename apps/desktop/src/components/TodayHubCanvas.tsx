@@ -49,7 +49,7 @@ import {
 } from '../lib/todayHub';
 import {INBOX_AUTOSAVE_DEBOUNCE_MS} from '../lib/inboxAutosaveScheduler';
 import {todayHubPerfEnabled, todayHubPerfLog} from '../lib/todayHub/todayHubPerf';
-import {todayHubStaticCellDocOffsetFromPointer} from '../lib/todayHubCellStaticPointer';
+import {todayHubStaticCellDocOffsetFromPointer} from '../lib/todayHub/todayHubCellStaticPointer';
 import {
   todayHubCanvasCellSurface,
   todayHubCanvasCellWarmOrActive,

@@ -1,4 +1,4 @@
-import type {StoredEditorWorkspaceTab} from './mainWindowUiStore';
+import type {StoredEditorWorkspaceTab} from '../mainWindowUiStore';
 
 function firstHubUriInStoredTab(
   t: StoredEditorWorkspaceTab,

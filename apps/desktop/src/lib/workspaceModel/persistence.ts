@@ -26,7 +26,7 @@ import {
   tabsFromStored,
 } from '../editorWorkspaceTabs';
 import {normalizeEditorDocUri} from '../editorDocumentHistory';
-import {pickDefaultActiveTodayHubUri} from '../todayHubWorkspaceRestore';
+import {pickDefaultActiveTodayHubUri} from '../todayHub/todayHubWorkspaceRestore';
 import type {HistoryStack, WorkspaceModel, WorkspaceState, TabEntry} from './types';
 import {createDefaultWorkspaceState, normalizeWorkspaceUri} from './types';
 

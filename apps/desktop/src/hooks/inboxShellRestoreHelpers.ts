@@ -13,7 +13,7 @@ import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
 import {parseWorkspaceModelFromPersistence} from '../lib/workspaceModel/persistence';
-import {pickDefaultActiveTodayHubUri} from '../lib/todayHubWorkspaceRestore';
+import {pickDefaultActiveTodayHubUri} from '../lib/todayHub/todayHubWorkspaceRestore';
 
 export type StoredWorkspaceRow = {id: string; entries: string[]; index: number};
 

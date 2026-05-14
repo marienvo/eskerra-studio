@@ -11,7 +11,7 @@ import {wikiLinkPointerActivatableInnerAtDocPosition} from '../editor/noteEditor
 import {
   buildTodayHubCellStaticViewModel,
   clipSegmentsToRange,
-} from '../lib/todayHubCellStaticView';
+} from '../lib/todayHub/todayHubCellStaticView';
 import {parseLoneLinkLine} from '../lib/parseLoneLinkLine';
 import {LinkRichPreviewCard} from './LinkRichPreviewCard';
 import {
@@ -21,7 +21,7 @@ import {
 import {
   todayHubStaticCellDocOffsetFromPointer,
   todayHubStaticRichTextPointerHitsVisibleLinkToken,
-} from '../lib/todayHubCellStaticPointer';
+} from '../lib/todayHub/todayHubCellStaticPointer';
 import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,

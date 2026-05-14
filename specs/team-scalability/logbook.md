@@ -162,6 +162,68 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Phase 2 PR #2 — 2026-05-14 — move Today Hub root helpers into lib/todayHub/
+
+**Cycle:** phase 2
+**Type:** pure refactor (file move + import update)
+**Author session:** sonnet 4.6 — phase-2-pr2 session
+
+**What moved**
+
+- From: `apps/desktop/src/lib/` (root)
+- To: `apps/desktop/src/lib/todayHub/` (existing folder)
+- Files moved:
+  - `todayHubCellStaticPointer.ts`
+  - `todayHubCellStaticPointer.test.ts`
+  - `todayHubCellStaticView.ts`
+  - `todayHubCellStaticView.test.ts`
+  - `todayHubWorkspaceRestore.ts`
+  - `todayHubWorkspaceRestore.test.ts`
+- `apps/desktop/src/lib/` root-level file count: 136 → 130 (−6)
+- Import call sites updated: 5
+  - `apps/desktop/src/components/TodayHubCellStaticRichText.tsx` (2 imports: `todayHubCellStaticView`, `todayHubCellStaticPointer`)
+  - `apps/desktop/src/components/TodayHubCanvas.tsx` (1 import: `todayHubCellStaticPointer`)
+  - `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (1 import: `todayHubWorkspaceRestore`)
+  - `apps/desktop/src/hooks/inboxShellRestoreHelpers.ts` (1 import: `todayHubWorkspaceRestore`)
+  - `apps/desktop/src/lib/workspaceModel/persistence.ts` (1 import: `todayHubWorkspaceRestore`)
+- Internal imports inside moved files updated:
+  - `todayHubCellStaticView.ts`: `../editor/noteEditor/...` → `../../editor/noteEditor/...` (2 import paths)
+  - `todayHubCellStaticView.test.ts`: `../editor/noteEditor/...` → `../../editor/noteEditor/...` (2 import paths)
+  - `todayHubWorkspaceRestore.ts`: `./mainWindowUiStore` → `../mainWindowUiStore`
+- Test sibling imports (`./todayHubCellStaticPointer`, `./todayHubCellStaticView`, `./todayHubWorkspaceRestore`) remain unchanged as co-located siblings
+
+**Module budget**
+
+- Baseline entries changed: none (moved files were not in the budget baseline JSON)
+- Direction: down only? n/a — domain-clustering move, no extractions
+- No barrel file (`index.ts`) added or changed
+- No ESLint deep-import restrictions added
+
+**Behavior**
+
+- Behavior change: no
+- No Today Hub rendering refactor
+- No workspace model changes beyond mechanical import path in `workspaceModel/persistence.ts`
+- No editor tab model changes
+
+**Verification**
+
+- `npm run test -w @eskerra/desktop -- todayHubCellStaticPointer.test.ts todayHubCellStaticView.test.ts todayHubWorkspaceRestore.test.ts todayHubCanvasCellLayout.test.ts todayHubWarmLru.test.ts`: pass (20 tests, 5 files)
+- `npm run lint`: pass
+- `npm run check:architecture`: pass
+- Manual smoke test: n/a — import-only move; no logic changes
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+No `index.ts` added. No ESLint deep-import restrictions added. Direct updated paths used for all call sites. Existing `todayHub/index.ts` boundary unchanged.
+
+---
+
 ## Phase 2 PR #2 prep — 2026-05-14 — Today Hub root helper migration
 
 **Branch:** `cleaning-things-up-pt-4`

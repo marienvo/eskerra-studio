@@ -3,11 +3,11 @@ import {ensureSyntaxTree, syntaxTree} from '@codemirror/language';
 import {EditorState} from '@codemirror/state';
 import {describe, expect, it} from 'vitest';
 
-import {markdownEskerra} from '../editor/noteEditor/markdownEskerraLanguage';
+import {markdownEskerra} from '../../editor/noteEditor/markdownEskerraLanguage';
 import {
   markdownEditorBlockLineClasses,
   noteMarkdownParserExtensions,
-} from '../editor/noteEditor/markdownEditorStyling';
+} from '../../editor/noteEditor/markdownEditorStyling';
 import {
   buildTodayHubCellStaticViewModel,
   clipSegmentsToRange,
