@@ -178,7 +178,7 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 **Module budget**
 
-- Baseline entries changed: `useMainWindowWorkspace.ts` (4087 cap → now 4074, cap still 4088)
+- Baseline entries changed: `useMainWindowWorkspace.ts` (4087 cap → now 4076, cap still 4088)
 - Direction: down only? yes
 - New function respects NEW_FILE_MAX_LINES: n/a — added to existing file; file is 121 lines
 
@@ -202,6 +202,117 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 **Notes**
 
 Anti-growth cap not raised (remains 4088). The useMemo now delegates all scan logic to the helper; the hook only builds the `noteSet` from React state and passes plain values. No closures, refs, or deps changed.
+
+---
+
+## Audit — 2026-05-14 — resolveModelBackedLegacyTabStrip prep
+
+**Scope:** prep audit only. No application code, refactor, file move, or module-budget change.
+
+**Files read**
+
+- `specs/team-scalability/useMainWindowWorkspace-candidates.md`
+- `specs/team-scalability/current-status.md`
+- `specs/team-scalability/logbook.md`
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts`
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.ts`
+- `apps/desktop/src/hooks/workspaceRuntimeTabsLegacyBridge.ts`
+- Related tests: `workspaceRuntimeProjection.test.ts`, `useMainWindowWorkspace.hydrateVault.test.ts`
+
+**Exact source ranges**
+
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` lines 1429-1515: `applyBackgroundNewTabOpen`.
+  - Legacy placement is built on lines 1437-1462.
+  - WorkspaceModel dispatch happens on lines 1464-1467.
+  - Model-derived tab strip selection, full signature comparison, legacy fallback, and dev warning happen on lines 1468-1489.
+  - Assignment/mirroring remains caller-owned on lines 1491-1500.
+  - Prefetch cache update on lines 1501-1511 is out of scope.
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` lines 2031-2096: `closeEditorTab`.
+  - Save/flush and closed-tab bookkeeping happen on lines 2034-2047.
+  - WorkspaceModel dispatch happens on lines 2049-2051.
+  - Model-derived tab strip selection, id-order comparison, legacy fallback, and dev warning happen on lines 2052-2075.
+  - Assignment remains caller-owned on lines 2077-2081.
+  - Active-tab refocus remains caller-owned on lines 2083-2086.
+- Related existing pattern: `apps/desktop/src/hooks/workspaceEditorHistoryNavigation.ts` lines 31-62 contains a private helper for tab-history model comparison plus assignment and warning. Do not reuse it directly in the minimal PR because it owns assignment and warning side effects.
+
+**Current responsibility**
+
+Both call sites compute the legacy tab strip first, dispatch the equivalent `WorkspaceModel` action, project the active workspace's model tabs back to `EditorWorkspaceTab[]`, and use model-derived tabs only when they match legacy expectations. If a model strip exists but does not match, development builds warn and the legacy strip remains authoritative.
+
+The two match rules are intentionally different:
+
+- Background open uses `legacyEditorWorkspaceTabsSignature` for both strips, so ids, normalized history entries, and history index must all match.
+- Close tab compares only tab ids and order. This preserves the existing behavior where close-tab fallback is keyed to strip membership/order, not full history signature.
+
+**Pure helper shape**
+
+Best minimal helper name: `resolveModelBackedLegacyTabStrip`.
+
+Inputs:
+
+- `nextModel: WorkspaceModel`
+- `nextTabsLegacy: readonly EditorWorkspaceTab[]`
+- `match: 'signature' | 'ids'`
+
+Outputs:
+
+- `nextTabs: EditorWorkspaceTab[]` — model-derived strip when the configured comparison matches, otherwise a copy/reference of the legacy strip exactly as today.
+- `derivedTabs: EditorWorkspaceTab[] | null` — null when no active hub/workspace can be projected; this remains a silent legacy fallback.
+- `matched: boolean`
+- `mismatch: null | {kind: 'signature'; legacySig: string; derivedSig: string | null} | {kind: 'ids'; legacyIds: string[]; derivedIds: string[]}`
+
+The helper must not read React refs/state, must not call `console.warn`, and must not read `process.env`. The caller should keep the exact warning messages and dev-only guard, using the helper's mismatch payload. For `closeEditorTab`, the caller should still add `{tabId, legacyIds, derivedIds}` to the warning payload so the existing payload shape is preserved.
+
+**Best target file**
+
+`apps/desktop/src/hooks/workspaceRuntimeProjection.ts`.
+
+Reason: the helper is pure model-to-runtime projection/comparison logic and already needs `editorWorkspaceTabsFromModelTabEntries`, `legacyEditorWorkspaceTabsSignature`, `WorkspaceModel`, and `EditorWorkspaceTab`. Putting it in `workspaceRuntimeTabsLegacyBridge.ts` would blur pure resolution with ref/state assignment, which this extraction should avoid.
+
+**Existing coverage**
+
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts` lines 170-269 cover `closeTabAction` model behavior for inactive close, active-neighbor close, and sole-tab close.
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts` lines 272-369 cover `openTabBackgroundAction` append, insert-after, insert-at-index, and Home-surface preservation.
+- `apps/desktop/src/hooks/useMainWindowWorkspace.hydrateVault.test.ts` lines 773-845 cover real hook tab creation/background open and shadow model alignment.
+- `apps/desktop/src/hooks/useMainWindowWorkspace.hydrateVault.test.ts` lines 929-940 cover `closeEditorTab` for the last active tab and Home refocus.
+
+**Missing tests for the implementation PR**
+
+- Add exact-value tests for `resolveModelBackedLegacyTabStrip` in `workspaceRuntimeProjection.test.ts`:
+  - signature match returns the derived tabs and `mismatch: null`.
+  - signature mismatch returns legacy tabs and exact `{kind: 'signature', legacySig, derivedSig}`.
+  - ids match returns derived tabs even if the full histories differ, matching the current `closeEditorTab` id-only comparison.
+  - ids mismatch returns legacy tabs and exact `{kind: 'ids', legacyIds, derivedIds}`.
+  - missing active hub or missing workspace returns legacy tabs, `derivedTabs: null`, `matched: false`, and `mismatch: null` to preserve no-warning fallback.
+- Keep assertions exact (`toEqual`, `toBe`) rather than truthiness-only checks.
+- No hook mount test is required for the pure extraction if the duplicated call-site warning payloads remain visibly unchanged in review.
+
+**Danger-zone analysis**
+
+The extraction target avoids the explicit danger zones:
+
+- Does not touch `lastPersistedRef`.
+- Does not touch `inboxContentByUri` or `inboxContentByUriRef`; the prefetch cache update after background open stays in the hook.
+- Does not touch `saveNoteMarkdown`, autosave scheduler behavior, watcher/reconcile behavior, or editor-save flow.
+- Does not touch `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`.
+
+The surrounding callbacks do cross save timing, closed-tab bookkeeping, shadow mirroring, active-tab refocus, and prefetch cache updates. Those must stay outside the helper.
+
+**Risk notes**
+
+- Stale closures: low if the helper receives only `nextModel` and the already-computed `nextTabsLegacy`. Do not pass refs, setters, callbacks, or current active tab refs into the helper.
+- Callback timing: medium around `closeEditorTab` because dispatch occurs after async save/flush and closed-tab recording. The helper must stay after dispatch and before assignment, preserving the exact order.
+- Warning behavior: medium. Preserve no warning when `derivedTabs` is null. Preserve dev-only `process.env.NODE_ENV !== 'production'` checks in the hook. Preserve exact message strings and payload field names.
+- Comparison semantics: medium. The background-open path uses full signature comparison, while close-tab uses id-only comparison. Combining them incorrectly would be a behavior change.
+
+**Recommendation**
+
+Safe to implement now as a minimal PR, because the extraction can be pure, local, and testable, and the previous smaller `hasReopenableClosedEditorTab` extraction is complete. Keep the PR to:
+
+- Add `resolveModelBackedLegacyTabStrip` to `workspaceRuntimeProjection.ts`.
+- Add focused pure tests in `workspaceRuntimeProjection.test.ts`.
+- Replace only the two duplicated selection/comparison blocks in `applyBackgroundNewTabOpen` and `closeEditorTab`.
+- Leave assignment, mirroring, warning side effects, save/flush, closed-tab stack updates, refocus, prefetch cache updates, and module-budget files unchanged.
 
 ---
 

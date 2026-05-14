@@ -4,7 +4,7 @@ Date: 2026-05-14
 
 ## Anti-Growth Policy
 
-- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` must not grow above the current module-budget cap (`4088` script-counted lines; `wc -l` currently reports `4087`).
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` must not grow above the current module-budget cap (`4088` script-counted lines; `wc -l` currently reports `4076`).
 - New behavior should land in focused helpers, hooks, or modules first.
 - The main hook should only wire dependencies, own React orchestration, and delegate focused logic.
 - Raising the budget requires an explicit logbook note, a reason, and a temporary follow-up plan to lower it again.
@@ -39,13 +39,13 @@ Previously extracted candidates (`injectActiveHubIntoTodayHubPersistMap`,
 
 ### 2. `resolveModelBackedLegacyTabStrip`
 
-- **Rough source location:** `apps/desktop/src/hooks/useMainWindowWorkspace.ts` lines ~1485-1500 (`applyBackgroundNewTabOpen`) and ~2069-2086 (`closeEditorTab`).
-- **Current responsibility:** Compares legacy tab-strip output with the model-derived tab strip, uses the derived strip when signatures match, and warns in development when they diverge.
+- **Rough source location:** `apps/desktop/src/hooks/useMainWindowWorkspace.ts` lines 1468-1489 (`applyBackgroundNewTabOpen`) and 2052-2075 (`closeEditorTab`).
+- **Current responsibility:** Compares legacy tab-strip output with the model-derived tab strip, uses the derived strip when it matches, and warns in development when a model strip exists but diverges. Background open uses full tab signatures; close-tab uses id/order comparison only.
 - **Danger-zone proximity:** Low to medium. It sits inside tab open/close orchestration, but the candidate itself is pure comparison plus warning metadata. It does not touch save refs, body caches, watcher state, or editor persistence.
-- **Testability:** High. Unit tests can cover matching signatures, mismatched signatures, missing model workspace, and warning payload data without mounting the hook.
-- **Likely files touched:** `apps/desktop/src/hooks/workspaceRuntimeProjection.ts` or `apps/desktop/src/hooks/workspaceRuntimeTabsLegacyBridge.ts`, corresponding test file, `apps/desktop/src/hooks/useMainWindowWorkspace.ts`.
+- **Testability:** High. Unit tests can cover signature match/mismatch, id match/mismatch, missing model workspace, and exact mismatch payload data without mounting the hook.
+- **Likely files touched:** `apps/desktop/src/hooks/workspaceRuntimeProjection.ts`, `apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts`, `apps/desktop/src/hooks/useMainWindowWorkspace.ts`.
 - **Risk:** medium.
-- **Safe now/later/not yet:** later. Safe mechanically, but it crosses two high-traffic tab callbacks and should follow a smaller extraction.
+- **Safe now/later/not yet:** safe now after prep audit, if implemented as a pure resolver only. Keep assignment, warning side effects, save/flush, closed-tab stack updates, refocus, and prefetch cache updates in the hook.
 
 ### 3. `useWorkspaceVaultMarkdownRefs`
 
@@ -79,6 +79,6 @@ Previously extracted candidates (`injectActiveHubIntoTodayHubPersistMap`,
 
 ## Recommended Next Extraction
 
-Recommend **`hasReopenableClosedEditorTab`** only.
+Recommend **`resolveModelBackedLegacyTabStrip`** as the next minimal implementation PR.
 
-It is the clearest next small extraction: pure, already adjacent to the closed-tab stack module, directly testable, and outside the explicit danger zones. `normalizeWorkspaceVaultRootPath` is also safe but too small to justify the review cycle by itself. The other candidates should wait until the next cleanup pass because they sit closer to tab orchestration, async vault ref refresh, or restore/default-hub behavior.
+The `hasReopenableClosedEditorTab` extraction is complete. The next candidate is medium risk because it crosses tab open/close orchestration, but the audited extraction can stay pure: resolve model-derived vs legacy tabs, return mismatch metadata, and leave all side effects in `useMainWindowWorkspace.ts`. `normalizeWorkspaceVaultRootPath` remains safe but lower value.
