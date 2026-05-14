@@ -206,6 +206,48 @@ Budget discrepancy note: `wc -l` reports 4099; the budget script (`split(/\r?\n/
 
 ---
 
+## Review — 2026-05-14 — #TBD (cycle 1 PR #1)
+
+**Reviewer session:** sonnet 4.6 — fresh session, no author context
+**Reviewer prompt used:** standard reviewer prompt from logbook template (diff + original + extracted file + README danger-zone section)
+
+**Prompt template for reusing this review:**
+
+> You are reviewing a refactor PR for the Eskerra desktop app. Read:
+> 1. The PR diff (files: `useMainWindowWorkspace.ts`, `workspaceTodayHubDerived.ts`, `workspaceTodayHubDerived.test.ts`, `module-budget-baseline.json`).
+> 2. The original file before the refactor: `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (lines ~842–890, `legacyTodayHubWorkspacesPersistFiltered` useMemo).
+> 3. The new extracted file: `apps/desktop/src/hooks/workspaceTodayHubDerived.ts`.
+> 4. `specs/team-scalability/README.md` (especially the danger-zone section).
+> 5. The relevant section of `CLAUDE.md`.
+>
+> Report:
+> - Any closure / ref / dependency that was silently dropped or rebound.
+> - Any state-mutation path in the original that is not preserved in the new code.
+> - Any missing test that the original behavior implicitly depended on.
+> - Whether the module-budget baseline was lowered correctly.
+> - Whether any danger-zone file was touched.
+>
+> Be specific. Cite line numbers. Do not approve or reject — just list findings.
+
+**Findings (verbatim from reviewer):**
+
+1. **Test coverage gap — active-hub-absent branch:** The test `'creates a new entry with homeHistory when the active hub is absent from merged'` passes `homeStatesByHub: {}`, so `homeStatesByHub[hub]` is undefined and the function falls through to `createWorkspaceHomeState(hub)` which creates a default (empty) history. The test only asserts `homeHistory` is defined, not that it has the correct shape. A caller who supplies a non-empty `homeStatesByHub` for the new hub would exercise different behaviour; the assertion should match exact `entries` and `index` from the supplied state. Not blocking — the code path is correct — but the weak assertion would survive a bug that mis-reads from the wrong hub.
+2. **JSDoc comment imprecision:** The helper JSDoc says `"Pure: reads params only, returns a new map."` The null-active-hub branch intentionally returns `merged` by reference (identity, not a copy). A future caller might rely on this for memo equality checks; the comment should state this explicitly so the optimisation is not inadvertently removed.
+
+No dropped dependencies, no stale closures, no mutation paths missed, no danger-zone files touched. Baseline was lowered correctly (4119 → 4100 in script-compatible units).
+
+**Verdict:** accept with tiny follow-up on items 1 and 2.
+
+**Resolutions:**
+
+- Finding 1: addressed — test strengthened to supply an explicit `homeStatesByHub` entry with non-default `entries` and `index`, and assertion updated to match exact values.
+- Finding 2: addressed — JSDoc updated to read `"Pure: reads params only, returning \`merged\` unchanged when no active hub is selected."` making the by-reference return explicit.
+- Follow-up review: accepted — no further findings.
+
+**Final status: accepted.**
+
+---
+
 ## Baseline — 2026-05-14 — cycle 1
 
 **Branch:** `cleaning-things-up`
