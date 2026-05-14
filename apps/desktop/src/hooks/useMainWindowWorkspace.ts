@@ -204,8 +204,8 @@ import {
 } from './workspaceVaultWatchEffects';
 import {useWorkspaceController} from './useWorkspaceController';
 import {
+  collectShadowDivergenceDevDiagnostics,
   deriveModelDerivedPersistencePayload,
-  describeFilteredLegacyVsModelPersistenceDivergence,
 } from './workspacePersistenceBridge';
 import {
   computeProjectionHubUris,
@@ -876,35 +876,23 @@ export function useMainWindowWorkspace(options: {
       : todayHubWorkspacesForSave;
 
   useEffect(() => {
-    if (!inboxShellRestored) return;
-    if (!import.meta.env.DEV && import.meta.env.MODE !== 'test') return;
-    // Suppress noise during init frames where the model has no hubs yet.
-    if (workspaceShadowModel.activeHub === null) return;
-    const modelHubKeys = new Set(Object.keys(modelDerivedPersistence.todayHubWorkspaces));
-    const legacyHubKeys = new Set(Object.keys(legacyTodayHubWorkspacesPersistFiltered));
-    const hasPendingProjectionHubs = Object.keys(todayHubWorkspacesForProjection).some(
-      hub => !modelHubKeys.has(hub),
-    );
-    const diffs = describeFilteredLegacyVsModelPersistenceDivergence(
+    const {diffs, suppress} = collectShadowDivergenceDevDiagnostics({
+      inboxShellRestored,
+      isDevOrTest: import.meta.env.DEV || import.meta.env.MODE === 'test',
+      shadowModelActiveHub: workspaceShadowModel.activeHub,
       modelDerivedPersistence,
-      {
+      legacyRuntimePayload: {
         activeTodayHubUri,
         todayHubWorkspaces: legacyTodayHubWorkspacesPersistFiltered,
       },
-      {
-        activeHub: workspaceShadowModel.activeHub,
-        runtimeActiveHub: activeTodayHubUri,
-        projectionActiveHub: hubForProjection,
-        restoredActiveHub:
-          typeof restoredInboxState?.activeTodayHubUri === 'string'
-            ? restoredInboxState.activeTodayHubUri
-            : null,
-        modelHubKeys,
-        legacyHubKeys,
-        hasPendingProjectionHubs,
-      },
-    );
-    if (diffs.length > 0) {
+      hubForProjection,
+      restoredActiveTodayHubUri:
+        typeof restoredInboxState?.activeTodayHubUri === 'string'
+          ? restoredInboxState.activeTodayHubUri
+          : null,
+      todayHubWorkspacesForProjection,
+    });
+    if (!suppress && diffs.length > 0) {
       console.warn('[workspaceModel] persistence legacy divergence', diffs);
     }
   }, [
