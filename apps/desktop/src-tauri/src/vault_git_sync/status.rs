@@ -321,8 +321,11 @@ fn read_ahead_behind(vault_path: &Path, remote_ref: &str) -> Result<(u32, u32, b
     let out = GitCmd::new(vault_path, &["rev-list", "--left-right", "--count", &range]).run()?;
 
     if !out.success {
-        // e.g. empty repo with no commits — treat as 0/0 but ref was present
-        return Ok((0, 0, true));
+        return Err(SyncError::GitCommandFailed {
+            command: format!("git rev-list --left-right --count {range}"),
+            exit_code: out.exit_code,
+            stderr: out.stderr.trim().to_string(),
+        });
     }
 
     let (ahead, behind) = parse_rev_list_count(out.stdout.trim())?;
@@ -767,7 +770,48 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // 14. Mutation safety
+    // 14. Unborn HEAD with remote ref — rev-list fails, must surface error
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn unborn_head_with_remote_ref_returns_error() {
+        // Create a source repo with one commit and expose it as a bare remote.
+        let source = Repo::new();
+        source.commit("f.txt", "a", "init");
+        let bare = tempfile::tempdir().unwrap();
+        git(
+            &[
+                "clone",
+                "--bare",
+                source.path().to_str().unwrap(),
+                bare.path().to_str().unwrap(),
+            ],
+            source.path(),
+        );
+
+        // Fresh unborn repo: no commits, so HEAD cannot be resolved.
+        let local = Repo::new();
+        git(
+            &["remote", "add", "origin", bare.path().to_str().unwrap()],
+            local.path(),
+        );
+        // Fetch so refs/remotes/origin/main exists locally even though HEAD is unborn.
+        git(&["fetch", "origin"], local.path());
+
+        // rev-list HEAD...origin/main fails on an unborn HEAD.
+        // Must propagate as GitCommandFailed, not silently return (0, 0, true).
+        let result = git_status(local.path(), "main", "origin");
+        assert!(
+            matches!(
+                result,
+                Err(SyncError::GitCommandFailed { ref command, .. }) if command.contains("rev-list")
+            ),
+            "expected GitCommandFailed for rev-list on unborn HEAD, got {result:?}",
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // 15. Mutation safety
     // -----------------------------------------------------------------------
 
     #[test]
