@@ -53,12 +53,13 @@ The first two weeks run as a tight, repeatable loop. The goal is to learn how sc
 ```
 Day 1        Baseline
               - Snapshot module-budget metrics, lint warnings, test counts.
-              - Pick ONE candidate from the workspace hook (outside danger zones).
               - Open a logbook baseline entry.
+              - Do not select an extraction candidate yet.
 
-Day 2-4      Audit candidate
-              - Read the code paths in scope. Map inputs, outputs, state.
-              - Confirm extraction is safe (no danger-zone touchpoints).
+Day 2-4      Audit candidates
+              - Identify 2-3 candidate extractions from the workspace hook.
+              - Map inputs, outputs, state, and danger-zone touchpoints.
+              - Select ONE candidate only after the audit.
               - Write a 5-10 line plan in the logbook PR entry.
 
 Day 5-7      Implement extraction PR #1

@@ -165,24 +165,46 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 ## Baseline — 2026-05-14 — cycle 1
 
 **Branch:** `cleaning-things-up`
-**Commit:** TODO — record the exact short SHA when the cycle officially starts.
+**Commit:** `1290736b`
 
-Snapshot of the metrics this cycle will move. Fill in exact numbers from the tooling listed; do not estimate.
+Measurements:
 
-- `useMainWindowWorkspace.ts` LOC: TODO — read from `scripts/module-budget-baseline.json` or `wc -l`.
-- Workspace-related sibling hooks LOC sum: TODO — sum of `apps/desktop/src/hooks/workspace*.ts` excluding tests.
-- `react-hooks/exhaustive-deps` warnings in workspace hook: TODO — run `npm run lint -w @eskerra/desktop` and count for this file.
-- ESLint suppression count: TODO — run `node scripts/check-eslint-suppressions.mjs` (or the equivalent invocation captured in `npm run check:architecture`).
-- Test file count under `apps/desktop/src/`: TODO — `find apps/desktop/src -name "*.test.ts*" | wc -l`.
-- `src/lib/` root-level file count: TODO — `ls apps/desktop/src/lib | wc -l` (exclude subdirectories).
-- `npm run check:architecture` status: TODO.
+- `useMainWindowWorkspace.ts` LOC: **4118**
+- Workspace-related sibling hooks LOC sum: **4855** (21 files matching `apps/desktop/src/hooks/workspace*.ts`, excluding `*.test.ts`)
+- `react-hooks/exhaustive-deps` warnings in `useMainWindowWorkspace.ts`: **0**
+- `eslint-disable` occurrences under `apps/desktop/src/`: **13** (raw lines; `npm run check:architecture` exits 0 against the current baseline in `scripts/eslint-disable-baseline.json`)
+- Test file count under `apps/desktop/src/`: **178** (`*.test.ts` + `*.test.tsx`)
+- `apps/desktop/src/lib/` root-level file count: **142** (regular files only, subdirectories excluded)
+- `npm run check:architecture` status: **pass** (exit 0)
 
-Candidates considered for extraction this cycle (to be filled in after the day 2-4 audit step; do not pre-commit to one yet):
+Commands used:
 
-- TODO — candidate 1 from `useMainWindowWorkspace.ts`, with one-line rationale and explicit confirmation it is outside the danger zones.
+```bash
+git rev-parse --abbrev-ref HEAD
+git rev-parse --short HEAD
+wc -l apps/desktop/src/hooks/useMainWindowWorkspace.ts
+ls apps/desktop/src/hooks/workspace*.ts | grep -v "\.test\." | xargs wc -l | tail -1
+( cd apps/desktop && npx eslint src/hooks/useMainWindowWorkspace.ts ) \
+  | grep -c "react-hooks/exhaustive-deps"
+grep -rn "eslint-disable" apps/desktop/src --include="*.ts" --include="*.tsx" | wc -l
+node scripts/check-eslint-suppressions.mjs
+find apps/desktop/src -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) | wc -l
+find apps/desktop/src/lib -maxdepth 1 -type f | wc -l
+npm run check:architecture
+```
+
+Measurement notes:
+
+- `react-hooks/exhaustive-deps` count is **0** today. The earlier May 04 follow-up recorded 26 warnings on this file; the rule appears to have been resolved in the interim. Recording 0 honestly; cycle 1 will not be measured against the older 26 figure.
+- "ESLint suppression count" in the README template maps to the raw `eslint-disable` line count above. The repo script (`check-eslint-suppressions.mjs`) validates against a baseline list and exits 0/1; it does not emit a single suppression number. The 13-line raw count is the cleanest comparable measure.
+- LOC is measured with `wc -l` (newline count), matching the convention used by `scripts/check-module-budgets.mjs`.
+
+Candidates considered for extraction this cycle: TODO — to be filled in after the day 2–4 audit step. Do not pre-commit before reading the code.
+
+- TODO — candidate 1: one-line rationale, explicit confirmation outside danger zones.
 - TODO — candidate 2.
 - TODO — candidate 3.
 
-Selected candidate: TODO — pick one after the audit, not before.
+Selected candidate: TODO — pick after the audit.
 
-Reason for selection: TODO — record why this candidate is the safest, smallest, highest-confidence first extraction. Must explicitly state how it avoids cache, persistence, watcher, and editor-save behavior.
+Reason for selection: TODO — must state how it avoids cache, persistence, watcher, and editor-save behavior.
