@@ -162,6 +162,422 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Reassessment — 2026-05-14 — phase 2 domain clustering after PR #2
+
+**Phase 2 window:** 2026-05-14 to 2026-05-14
+**PRs completed:** PR #1 `layout/`; PR #2 `todayHub/`
+
+**Metric movement**
+
+- `apps/desktop/src/lib/` root-level file count: 142 -> 130
+- Domains created/filled: `layout/` created; `todayHub/` filled with root helpers
+- Files moved: 12 total
+- Behavior changes: 0
+- Danger-zone touches: 0
+- Barrels/index files added: 0
+- ESLint deep-import restrictions added: 0
+
+**What went well:** Both moves stayed small and reviewable. Prep entries with exact file lists and import call sites made reviews fast and concrete. Existing domain folders were safer first targets than creating broad new domains: `todayHub/` already had a folder and `layout/` had clear file naming and focused call sites.
+
+**What was harder than expected:** Even import-only moves can brush against model or UI boundaries. The Today Hub move touched visible rendering imports and `workspaceModel/persistence.ts`; that was acceptable because it was import-only, but model-adjacent files need strict review. `clipboard/` is plausible next, but editor paste/import behavior makes it a higher-review-cost move than `layout/` or `todayHub/`.
+
+**Process lessons:** File-move reviews must compare bodies, constants, persisted values, defaults, and test assertions; import churn is not harmless by default. Keep avoiding barrel/index changes unless the prep proves they are required. Keep high-risk domains deferred: `vault/`, `editor/`, `gitSync/`, `workspaceModel/`, and `tauri/`. If `clipboard/` becomes the next candidate, require a fresh prep entry and explicit editor paste/import review.
+
+**Decision:** pause phase 2 after two successful moves; keep `clipboard/` as the next candidate only after a fresh prep entry.
+
+**Reasoning:** The first two domain moves proved the migration mechanics and reduced the flat `src/lib/` root meaningfully without behavior changes. Continuing immediately would move into medium-risk territory. Do not add contributor-process docs yet, and do not return to phase 1 hook extraction without a separate fresh audit.
+
+## Checkpoint — 2026-05-14 — phase 2 after PR #2
+
+**Phase 2 results so far:** PR #1 `layout/` accepted; PR #2 `todayHub/` accepted. Both were pure file moves with mechanical import updates, no behavior changes, no barrel/index changes, no ESLint deep-import restrictions, and no contributor-process files.
+
+**Migration mechanics:** proven enough for the initial phase-2 hypothesis. Prep entries with exact file lists, import call sites, targeted tests, and non-goals made both reviews fast and concrete. Root-level `apps/desktop/src/lib/` movement so far: 142 -> 130.
+
+**Process lesson from Today Hub:** existing domain folders make review easier, but visible UI helpers still need strict body/test comparison and explicit callout of cross-domain imports such as `workspaceModel/persistence.ts`. Keeping `todayHub/index.ts` unchanged avoided turning a file move into a boundary-design PR.
+
+**Decision:** stop after two successful phase-2 moves and write a reassessment before selecting another domain.
+
+**Recommended next candidate if phase 2 continues:** `clipboard/` is the only plausible next small domain in the current plan, but it is medium risk because it touches editor paste/import behavior. Avoid `vault/`, `editor/`, `gitSync/`, `workspaceModel/`, and `tauri/` for now.
+
+**Next step:** write a phase-2 reassessment. If the reassessment chooses to continue with `clipboard/`, require a fresh prep entry before implementation.
+
+## Review — 2026-05-14 — phase 2 PR #2 — move Today Hub root helpers into lib/todayHub/
+
+**Reviewer session:** sonnet 4.6 — phase-2-pr2 review session
+**Review prompt:** Close phase 2 PR #2; verdict accept with no findings; confirm file scope, import mechanics, no content changes, no added files or restrictions.
+
+**Files reviewed**
+
+- `apps/desktop/src/lib/todayHub/todayHubCellStaticPointer.ts`
+- `apps/desktop/src/lib/todayHub/todayHubCellStaticPointer.test.ts`
+- `apps/desktop/src/lib/todayHub/todayHubCellStaticView.ts`
+- `apps/desktop/src/lib/todayHub/todayHubCellStaticView.test.ts`
+- `apps/desktop/src/lib/todayHub/todayHubWorkspaceRestore.ts`
+- `apps/desktop/src/lib/todayHub/todayHubWorkspaceRestore.test.ts`
+- 5 updated import call sites (`TodayHubCellStaticRichText.tsx`, `TodayHubCanvas.tsx`, `useMainWindowWorkspace.ts`, `inboxShellRestoreHelpers.ts`, `workspaceModel/persistence.ts`)
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Checklist**
+
+- Only six approved files moved: confirmed — no other files added or removed from `src/lib/` root
+- Imports mechanical: confirmed — only path strings updated; no imports added or removed
+- Function bodies unchanged: confirmed — all helpers (`pickDefaultActiveTodayHubUri`, `buildTodayHubCellStaticViewModel`, `clipSegmentsToRange`, pointer helpers) identical to pre-move
+- Constants unchanged: confirmed — no constants or persisted values changed
+- Test assertions unchanged: confirmed — all 20 test assertions identical to pre-move
+- `workspaceModel/persistence.ts` changed only its import path: confirmed — no other lines touched
+- No Today Hub rendering refactor introduced: confirmed
+- No workspace model or editor tab model behavior changed: confirmed
+- No `index.ts` or barrel added or changed: confirmed
+- No ESLint deep-import restrictions added: confirmed
+- No CODEOWNERS, CONTRIBUTING.md, or PR template changes: confirmed
+- `src/lib/` root-level file count: confirmed 136 → 130
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
+## Phase 2 PR #2 — 2026-05-14 — move Today Hub root helpers into lib/todayHub/
+
+**Cycle:** phase 2
+**Type:** pure refactor (file move + import update)
+**Author session:** sonnet 4.6 — phase-2-pr2 session
+
+**What moved**
+
+- From: `apps/desktop/src/lib/` (root)
+- To: `apps/desktop/src/lib/todayHub/` (existing folder)
+- Files moved:
+  - `todayHubCellStaticPointer.ts`
+  - `todayHubCellStaticPointer.test.ts`
+  - `todayHubCellStaticView.ts`
+  - `todayHubCellStaticView.test.ts`
+  - `todayHubWorkspaceRestore.ts`
+  - `todayHubWorkspaceRestore.test.ts`
+- `apps/desktop/src/lib/` root-level file count: 136 → 130 (−6)
+- Import call sites updated: 5
+  - `apps/desktop/src/components/TodayHubCellStaticRichText.tsx` (2 imports: `todayHubCellStaticView`, `todayHubCellStaticPointer`)
+  - `apps/desktop/src/components/TodayHubCanvas.tsx` (1 import: `todayHubCellStaticPointer`)
+  - `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (1 import: `todayHubWorkspaceRestore`)
+  - `apps/desktop/src/hooks/inboxShellRestoreHelpers.ts` (1 import: `todayHubWorkspaceRestore`)
+  - `apps/desktop/src/lib/workspaceModel/persistence.ts` (1 import: `todayHubWorkspaceRestore`)
+- Internal imports inside moved files updated:
+  - `todayHubCellStaticView.ts`: `../editor/noteEditor/...` → `../../editor/noteEditor/...` (2 import paths)
+  - `todayHubCellStaticView.test.ts`: `../editor/noteEditor/...` → `../../editor/noteEditor/...` (2 import paths)
+  - `todayHubWorkspaceRestore.ts`: `./mainWindowUiStore` → `../mainWindowUiStore`
+- Test sibling imports (`./todayHubCellStaticPointer`, `./todayHubCellStaticView`, `./todayHubWorkspaceRestore`) remain unchanged as co-located siblings
+
+**Module budget**
+
+- Baseline entries changed: none (moved files were not in the budget baseline JSON)
+- Direction: down only? n/a — domain-clustering move, no extractions
+- No barrel file (`index.ts`) added or changed
+- No ESLint deep-import restrictions added
+
+**Behavior**
+
+- Behavior change: no
+- No Today Hub rendering refactor
+- No workspace model changes beyond mechanical import path in `workspaceModel/persistence.ts`
+- No editor tab model changes
+
+**Verification**
+
+- `npm run test -w @eskerra/desktop -- todayHubCellStaticPointer.test.ts todayHubCellStaticView.test.ts todayHubWorkspaceRestore.test.ts todayHubCanvasCellLayout.test.ts todayHubWarmLru.test.ts`: pass (20 tests, 5 files)
+- `npm run lint`: pass
+- `npm run check:architecture`: pass
+- Manual smoke test: n/a — import-only move; no logic changes
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+No `index.ts` added. No ESLint deep-import restrictions added. Direct updated paths used for all call sites. Existing `todayHub/index.ts` boundary unchanged.
+
+---
+
+## Phase 2 PR #2 prep — 2026-05-14 — Today Hub root helper migration
+
+**Branch:** `cleaning-things-up-pt-4`
+**Commit:** `e7002796`
+
+**Baseline**
+
+- `apps/desktop/src/lib/` root-level file count: 136
+- Target folder: `apps/desktop/src/lib/todayHub/`
+- `npm run check:architecture` before move: pass. Note: `check-module-budgets` reported no merge base and skipped git-based new/growth checks, then exited successfully.
+
+**Exact files to move**
+
+- `apps/desktop/src/lib/todayHubCellStaticPointer.ts`
+- `apps/desktop/src/lib/todayHubCellStaticPointer.test.ts`
+- `apps/desktop/src/lib/todayHubCellStaticView.ts`
+- `apps/desktop/src/lib/todayHubCellStaticView.test.ts`
+- `apps/desktop/src/lib/todayHubWorkspaceRestore.ts`
+- `apps/desktop/src/lib/todayHubWorkspaceRestore.test.ts`
+
+**Import call sites needing mechanical updates**
+
+- `apps/desktop/src/components/TodayHubCellStaticRichText.tsx` imports `../lib/todayHubCellStaticView` and `../lib/todayHubCellStaticPointer`
+- `apps/desktop/src/components/TodayHubCanvas.tsx` imports `../lib/todayHubCellStaticPointer`
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` imports `../lib/todayHubWorkspaceRestore`
+- `apps/desktop/src/hooks/inboxShellRestoreHelpers.ts` imports `../lib/todayHubWorkspaceRestore`
+- `apps/desktop/src/lib/workspaceModel/persistence.ts` imports `../todayHubWorkspaceRestore`
+- Moved tests currently import sibling modules via `./todayHubCellStaticPointer`, `./todayHubCellStaticView`, and `./todayHubWorkspaceRestore`; these should remain sibling imports after the move.
+- Internal imports inside moved files also need path-only updates: `todayHubCellStaticView*` imports from `../editor/...` should become `../../editor/...`; `todayHubWorkspaceRestore.ts` imports `./mainWindowUiStore` and should become `../mainWindowUiStore`.
+
+**Existing tests to run for the move PR**
+
+- `npm run test -w @eskerra/desktop -- todayHubCellStaticPointer.test.ts todayHubCellStaticView.test.ts todayHubWorkspaceRestore.test.ts todayHubCanvasCellLayout.test.ts todayHubWarmLru.test.ts`
+- `npm run check:architecture`
+
+**Non-goals**
+
+- No behavior changes.
+- No Today Hub rendering refactor.
+- No workspace model changes beyond the mechanical import path in `workspaceModel/persistence.ts`.
+- No editor tab model changes.
+- No barrel or `index.ts` changes unless implementation proves they are required; current audit found no requirement.
+- No deep-import ESLint restrictions.
+- No `.git-blame-ignore-revs` change until after the move commit exists.
+- No module-budget update for this planning entry.
+
+## Checkpoint — 2026-05-14 — phase 2 after PR #1
+
+**Phase 2 PR #1 result:** accepted. The `layout/` move landed as a pure file move plus mechanical import updates: six approved files moved, `windowTiling.ts` stayed root-level, no barrel was added, and `src/lib/` root-level files moved 142 -> 136.
+
+**Migration mechanics:** worked. The prep entry was specific enough to review the diff quickly, and the review found no behavior changes, no assertion changes, no persisted-key/default changes, and no added restrictions or contributor-process files.
+
+**Process lesson:** keep each domain move anchored by a prep entry with exact files, import call sites, targeted tests, and non-goals. For file moves, the review should keep comparing bodies/constants/tests against the pre-move versions rather than treating the diff as harmless import churn.
+
+**Decision:** continue phase 2 with one more small domain move, but require a fresh prep entry before implementation.
+
+**Recommended next candidate:** `todayHub/`. The plan already has an existing `apps/desktop/src/lib/todayHub/` folder, a small set of root files to consider (`todayHubCellStaticPointer*`, `todayHubCellStaticView*`, `todayHubWorkspaceRestore*`), and colocated tests. `clipboard/` remains a plausible later candidate, but it carries editor paste/import risk and should wait until after the Today Hub prep audit. Avoid `vault/`, `editor/`, `gitSync/`, `workspaceModel/`, and `tauri/` for now.
+
+**Next step:** write a Phase 2 PR #2 prep entry before any move. It should confirm the exact Today Hub file list, import call sites, whether the existing `todayHub/index.ts` boundary changes or stays untouched, and targeted tests.
+
+## Review — 2026-05-14 — phase 2 PR #1 — move layout helpers into lib/layout/
+
+**Reviewer session:** sonnet 4.6 — phase-2-pr1 review session
+**Review prompt:** Close phase 2 PR #1; verdict accept with no findings; confirm file scope, import mechanics, no content changes, no added files or restrictions.
+
+**Files reviewed**
+- `apps/desktop/src/lib/layout/desktopHorizontalSplitClamp.ts`
+- `apps/desktop/src/lib/layout/desktopHorizontalSplitClamp.test.ts`
+- `apps/desktop/src/lib/layout/desktopVerticalSplitClamp.ts`
+- `apps/desktop/src/lib/layout/desktopVerticalSplitClamp.test.ts`
+- `apps/desktop/src/lib/layout/layoutStore.ts`
+- `apps/desktop/src/lib/layout/layoutStore.test.ts`
+- 9 updated import call sites (App.tsx, VaultTabSideColumn.tsx, DesktopHorizontalSplit.tsx, DesktopHorizontalSplitEnd.tsx, DesktopVerticalSplit.tsx, MainWorkspaceSplit.tsx, VaultTab.tsx, useAppLayoutWidthPersisters.ts, useAppOnMountLayoutHydration.ts)
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Checklist**
+
+- Only six approved files moved: confirmed — no other files added or removed from `src/lib/` root
+- `windowTiling.ts` stayed root-level: confirmed
+- Imports mechanical: confirmed — only path strings updated; no imports added or removed
+- Function bodies unchanged: confirmed — all clamp helpers, sanitizers, migrate/parse functions, load/save functions identical
+- Constants unchanged: confirmed — persisted store key names (`layoutPanelsV4`, `layoutPanelsV3`), default values, and clamp constants all identical
+- Test assertions unchanged: confirmed — all 20 test assertions identical to pre-move
+- No `index.ts` or barrel added: confirmed
+- No ESLint deep-import restrictions added: confirmed
+- No CODEOWNERS, CONTRIBUTING.md, or PR template changes: confirmed
+- `src/lib/` root-level file count: confirmed 142 → 136
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
+## Phase 2 PR #1 — 2026-05-14 — move layout helpers into lib/layout/
+
+**Cycle:** phase 2
+**Type:** pure refactor (file move + import update)
+**Author session:** sonnet 4.6 — phase-2-pr1 session
+
+**What moved**
+
+- From: `apps/desktop/src/lib/` (root)
+- To: `apps/desktop/src/lib/layout/` (new folder)
+- Files moved:
+  - `desktopHorizontalSplitClamp.ts`
+  - `desktopHorizontalSplitClamp.test.ts`
+  - `desktopVerticalSplitClamp.ts`
+  - `desktopVerticalSplitClamp.test.ts`
+  - `layoutStore.ts`
+  - `layoutStore.test.ts`
+- `apps/desktop/src/lib/` root-level file count: 142 → 136 (−6)
+- Import call sites updated: 9 (App.tsx, VaultTabSideColumn.tsx, DesktopHorizontalSplit.tsx, DesktopHorizontalSplitEnd.tsx, DesktopVerticalSplit.tsx, MainWorkspaceSplit.tsx, VaultTab.tsx, useAppLayoutWidthPersisters.ts, useAppOnMountLayoutHydration.ts)
+- Test file sibling imports (3 test files) resolved correctly as co-located siblings in `layout/`
+
+**Module budget**
+
+- Baseline entries changed: none (moved files were not in the budget baseline JSON)
+- Direction: down only? n/a — this is a domain-clustering move, no extractions
+- `windowTiling.ts` stayed root-level (confirmed)
+- No barrel file (`index.ts`) added
+
+**Behavior**
+
+- Behavior change: no
+- Persisted layout key names and default values unchanged
+- `layoutStore.ts` calls same Tauri store APIs under same conditions
+- Clamp constants and return values unchanged
+
+**Verification**
+
+- `npx vitest run` (3 moved test files, 20 tests): pass
+- `npm run lint`: pass
+- `npm run check:architecture`: pass
+- Manual smoke test: n/a — import-only move; no logic changes
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+No `index.ts` or ESLint deep-import restrictions added. Direct updated paths used for all call sites per the plan. `windowTiling.ts` intentionally left root-level (Tauri command glue boundary).
+
+---
+
+## Phase 2 PR #1 prep — 2026-05-14 — layout domain migration
+
+**Branch:** `cleaning-things-up-pt-4`
+**Commit:** `92fb2b44`
+
+**Baseline**
+
+- `apps/desktop/src/lib/` root-level file count: 142
+- Planned new folder: `apps/desktop/src/lib/layout/`
+- `npm run check:architecture` before move: pass. Note: `check-module-budgets` reported no merge base and skipped git-based new/growth checks, then exited successfully.
+
+**Exact files to move**
+
+- `apps/desktop/src/lib/desktopHorizontalSplitClamp.ts`
+- `apps/desktop/src/lib/desktopHorizontalSplitClamp.test.ts`
+- `apps/desktop/src/lib/desktopVerticalSplitClamp.ts`
+- `apps/desktop/src/lib/desktopVerticalSplitClamp.test.ts`
+- `apps/desktop/src/lib/layoutStore.ts`
+- `apps/desktop/src/lib/layoutStore.test.ts`
+
+**Import call sites needing mechanical updates**
+
+- `apps/desktop/src/App.tsx` imports `./lib/layoutStore`
+- `apps/desktop/src/shell/useAppOnMountLayoutHydration.ts` imports `../lib/layoutStore`
+- `apps/desktop/src/shell/useAppLayoutWidthPersisters.ts` imports `../lib/layoutStore`
+- `apps/desktop/src/components/MainWorkspaceSplit.tsx` imports `../lib/layoutStore`
+- `apps/desktop/src/components/VaultTabSideColumn.tsx` imports `../lib/layoutStore`
+- `apps/desktop/src/components/VaultTab.tsx` imports `../lib/layoutStore`
+- `apps/desktop/src/components/DesktopHorizontalSplit.tsx` imports `../lib/desktopHorizontalSplitClamp` and `../lib/layoutStore`
+- `apps/desktop/src/components/DesktopHorizontalSplitEnd.tsx` imports `../lib/desktopHorizontalSplitClamp`
+- `apps/desktop/src/components/DesktopVerticalSplit.tsx` imports `../lib/desktopVerticalSplitClamp` and `../lib/layoutStore`
+- Moved tests currently import sibling modules via `./desktopHorizontalSplitClamp`, `./desktopVerticalSplitClamp`, and `./layoutStore`; these should remain sibling imports after the move.
+
+**Targeted tests for the move PR**
+
+- `npm run test -w @eskerra/desktop -- desktopHorizontalSplitClamp.test.ts desktopVerticalSplitClamp.test.ts layoutStore.test.ts`
+- `npm run check:architecture`
+
+**Non-goals**
+
+- Do not move `windowTiling.ts`.
+- No behavior changes.
+- No barrel or `index.ts` yet unless implementation proves it is required.
+- No deep-import ESLint restrictions.
+- No `.git-blame-ignore-revs` change until after the move commit exists.
+- No module-budget update for this planning entry.
+
+## Planning — 2026-05-14 — phase 2 lib domain clustering
+
+Created [`phase-2-lib-domain-plan.md`](./phase-2-lib-domain-plan.md) to audit `apps/desktop/src/lib/` root-level files, proposed domain folders, cross-domain risks, and the recommended first migration PR. Decision captured there: start phase 2 with a small `layout/` move and keep higher-risk vault, editor, git sync, workspace model, and Tauri boundaries for later audited PRs.
+
+## Reassessment — 2026-05-14 — end of cycle 2
+
+**Cycle window:** 2026-05-14 -> 2026-05-14
+**PRs completed this cycle:** #TBD `collectShadowDivergenceDevDiagnostics`
+
+**Metric movement vs. baseline**
+
+- `useMainWindowWorkspace.ts` LOC: 4099 -> 4087
+- Workspace sibling hooks LOC sum: 4902 -> 4951 (expected increase from moving diagnostic logic into `workspacePersistenceBridge.ts`)
+- Module-budget baseline entries lowered: 1 (`useMainWindowWorkspace.ts` 4100 -> 4088)
+- New ESLint suppressions: 0 (raw `eslint-disable` count remains 13)
+- Danger-zone touches: 0
+- Test file count under `apps/desktop/src/`: 178 -> 179 (`workspacePersistenceBridge.test.ts` added)
+
+**Exit-criteria check (from README)**
+
+1. 2-3 small extractions merged? no — one completed in cycle 2; stopping early was intentional because no remaining pre-audited candidate was available.
+2. Every PR has a logbook PR entry? yes.
+3. Every PR has a logbook review entry? yes.
+4. Baseline only moved down? yes.
+5. No danger-zone files modified? yes.
+6. No new ESLint suppressions, `check:architecture` green? yes, based on PR entry.
+
+**What went well:** Candidate B was persistence-diagnostics-adjacent but stayed safe because the helper remained read-only and `console.warn` stayed in the hook. The review confirmed warning ownership, suppress conditions, pending-projection filtering, and exact `{suppress, diffs}` tests. Across cycle 1 and cycle 2, `useMainWindowWorkspace.ts` moved from 4118 -> 4087 LOC.
+
+**What was harder than expected:** The loop is working, but the LOC reduction is still modest relative to the hook size. Cycle 2 also consumed the only carried-forward audited candidate; starting another extraction now would require a fresh audit, not opportunistic guessing.
+
+**Process lessons:** Keep persistence-adjacent extractions read-only unless a separate spec explicitly permits writes. Preserve warning side effects at the caller unless the review scope includes behavior changes. Exact-value tests remain the right default. Future gains need either a fresh phase-1 audit of `useMainWindowWorkspace.ts` or a separate phase-2 `src/lib/` domain plan.
+
+**Decision for next cycle:** pause phase 1 and prepare phase 2 (`src/lib/` domain clustering) as a separate planning cycle.
+
+**Reasoning:** There is no obvious low-risk phase-1 candidate left from the current audit. Continuing phase 1 would be valid only after a new audit, but the first two cycles already proved the extraction process and lowered the hook without touching danger zones. The better next move is to pause hook extractions, write a focused phase-2 plan for `apps/desktop/src/lib/` clustering, and keep contributor-process files (`CODEOWNERS`, `CONTRIBUTING.md`, PR template) out of scope until the directory plan is clearer.
+
+---
+
+## Checkpoint — 2026-05-14 — cycle 2 after PR #1
+
+**Decision:** stop cycle 2 after one successful extraction and write the reassessment next. Do not start another extraction in this cycle.
+
+**Rationale:** Cycle 2 already moved the primary hotspot in the right direction (`useMainWindowWorkspace.ts` 4099 → 4087; budget cap 4100 → 4088), and the persistence-diagnostics-adjacent extraction reviewed cleanly: no writes, warning ownership stayed in the hook, and suppression behavior has exact tests. Candidate B was the only carried-forward audited candidate from cycle 1. Starting another PR now would require a fresh audit, which should happen deliberately in the next cycle rather than inventing a candidate midstream. This is also a good pause point before deciding whether the loop should continue with more phase-1 hook extractions or start planning phase 2 separately.
+
+---
+
+## Review — 2026-05-14 — cycle 2 PR #1 — extract collectShadowDivergenceDevDiagnostics
+
+**Reviewer session:** sonnet 4.6 — cycle-2 review session
+**Review prompt:** Close cycle 2 PR #1; verdict accept with no findings; confirm danger-zone, suppression behavior, warning ownership, and test exactness.
+
+**Files reviewed**
+- `apps/desktop/src/hooks/workspacePersistenceBridge.ts`
+- `apps/desktop/src/hooks/workspacePersistenceBridge.test.ts`
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (call site only)
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Checklist**
+
+- `console.warn` ownership: confirmed — hook retains ownership; helper returns `{diffs, suppress}` and never calls `console.warn` directly
+- Danger-zone paths: confirmed not touched — no writes to `lastPersistedRef`, `inboxContentByUri`, or `saveNoteMarkdown`; the extracted `useEffect` body was read-only diagnostic telemetry before and after
+- Watcher / cache / persistence / editor-save paths: not touched
+- Suppression behavior preserved: confirmed — all three suppress conditions (`!inboxShellRestored`, `!isDevOrTest`, `shadowModelActiveHub === null`) and `hasPendingProjectionHubs` timing-noise filtering carried over exactly
+- Tests use exact returned values: confirmed — tests 4–6 assert exact `{suppress, diffs}` shapes including the pending-projection path (`diffs: []` after filter); suppress-path tests assert `{suppress: true, diffs: []}`
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
 ## PR — 2026-05-14 — #TBD — extract collectShadowDivergenceDevDiagnostics
 
 **Cycle:** 2

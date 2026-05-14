@@ -3,7 +3,7 @@ import {useCallback, type Dispatch, type SetStateAction} from 'react';
 import {
   saveStoredLayouts,
   type StoredLayouts,
-} from '../lib/layoutStore';
+} from '../lib/layout/layoutStore';
 
 export function useAppLayoutWidthPersisters(
   setLayouts: Dispatch<SetStateAction<StoredLayouts>>,

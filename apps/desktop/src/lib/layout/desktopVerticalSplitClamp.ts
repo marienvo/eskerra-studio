@@ -26,7 +26,7 @@ export function maxAvailableTopHeightPx(
  * that comparison: lowering `minTopPx` to 20 would make `maxH - minTop` almost always large and would
  * persist premature clamps, wiping the saved split on disk.
  */
-/** Legacy “typical” top minimum (px); squeeze is detected vs this, not the live `minTopPx` (e.g. 20). */
+/** Legacy "typical" top minimum (px); squeeze is detected vs this, not the live `minTopPx` (e.g. 20). */
 export const TRANSIENT_VSPLIT_TOP_REFERENCE_MIN_PX = 120;
 
 /** Margin above {@link TRANSIENT_VSPLIT_TOP_REFERENCE_MIN_PX} for the squeeze band. */

@@ -11,8 +11,8 @@ import {
   clampSplitTopHeightPx,
   maxAvailableTopHeightPx,
   shouldPersistVerticalSplitTopHeightClamp,
-} from '../lib/desktopVerticalSplitClamp';
-import {MIN_RESIZABLE_PANE_PX} from '../lib/layoutStore';
+} from '../lib/layout/desktopVerticalSplitClamp';
+import {MIN_RESIZABLE_PANE_PX} from '../lib/layout/layoutStore';
 
 export type DesktopVerticalSplitProps = {
   /** Current top pane height in CSS pixels (controlled by parent). */

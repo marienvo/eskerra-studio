@@ -35,7 +35,7 @@ import {
 import {
   MIN_RESIZABLE_PANE_PX,
   NOTIFICATIONS_PANEL,
-} from '../lib/layoutStore';
+} from '../lib/layout/layoutStore';
 
 import {
   FrontmatterEditor,

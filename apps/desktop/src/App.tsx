@@ -33,7 +33,7 @@ import {ThemedChromeBackground} from './theme/ThemedChromeBackground';
 import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
-} from './lib/layoutStore';
+} from './lib/layout/layoutStore';
 import {
   DEFAULT_MAIN_WINDOW_PANE_VISIBILITY,
   type TodayHubWorkspaceSnapshot,

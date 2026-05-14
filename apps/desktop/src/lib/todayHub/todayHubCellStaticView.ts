@@ -3,12 +3,12 @@ import {EditorState} from '@codemirror/state';
 
 import {
   markdownEditorBlockLineClasses,
-} from '../editor/noteEditor/markdownEditorStyling';
+} from '../../editor/noteEditor/markdownEditorStyling';
 import {
   buildCellStaticSegments,
   type CellStaticResolvePredicates,
   type CellStaticSegment,
-} from '../editor/noteEditor/eskerraTableV1/eskerraTableCellStaticSegments';
+} from '../../editor/noteEditor/eskerraTableV1/eskerraTableCellStaticSegments';
 
 export type TodayHubStaticLine = {
   from: number;

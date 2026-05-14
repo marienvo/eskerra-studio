@@ -118,7 +118,7 @@ import {
 import {useWorkspaceTodayHubSwitch} from './workspaceTodayHubSwitch';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {sortedTodayHubNoteUrisFromRefs} from '@eskerra/core';
-import {pickDefaultActiveTodayHubUri} from '../lib/todayHubWorkspaceRestore';
+import {pickDefaultActiveTodayHubUri} from '../lib/todayHub/todayHubWorkspaceRestore';
 import {
   selectNoteActiveHubTodayOpen,
   isOnWorkspaceHome,
