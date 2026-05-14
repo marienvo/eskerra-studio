@@ -162,6 +162,129 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Phase 2 PR #1 prep — 2026-05-14 — layout domain migration
+
+**Branch:** `cleaning-things-up-pt-4`
+**Commit:** `92fb2b44`
+
+**Baseline**
+
+- `apps/desktop/src/lib/` root-level file count: 142
+- Planned new folder: `apps/desktop/src/lib/layout/`
+- `npm run check:architecture` before move: pass. Note: `check-module-budgets` reported no merge base and skipped git-based new/growth checks, then exited successfully.
+
+**Exact files to move**
+
+- `apps/desktop/src/lib/desktopHorizontalSplitClamp.ts`
+- `apps/desktop/src/lib/desktopHorizontalSplitClamp.test.ts`
+- `apps/desktop/src/lib/desktopVerticalSplitClamp.ts`
+- `apps/desktop/src/lib/desktopVerticalSplitClamp.test.ts`
+- `apps/desktop/src/lib/layoutStore.ts`
+- `apps/desktop/src/lib/layoutStore.test.ts`
+
+**Import call sites needing mechanical updates**
+
+- `apps/desktop/src/App.tsx` imports `./lib/layoutStore`
+- `apps/desktop/src/shell/useAppOnMountLayoutHydration.ts` imports `../lib/layoutStore`
+- `apps/desktop/src/shell/useAppLayoutWidthPersisters.ts` imports `../lib/layoutStore`
+- `apps/desktop/src/components/MainWorkspaceSplit.tsx` imports `../lib/layoutStore`
+- `apps/desktop/src/components/VaultTabSideColumn.tsx` imports `../lib/layoutStore`
+- `apps/desktop/src/components/VaultTab.tsx` imports `../lib/layoutStore`
+- `apps/desktop/src/components/DesktopHorizontalSplit.tsx` imports `../lib/desktopHorizontalSplitClamp` and `../lib/layoutStore`
+- `apps/desktop/src/components/DesktopHorizontalSplitEnd.tsx` imports `../lib/desktopHorizontalSplitClamp`
+- `apps/desktop/src/components/DesktopVerticalSplit.tsx` imports `../lib/desktopVerticalSplitClamp` and `../lib/layoutStore`
+- Moved tests currently import sibling modules via `./desktopHorizontalSplitClamp`, `./desktopVerticalSplitClamp`, and `./layoutStore`; these should remain sibling imports after the move.
+
+**Targeted tests for the move PR**
+
+- `npm run test -w @eskerra/desktop -- desktopHorizontalSplitClamp.test.ts desktopVerticalSplitClamp.test.ts layoutStore.test.ts`
+- `npm run check:architecture`
+
+**Non-goals**
+
+- Do not move `windowTiling.ts`.
+- No behavior changes.
+- No barrel or `index.ts` yet unless implementation proves it is required.
+- No deep-import ESLint restrictions.
+- No `.git-blame-ignore-revs` change until after the move commit exists.
+- No module-budget update for this planning entry.
+
+## Planning — 2026-05-14 — phase 2 lib domain clustering
+
+Created [`phase-2-lib-domain-plan.md`](./phase-2-lib-domain-plan.md) to audit `apps/desktop/src/lib/` root-level files, proposed domain folders, cross-domain risks, and the recommended first migration PR. Decision captured there: start phase 2 with a small `layout/` move and keep higher-risk vault, editor, git sync, workspace model, and Tauri boundaries for later audited PRs.
+
+## Reassessment — 2026-05-14 — end of cycle 2
+
+**Cycle window:** 2026-05-14 -> 2026-05-14
+**PRs completed this cycle:** #TBD `collectShadowDivergenceDevDiagnostics`
+
+**Metric movement vs. baseline**
+
+- `useMainWindowWorkspace.ts` LOC: 4099 -> 4087
+- Workspace sibling hooks LOC sum: 4902 -> 4951 (expected increase from moving diagnostic logic into `workspacePersistenceBridge.ts`)
+- Module-budget baseline entries lowered: 1 (`useMainWindowWorkspace.ts` 4100 -> 4088)
+- New ESLint suppressions: 0 (raw `eslint-disable` count remains 13)
+- Danger-zone touches: 0
+- Test file count under `apps/desktop/src/`: 178 -> 179 (`workspacePersistenceBridge.test.ts` added)
+
+**Exit-criteria check (from README)**
+
+1. 2-3 small extractions merged? no — one completed in cycle 2; stopping early was intentional because no remaining pre-audited candidate was available.
+2. Every PR has a logbook PR entry? yes.
+3. Every PR has a logbook review entry? yes.
+4. Baseline only moved down? yes.
+5. No danger-zone files modified? yes.
+6. No new ESLint suppressions, `check:architecture` green? yes, based on PR entry.
+
+**What went well:** Candidate B was persistence-diagnostics-adjacent but stayed safe because the helper remained read-only and `console.warn` stayed in the hook. The review confirmed warning ownership, suppress conditions, pending-projection filtering, and exact `{suppress, diffs}` tests. Across cycle 1 and cycle 2, `useMainWindowWorkspace.ts` moved from 4118 -> 4087 LOC.
+
+**What was harder than expected:** The loop is working, but the LOC reduction is still modest relative to the hook size. Cycle 2 also consumed the only carried-forward audited candidate; starting another extraction now would require a fresh audit, not opportunistic guessing.
+
+**Process lessons:** Keep persistence-adjacent extractions read-only unless a separate spec explicitly permits writes. Preserve warning side effects at the caller unless the review scope includes behavior changes. Exact-value tests remain the right default. Future gains need either a fresh phase-1 audit of `useMainWindowWorkspace.ts` or a separate phase-2 `src/lib/` domain plan.
+
+**Decision for next cycle:** pause phase 1 and prepare phase 2 (`src/lib/` domain clustering) as a separate planning cycle.
+
+**Reasoning:** There is no obvious low-risk phase-1 candidate left from the current audit. Continuing phase 1 would be valid only after a new audit, but the first two cycles already proved the extraction process and lowered the hook without touching danger zones. The better next move is to pause hook extractions, write a focused phase-2 plan for `apps/desktop/src/lib/` clustering, and keep contributor-process files (`CODEOWNERS`, `CONTRIBUTING.md`, PR template) out of scope until the directory plan is clearer.
+
+---
+
+## Checkpoint — 2026-05-14 — cycle 2 after PR #1
+
+**Decision:** stop cycle 2 after one successful extraction and write the reassessment next. Do not start another extraction in this cycle.
+
+**Rationale:** Cycle 2 already moved the primary hotspot in the right direction (`useMainWindowWorkspace.ts` 4099 → 4087; budget cap 4100 → 4088), and the persistence-diagnostics-adjacent extraction reviewed cleanly: no writes, warning ownership stayed in the hook, and suppression behavior has exact tests. Candidate B was the only carried-forward audited candidate from cycle 1. Starting another PR now would require a fresh audit, which should happen deliberately in the next cycle rather than inventing a candidate midstream. This is also a good pause point before deciding whether the loop should continue with more phase-1 hook extractions or start planning phase 2 separately.
+
+---
+
+## Review — 2026-05-14 — cycle 2 PR #1 — extract collectShadowDivergenceDevDiagnostics
+
+**Reviewer session:** sonnet 4.6 — cycle-2 review session
+**Review prompt:** Close cycle 2 PR #1; verdict accept with no findings; confirm danger-zone, suppression behavior, warning ownership, and test exactness.
+
+**Files reviewed**
+- `apps/desktop/src/hooks/workspacePersistenceBridge.ts`
+- `apps/desktop/src/hooks/workspacePersistenceBridge.test.ts`
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (call site only)
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Checklist**
+
+- `console.warn` ownership: confirmed — hook retains ownership; helper returns `{diffs, suppress}` and never calls `console.warn` directly
+- Danger-zone paths: confirmed not touched — no writes to `lastPersistedRef`, `inboxContentByUri`, or `saveNoteMarkdown`; the extracted `useEffect` body was read-only diagnostic telemetry before and after
+- Watcher / cache / persistence / editor-save paths: not touched
+- Suppression behavior preserved: confirmed — all three suppress conditions (`!inboxShellRestored`, `!isDevOrTest`, `shadowModelActiveHub === null`) and `hasPendingProjectionHubs` timing-noise filtering carried over exactly
+- Tests use exact returned values: confirmed — tests 4–6 assert exact `{suppress, diffs}` shapes including the pending-projection path (`diffs: []` after filter); suppress-path tests assert `{suppress: true, diffs: []}`
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
 ## PR — 2026-05-14 — #TBD — extract collectShadowDivergenceDevDiagnostics
 
 **Cycle:** 2
