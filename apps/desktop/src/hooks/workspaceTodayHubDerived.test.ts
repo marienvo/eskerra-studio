@@ -194,7 +194,7 @@ describe('injectActiveHubIntoTodayHubPersistMap', () => {
     ]);
   });
 
-  it('applies tabsToStored conversion (multi-entry history is flattened to stored format)', () => {
+  it('applies tabsToStored conversion (history wrapper is unwrapped; all entries preserved)', () => {
     const tab: EditorWorkspaceTab = {
       id: 'etab-3',
       history: {entries: ['/vault/Inbox/A.md', '/vault/Inbox/B.md'], index: 1},
