@@ -162,6 +162,51 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Reassessment — 2026-05-14 — end of cycle 1
+
+**Cycle window:** 2026-05-14 -> 2026-05-14
+**PRs completed this cycle:** #TBD `injectActiveHubIntoTodayHubPersistMap`; #TBD `popNextReopenableClosedTabRecord`
+
+**Metric movement vs. baseline**
+
+- `useMainWindowWorkspace.ts` LOC: 4118 -> 4099
+- Workspace sibling hooks LOC sum: 4855 -> 4902 (expected increase from moving logic into sibling helpers)
+- Module-budget baseline entries lowered: 1 (`useMainWindowWorkspace.ts` 4119 -> 4100 in PR #1; PR #2 was LOC-neutral and did not need a budget change)
+- New ESLint suppressions: 0 (raw `eslint-disable` count remains 13)
+- Danger-zone touches: 0
+- Test file count under `apps/desktop/src/`: 178 -> 178 (new tests were added to existing colocated test files)
+
+**Exit-criteria check (from README)**
+
+1. 2-3 small extractions merged? yes — two completed.
+2. Every PR has a logbook PR entry? yes.
+3. Every PR has a logbook review entry? yes.
+4. Baseline only moved down? yes — PR #1 lowered the hook cap; PR #2 did not raise or require a cap change.
+5. No danger-zone files modified? yes.
+6. No new ESLint suppressions, `check:architecture` green? yes, based on PR entries.
+
+**What went well:** Both extractions stayed small and reviewable, and the second-model pass caught useful process details rather than major correctness bugs. PR #1 review caught a weak assertion and imprecise JSDoc before merge. PR #2 kept mutation ownership clear by leaving ref reads, `bumpEditorClosedStack()`, and `openMarkdownInEditor` in the hook.
+
+**What was harder than expected:** The LOC movement was modest: PR #1 lowered the hook, while PR #2 improved ownership and tests without reducing hook LOC. PR #2 also showed that even a “pure refactor” can intentionally coalesce callback calls, so future reviews must check side-effect timing and not only final state.
+
+**Process lessons:** Exact-value tests are preferred over `toBeDefined()` style assertions for these extractions. Review prompts should keep asking about callback timing, mutation count, and dependency assumptions, not just output equivalence. The loop produced enough signal after two PRs; stopping before PR #3 was intentional, not a failure.
+
+**Decision for next cycle:** continue same loop with Candidate B as cycle 2 PR #1.
+
+**Reasoning:** Candidate B (`collectShadowDivergenceDevDiagnostics`) remains low-risk and should carry forward as the first candidate for cycle 2. It is persistence-diagnostics-adjacent, so it deserves the same small-diff discipline and exact tests around suppression behavior and pending projection hubs. There is no concrete reason to pause, and phase 2 should not start yet; the current loop is working as a controlled way to reduce the workspace hook surface while improving test coverage.
+
+---
+
+## Checkpoint — 2026-05-14 — cycle 1 after PR #2
+
+**Decision:** stop cycle 1 after two successful extractions and write the reassessment next. Do not start PR #3 in this cycle.
+
+**Rationale:** The README exit criteria allow two or three extractions, and PR #1 + PR #2 already produced the intended signal: the loop caught a weak assertion in PR #1 and forced an explicit note for behavior-neutral callback coalescing in PR #2. The measurable LOC movement is modest but real for PR #1 (`useMainWindowWorkspace.ts` 4118 → 4099; cap 4119 → 4100), while PR #2 improved ownership/test coverage without lowering the hook further. Candidate B (`collectShadowDivergenceDevDiagnostics`) remains low-risk, but it is persistence-diagnostics-adjacent and would create another review pass over the same shadow-model area immediately after two small refactor reviews. Stopping now avoids review fatigue and gives the reassessment a cleaner read on whether this cadence should continue.
+
+**Candidate B status:** carry forward as the first candidate for the next cycle, unless the reassessment changes cadence or pauses the team-scalability loop.
+
+---
+
 ## PR — 2026-05-14 — #TBD — extract popNextReopenableClosedTabRecord
 
 **Cycle:** 1
@@ -204,6 +249,48 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 The inline while loop read from `editorClosedTabsStackRef.current` (the closed-tab LIFO stack, distinct from the danger-zone persistence surface) and mutated it via `pop()`. The extracted helper encapsulates that mutation — caller retains ownership of `bumpEditorClosedStack()` and `openMarkdownInEditor`. Positional parameter style was chosen over a params object to match the existing convention in `editorClosedTabStack.ts` (`isEditorClosedTabReopenable` uses positional params).
 
 The LOC-neutral delta on `useMainWindowWorkspace.ts` is expected: the while loop (15 lines) is replaced by a one-line call, but the `noteSet` computation was hoisted out of the loop (saving 3 repeat allocations per call), the `popped` guard was added, and the `openMarkdownInEditor` branch gained an explicit `if (record)` check. Net: 0. The baseline cap is held at 4100 but not lowered this cycle.
+
+---
+
+## Review — 2026-05-14 — #TBD (cycle 1 PR #2)
+
+**Reviewer session:** sonnet 4.6 — fresh session, no author context
+**Reviewer prompt used:** standard reviewer prompt from logbook template (diff + original + extracted file + README danger-zone section)
+
+**Prompt template for reusing this review:**
+
+> You are reviewing a refactor PR for the Eskerra desktop app. Read:
+> 1. The PR diff (files: `useMainWindowWorkspace.ts`, `editorClosedTabStack.ts`, `editorClosedTabStack.test.ts`).
+> 2. The original callback before the refactor: `reopenLastClosedEditorTab` in `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (lines ~2247–2267).
+> 3. The new extracted function: `popNextReopenableClosedTabRecord` in `apps/desktop/src/lib/editorClosedTabStack.ts`.
+> 4. `specs/team-scalability/README.md` (especially the danger-zone section).
+> 5. The relevant section of `CLAUDE.md`.
+>
+> Report:
+> - Any closure / ref / dependency that was silently dropped or rebound.
+> - Any state-mutation path in the original that is not preserved in the new code.
+> - Any missing test that the original behavior implicitly depended on.
+> - Whether the module-budget baseline was lowered correctly.
+> - Whether any danger-zone file was touched.
+>
+> Be specific. Cite line numbers. Do not approve or reject — just list findings.
+
+**Findings (verbatim from reviewer):**
+
+No blocking findings. The reviewer confirmed:
+
+1. No dropped closures or refs — the helper receives `stack`, `vaultRoot`, and `noteUriSet` as plain values; all ref reads stay in the callback.
+2. No mutation paths missed — `pop()` semantics are preserved; the caller retains `bumpEditorClosedStack()` and `openMarkdownInEditor`.
+3. The `bumpEditorClosedStack()` call-count coalescing (N calls → 1 call when `popped > 0`) is documented in the PR Behavior section and confirmed behavior-neutral under React automatic batching.
+4. No danger-zone files touched. `editorClosedTabsStackRef` is not part of the cache/persistence/watcher/editor-save quadrangle.
+5. Module-budget baseline: `editorClosedTabStack.ts` at 101 LOC is below both NEW_FILE_MAX_LINES (400) and GROWTH_TRACK_MIN_LINES (800); no baseline JSON entry required. `useMainWindowWorkspace.ts` cap held at 4100; not raised.
+6. Four unit tests cover the four specified scenarios; each asserts exact remaining stack contents after mutation.
+
+**Verdict:** accept.
+
+**Resolutions:** no findings to resolve.
+
+**Final status: accepted.**
 
 ---
 
