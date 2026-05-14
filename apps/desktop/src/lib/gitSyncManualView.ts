@@ -88,70 +88,94 @@ function appendDetail(parts: string[], label: string, value: string | null | und
   parts.push(`${label}: ${value}`);
 }
 
-export function formatVaultGitSyncError(error: unknown): string {
-  const syncError = asSyncError(error);
-  if (syncError == null) {
-    if (error instanceof Error && error.message.trim() !== '') {
-      return error.message;
-    }
-    return 'Sync failed.';
+function formatUnknownSyncError(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== '') {
+    return error.message;
   }
+  return 'Sync failed.';
+}
 
-  switch (syncError.type) {
-    case 'mergeFailed': {
-      const parts = ['Merge conflict. Manual intervention required.'];
-      appendDetail(parts, 'Snapshot branch', syncError.snapshotBranch);
-      appendDetail(parts, 'Pre-merge SHA', syncError.preMergeSha);
-      return parts.join(' ');
-    }
+function formatMergeFailedError(error: Extract<SyncError, {type: 'mergeFailed'}>): string {
+  const parts = ['Merge conflict. Manual intervention required.'];
+  appendDetail(parts, 'Snapshot branch', error.snapshotBranch);
+  appendDetail(parts, 'Pre-merge SHA', error.preMergeSha);
+  return parts.join(' ');
+}
+
+function formatGitCommandFailedError(error: Extract<SyncError, {type: 'gitCommandFailed'}>): string {
+  const command = error.command.trim();
+  const stderr = error.stderr.trim();
+  if (command !== '' && stderr !== '') {
+    return `Git command failed: ${command}. ${stderr}`;
+  }
+  if (command !== '') {
+    return `Git command failed: ${command}.`;
+  }
+  return stderr === '' ? 'Git command failed.' : `Git command failed. ${stderr}`;
+}
+
+function formatStderrBackedError(label: string, stderr: string): string {
+  const trimmed = stderr.trim();
+  return trimmed === '' ? `${label}.` : `${label}. ${trimmed}`;
+}
+
+function formatUnsupportedStagePlanError(error: Extract<SyncError, {type: 'unsupportedStagePlan'}>): string {
+  const paths = error.paths.join(', ');
+  return paths === ''
+    ? 'Sync blocked: unsupported change type detected.'
+    : `Sync blocked: renamed file detected (${paths}). Commit or revert the rename to continue.`;
+}
+
+function formatConflictResolutionFailedError(
+  error: Extract<SyncError, {type: 'conflictResolutionFailed'}>,
+): string {
+  const parts = ['Conflict resolution failed.'];
+  if (error.unresolved.length > 0) {
+    parts.push(`Unresolved: ${error.unresolved.join(', ')}.`);
+  }
+  if (error.manual.length > 0) {
+    parts.push(`Requires manual resolution: ${error.manual.join(', ')}.`);
+  }
+  return parts.join(' ');
+}
+
+function formatKnownSyncError(error: SyncError): string {
+  switch (error.type) {
+    case 'mergeFailed':
+      return formatMergeFailedError(error);
     case 'lockAlreadyHeld':
       return 'Sync already running.';
     case 'pushRejected':
       return 'Push rejected. Local changes remain committed.';
-    case 'gitCommandFailed': {
-      const command = syncError.command.trim();
-      const stderr = syncError.stderr.trim();
-      if (command !== '' && stderr !== '') {
-        return `Git command failed: ${command}. ${stderr}`;
-      }
-      if (command !== '') {
-        return `Git command failed: ${command}.`;
-      }
-      return stderr === '' ? 'Git command failed.' : `Git command failed. ${stderr}`;
-    }
+    case 'gitCommandFailed':
+      return formatGitCommandFailedError(error);
     case 'remoteBranchMissing':
-      return `Remote branch missing: ${syncError.remote}/${syncError.branch}.`;
+      return `Remote branch missing: ${error.remote}/${error.branch}.`;
     case 'wrongBranch':
-      return `Wrong Git branch. Expected ${syncError.expected}, found ${syncError.actual}.`;
+      return `Wrong Git branch. Expected ${error.expected}, found ${error.actual}.`;
     case 'invalidConfig':
-      return `Invalid sync config. ${syncError.reason}`;
+      return `Invalid sync config. ${error.reason}`;
     case 'timeout':
-      return `Sync timed out during ${syncError.step} after ${syncError.secs}s.`;
-    case 'fetchFailed': {
-      const stderr = syncError.stderr.trim();
-      return stderr === '' ? 'Fetch failed.' : `Fetch failed. ${stderr}`;
-    }
-    case 'authenticationFailed': {
-      const stderr = syncError.stderr.trim();
-      return stderr === '' ? 'Authentication failed.' : `Authentication failed. ${stderr}`;
-    }
-    case 'unsupportedStagePlan': {
-      const paths = syncError.paths.join(', ');
-      return paths === ''
-        ? 'Sync blocked: unsupported change type detected.'
-        : `Sync blocked: renamed file detected (${paths}). Commit or revert the rename to continue.`;
-    }
-    case 'conflictResolutionFailed': {
-      const parts = ['Conflict resolution failed.'];
-      if (syncError.unresolved.length > 0) {
-        parts.push(`Unresolved: ${syncError.unresolved.join(', ')}.`);
-      }
-      if (syncError.manual.length > 0) {
-        parts.push(`Requires manual resolution: ${syncError.manual.join(', ')}.`);
-      }
-      return parts.join(' ');
-    }
+      return `Sync timed out during ${error.step} after ${error.secs}s.`;
+    case 'fetchFailed':
+      return formatStderrBackedError('Fetch failed', error.stderr);
+    case 'authenticationFailed':
+      return formatStderrBackedError('Authentication failed', error.stderr);
+    case 'unsupportedStagePlan':
+      return formatUnsupportedStagePlanError(error);
+    case 'conflictResolutionFailed':
+      return formatConflictResolutionFailedError(error);
+    case 'notGitRepository':
+    case 'detachedHead':
+    case 'remoteMissing':
+    case 'unsafeGitState':
+      return 'Sync failed.';
     default:
       return 'Sync failed.';
   }
+}
+
+export function formatVaultGitSyncError(error: unknown): string {
+  const syncError = asSyncError(error);
+  return syncError == null ? formatUnknownSyncError(error) : formatKnownSyncError(syncError);
 }

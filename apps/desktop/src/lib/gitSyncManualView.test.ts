@@ -318,6 +318,17 @@ describe('formatVaultGitSyncError', () => {
     ).toBe('Git command failed: git fetch origin. remote unavailable');
   });
 
+  it('formats gitCommandFailed with no details', () => {
+    expect(
+      formatVaultGitSyncError({
+        type: 'gitCommandFailed',
+        command: '  ',
+        exitCode: null,
+        stderr: '',
+      }),
+    ).toBe('Git command failed.');
+  });
+
   it('formats fetchFailed with stderr', () => {
     expect(
       formatVaultGitSyncError({type: 'fetchFailed', stderr: 'Could not read from remote repository'}),
@@ -391,5 +402,13 @@ describe('formatVaultGitSyncError', () => {
     expect(
       formatVaultGitSyncError({type: 'conflictResolutionFailed', unresolved: [], manual: []}),
     ).toBe('Conflict resolution failed.');
+  });
+
+  it('formats non-sync Error values with their message', () => {
+    expect(formatVaultGitSyncError(new Error('network unavailable'))).toBe('network unavailable');
+  });
+
+  it('formats unknown sync error types with the generic fallback', () => {
+    expect(formatVaultGitSyncError({type: 'futureSyncError'})).toBe('Sync failed.');
   });
 });
