@@ -31,6 +31,8 @@ Pause phase 2 after three successful domain moves.
 
 Next candidates require a fresh high-effort audit first.
 
+A vault-specific audit now exists at `specs/team-scalability/phase-2-vault-domain-audit.md`. It recommends only a tiny tested pure-helper vault move as the next possible vault PR and keeps save, watcher, merge, bootstrap, and attachment/image persistence paths paused.
+
 Deferred high-risk domains:
 
 - `vault/`

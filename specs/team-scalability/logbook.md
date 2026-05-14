@@ -162,6 +162,10 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Planning — 2026-05-14 — phase 2 vault domain audit
+
+Created `specs/team-scalability/phase-2-vault-domain-audit.md` as a documentation-only audit for a future `vault/` migration. The safest first vault PR, if the team continues, is limited to the tested pure helpers `vaultBacklinkBodySeed.*` and `countInboxVaultMarkdownRefs.*`; `vaultBootstrap.ts`, `saveNoteMarkdown`, watcher planning, merge/write paths, and attachment/image persistence remain paused pending separate high-effort prep.
+
 ## Reassessment — 2026-05-14 — phase 2 domain clustering after PR #3
 
 **Phase 2 window:** 2026-05-14 to 2026-05-14
