@@ -33,6 +33,13 @@ Pause phase 2 after four successful domain moves.
 
 Next candidates require a fresh high-effort audit first.
 
+Fresh audit completed in `specs/team-scalability/useMainWindowWorkspace-candidates.md`.
+Anti-growth policy is now explicit: `useMainWindowWorkspace.ts` must not exceed the current
+module-budget cap (`4088` script-counted lines), new behavior should land in focused helpers
+first, and any budget raise must be logged as temporary.
+
+Recommended next extraction, if the loop resumes: `hasReopenableClosedEditorTab`.
+
 A vault-specific audit exists at `specs/team-scalability/phase-2-vault-domain-audit.md`. It keeps save, watcher, merge, bootstrap, and attachment/image persistence paths paused. Tree helpers, URI/path helpers, and link/rename/merge helpers each need a separate prep entry before any move.
 
 Deferred high-risk domains (remaining work):

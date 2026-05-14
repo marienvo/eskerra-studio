@@ -162,6 +162,47 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Audit — 2026-05-14 — useMainWindowWorkspace anti-growth policy and next candidates
+
+**Scope:** docs-only audit; no application code, refactor, file move, or module-budget change.
+
+**Files read**
+
+- `specs/team-scalability/current-status.md`
+- `specs/team-scalability/logbook.md`
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts`
+- nearby `workspace*.ts` hooks/helpers
+- `scripts/check-module-budgets.mjs`
+- `scripts/module-budget-baseline.json`
+
+**Anti-growth policy added**
+
+Recorded in `specs/team-scalability/useMainWindowWorkspace-candidates.md`:
+
+- `useMainWindowWorkspace.ts` must not grow above the current module-budget cap (`4088` script-counted lines; `wc -l` currently reports `4087`).
+- New behavior should land in focused helpers, hooks, or modules first.
+- The main hook should only wire dependencies, own React orchestration, and delegate focused logic.
+- Raising the budget requires an explicit logbook note, a reason, and a temporary follow-up plan to lower it again.
+- Prefer one small extraction per cleanup cycle.
+
+**Candidates audited**
+
+Detailed notes are in `specs/team-scalability/useMainWindowWorkspace-candidates.md`.
+
+- `hasReopenableClosedEditorTab` — source lines ~679-698; derives the closed-tab reopen enabled state; danger-zone proximity low; testability high; likely files: `editorClosedTabStack.ts`, `editorClosedTabStack.test.ts`, `useMainWindowWorkspace.ts`; risk: low; **safe now**.
+- `resolveModelBackedLegacyTabStrip` — source lines ~1485-1500 and ~2069-2086; chooses model-derived tabs only when signatures match legacy output; danger-zone proximity low to medium; testability high; likely files: `workspaceRuntimeProjection.ts` or `workspaceRuntimeTabsLegacyBridge.ts`, test file, `useMainWindowWorkspace.ts`; risk: medium; **later**.
+- `useWorkspaceVaultMarkdownRefs` — source lines ~2463-2489; owns async markdown-ref collection and stale-result suppression; danger-zone proximity medium because refresh nonces intersect vault mutation/watch refresh paths; testability medium; likely files: new `workspaceVaultMarkdownRefs.ts`, test file, `useMainWindowWorkspace.ts`; risk: medium; **later**.
+- `deriveDefaultActiveTodayHubRestore` — source lines ~3915-3977; chooses/restores the default active Today hub after restore; danger-zone proximity medium due shell restore and Today Hub workspace persistence state; testability high if kept pure; likely files: `workspaceTodayHubDerived.ts` or `workspaceInboxShellRestoreBridge.ts`, test file, `useMainWindowWorkspace.ts`; risk: medium; **later**.
+- `normalizeWorkspaceVaultRootPath` — source lines ~257-259 and call sites around ~710, ~3802, ~3919; pure vault-root canonicalization; danger-zone proximity low; testability high; likely files: a small restore/projection helper, test file, `useMainWindowWorkspace.ts`; risk: low; **safe now, but low value**.
+
+**Recommended next extraction**
+
+Recommend only `hasReopenableClosedEditorTab`.
+
+Reason: it is the clearest one-small-extraction target, already belongs with `editorClosedTabStack.ts`, needs only pure unit tests, and avoids `lastPersistedRef`, `inboxContentByUri`, `saveNoteMarkdown`, the autosave scheduler, watcher/reconcile behavior, and editor-save flow. `normalizeWorkspaceVaultRootPath` is also safe but too small to justify a cleanup cycle by itself.
+
+---
+
 ## Review — 2026-05-14 — phase 2 vault PR #1 — move pure vault helpers into lib/vault/
 
 **Reviewer session:** sonnet 4.6 — phase-2-vault-pr1 review session
