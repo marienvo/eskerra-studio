@@ -86,7 +86,7 @@ import {
 } from '../lib/editorDocumentHistory';
 import {
   type ClosedEditorTabRecord,
-  isEditorClosedTabReopenable,
+  hasReopenableClosedEditorTab,
   popNextReopenableClosedTabRecord,
 } from '../lib/editorClosedTabStack';
 import {
@@ -217,8 +217,8 @@ import {
 import {
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
-  legacyEditorWorkspaceTabsSignature,
   projectWorkspaceRuntimeToModel,
+  resolveModelBackedLegacyTabStrip,
   workspaceStateForIncomingHubSwitch,
 } from './workspaceRuntimeProjection';
 import {
@@ -678,22 +678,11 @@ export function useMainWindowWorkspace(options: {
 
   /* editorClosedStackVersion re-runs this when the ref-backed closed-tab stack mutates. */
   const canReopenClosedEditorTab = useMemo(() => {
-    const root = vaultRoot;
-    if (!root) {
+    if (!vaultRoot) {
       return false;
     }
-    const noteSet = new Set(
-      notes.map(n => n.uri.replace(/\\/g, '/')),
-    );
-    const stack = editorClosedTabsStackSnapshot;
-    for (let i = stack.length - 1; i >= 0; i--) {
-      if (
-        isEditorClosedTabReopenable(stack[i]!.uri, root, noteSet)
-      ) {
-        return true;
-      }
-    }
-    return false;
+    const noteSet = new Set(notes.map(n => n.uri.replace(/\\/g, '/')));
+    return hasReopenableClosedEditorTab(editorClosedTabsStackSnapshot, vaultRoot, noteSet);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- editorClosedStackVersion syncs ref stack mutations to UI
   }, [vaultRoot, notes, editorClosedStackVersion, editorClosedTabsStackSnapshot]);
 
@@ -1476,22 +1465,16 @@ export function useMainWindowWorkspace(options: {
         'background new tab',
         m => openTabBackgroundAction(m, targetNorm, tabOpts),
       );
-      const hub = nextModel.activeHub;
-      const derived =
-        hub != null && nextModel.workspaces[hub] != null
-          ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
-          : null;
-
-      const legacySig = legacyEditorWorkspaceTabsSignature(nextTabsLegacy);
-      const derivedSig =
-        derived != null ? legacyEditorWorkspaceTabsSignature(derived) : null;
-      const derivedMatchesLegacy = derivedSig === legacySig && derived != null;
-
-      const nextTabs = derivedMatchesLegacy ? derived : nextTabsLegacy;
-      if (!derivedMatchesLegacy && derived != null) {
+      const {nextTabs, mismatch: tabStripMismatch} = resolveModelBackedLegacyTabStrip(
+        nextModel,
+        nextTabsLegacy,
+        'signature',
+      );
+      if (tabStripMismatch?.kind === 'signature') {
         const warn =
           typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
         if (warn) {
+          const {legacySig, derivedSig} = tabStripMismatch;
           console.warn(
             '[workspaceModel] applyBackgroundNewTabOpen: model strip mismatch vs legacy placement; using legacy strip',
             {legacySig, derivedSig},
@@ -2060,24 +2043,16 @@ export function useMainWindowWorkspace(options: {
         const nextModel = dispatchWorkspaceActionSync('close tab', m =>
           closeTabAction(m, tabId),
         );
-        const hub = nextModel.activeHub;
-        const derived =
-          hub != null && nextModel.workspaces[hub] != null
-            ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
-            : null;
-
-        const legacyIds = nextTabsLegacy.map(t => t.id);
-        const derivedIds = derived?.map(t => t.id) ?? [];
-        const derivedMatchesLegacy =
-          derived != null &&
-          derivedIds.length === legacyIds.length &&
-          derivedIds.every((id, i) => id === legacyIds[i]);
-
-        const nextTabs = derivedMatchesLegacy ? derived : nextTabsLegacy;
-        if (!derivedMatchesLegacy && derived != null) {
+        const {nextTabs, mismatch: tabStripMismatch} = resolveModelBackedLegacyTabStrip(
+          nextModel,
+          nextTabsLegacy,
+          'ids',
+        );
+        if (tabStripMismatch?.kind === 'ids') {
           const warn =
             typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
           if (warn) {
+            const {legacyIds, derivedIds} = tabStripMismatch;
             console.warn(
               '[workspaceModel] closeEditorTab: model strip mismatch vs legacy filter; using legacy strip',
               {tabId, legacyIds, derivedIds},

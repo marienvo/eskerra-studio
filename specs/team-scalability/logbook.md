@@ -162,6 +162,285 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Review — 2026-05-14 — resolveModelBackedLegacyTabStrip extraction
+
+**Reviewer session:** sonnet 4.6 low
+
+**Files reviewed**
+
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.ts` (new `resolveModelBackedLegacyTabStrip` + `ResolveModelBackedLegacyTabStripResult`)
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts` (6 new tests)
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (two replaced blocks + import update)
+
+**Checklist**
+
+- Background open still uses full signature comparison (`'signature'` path, `legacyEditorWorkspaceTabsSignature`): confirmed
+- Close tab still uses id/order-only comparison (`'ids'` path, id array equality): confirmed
+- Missing `activeHub` or missing workspace entry silently returns legacy tabs, `derivedTabs: null`, `matched: false`, `mismatch: null` — no warning emitted: confirmed
+- Helper does not call `console.warn`, read `process.env`, or read React state/refs: confirmed
+- Warning messages, warn-gate (`process.env.NODE_ENV !== 'production'`), and payload field names (`legacySig`, `derivedSig`, `tabId`, `legacyIds`, `derivedIds`) remain caller-owned and unchanged: confirmed
+- Assignment (`assignLegacyEditorWorkspaceTabs`), mirroring (`mirrorShadowActiveWorkspaceTabs`), save/flush (`flushInboxSaveRef`, `saveChainRef`), closed-tab stack updates (`recordClosedTabAndPruneScroll`), refocus (`refocusAfterClosingActiveTab`), and prefetch cache update (`inboxContentByUriRef`) stayed caller-owned: confirmed
+- Callback order in both `applyBackgroundNewTabOpen` and `closeEditorTab` unchanged: confirmed
+- No danger-zone paths touched (no cache writes, persistence, watcher, autosave, editor-save, `lastPersistedRef`, `inboxContentByUri` mutation, `saveNoteMarkdown`, `NoteMarkdownEditor.tsx`, `EskerraTableShell.tsx`): confirmed
+- Anti-growth cap (4088) not raised; hook moved 4076 → 4062: confirmed
+- 37 tests passed (31 pre-existing + 6 new exact-value tests covering signature match, signature mismatch, ids match with differing histories, ids mismatch, missing activeHub, missing workspace): confirmed
+
+**Findings**
+
+Blocking: none
+
+Tiny follow-ups (resolved before acceptance):
+1. `derivedSig` typed `string | null` in `ResolveModelBackedLegacyTabStripResult` — but the early-return for `derivedTabs == null` means every code path reaching the signature branch has a non-null `derivedTabs`, so `legacyEditorWorkspaceTabsSignature(derivedTabs)` always returns `string`. Narrowed to `string` to remove the spurious `| null`. Fixed in `workspaceRuntimeProjection.ts`.
+2. `App.tsx` budget cap dropped from 767 → 713 in `module-budget-baseline.json` without a logbook entry. Confirmed intentional catch-up maintenance: `wc -l App.tsx` = 712, so the new cap is accurate. Not part of this extraction PR; no further action needed.
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
+## PR — 2026-05-14 — resolveModelBackedLegacyTabStrip extraction
+
+**Cycle:** cleaning-things-up-pt-7
+**Type:** pure refactor
+**Author session:** sonnet 4.6 high
+
+**What moved**
+
+- From: `apps/desktop/src/hooks/useMainWindowWorkspace.ts`
+  - `applyBackgroundNewTabOpen` ~lines 1469-1489: model-derived vs legacy signature comparison block
+  - `closeEditorTab` ~lines 2052-2075: model-derived vs legacy id/order comparison block
+- To: `apps/desktop/src/hooks/workspaceRuntimeProjection.ts` — new `resolveModelBackedLegacyTabStrip` export + `ResolveModelBackedLegacyTabStripResult` type
+- LOC delta source: 4076 → 4062 (−14)
+- LOC new function: ~55 lines added to `workspaceRuntimeProjection.ts` (257 → 315)
+- Tests added: 6 new tests in `workspaceRuntimeProjection.test.ts` covering signature match, signature mismatch, ids match (histories differ), ids mismatch, missing activeHub, missing workspace for active hub (`wc -l`: 813 → 911)
+
+**Module budget**
+
+- Baseline entries changed: `workspaceRuntimeProjection.test.ts` budget cap raised from 814 → 912 (new test coverage; cap = `wc -l` + 1 per tool convention)
+- `useMainWindowWorkspace.ts` anti-growth cap (4088) not raised; hook is now 4062
+- New function fits in existing file (315 lines, well under NEW_FILE_MAX_LINES)
+
+**Behavior**
+
+- Behavior change: no
+- `legacyEditorWorkspaceTabsSignature` import removed from `useMainWindowWorkspace.ts` (now called only inside `workspaceRuntimeProjection.ts`)
+- Warning messages, payload field names (`legacySig`, `derivedSig`, `tabId`, `legacyIds`, `derivedIds`), and warn-gate (`process.env.NODE_ENV !== 'production'`) unchanged
+- Callback order and all side effects (assignLegacyEditorWorkspaceTabs, prefetch cache, closed-tab stack, refocus, save flush) unchanged
+
+**Verification**
+
+- `npm run lint`: pass
+- `npx vitest run apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts` (37 tests): pass
+- `npm run check:architecture`: pass
+- Manual smoke test: not run — pure derivation with no side effects
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+Anti-growth cap (4088) not raised. The two duplicated model-vs-legacy resolution blocks are now a single typed helper. Call sites retain all side effects: `console.warn`, `process.env` guard, `assignLegacyEditorWorkspaceTabs`, prefetch cache, closed-tab stack, and `refocusAfterClosingActiveTab`. The `tabStripMismatch?.kind === 'signature'/'ids'` narrowing at each call site preserves the original `!derivedMatchesLegacy && derived != null` guard exactly.
+
+---
+
+## PR — 2026-05-14 — hasReopenableClosedEditorTab extraction
+
+**Cycle:** cleaning-things-up-pt-7
+**Type:** pure refactor
+**Author session:** sonnet 4.6 medium
+
+**What moved**
+
+- From: `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (`canReopenClosedEditorTab` useMemo body, lines ~680-698)
+- To: `apps/desktop/src/lib/editorClosedTabStack.ts` (new `hasReopenableClosedEditorTab` export)
+- LOC delta source: 4087 → 4076 (−11)
+- LOC new function: ~20 lines added to `editorClosedTabStack.ts` (101 → 121)
+- Tests added: 7 new tests in `editorClosedTabStack.test.ts` covering null vaultRoot, empty stack, top-entry reopenable, non-top-entry reopenable, all-stale, note-set membership, and no-mutation guarantee (10 → 17 total tests)
+
+**Module budget**
+
+- Baseline entries changed: `useMainWindowWorkspace.ts` (4087 cap → now 4076, cap still 4088)
+- Direction: down only? yes
+- New function respects NEW_FILE_MAX_LINES: n/a — added to existing file; file is 121 lines
+
+**Behavior**
+
+- Behavior change: no
+- `isEditorClosedTabReopenable` removed from the hook's direct import (delegated via `hasReopenableClosedEditorTab`)
+
+**Verification**
+
+- `npm run lint`: pass
+- `npx vitest run apps/desktop/src/lib/editorClosedTabStack.test.ts` (17 tests): pass
+- `npm run check:architecture`: pass
+- Manual smoke test: not run — pure derivation with no side effects
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+Anti-growth cap not raised (remains 4088). The useMemo now delegates all scan logic to the helper; the hook only builds the `noteSet` from React state and passes plain values. No closures, refs, or deps changed.
+
+---
+
+## Audit — 2026-05-14 — resolveModelBackedLegacyTabStrip prep
+
+**Scope:** prep audit only. No application code, refactor, file move, or module-budget change.
+
+**Files read**
+
+- `specs/team-scalability/useMainWindowWorkspace-candidates.md`
+- `specs/team-scalability/current-status.md`
+- `specs/team-scalability/logbook.md`
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts`
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.ts`
+- `apps/desktop/src/hooks/workspaceRuntimeTabsLegacyBridge.ts`
+- Related tests: `workspaceRuntimeProjection.test.ts`, `useMainWindowWorkspace.hydrateVault.test.ts`
+
+**Exact source ranges**
+
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` lines 1429-1515: `applyBackgroundNewTabOpen`.
+  - Legacy placement is built on lines 1437-1462.
+  - WorkspaceModel dispatch happens on lines 1464-1467.
+  - Model-derived tab strip selection, full signature comparison, legacy fallback, and dev warning happen on lines 1468-1489.
+  - Assignment/mirroring remains caller-owned on lines 1491-1500.
+  - Prefetch cache update on lines 1501-1511 is out of scope.
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` lines 2031-2096: `closeEditorTab`.
+  - Save/flush and closed-tab bookkeeping happen on lines 2034-2047.
+  - WorkspaceModel dispatch happens on lines 2049-2051.
+  - Model-derived tab strip selection, id-order comparison, legacy fallback, and dev warning happen on lines 2052-2075.
+  - Assignment remains caller-owned on lines 2077-2081.
+  - Active-tab refocus remains caller-owned on lines 2083-2086.
+- Related existing pattern: `apps/desktop/src/hooks/workspaceEditorHistoryNavigation.ts` lines 31-62 contains a private helper for tab-history model comparison plus assignment and warning. Do not reuse it directly in the minimal PR because it owns assignment and warning side effects.
+
+**Current responsibility**
+
+Both call sites compute the legacy tab strip first, dispatch the equivalent `WorkspaceModel` action, project the active workspace's model tabs back to `EditorWorkspaceTab[]`, and use model-derived tabs only when they match legacy expectations. If a model strip exists but does not match, development builds warn and the legacy strip remains authoritative.
+
+The two match rules are intentionally different:
+
+- Background open uses `legacyEditorWorkspaceTabsSignature` for both strips, so ids, normalized history entries, and history index must all match.
+- Close tab compares only tab ids and order. This preserves the existing behavior where close-tab fallback is keyed to strip membership/order, not full history signature.
+
+**Pure helper shape**
+
+Best minimal helper name: `resolveModelBackedLegacyTabStrip`.
+
+Inputs:
+
+- `nextModel: WorkspaceModel`
+- `nextTabsLegacy: readonly EditorWorkspaceTab[]`
+- `match: 'signature' | 'ids'`
+
+Outputs:
+
+- `nextTabs: EditorWorkspaceTab[]` — model-derived strip when the configured comparison matches, otherwise a copy/reference of the legacy strip exactly as today.
+- `derivedTabs: EditorWorkspaceTab[] | null` — null when no active hub/workspace can be projected; this remains a silent legacy fallback.
+- `matched: boolean`
+- `mismatch: null | {kind: 'signature'; legacySig: string; derivedSig: string | null} | {kind: 'ids'; legacyIds: string[]; derivedIds: string[]}`
+
+The helper must not read React refs/state, must not call `console.warn`, and must not read `process.env`. The caller should keep the exact warning messages and dev-only guard, using the helper's mismatch payload. For `closeEditorTab`, the caller should still add `{tabId, legacyIds, derivedIds}` to the warning payload so the existing payload shape is preserved.
+
+**Best target file**
+
+`apps/desktop/src/hooks/workspaceRuntimeProjection.ts`.
+
+Reason: the helper is pure model-to-runtime projection/comparison logic and already needs `editorWorkspaceTabsFromModelTabEntries`, `legacyEditorWorkspaceTabsSignature`, `WorkspaceModel`, and `EditorWorkspaceTab`. Putting it in `workspaceRuntimeTabsLegacyBridge.ts` would blur pure resolution with ref/state assignment, which this extraction should avoid.
+
+**Existing coverage**
+
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts` lines 170-269 cover `closeTabAction` model behavior for inactive close, active-neighbor close, and sole-tab close.
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts` lines 272-369 cover `openTabBackgroundAction` append, insert-after, insert-at-index, and Home-surface preservation.
+- `apps/desktop/src/hooks/useMainWindowWorkspace.hydrateVault.test.ts` lines 773-845 cover real hook tab creation/background open and shadow model alignment.
+- `apps/desktop/src/hooks/useMainWindowWorkspace.hydrateVault.test.ts` lines 929-940 cover `closeEditorTab` for the last active tab and Home refocus.
+
+**Missing tests for the implementation PR**
+
+- Add exact-value tests for `resolveModelBackedLegacyTabStrip` in `workspaceRuntimeProjection.test.ts`:
+  - signature match returns the derived tabs and `mismatch: null`.
+  - signature mismatch returns legacy tabs and exact `{kind: 'signature', legacySig, derivedSig}`.
+  - ids match returns derived tabs even if the full histories differ, matching the current `closeEditorTab` id-only comparison.
+  - ids mismatch returns legacy tabs and exact `{kind: 'ids', legacyIds, derivedIds}`.
+  - missing active hub or missing workspace returns legacy tabs, `derivedTabs: null`, `matched: false`, and `mismatch: null` to preserve no-warning fallback.
+- Keep assertions exact (`toEqual`, `toBe`) rather than truthiness-only checks.
+- No hook mount test is required for the pure extraction if the duplicated call-site warning payloads remain visibly unchanged in review.
+
+**Danger-zone analysis**
+
+The extraction target avoids the explicit danger zones:
+
+- Does not touch `lastPersistedRef`.
+- Does not touch `inboxContentByUri` or `inboxContentByUriRef`; the prefetch cache update after background open stays in the hook.
+- Does not touch `saveNoteMarkdown`, autosave scheduler behavior, watcher/reconcile behavior, or editor-save flow.
+- Does not touch `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`.
+
+The surrounding callbacks do cross save timing, closed-tab bookkeeping, shadow mirroring, active-tab refocus, and prefetch cache updates. Those must stay outside the helper.
+
+**Risk notes**
+
+- Stale closures: low if the helper receives only `nextModel` and the already-computed `nextTabsLegacy`. Do not pass refs, setters, callbacks, or current active tab refs into the helper.
+- Callback timing: medium around `closeEditorTab` because dispatch occurs after async save/flush and closed-tab recording. The helper must stay after dispatch and before assignment, preserving the exact order.
+- Warning behavior: medium. Preserve no warning when `derivedTabs` is null. Preserve dev-only `process.env.NODE_ENV !== 'production'` checks in the hook. Preserve exact message strings and payload field names.
+- Comparison semantics: medium. The background-open path uses full signature comparison, while close-tab uses id-only comparison. Combining them incorrectly would be a behavior change.
+
+**Recommendation**
+
+Safe to implement now as a minimal PR, because the extraction can be pure, local, and testable, and the previous smaller `hasReopenableClosedEditorTab` extraction is complete. Keep the PR to:
+
+- Add `resolveModelBackedLegacyTabStrip` to `workspaceRuntimeProjection.ts`.
+- Add focused pure tests in `workspaceRuntimeProjection.test.ts`.
+- Replace only the two duplicated selection/comparison blocks in `applyBackgroundNewTabOpen` and `closeEditorTab`.
+- Leave assignment, mirroring, warning side effects, save/flush, closed-tab stack updates, refocus, prefetch cache updates, and module-budget files unchanged.
+
+---
+
+## Audit — 2026-05-14 — useMainWindowWorkspace anti-growth policy and next candidates
+
+**Scope:** docs-only audit; no application code, refactor, file move, or module-budget change.
+
+**Files read**
+
+- `specs/team-scalability/current-status.md`
+- `specs/team-scalability/logbook.md`
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts`
+- nearby `workspace*.ts` hooks/helpers
+- `scripts/check-module-budgets.mjs`
+- `scripts/module-budget-baseline.json`
+
+**Anti-growth policy added**
+
+Recorded in `specs/team-scalability/useMainWindowWorkspace-candidates.md`:
+
+- `useMainWindowWorkspace.ts` must not grow above the current module-budget cap (`4088` script-counted lines; `wc -l` currently reports `4087`).
+- New behavior should land in focused helpers, hooks, or modules first.
+- The main hook should only wire dependencies, own React orchestration, and delegate focused logic.
+- Raising the budget requires an explicit logbook note, a reason, and a temporary follow-up plan to lower it again.
+- Prefer one small extraction per cleanup cycle.
+
+**Candidates audited**
+
+Detailed notes are in `specs/team-scalability/useMainWindowWorkspace-candidates.md`.
+
+- `hasReopenableClosedEditorTab` — source lines ~679-698; derives the closed-tab reopen enabled state; danger-zone proximity low; testability high; likely files: `editorClosedTabStack.ts`, `editorClosedTabStack.test.ts`, `useMainWindowWorkspace.ts`; risk: low; **safe now**.
+- `resolveModelBackedLegacyTabStrip` — source lines ~1485-1500 and ~2069-2086; chooses model-derived tabs only when signatures match legacy output; danger-zone proximity low to medium; testability high; likely files: `workspaceRuntimeProjection.ts` or `workspaceRuntimeTabsLegacyBridge.ts`, test file, `useMainWindowWorkspace.ts`; risk: medium; **later**.
+- `useWorkspaceVaultMarkdownRefs` — source lines ~2463-2489; owns async markdown-ref collection and stale-result suppression; danger-zone proximity medium because refresh nonces intersect vault mutation/watch refresh paths; testability medium; likely files: new `workspaceVaultMarkdownRefs.ts`, test file, `useMainWindowWorkspace.ts`; risk: medium; **later**.
+- `deriveDefaultActiveTodayHubRestore` — source lines ~3915-3977; chooses/restores the default active Today hub after restore; danger-zone proximity medium due shell restore and Today Hub workspace persistence state; testability high if kept pure; likely files: `workspaceTodayHubDerived.ts` or `workspaceInboxShellRestoreBridge.ts`, test file, `useMainWindowWorkspace.ts`; risk: medium; **later**.
+- `normalizeWorkspaceVaultRootPath` — source lines ~257-259 and call sites around ~710, ~3802, ~3919; pure vault-root canonicalization; danger-zone proximity low; testability high; likely files: a small restore/projection helper, test file, `useMainWindowWorkspace.ts`; risk: low; **safe now, but low value**.
+
+**Recommended next extraction**
+
+Recommend only `hasReopenableClosedEditorTab`.
+
+Reason: it is the clearest one-small-extraction target, already belongs with `editorClosedTabStack.ts`, needs only pure unit tests, and avoids `lastPersistedRef`, `inboxContentByUri`, `saveNoteMarkdown`, the autosave scheduler, watcher/reconcile behavior, and editor-save flow. `normalizeWorkspaceVaultRootPath` is also safe but too small to justify a cleanup cycle by itself.
+
+---
+
 ## Review — 2026-05-14 — phase 2 vault PR #1 — move pure vault helpers into lib/vault/
 
 **Reviewer session:** sonnet 4.6 — phase-2-vault-pr1 review session

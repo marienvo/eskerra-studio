@@ -81,6 +81,26 @@ export function pushClosedTabsFromCloseAll(
 }
 
 /**
+ * Returns true when at least one entry in `stack` is reopenable given the current
+ * vault root and known-note set. Does not mutate `stack`.
+ */
+export function hasReopenableClosedEditorTab(
+  stack: readonly ClosedEditorTabRecord[],
+  vaultRoot: string | null,
+  noteUriSet: ReadonlySet<string>,
+): boolean {
+  if (!vaultRoot) {
+    return false;
+  }
+  for (let i = stack.length - 1; i >= 0; i--) {
+    if (isEditorClosedTabReopenable(stack[i]!.uri, vaultRoot, noteUriSet)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Pops records from `stack` until a reopenable record is found or the stack is exhausted.
  * Mutates `stack` in place (LIFO pop semantics).
  */
