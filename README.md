@@ -2,7 +2,7 @@
 > Still in early development
 
 <p align="center">
-  <img src="./eskerra-logo.png" alt="Eskerra logo" width="120"><br>
+  <img src="./assets/brand/eskerra-logo.png" alt="Eskerra logo" width="120"><br>
 </p>
 
 <h1 align="center">Eskerra</h1>
