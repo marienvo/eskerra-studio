@@ -127,6 +127,30 @@ export function formatVaultGitSyncError(error: unknown): string {
       return `Invalid sync config. ${syncError.reason}`;
     case 'timeout':
       return `Sync timed out during ${syncError.step} after ${syncError.secs}s.`;
+    case 'fetchFailed': {
+      const stderr = syncError.stderr.trim();
+      return stderr === '' ? 'Fetch failed.' : `Fetch failed. ${stderr}`;
+    }
+    case 'authenticationFailed': {
+      const stderr = syncError.stderr.trim();
+      return stderr === '' ? 'Authentication failed.' : `Authentication failed. ${stderr}`;
+    }
+    case 'unsupportedStagePlan': {
+      const paths = syncError.paths.join(', ');
+      return paths === ''
+        ? 'Sync blocked: unsupported change type detected.'
+        : `Sync blocked: renamed file detected (${paths}). Commit or revert the rename to continue.`;
+    }
+    case 'conflictResolutionFailed': {
+      const parts = ['Conflict resolution failed.'];
+      if (syncError.unresolved.length > 0) {
+        parts.push(`Unresolved: ${syncError.unresolved.join(', ')}.`);
+      }
+      if (syncError.manual.length > 0) {
+        parts.push(`Requires manual resolution: ${syncError.manual.join(', ')}.`);
+      }
+      return parts.join(' ');
+    }
     default:
       return 'Sync failed.';
   }

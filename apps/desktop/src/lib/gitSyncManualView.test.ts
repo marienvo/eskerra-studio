@@ -317,4 +317,79 @@ describe('formatVaultGitSyncError', () => {
       }),
     ).toBe('Git command failed: git fetch origin. remote unavailable');
   });
+
+  it('formats fetchFailed with stderr', () => {
+    expect(
+      formatVaultGitSyncError({type: 'fetchFailed', stderr: 'Could not read from remote repository'}),
+    ).toBe('Fetch failed. Could not read from remote repository');
+  });
+
+  it('formats fetchFailed with empty stderr', () => {
+    expect(formatVaultGitSyncError({type: 'fetchFailed', stderr: ''})).toBe('Fetch failed.');
+  });
+
+  it('formats authenticationFailed with stderr', () => {
+    expect(
+      formatVaultGitSyncError({
+        type: 'authenticationFailed',
+        stderr: 'Permission denied (publickey).',
+      }),
+    ).toBe('Authentication failed. Permission denied (publickey).');
+  });
+
+  it('formats authenticationFailed with empty stderr', () => {
+    expect(formatVaultGitSyncError({type: 'authenticationFailed', stderr: ''})).toBe(
+      'Authentication failed.',
+    );
+  });
+
+  it('formats unsupportedStagePlan with paths', () => {
+    expect(
+      formatVaultGitSyncError({type: 'unsupportedStagePlan', paths: ['Inbox/old.md', 'Inbox/new.md']}),
+    ).toBe(
+      'Sync blocked: renamed file detected (Inbox/old.md, Inbox/new.md). Commit or revert the rename to continue.',
+    );
+  });
+
+  it('formats unsupportedStagePlan with empty paths', () => {
+    expect(formatVaultGitSyncError({type: 'unsupportedStagePlan', paths: []})).toBe(
+      'Sync blocked: unsupported change type detected.',
+    );
+  });
+
+  it('formats conflictResolutionFailed with unresolved and manual paths', () => {
+    expect(
+      formatVaultGitSyncError({
+        type: 'conflictResolutionFailed',
+        unresolved: ['Inbox/a.md'],
+        manual: ['Inbox/b.md'],
+      }),
+    ).toBe('Conflict resolution failed. Unresolved: Inbox/a.md. Requires manual resolution: Inbox/b.md.');
+  });
+
+  it('formats conflictResolutionFailed with only unresolved paths', () => {
+    expect(
+      formatVaultGitSyncError({
+        type: 'conflictResolutionFailed',
+        unresolved: ['Inbox/a.md', 'Inbox/b.md'],
+        manual: [],
+      }),
+    ).toBe('Conflict resolution failed. Unresolved: Inbox/a.md, Inbox/b.md.');
+  });
+
+  it('formats conflictResolutionFailed with only manual paths', () => {
+    expect(
+      formatVaultGitSyncError({
+        type: 'conflictResolutionFailed',
+        unresolved: [],
+        manual: ['Inbox/c.md'],
+      }),
+    ).toBe('Conflict resolution failed. Requires manual resolution: Inbox/c.md.');
+  });
+
+  it('formats conflictResolutionFailed with no paths', () => {
+    expect(
+      formatVaultGitSyncError({type: 'conflictResolutionFailed', unresolved: [], manual: []}),
+    ).toBe('Conflict resolution failed.');
+  });
 });
