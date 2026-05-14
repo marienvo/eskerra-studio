@@ -162,6 +162,86 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Reassessment — 2026-05-14 — phase 2 domain clustering after PR #2
+
+**Phase 2 window:** 2026-05-14 to 2026-05-14
+**PRs completed:** PR #1 `layout/`; PR #2 `todayHub/`
+
+**Metric movement**
+
+- `apps/desktop/src/lib/` root-level file count: 142 -> 130
+- Domains created/filled: `layout/` created; `todayHub/` filled with root helpers
+- Files moved: 12 total
+- Behavior changes: 0
+- Danger-zone touches: 0
+- Barrels/index files added: 0
+- ESLint deep-import restrictions added: 0
+
+**What went well:** Both moves stayed small and reviewable. Prep entries with exact file lists and import call sites made reviews fast and concrete. Existing domain folders were safer first targets than creating broad new domains: `todayHub/` already had a folder and `layout/` had clear file naming and focused call sites.
+
+**What was harder than expected:** Even import-only moves can brush against model or UI boundaries. The Today Hub move touched visible rendering imports and `workspaceModel/persistence.ts`; that was acceptable because it was import-only, but model-adjacent files need strict review. `clipboard/` is plausible next, but editor paste/import behavior makes it a higher-review-cost move than `layout/` or `todayHub/`.
+
+**Process lessons:** File-move reviews must compare bodies, constants, persisted values, defaults, and test assertions; import churn is not harmless by default. Keep avoiding barrel/index changes unless the prep proves they are required. Keep high-risk domains deferred: `vault/`, `editor/`, `gitSync/`, `workspaceModel/`, and `tauri/`. If `clipboard/` becomes the next candidate, require a fresh prep entry and explicit editor paste/import review.
+
+**Decision:** pause phase 2 after two successful moves; keep `clipboard/` as the next candidate only after a fresh prep entry.
+
+**Reasoning:** The first two domain moves proved the migration mechanics and reduced the flat `src/lib/` root meaningfully without behavior changes. Continuing immediately would move into medium-risk territory. Do not add contributor-process docs yet, and do not return to phase 1 hook extraction without a separate fresh audit.
+
+## Checkpoint — 2026-05-14 — phase 2 after PR #2
+
+**Phase 2 results so far:** PR #1 `layout/` accepted; PR #2 `todayHub/` accepted. Both were pure file moves with mechanical import updates, no behavior changes, no barrel/index changes, no ESLint deep-import restrictions, and no contributor-process files.
+
+**Migration mechanics:** proven enough for the initial phase-2 hypothesis. Prep entries with exact file lists, import call sites, targeted tests, and non-goals made both reviews fast and concrete. Root-level `apps/desktop/src/lib/` movement so far: 142 -> 130.
+
+**Process lesson from Today Hub:** existing domain folders make review easier, but visible UI helpers still need strict body/test comparison and explicit callout of cross-domain imports such as `workspaceModel/persistence.ts`. Keeping `todayHub/index.ts` unchanged avoided turning a file move into a boundary-design PR.
+
+**Decision:** stop after two successful phase-2 moves and write a reassessment before selecting another domain.
+
+**Recommended next candidate if phase 2 continues:** `clipboard/` is the only plausible next small domain in the current plan, but it is medium risk because it touches editor paste/import behavior. Avoid `vault/`, `editor/`, `gitSync/`, `workspaceModel/`, and `tauri/` for now.
+
+**Next step:** write a phase-2 reassessment. If the reassessment chooses to continue with `clipboard/`, require a fresh prep entry before implementation.
+
+## Review — 2026-05-14 — phase 2 PR #2 — move Today Hub root helpers into lib/todayHub/
+
+**Reviewer session:** sonnet 4.6 — phase-2-pr2 review session
+**Review prompt:** Close phase 2 PR #2; verdict accept with no findings; confirm file scope, import mechanics, no content changes, no added files or restrictions.
+
+**Files reviewed**
+
+- `apps/desktop/src/lib/todayHub/todayHubCellStaticPointer.ts`
+- `apps/desktop/src/lib/todayHub/todayHubCellStaticPointer.test.ts`
+- `apps/desktop/src/lib/todayHub/todayHubCellStaticView.ts`
+- `apps/desktop/src/lib/todayHub/todayHubCellStaticView.test.ts`
+- `apps/desktop/src/lib/todayHub/todayHubWorkspaceRestore.ts`
+- `apps/desktop/src/lib/todayHub/todayHubWorkspaceRestore.test.ts`
+- 5 updated import call sites (`TodayHubCellStaticRichText.tsx`, `TodayHubCanvas.tsx`, `useMainWindowWorkspace.ts`, `inboxShellRestoreHelpers.ts`, `workspaceModel/persistence.ts`)
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Checklist**
+
+- Only six approved files moved: confirmed — no other files added or removed from `src/lib/` root
+- Imports mechanical: confirmed — only path strings updated; no imports added or removed
+- Function bodies unchanged: confirmed — all helpers (`pickDefaultActiveTodayHubUri`, `buildTodayHubCellStaticViewModel`, `clipSegmentsToRange`, pointer helpers) identical to pre-move
+- Constants unchanged: confirmed — no constants or persisted values changed
+- Test assertions unchanged: confirmed — all 20 test assertions identical to pre-move
+- `workspaceModel/persistence.ts` changed only its import path: confirmed — no other lines touched
+- No Today Hub rendering refactor introduced: confirmed
+- No workspace model or editor tab model behavior changed: confirmed
+- No `index.ts` or barrel added or changed: confirmed
+- No ESLint deep-import restrictions added: confirmed
+- No CODEOWNERS, CONTRIBUTING.md, or PR template changes: confirmed
+- `src/lib/` root-level file count: confirmed 136 → 130
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
 ## Phase 2 PR #2 — 2026-05-14 — move Today Hub root helpers into lib/todayHub/
 
 **Cycle:** phase 2
