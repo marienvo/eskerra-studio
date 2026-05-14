@@ -2,11 +2,55 @@ import {describe, expect, it} from 'vitest';
 
 import {
   type ClosedEditorTabRecord,
+  hasReopenableClosedEditorTab,
   isEditorClosedTabReopenable,
   popNextReopenableClosedTabRecord,
   pushClosedTabsFromCloseAll,
   pushClosedTabsFromCloseOther,
 } from './editorClosedTabStack';
+
+describe('hasReopenableClosedEditorTab', () => {
+  const vault = '/vault';
+  const noNotes = new Set<string>();
+  const rec = (uri: string): ClosedEditorTabRecord => ({uri, index: 0});
+
+  it('returns false when vaultRoot is null', () => {
+    expect(hasReopenableClosedEditorTab([rec('/vault/a.md')], null, noNotes)).toBe(false);
+  });
+
+  it('returns false for an empty stack', () => {
+    expect(hasReopenableClosedEditorTab([], vault, noNotes)).toBe(false);
+  });
+
+  it('returns true when the top entry is reopenable', () => {
+    expect(
+      hasReopenableClosedEditorTab([rec('/vault/a.md')], vault, noNotes),
+    ).toBe(true);
+  });
+
+  it('returns true when only a non-top entry is reopenable', () => {
+    const stack = [rec('/vault/deep.md'), rec('/outside/stale.txt')];
+    expect(hasReopenableClosedEditorTab(stack, vault, noNotes)).toBe(true);
+  });
+
+  it('returns false when all entries are outside the vault', () => {
+    const stack = [rec('/outside/a.md'), rec('/outside/b.md')];
+    expect(hasReopenableClosedEditorTab(stack, vault, noNotes)).toBe(false);
+  });
+
+  it('returns true for an entry in the note set even without .md suffix', () => {
+    const noteSet = new Set(['/vault/special']);
+    expect(
+      hasReopenableClosedEditorTab([rec('/vault/special')], vault, noteSet),
+    ).toBe(true);
+  });
+
+  it('does not mutate the stack', () => {
+    const stack = [rec('/vault/a.md'), rec('/vault/b.md')];
+    hasReopenableClosedEditorTab(stack, vault, noNotes);
+    expect(stack).toHaveLength(2);
+  });
+});
 
 describe('isEditorClosedTabReopenable', () => {
   it('returns true for path under vault with .md suffix', () => {

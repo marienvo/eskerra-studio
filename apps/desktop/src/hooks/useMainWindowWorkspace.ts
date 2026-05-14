@@ -86,6 +86,7 @@ import {
 } from '../lib/editorDocumentHistory';
 import {
   type ClosedEditorTabRecord,
+  hasReopenableClosedEditorTab,
   isEditorClosedTabReopenable,
   popNextReopenableClosedTabRecord,
 } from '../lib/editorClosedTabStack';
@@ -678,22 +679,8 @@ export function useMainWindowWorkspace(options: {
 
   /* editorClosedStackVersion re-runs this when the ref-backed closed-tab stack mutates. */
   const canReopenClosedEditorTab = useMemo(() => {
-    const root = vaultRoot;
-    if (!root) {
-      return false;
-    }
-    const noteSet = new Set(
-      notes.map(n => n.uri.replace(/\\/g, '/')),
-    );
-    const stack = editorClosedTabsStackSnapshot;
-    for (let i = stack.length - 1; i >= 0; i--) {
-      if (
-        isEditorClosedTabReopenable(stack[i]!.uri, root, noteSet)
-      ) {
-        return true;
-      }
-    }
-    return false;
+    const noteSet = new Set(notes.map(n => n.uri.replace(/\\/g, '/')));
+    return hasReopenableClosedEditorTab(editorClosedTabsStackSnapshot, vaultRoot, noteSet);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- editorClosedStackVersion syncs ref stack mutations to UI
   }, [vaultRoot, notes, editorClosedStackVersion, editorClosedTabsStackSnapshot]);
 
