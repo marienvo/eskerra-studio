@@ -162,6 +162,40 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Review — 2026-05-14 — resolveModelBackedLegacyTabStrip extraction
+
+**Reviewer session:** sonnet 4.6 low
+
+**Files reviewed**
+
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.ts` (new `resolveModelBackedLegacyTabStrip` + `ResolveModelBackedLegacyTabStripResult`)
+- `apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts` (6 new tests)
+- `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (two replaced blocks + import update)
+
+**Checklist**
+
+- Background open still uses full signature comparison (`'signature'` path, `legacyEditorWorkspaceTabsSignature`): confirmed
+- Close tab still uses id/order-only comparison (`'ids'` path, id array equality): confirmed
+- Missing `activeHub` or missing workspace entry silently returns legacy tabs, `derivedTabs: null`, `matched: false`, `mismatch: null` — no warning emitted: confirmed
+- Helper does not call `console.warn`, read `process.env`, or read React state/refs: confirmed
+- Warning messages, warn-gate (`process.env.NODE_ENV !== 'production'`), and payload field names (`legacySig`, `derivedSig`, `tabId`, `legacyIds`, `derivedIds`) remain caller-owned and unchanged: confirmed
+- Assignment (`assignLegacyEditorWorkspaceTabs`), mirroring (`mirrorShadowActiveWorkspaceTabs`), save/flush (`flushInboxSaveRef`, `saveChainRef`), closed-tab stack updates (`recordClosedTabAndPruneScroll`), refocus (`refocusAfterClosingActiveTab`), and prefetch cache update (`inboxContentByUriRef`) stayed caller-owned: confirmed
+- Callback order in both `applyBackgroundNewTabOpen` and `closeEditorTab` unchanged: confirmed
+- No danger-zone paths touched (no cache writes, persistence, watcher, autosave, editor-save, `lastPersistedRef`, `inboxContentByUri` mutation, `saveNoteMarkdown`, `NoteMarkdownEditor.tsx`, `EskerraTableShell.tsx`): confirmed
+- Anti-growth cap (4088) not raised; hook moved 4076 → 4062: confirmed
+- 37 tests passed (31 pre-existing + 6 new exact-value tests covering signature match, signature mismatch, ids match with differing histories, ids mismatch, missing activeHub, missing workspace): confirmed
+
+**Findings**
+
+Blocking: none
+Tiny follow-ups: none
+
+**Verdict:** accept
+
+**Final status:** accepted
+
+---
+
 ## PR — 2026-05-14 — resolveModelBackedLegacyTabStrip extraction
 
 **Cycle:** cleaning-things-up-pt-7
