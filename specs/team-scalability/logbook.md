@@ -199,12 +199,60 @@ Measurement notes:
 - "ESLint suppression count" in the README template maps to the raw `eslint-disable` line count above. The repo script (`check-eslint-suppressions.mjs`) validates against a baseline list and exits 0/1; it does not emit a single suppression number. The 13-line raw count is the cleanest comparable measure.
 - LOC is measured with `wc -l` (newline count), matching the convention used by `scripts/check-module-budgets.mjs`.
 
-Candidates considered for extraction this cycle: TODO — to be filled in after the day 2–4 audit step. Do not pre-commit before reading the code.
+### Candidates considered for extraction
 
-- TODO — candidate 1: one-line rationale, explicit confirmation outside danger zones.
-- TODO — candidate 2.
-- TODO — candidate 3.
+Audited by reading `useMainWindowWorkspace.ts` against the danger-zone list. Many initially promising callbacks (disk-conflict resolvers, merge-view orchestration, `deleteNote`, `deleteFolder`, `bulkDelete*`, `applyBackgroundNewTabOpen`, `loadOpenedNoteBodyAndApplySelection`, `hydrateVault`, `closeAllEditorTabs`) were ruled out because they touch `lastPersistedRef`, `inboxContentByUri`, `autosaveSchedulerRef`, or `enqueuePersistOutgoingNoteMarkdown`. The three candidates below all avoid that surface.
 
-Selected candidate: TODO — pick after the audit.
+#### Candidate A — `injectActiveHubIntoTodayHubPersistMap` (pure helper)
 
-Reason for selection: TODO — must state how it avoids cache, persistence, watcher, and editor-save behavior.
+1. **Name:** `injectActiveHubIntoTodayHubPersistMap`
+2. **Current responsibility:** Final step of `legacyTodayHubWorkspacesPersistFiltered` (the `useMemo` in `useMainWindowWorkspace.ts`) that overlays the live `editorWorkspaceTabs` / `activeEditorTabId` / `homeStatesByHub[hub]` onto an already-filtered, already-merged hub-workspaces map before persist.
+3. **Source line range:** `useMainWindowWorkspace.ts` lines ~842–890 (the inline portion after the calls to `deriveTodayHubWorkspacesPersistFiltered` and `mergeHomeHistoryIntoHubSnapshotsForPersist`).
+4. **State ownership:** None held. Reads only the values already passed into the existing `useMemo` (`activeTodayHubUri`, `editorWorkspaceTabs`, `activeEditorTabId`, `homeStatesByHub`, plus the merged map produced by sibling pure helpers).
+5. **Inputs:** `{merged: Record<string, TodayHubWorkspaceSnapshot>, activeTodayHubUri: string | null, homeStatesByHub: Record<string, WorkspaceHomeState>, editorWorkspaceTabs: EditorWorkspaceTab[], activeEditorTabId: string | null}`. **Outputs:** new `Record<string, TodayHubWorkspaceSnapshot>`.
+6. **Files likely touched:** `apps/desktop/src/hooks/workspaceTodayHubDerived.ts` (add the helper next to its siblings), `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (call it from the existing `useMemo`), and a new colocated `*.test.ts`.
+7. **Existing tests:** `workspaceTodayHubDerived` is exercised indirectly via `useMainWindowWorkspace.hydrateVault.test.ts` and the integration harness; no direct test for this specific overlay logic.
+8. **Missing tests to add:** Direct unit tests in `workspaceTodayHubDerived.test.ts` (new): (a) `activeTodayHubUri == null` returns input unchanged; (b) hub absent in `merged` — creates entry from current tabs + active id + `createWorkspaceHomeState`; (c) hub present in `merged` — preserves prior `homeHistory`, overrides `editorWorkspaceTabs` + `activeEditorTabId`; (d) `tabsToStored` is applied (round-trip with empty tabs).
+9. **Danger-zone analysis:** No refs touched. No `lastPersistedRef` / `inboxContentByUri` / `saveNoteMarkdown`. No FS, no async, no watcher, no editor save. Pure derivation on plain inputs. **Outside all danger zones.**
+10. **Risk:** **low**.
+11. **Merge-conflict reduction:** Future changes to the today-hub persist shape (a frequently touched area) land in `workspaceTodayHubDerived.ts` instead of `useMainWindowWorkspace.ts`. Removes a self-contained ~30-line block from the megahook.
+
+#### Candidate B — `collectShadowDivergenceDevDiagnostics` (pure helper)
+
+1. **Name:** `collectShadowDivergenceDevDiagnostics`
+2. **Current responsibility:** Body of the dev/test-only `useEffect` that compares model-derived persistence to legacy runtime persistence and `console.warn`s on divergence (`[workspaceModel] persistence legacy divergence`).
+3. **Source line range:** `useMainWindowWorkspace.ts` lines ~896–937.
+4. **State ownership:** None. The effect reads `inboxShellRestored`, `workspaceShadowModel`, `modelDerivedPersistence`, `legacyTodayHubWorkspacesPersistFiltered`, `activeTodayHubUri`, `hubForProjection`, `restoredInboxState`, `todayHubWorkspacesForProjection`. It writes nothing back to React state or refs.
+5. **Inputs:** the readonly snapshot above. **Outputs:** `{diffs: string[]; suppress: boolean}` — empty `diffs` or `suppress: true` means no warning.
+6. **Files likely touched:** `apps/desktop/src/hooks/workspacePersistenceBridge.ts` (add helper alongside `describeFilteredLegacyVsModelPersistenceDivergence`), `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (effect body becomes 5–6 lines calling the helper + `console.warn`), and a new colocated `*.test.ts`.
+7. **Existing tests:** None for this effect directly.
+8. **Missing tests to add:** Unit tests for the helper: suppress when `inboxShellRestored === false`; suppress when not dev/test; suppress when `workspaceShadowModel.activeHub === null`; non-empty diffs when projection contains pending hubs not yet in the model.
+9. **Danger-zone analysis:** Dev-mode telemetry only. No persistence writes, no cache writes, no watcher, no editor save. Worst-case regression: noisier or quieter `console.warn` in dev/test. No user-visible behavior. **Outside all danger zones.**
+10. **Risk:** **low**.
+11. **Merge-conflict reduction:** Moves a chunk of dev-observability logic to a sibling file that already owns `describeFilteredLegacyVsModelPersistenceDivergence`. Future tuning of divergence filtering lands there, not in the megahook.
+
+#### Candidate C — `popNextReopenableClosedTabRecord` (pure helper)
+
+1. **Name:** `popNextReopenableClosedTabRecord`
+2. **Current responsibility:** The `while` loop inside `reopenLastClosedEditorTab` that pops records off the closed-tab stack until it finds one whose URI is still reopenable against the current vault + notes set.
+3. **Source line range:** `useMainWindowWorkspace.ts` lines ~2266–2286.
+4. **State ownership:** Mutates only `editorClosedTabsStackRef.current` (pop semantics). The closed-tab stack is **not** in the danger-zone quadrangle.
+5. **Inputs:** `{stack: ClosedEditorTabRecord[] (mutated by pop), vaultRoot: string | null, noteUriSet: Set<string>}`. **Outputs:** `{record: ClosedEditorTabRecord | null, popped: number}`. Caller still owns `bumpEditorClosedStack()` and the `openMarkdownInEditor` invocation.
+6. **Files likely touched:** `apps/desktop/src/lib/editorClosedTabStack.ts` (already houses `isEditorClosedTabReopenable`), `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (callback shrinks to ~6 lines), `editorClosedTabStack.test.ts` (extend).
+7. **Existing tests:** `editorClosedTabStack.test.ts` covers `isEditorClosedTabReopenable` and stack-push helpers; no direct test for "pop until reopenable" semantics.
+8. **Missing tests to add:** empty stack → `{record: null, popped: 0}`; top entry reopenable → `popped === 1`; first two entries stale, third reopenable → `popped === 3`, returned record is the third; all stale → all popped, `record === null`.
+9. **Danger-zone analysis:** Only mutates the closed-tab stack ref. Does not touch `lastPersistedRef`, `inboxContentByUri`, `saveNoteMarkdown`, watcher state, or editor-save flow. The caller still drives `openMarkdownInEditor`, which is left untouched. **Outside all danger zones.**
+10. **Risk:** **low**.
+11. **Merge-conflict reduction:** Smaller LOC delta than A or B, but consolidates closed-tab stack behavior into one module — future tweaks to "which closed tabs can be reopened" land in `editorClosedTabStack.ts`, not the megahook.
+
+### Selected candidate
+
+**Candidate A — `injectActiveHubIntoTodayHubPersistMap`.**
+
+Reason for selection:
+
+- **Smallest blast radius.** Pure derivation, no refs, no async, no FS. The diff is a function move plus a delegation call.
+- **Highest test ROI.** Four crisp unit tests fully cover the helper; no integration harness needed.
+- **Natural home already exists.** `workspaceTodayHubDerived.ts` is the established sibling for `deriveTodayHubWorkspacesPersistFiltered` and `mergeHomeHistoryIntoHubSnapshotsForPersist`; this helper completes the trio.
+- **Danger-zone-free.** Reads only the values already inside the `useMemo`; writes nothing. Does not interact with `lastPersistedRef`, `inboxContentByUri`, `saveNoteMarkdown`, watcher state, or editor-save behavior. The persist write itself remains in the unchanged `workspacePersistence` path.
+- **Confidence-builder for the loop.** First PR in the cycle should be the one most likely to merge cleanly and produce a reviewer comment about *style*, not *correctness*. Candidate A fits that role best; B and C are good fallbacks for PR #2 and PR #3.
