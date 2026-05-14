@@ -24,10 +24,10 @@ import {
 } from '@eskerra/core';
 
 import {MIDDLE_CLICK_BLOCK_PASTE_WINDOW_MS} from '../../hooks/middleClickPasteBlock';
-import {clipboardDataProbablyHasVaultImage} from '../../lib/clipboardImageFiles';
-import {formatVaultImageMarkdownForInsert} from '../../lib/formatVaultImageMarkdown';
+import {clipboardDataProbablyHasVaultImage} from '../../lib/clipboard/clipboardImageFiles';
+import {formatVaultImageMarkdownForInsert} from '../../lib/clipboard/formatVaultImageMarkdown';
 import {cleanPastedMarkdownFragment} from '../../lib/cleanNoteMarkdown';
-import {tryClipboardHtmlToMarkdownInsert} from '../../lib/htmlClipboardToMarkdown';
+import {tryClipboardHtmlToMarkdownInsert} from '../../lib/clipboard/htmlClipboardToMarkdown';
 import type {NoteInboxAttachmentHost} from '../../lib/noteInboxAttachmentHost';
 import {isActivatableRelativeMarkdownHref} from './markdownActivatableRelativeHref';
 import {markdownCodeBackgroundLayer} from './markdownCodeBackgroundLayer';

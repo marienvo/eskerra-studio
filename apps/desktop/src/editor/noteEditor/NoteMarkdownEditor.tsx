@@ -42,14 +42,14 @@ import {
   type InboxWikiLinkCompletionCandidate,
 } from '@eskerra/core';
 
-import {clipboardDataProbablyHasVaultImage} from '../../lib/clipboardImageFiles';
+import {clipboardDataProbablyHasVaultImage} from '../../lib/clipboard/clipboardImageFiles';
 import {
   todayHubPerfEnabled,
   todayHubPerfLog,
 } from '../../lib/todayHub/todayHubPerf';
-import {formatVaultImageMarkdownForInsert} from '../../lib/formatVaultImageMarkdown';
+import {formatVaultImageMarkdownForInsert} from '../../lib/clipboard/formatVaultImageMarkdown';
 import {cleanPastedMarkdownFragment} from '../../lib/cleanNoteMarkdown';
-import {tryClipboardHtmlToMarkdownInsert} from '../../lib/htmlClipboardToMarkdown';
+import {tryClipboardHtmlToMarkdownInsert} from '../../lib/clipboard/htmlClipboardToMarkdown';
 import {
   isNoteAttachmentImageFilePath,
   type NoteInboxAttachmentHost,

@@ -1,6 +1,6 @@
 import {markdownContainsTransientImageUrls} from '@eskerra/core';
 
-import {dotExtensionForClipboardBytes} from './clipboardImageFiles';
+import {dotExtensionForClipboardBytes} from './clipboard/clipboardImageFiles';
 import {saveVaultImageBytes} from './desktopVaultAttachments';
 
 function markdownImagePattern(): RegExp {
