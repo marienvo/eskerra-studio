@@ -1,7 +1,7 @@
 import {
   MIN_RESIZABLE_PANE_PX,
   NOTIFICATIONS_INBOX_STACK_TOP,
-} from '../lib/layoutStore';
+} from '../lib/layout/layoutStore';
 import type {VaultTreeBulkItem} from '../lib/vaultTreeBulkPlan';
 
 import {DesktopVerticalSplit} from './DesktopVerticalSplit';

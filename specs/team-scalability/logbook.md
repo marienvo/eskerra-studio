@@ -162,6 +162,59 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## Phase 2 PR #1 — 2026-05-14 — move layout helpers into lib/layout/
+
+**Cycle:** phase 2
+**Type:** pure refactor (file move + import update)
+**Author session:** sonnet 4.6 — phase-2-pr1 session
+
+**What moved**
+
+- From: `apps/desktop/src/lib/` (root)
+- To: `apps/desktop/src/lib/layout/` (new folder)
+- Files moved:
+  - `desktopHorizontalSplitClamp.ts`
+  - `desktopHorizontalSplitClamp.test.ts`
+  - `desktopVerticalSplitClamp.ts`
+  - `desktopVerticalSplitClamp.test.ts`
+  - `layoutStore.ts`
+  - `layoutStore.test.ts`
+- `apps/desktop/src/lib/` root-level file count: 142 → 136 (−6)
+- Import call sites updated: 9 (App.tsx, VaultTabSideColumn.tsx, DesktopHorizontalSplit.tsx, DesktopHorizontalSplitEnd.tsx, DesktopVerticalSplit.tsx, MainWorkspaceSplit.tsx, VaultTab.tsx, useAppLayoutWidthPersisters.ts, useAppOnMountLayoutHydration.ts)
+- Test file sibling imports (3 test files) resolved correctly as co-located siblings in `layout/`
+
+**Module budget**
+
+- Baseline entries changed: none (moved files were not in the budget baseline JSON)
+- Direction: down only? n/a — this is a domain-clustering move, no extractions
+- `windowTiling.ts` stayed root-level (confirmed)
+- No barrel file (`index.ts`) added
+
+**Behavior**
+
+- Behavior change: no
+- Persisted layout key names and default values unchanged
+- `layoutStore.ts` calls same Tauri store APIs under same conditions
+- Clamp constants and return values unchanged
+
+**Verification**
+
+- `npx vitest run` (3 moved test files, 20 tests): pass
+- `npm run lint`: pass
+- `npm run check:architecture`: pass
+- Manual smoke test: n/a — import-only move; no logic changes
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+**Notes**
+
+No `index.ts` or ESLint deep-import restrictions added. Direct updated paths used for all call sites per the plan. `windowTiling.ts` intentionally left root-level (Tauri command glue boundary).
+
+---
+
 ## Phase 2 PR #1 prep — 2026-05-14 — layout domain migration
 
 **Branch:** `cleaning-things-up-pt-4`

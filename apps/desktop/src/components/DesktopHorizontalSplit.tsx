@@ -11,8 +11,8 @@ import {
   clampSplitLeftWidthPx,
   maxAvailableLeftWidthPx,
   shouldPersistLeftSplitWidthClamp,
-} from '../lib/desktopHorizontalSplitClamp';
-import {MIN_RESIZABLE_PANE_PX} from '../lib/layoutStore';
+} from '../lib/layout/desktopHorizontalSplitClamp';
+import {MIN_RESIZABLE_PANE_PX} from '../lib/layout/layoutStore';
 
 export type DesktopHorizontalSplitProps = {
   /** Current left column width in CSS pixels (controlled by parent). */

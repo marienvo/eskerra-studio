@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import {clampSplitRightWidthPx} from '../lib/desktopHorizontalSplitClamp';
+import {clampSplitRightWidthPx} from '../lib/layout/desktopHorizontalSplitClamp';
 
 export type DesktopHorizontalSplitEndProps = {
   /** Current end column width in CSS pixels (shell end column: notifications ± inbox tree; not the rail). */

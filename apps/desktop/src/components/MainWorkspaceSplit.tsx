@@ -5,7 +5,7 @@ import {
   MIN_RESIZABLE_PANE_PX,
   PODCASTS_LEFT_PANEL,
   VAULT_EPISODES_STACK_TOP,
-} from '../lib/layoutStore';
+} from '../lib/layout/layoutStore';
 
 import {DesktopHorizontalSplit} from './DesktopHorizontalSplit';
 import {DesktopVerticalSplit} from './DesktopVerticalSplit';

@@ -8,7 +8,7 @@ import {hydrateEmojiUsageFromStore} from '../lib/emojiUsageStore';
 import {
   loadStoredLayouts,
   type StoredLayouts,
-} from '../lib/layoutStore';
+} from '../lib/layout/layoutStore';
 import {
   loadMainWindowUi,
   type TodayHubWorkspaceSnapshot,
