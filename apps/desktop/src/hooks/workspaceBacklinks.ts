@@ -12,7 +12,7 @@ import {
 import type {VaultFilesystem, VaultMarkdownRef} from '@eskerra/core';
 
 import {listInboxAllBacklinkReferrersForTarget} from '../lib/inboxAllBacklinkIndex';
-import {mergeVaultBacklinkBodySeed} from '../lib/vaultBacklinkBodySeed';
+import {mergeVaultBacklinkBodySeed} from '../lib/vault/vaultBacklinkBodySeed';
 
 import {loadVaultMarkdownBodiesWithSeed} from './inboxNoteBodyCache';
 
