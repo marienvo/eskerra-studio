@@ -3,11 +3,15 @@
  */
 import './useMainWindowWorkspace.integration.mocks';
 
+import * as eskerraCore from '@eskerra/core';
 import {act, waitFor} from '@testing-library/react';
-import {describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {tabsControllerEditorSurface} from './workspaceRuntimeProjection';
-import {mountHydratedMainWindowWorkspace} from './useMainWindowWorkspace.integration.harness';
+import {
+  getDesktopMainWindowIntegrationMocks,
+  mountHydratedMainWindowWorkspace,
+} from './useMainWindowWorkspace.integration.harness';
 
 const VAULT_ROOT = '/vault';
 
@@ -96,6 +100,68 @@ describe('tabsController without Today hub', () => {
       expect(result.current.tabsController.editorWorkspaceTabs[0]?.history.index).toBe(1);
       expect(result.current.tabsController.editorHistoryCanGoBack).toBe(true);
     });
+
+    unmount();
+  });
+});
+
+describe('first Today hub after delayed markdown scan', () => {
+  let collectCall = 0;
+
+  beforeEach(() => {
+    getDesktopMainWindowIntegrationMocks().resetAll();
+    collectCall = 0;
+    vi.spyOn(eskerraCore, 'collectVaultMarkdownRefs').mockImplementation(async () => {
+      collectCall += 1;
+      if (collectCall === 1) {
+        return [];
+      }
+      return [{name: 'Today', uri: `${VAULT_ROOT}/Daily/Today.md`}];
+    });
+  });
+
+  afterEach(() => {
+    vi.mocked(eskerraCore.collectVaultMarkdownRefs).mockRestore();
+  });
+
+  it('preserves legacy inbox tabs in tabsController when the first hub appears', async () => {
+    const NOTE = `${VAULT_ROOT}/Inbox/only.md`;
+    const HUB = `${VAULT_ROOT}/Daily/Today.md`;
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: [VAULT_ROOT, `${VAULT_ROOT}/Inbox`],
+      files: {[NOTE]: 'body\n'},
+    });
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    expect(result.current.workspaceShadowModelForTests?.activeHub).toBeNull();
+
+    await act(async () => {
+      await result.current.selectionController.selectNoteInNewActiveTab(NOTE);
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(NOTE);
+    });
+
+    const tabIdBefore = result.current.tabsController.activeEditorTabId;
+
+    await act(async () => {
+      result.current.__bumpVaultMarkdownRefsScanForTests?.();
+    });
+
+    await waitFor(() => {
+      expect(result.current.workspaceShadowModelForTests?.activeHub).toBe(HUB);
+      expect(result.current.selectionController.vaultMarkdownRefs.some(r => r.uri === HUB)).toBe(
+        true,
+      );
+    });
+
+    expect(result.current.tabsController.editorWorkspaceTabs).toHaveLength(1);
+    expect(result.current.tabsController.editorWorkspaceTabs[0]?.history.entries).toEqual([NOTE]);
+    expect(result.current.tabsController.activeEditorTabId).toBe(tabIdBefore);
 
     unmount();
   });
