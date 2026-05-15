@@ -17,6 +17,7 @@ import {
   useRef,
   useState,
   type Dispatch,
+  type MutableRefObject,
   type RefObject,
   type SetStateAction,
 } from 'react';
@@ -218,6 +219,7 @@ import {
   remapEditorShellScrollMapExact,
   remapEditorShellScrollMapTreePrefix,
 } from './workspaceEditorScrollMap';
+import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import {cleanNoteMarkdownBody} from '../lib/cleanNoteMarkdown';
 import {
   clearInboxYamlFrontmatterEditorRefs,
@@ -905,6 +907,12 @@ export function useMainWindowWorkspace(options: {
     todayHubSettingsRef.current = todayHubSettings;
   }, [todayHubSettings]);
 
+  /** Filled in layout after {@link useWorkspacePersistence}; stable identity for sub-hooks' `useCallback` deps. */
+  const autosaveSchedulerTargetRef = useRef<MutableRefObject<InboxAutosaveScheduler> | null>(null);
+  const cancelAutosave = useCallback(() => {
+    autosaveSchedulerTargetRef.current?.current.cancel();
+  }, []);
+
   const {
     diskConflict,
     setDiskConflict,
@@ -920,10 +928,9 @@ export function useMainWindowWorkspace(options: {
     dismissDiskConflictSoft,
     clearStaleDiskConflictsForOpen,
   } = useDiskConflictState({
-    loadFullMarkdownIntoInboxEditor: (full, uri, selection) =>
-      loadFullMarkdownIntoInboxEditor(full, uri, selection),
+    loadFullMarkdownIntoInboxEditor,
     scheduleBacklinksDeferOneFrameAfterLoad,
-    cancelAutosave: () => autosaveSchedulerRef.current.cancel(),
+    cancelAutosave,
     selectedUriRef,
     lastPersistedRef,
     lastPersistedExternalMutationSeqRef,
@@ -981,8 +988,9 @@ export function useMainWindowWorkspace(options: {
   });
 
   useLayoutEffect(() => {
+    autosaveSchedulerTargetRef.current = autosaveSchedulerRef;
     flushInboxSaveForHydrateRef.current = workspacePersistenceFlushInboxSaveRef.current;
-  });
+  }, [autosaveSchedulerRef, workspacePersistenceFlushInboxSaveRef]);
   const flushInboxSaveRef = workspacePersistenceFlushInboxSaveRef;
 
   const getRenameMaintenanceSnapshot =
@@ -1606,7 +1614,7 @@ export function useMainWindowWorkspace(options: {
     setDiskConflictSoft,
     resolveDiskConflictReloadFromDisk,
     resolveDiskConflictKeepLocal,
-    cancelAutosave: () => autosaveSchedulerRef.current.cancel(),
+    cancelAutosave,
     setErr,
     inboxEditorRef,
     loadFullMarkdownIntoInboxEditor,
