@@ -378,6 +378,13 @@ export function useMainWindowWorkspace(options: {
   // showTodayHubCanvas derives from selection; see useMemo below.
   const [inboxContentByUri, setInboxContentByUri] = useState<Record<string, string>>({});
   const [vaultMarkdownRefs, setVaultMarkdownRefs] = useState<VaultMarkdownRef[]>([]);
+  /**
+   * False while `vaultMarkdownRefs` for the current `{vaultRoot, fsRefreshNonce}` fetch has not
+   * completed. `vaultMarkdownRefs` stays `[]` until the async scan finishes, so without this flag
+   * {@link syncHubWorkspacesToVaultTodayRefsAction} could prune restored hub state on an empty URI
+   * list during startup.
+   */
+  const [vaultMarkdownRefsReady, setVaultMarkdownRefsReady] = useState(false);
   const [fsRefreshNonce, setFsRefreshNonce] = useState(0);
   const [podcastFsNonce, setPodcastFsNonce] = useState(0);
   const [vaultTreeSelectionClearNonce, setVaultTreeSelectionClearNonce] = useState(0);
@@ -432,6 +439,10 @@ export function useMainWindowWorkspace(options: {
   const subtreeMarkdownCache = useMemo(() => new SubtreeMarkdownPresenceCache(), []);
   const inboxBodyPrefetchGenRef = useRef(0);
   const vaultRefsBuildGenRef = useRef(0);
+  const vaultMarkdownRefsFetchKeyRef = useRef<{
+    root: string | null;
+    nonce: number;
+  } | null>(null);
   const vaultMarkdownRefsRef = useRef<VaultMarkdownRef[]>([]);
   const vaultRootRef = useRef<string | null>(null);
   const selectedUriRef = useRef<string | null>(null);
@@ -743,7 +754,23 @@ export function useMainWindowWorkspace(options: {
   >;
 
   useLayoutEffect(() => {
+    const prev = vaultMarkdownRefsFetchKeyRef.current;
+    const next = {root: vaultRoot, nonce: fsRefreshNonce};
+    if (
+      prev == null ||
+      prev.root !== next.root ||
+      prev.nonce !== next.nonce
+    ) {
+      vaultMarkdownRefsFetchKeyRef.current = next;
+      setVaultMarkdownRefsReady(vaultRoot == null);
+    }
+  }, [vaultRoot, fsRefreshNonce]);
+
+  useLayoutEffect(() => {
     if (!inboxShellRestored) {
+      return;
+    }
+    if (vaultRoot != null && !vaultMarkdownRefsReady) {
       return;
     }
     dispatchWorkspaceActionSync('sync today hub workspaces to vault refs', m =>
@@ -752,6 +779,8 @@ export function useMainWindowWorkspace(options: {
   }, [
     inboxShellRestored,
     workspaceModelHubUris,
+    vaultRoot,
+    vaultMarkdownRefsReady,
     dispatchWorkspaceActionSync,
   ]);
 
@@ -2362,11 +2391,13 @@ export function useMainWindowWorkspace(options: {
           return;
         }
         setVaultMarkdownRefs(refs);
+        setVaultMarkdownRefsReady(true);
       } catch (e) {
         if (ac.signal.aborted) {
           return;
         }
         console.warn('[vaultMarkdownRefs]', e);
+        setVaultMarkdownRefsReady(true);
       }
     })();
     return () => {
