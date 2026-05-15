@@ -185,6 +185,7 @@ import {
 import {
   computeEditorHistoryCanGoBack,
   computeEditorHistoryCanGoForward,
+  deriveActiveTabHistorySnapshot,
   moveHomeHistoryBridge,
   openCurrentHomeAfterComposingBridge,
   runEditorHistoryGoBack,
@@ -3477,23 +3478,12 @@ export function useMainWindowWorkspace(options: {
   );
 
   const activeTabHistory = useMemo(
-    () => {
-      const hub = workspaceShadowModel.activeHub;
-      if (hub == null) {
-        return {entries: [], index: -1};
-      }
-      const ws = workspaceShadowModel.workspaces[hub];
-      if (ws == null || ws.active.kind !== 'tab') {
-        return {entries: [], index: -1};
-      }
-      const activeTabId = ws.active.id;
-      const tab = ws.tabs.find(t => t.id === activeTabId);
-      if (tab == null) {
-        return {entries: [], index: -1};
-      }
-      return {entries: [...tab.history.entries], index: tab.history.index};
-    },
-    [workspaceShadowModel],
+    () =>
+      deriveActiveTabHistorySnapshot({
+        editorWorkspaceTabs: tabsControllerSurface[0],
+        activeEditorTabId: tabsControllerSurface[1],
+      }),
+    [tabsControllerSurface],
   );
 
   const activeHomeState = useMemo(

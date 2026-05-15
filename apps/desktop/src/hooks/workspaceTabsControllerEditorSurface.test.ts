@@ -60,4 +60,43 @@ describe('tabsController without Today hub', () => {
 
     unmount();
   });
+
+  it('enables editor back when legacy tab history has prior entries (no Today hub)', async () => {
+    const NOTE_A = `${VAULT_ROOT}/Inbox/a.md`;
+    const NOTE_B = `${VAULT_ROOT}/Inbox/b.md`;
+    const {result, unmount} = await mountHydratedMainWindowWorkspace({
+      dirs: [VAULT_ROOT, `${VAULT_ROOT}/Inbox`],
+      files: {[NOTE_A]: 'a\n', [NOTE_B]: 'b\n'},
+    });
+
+    await waitFor(() => {
+      expect(result.current.inboxShellRestored).toBe(true);
+    });
+
+    expect(result.current.workspaceShadowModelForTests?.activeHub).toBeNull();
+
+    await act(async () => {
+      await result.current.selectionController.selectNoteInNewActiveTab(NOTE_A);
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(NOTE_A);
+    });
+
+    await act(async () => {
+      result.current.selectionController.selectNote(NOTE_B);
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectionController.selectedUri).toBe(NOTE_B);
+      expect(result.current.tabsController.editorWorkspaceTabs[0]?.history.entries).toEqual([
+        NOTE_A,
+        NOTE_B,
+      ]);
+      expect(result.current.tabsController.editorWorkspaceTabs[0]?.history.index).toBe(1);
+      expect(result.current.tabsController.editorHistoryCanGoBack).toBe(true);
+    });
+
+    unmount();
+  });
 });
