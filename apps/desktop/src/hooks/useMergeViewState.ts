@@ -15,7 +15,7 @@ import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
 import {resolveVaultLinkBaseMarkdownUri} from '../lib/resolveVaultLinkBaseMarkdownUri';
 import {mergeInboxNoteBodyIntoCache} from './inboxNoteBodyCache';
-import type {DiskConflictSoftState, DiskConflictState, LastPersisted} from './workspaceFsWatchReconcile';
+import type {DiskConflictSoftState, DiskConflictState} from './workspaceFsWatchReconcile';
 
 export type WorkspaceMergeView =
   | null
@@ -34,11 +34,10 @@ type UseMergeViewStateOptions = {
   todayHubWikiNavParentRef: MutableRefObject<string | null>;
   diskConflictRef: MutableRefObject<DiskConflictState | null>;
   diskConflictSoftRef: MutableRefObject<DiskConflictSoftState | null>;
-  setDiskConflict: Dispatch<SetStateAction<DiskConflictState | null>>;
-  setDiskConflictSoft: Dispatch<SetStateAction<DiskConflictSoftState | null>>;
   resolveDiskConflictReloadFromDisk: () => void;
   resolveDiskConflictKeepLocal: () => void;
-  cancelAutosave: () => void;
+  elevateDiskConflictSoftToBlocking: () => void;
+  clearBlockingDiskConflictForMergedBody: () => void;
   setErr: Dispatch<SetStateAction<string | null>>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   loadFullMarkdownIntoInboxEditor: (
@@ -57,8 +56,6 @@ type UseMergeViewStateOptions = {
   setBacklinksActiveBody: Dispatch<SetStateAction<string>>;
   enqueuePersistOutgoingNoteMarkdown: (uri: string, markdown: string) => void;
   scheduleBacklinksDeferOneFrameAfterLoad: () => void;
-  lastPersistedRef: MutableRefObject<LastPersisted | null>;
-  lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
 };
 
 export type UseMergeViewStateResult = {
@@ -81,11 +78,10 @@ export function useMergeViewState(options: UseMergeViewStateOptions): UseMergeVi
     todayHubWikiNavParentRef,
     diskConflictRef,
     diskConflictSoftRef,
-    setDiskConflict,
-    setDiskConflictSoft,
     resolveDiskConflictReloadFromDisk,
     resolveDiskConflictKeepLocal,
-    cancelAutosave,
+    elevateDiskConflictSoftToBlocking,
+    clearBlockingDiskConflictForMergedBody,
     setErr,
     inboxEditorRef,
     loadFullMarkdownIntoInboxEditor,
@@ -100,8 +96,6 @@ export function useMergeViewState(options: UseMergeViewStateOptions): UseMergeVi
     setBacklinksActiveBody,
     enqueuePersistOutgoingNoteMarkdown,
     scheduleBacklinksDeferOneFrameAfterLoad,
-    lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
   } = options;
 
   const [mergeView, setMergeView] = useState<WorkspaceMergeView>(null);
@@ -231,22 +225,17 @@ export function useMergeViewState(options: UseMergeViewStateOptions): UseMergeVi
 
     const s = diskConflictSoftRef.current;
     if (s && normalizeEditorDocUri(s.uri) === normUri) {
-      cancelAutosave();
-      const hard: DiskConflictState = {uri: s.uri, diskMarkdown: s.diskMarkdown};
-      setDiskConflict(hard);
-      diskConflictRef.current = hard;
-      setDiskConflictSoft(null);
-      diskConflictSoftRef.current = null;
-      setMergeView({kind: 'diskConflict', baseUri: normUri, diskMarkdown: s.diskMarkdown});
+      elevateDiskConflictSoftToBlocking();
+      const hard = diskConflictRef.current;
+      if (hard && normalizeEditorDocUri(hard.uri) === normUri) {
+        setMergeView({
+          kind: 'diskConflict',
+          baseUri: normUri,
+          diskMarkdown: hard.diskMarkdown,
+        });
+      }
     }
-  }, [
-    cancelAutosave,
-    diskConflictRef,
-    diskConflictSoftRef,
-    selectedUriRef,
-    setDiskConflict,
-    setDiskConflictSoft,
-  ]);
+  }, [diskConflictRef, diskConflictSoftRef, elevateDiskConflictSoftToBlocking, selectedUriRef]);
 
   const applyMergedBodyFromMerge = useCallback(
     (body: string) => {
@@ -255,16 +244,7 @@ export function useMergeViewState(options: UseMergeViewStateOptions): UseMergeVi
       const normBase = normalizeEditorDocUri(mv.baseUri);
 
       if (mv.kind === 'diskConflict') {
-        cancelAutosave();
-        const dc = diskConflictRef.current;
-        if (dc) {
-          lastPersistedRef.current = {uri: dc.uri, markdown: dc.diskMarkdown};
-          lastPersistedExternalMutationSeqRef.current += 1;
-        }
-        setDiskConflict(null);
-        diskConflictRef.current = null;
-        setDiskConflictSoft(null);
-        diskConflictSoftRef.current = null;
+        clearBlockingDiskConflictForMergedBody();
       } else {
         const dc = diskConflictRef.current;
         if (dc && normalizeEditorDocUri(dc.uri) === normBase) {
@@ -304,12 +284,8 @@ export function useMergeViewState(options: UseMergeViewStateOptions): UseMergeVi
     },
     [
       mergeView,
-      cancelAutosave,
+      clearBlockingDiskConflictForMergedBody,
       diskConflictRef,
-      lastPersistedRef,
-      lastPersistedExternalMutationSeqRef,
-      setDiskConflict,
-      setDiskConflictSoft,
       setErr,
       suppressEditorOnChangeRef,
       inboxEditorRef,

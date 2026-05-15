@@ -104,4 +104,41 @@ describe('useDiskConflictState', () => {
     });
     expect(skipRecencyDeferForUriRef.current.size).toBe(0);
   });
+
+  it('clearBlockingDiskConflictForMergedBody records disk as last persisted and clears UI', () => {
+    const selectedUriRef = {current: '/note.md'};
+    const lastPersistedRef = {current: {uri: '/other.md', markdown: 'x'} as {uri: string; markdown: string}};
+    const lastPersistedExternalMutationSeqRef = {current: 2};
+    const inboxContentByUriRef = {current: {} as Record<string, string>};
+    const skipRecencyDeferForUriRef = {current: new Set<string>()};
+    const cancelAutosave = vi.fn();
+
+    const {result} = renderHook(() =>
+      useDiskConflictState({
+        loadFullMarkdownIntoInboxEditor: vi.fn(),
+        scheduleBacklinksDeferOneFrameAfterLoad: vi.fn(),
+        cancelAutosave,
+        selectedUriRef,
+        lastPersistedRef,
+        lastPersistedExternalMutationSeqRef,
+        inboxContentByUriRef,
+        skipRecencyDeferForUriRef,
+        setInboxContentByUri: vi.fn(),
+        setErr: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setDiskConflict({uri: '/note.md', diskMarkdown: '# from disk'});
+    });
+    act(() => {
+      result.current.clearBlockingDiskConflictForMergedBody();
+    });
+
+    expect(cancelAutosave).toHaveBeenCalledTimes(1);
+    expect(lastPersistedRef.current).toEqual({uri: '/note.md', markdown: '# from disk'});
+    expect(lastPersistedExternalMutationSeqRef.current).toBe(3);
+    expect(result.current.diskConflict).toBeNull();
+    expect(result.current.diskConflictSoft).toBeNull();
+  });
 });

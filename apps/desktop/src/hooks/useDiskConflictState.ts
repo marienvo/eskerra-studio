@@ -45,6 +45,8 @@ export type UseDiskConflictStateResult = {
   resolveDiskConflictReloadFromDisk: () => void;
   resolveDiskConflictKeepLocal: () => void;
   elevateDiskConflictSoftToBlocking: () => void;
+  /** Clears blocking + soft conflict UI after recording disk markdown as last persisted (merge-apply path). */
+  clearBlockingDiskConflictForMergedBody: () => void;
   dismissDiskConflictSoft: () => void;
   clearStaleDiskConflictsForOpen: (targetNorm: string) => void;
 };
@@ -160,6 +162,19 @@ export function useDiskConflictState(
     diskConflictSoftRef.current = null;
   }, [cancelAutosave, selectedUriRef]);
 
+  const clearBlockingDiskConflictForMergedBody = useCallback(() => {
+    cancelAutosave();
+    const c = diskConflictRef.current;
+    if (c) {
+      lastPersistedRef.current = {uri: c.uri, markdown: c.diskMarkdown};
+      lastPersistedExternalMutationSeqRef.current += 1;
+    }
+    setDiskConflict(null);
+    diskConflictRef.current = null;
+    setDiskConflictSoft(null);
+    diskConflictSoftRef.current = null;
+  }, [cancelAutosave, lastPersistedExternalMutationSeqRef, lastPersistedRef]);
+
   const dismissDiskConflictSoft = useCallback(() => {
     setDiskConflictSoft(null);
     diskConflictSoftRef.current = null;
@@ -191,6 +206,7 @@ export function useDiskConflictState(
     resolveDiskConflictReloadFromDisk,
     resolveDiskConflictKeepLocal,
     elevateDiskConflictSoftToBlocking,
+    clearBlockingDiskConflictForMergedBody,
     dismissDiskConflictSoft,
     clearStaleDiskConflictsForOpen,
   };

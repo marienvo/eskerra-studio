@@ -925,6 +925,7 @@ export function useMainWindowWorkspace(options: {
     resolveDiskConflictReloadFromDisk,
     resolveDiskConflictKeepLocal,
     elevateDiskConflictSoftToBlocking,
+    clearBlockingDiskConflictForMergedBody,
     dismissDiskConflictSoft,
     clearStaleDiskConflictsForOpen,
   } = useDiskConflictState({
@@ -1610,11 +1611,10 @@ export function useMainWindowWorkspace(options: {
     todayHubWikiNavParentRef,
     diskConflictRef,
     diskConflictSoftRef,
-    setDiskConflict,
-    setDiskConflictSoft,
     resolveDiskConflictReloadFromDisk,
     resolveDiskConflictKeepLocal,
-    cancelAutosave,
+    elevateDiskConflictSoftToBlocking,
+    clearBlockingDiskConflictForMergedBody,
     setErr,
     inboxEditorRef,
     loadFullMarkdownIntoInboxEditor,
@@ -1629,8 +1629,6 @@ export function useMainWindowWorkspace(options: {
     setBacklinksActiveBody,
     enqueuePersistOutgoingNoteMarkdown,
     scheduleBacklinksDeferOneFrameAfterLoad,
-    lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
   });
 
   useLayoutEffect(() => {
