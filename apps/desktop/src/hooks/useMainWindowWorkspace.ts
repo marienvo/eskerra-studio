@@ -776,11 +776,15 @@ export function useMainWindowWorkspace(options: {
     dispatchWorkspaceActionSync('sync today hub workspaces to vault refs', m =>
       syncHubWorkspacesToVaultTodayRefsAction(m, workspaceModelHubUris),
     );
+    // `runDeferredShellRestoreTabStateAndShadowSync` may apply `shellRestoreProjection` in a
+    // microtask after this layout effect; that can reintroduce persisted hub keys not in
+    // `workspaceModelHubUris`. Re-run when the shadow model changes so stale hubs are pruned again.
   }, [
     inboxShellRestored,
     workspaceModelHubUris,
     vaultRoot,
     vaultMarkdownRefsReady,
+    workspaceShadowModel,
     dispatchWorkspaceActionSync,
   ]);
 
