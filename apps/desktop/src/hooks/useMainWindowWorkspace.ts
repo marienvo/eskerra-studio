@@ -3799,10 +3799,6 @@ export function useMainWindowWorkspace(options: {
         assignInboxShellRestored(setInboxShellRestored, true);
       }
 
-      if (shellRestoreProjection != null) {
-        syncShadowWorkspaceFromShellRestore(shellRestoreProjection);
-      }
-
       runDeferredShellRestoreTabStateAndShadowSync(
         {
           editorWorkspaceTabsRef,
@@ -3814,7 +3810,7 @@ export function useMainWindowWorkspace(options: {
           mirrorShadowHomeSurface,
           syncShadowWorkspaceFromShellRestore,
         },
-        null,
+        shellRestoreProjection,
       );
 
       restoreInboxSelectionAfterShellRestore(root, restoredTabs, hubUris.length);
