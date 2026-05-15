@@ -912,7 +912,7 @@ export function useMainWindowWorkspace(options: {
 
   useLayoutEffect(() => {
     flushInboxSaveForHydrateRef.current = workspacePersistenceFlushInboxSaveRef.current;
-  }, [workspacePersistenceFlushInboxSaveRef]);
+  });
   const flushInboxSaveRef = workspacePersistenceFlushInboxSaveRef;
 
   const getRenameMaintenanceSnapshot =
