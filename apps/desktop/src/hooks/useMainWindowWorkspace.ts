@@ -308,6 +308,10 @@ export type UseMainWindowWorkspaceResult = {
   frontmatterController: WorkspaceFrontmatterController;
   /** Test-only shadow model for the workspaceModel migration bridge. */
   workspaceShadowModelForTests?: WorkspaceModel;
+  /**
+   * Vitest only: re-run {@link collectVaultMarkdownRefs} (same trigger as `fsRefreshNonce` bump).
+   */
+  __bumpVaultMarkdownRefsScanForTests?: () => void;
 };
 
 export function useMainWindowWorkspace(options: {
@@ -805,11 +809,15 @@ export function useMainWindowWorkspace(options: {
     dispatchWorkspaceActionSync('sync today hub workspaces to vault refs', m =>
       syncHubWorkspacesToVaultTodayRefsAction(m, workspaceModelHubUris),
     );
+    // `runDeferredShellRestoreTabStateAndShadowSync` may apply `shellRestoreProjection` in a
+    // microtask after this layout effect; that can reintroduce persisted hub keys not in
+    // `workspaceModelHubUris`. Re-run when the shadow model changes so stale hubs are pruned again.
   }, [
     inboxShellRestored,
     workspaceModelHubUris,
     vaultRoot,
     vaultMarkdownRefsReady,
+    workspaceShadowModel,
     dispatchWorkspaceActionSync,
   ]);
 
@@ -2318,7 +2326,6 @@ export function useMainWindowWorkspace(options: {
           return;
         }
         console.warn('[vaultMarkdownRefs]', e);
-        setVaultMarkdownRefsReady(true);
       }
     })();
     return () => {
@@ -3811,12 +3818,18 @@ export function useMainWindowWorkspace(options: {
       setActiveTodayHubUri,
     });
     mirrorShadowActiveHub(pick, 'default active hub');
+    mirrorShadowActiveWorkspaceTabs(
+      editorWorkspaceTabsRef.current,
+      activeEditorTabIdRef.current,
+      'seed shadow tabs from legacy on first default hub',
+    );
   }, [
     vaultRoot,
     inboxShellRestored,
     vaultMarkdownRefs,
     modelActiveTodayHubUri,
     mirrorShadowActiveHub,
+    mirrorShadowActiveWorkspaceTabs,
     switchTodayHubWorkspace,
     restoredInboxState,
   ]);
@@ -3930,5 +3943,12 @@ export function useMainWindowWorkspace(options: {
     },
     workspaceShadowModelForTests:
       import.meta.env.MODE === 'test' ? workspaceShadowModel : undefined,
+    ...(import.meta.env.MODE === 'test'
+      ? {
+          __bumpVaultMarkdownRefsScanForTests: () => {
+            setFsRefreshNonce(n => n + 1);
+          },
+        }
+      : {}),
   };
 }
