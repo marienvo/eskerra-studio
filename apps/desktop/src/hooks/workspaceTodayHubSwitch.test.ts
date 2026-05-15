@@ -4,7 +4,7 @@ import {describe, expect, it, vi} from 'vitest';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-import {tabsToStored, type EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
+import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import {useWorkspaceTodayHubSwitch, type UseWorkspaceTodayHubSwitchArgs} from './workspaceTodayHubSwitch';
 
 // ---------------------------------------------------------------------------
@@ -16,25 +16,6 @@ const HUB_B = '/vault/B/Today.md';
 const NOT_A_HUB = '/vault/Inbox/Note.md';
 
 type StubWorkspaces = Record<string, TodayHubWorkspaceSnapshot>;
-
-function createMutatingWorkspaceSetter(hubWorkspaces: StubWorkspaces) {
-  return vi.fn(
-    (
-      updaterOrValue:
-        | StubWorkspaces
-        | ((prev: StubWorkspaces) => StubWorkspaces),
-    ) => {
-      const next =
-        typeof updaterOrValue === 'function'
-          ? updaterOrValue({...hubWorkspaces})
-          : updaterOrValue;
-      for (const k of Object.keys(hubWorkspaces)) {
-        delete hubWorkspaces[k];
-      }
-      Object.assign(hubWorkspaces, next);
-    },
-  );
-}
 
 /**
  * Build a full args object for the hook. Every option can be overridden; defaults are
@@ -54,7 +35,6 @@ function makeArgs(overrides: {
   setActiveTodayHubUri?: ReturnType<typeof vi.fn>;
   setEditorWorkspaceTabs?: ReturnType<typeof vi.fn>;
   setActiveEditorTabId?: ReturnType<typeof vi.fn>;
-  setTodayHubWorkspacesForSave?: ReturnType<typeof vi.fn>;
   /** Initial `homeStatesByHubRef.current` for outgoing hub snapshot tests. */
   homeStatesByHubSeed?: Record<string, WorkspaceHomeState>;
   syncWorkspaceModelForIncomingHub?: ReturnType<typeof vi.fn>;
@@ -75,7 +55,6 @@ function makeArgs(overrides: {
     setComposingNewEntry: ReturnType<typeof vi.fn>;
     setEditorBody: ReturnType<typeof vi.fn>;
     setInboxEditorResetNonce: ReturnType<typeof vi.fn>;
-    setTodayHubWorkspacesForSave: ReturnType<typeof vi.fn>;
   };
   hubWorkspaces: StubWorkspaces;
 } {
@@ -93,9 +72,6 @@ function makeArgs(overrides: {
   const setComposingNewEntry = vi.fn();
   const setEditorBody = vi.fn();
   const setInboxEditorResetNonce = vi.fn();
-
-  const setTodayHubWorkspacesForSave =
-    overrides.setTodayHubWorkspacesForSave ?? createMutatingWorkspaceSetter(hubWorkspaces);
 
   const args: UseWorkspaceTodayHubSwitchArgs = {
     state: {legacyTodayHubWorkspacesForSwitch: hubWorkspaces},
@@ -119,7 +95,6 @@ function makeArgs(overrides: {
       setInboxEditorYamlLeadingBeforeFrontmatter: vi.fn(),
       setEditorBody,
       setInboxEditorResetNonce,
-      setTodayHubWorkspacesForSave,
       setEditorWorkspaceTabs,
       setActiveEditorTabId,
       setActiveTodayHubUri,
@@ -161,7 +136,6 @@ function makeArgs(overrides: {
       setComposingNewEntry,
       setEditorBody,
       setInboxEditorResetNonce,
-      setTodayHubWorkspacesForSave,
     },
   };
 }
@@ -218,7 +192,8 @@ describe('switchTodayHubWorkspace', () => {
 
   it('snapshots outgoing hub homeHistory from homeStatesByHubRef when switching hubs', async () => {
     const NOTE_A = '/vault/Inbox/OutgoingHomeNote.md';
-    const {args, hubWorkspaces} = makeArgs({
+    const syncWorkspaceModelForIncomingHub = vi.fn();
+    const {args} = makeArgs({
       activeTodayHubUri: HUB_A,
       hubWorkspaces: {
         [HUB_B]: {editorWorkspaceTabs: [], activeEditorTabId: null},
@@ -226,20 +201,35 @@ describe('switchTodayHubWorkspace', () => {
       homeStatesByHubSeed: {
         [HUB_A]: {history: {entries: [HUB_A, NOTE_A], index: 1}},
       },
+      syncWorkspaceModelForIncomingHub,
     });
     const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
 
     await act(async () => {
       await result.current.switchTodayHubWorkspace(HUB_B);
+      await result.current.switchTodayHubWorkspace(HUB_A);
     });
 
-    expect(hubWorkspaces[HUB_A]?.homeHistory).toEqual({
+    expect(syncWorkspaceModelForIncomingHub).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        hubUri: HUB_A,
+        snapshot: expect.objectContaining({
+          homeHistory: {
+            entries: [HUB_A, NOTE_A],
+            index: 1,
+          },
+        }),
+      }),
+    );
+    expect(
+      syncWorkspaceModelForIncomingHub.mock.calls.at(-1)?.[0].snapshot.homeHistory,
+    ).toEqual({
       entries: [HUB_A, NOTE_A],
       index: 1,
     });
   });
 
-  it('snapshot-then-restore (target has tabs): saves outgoing hub A, keeps B snapshot, activates restored tab, does NOT call selectNote(B)', async () => {
+  it('snapshot-then-restore (target has tabs): keeps B snapshot, activates restored tab, does NOT call selectNote(B)', async () => {
     const bSnapshot: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
       activeEditorTabId: 'tab-b1',
@@ -248,7 +238,7 @@ describe('switchTodayHubWorkspace', () => {
       {id: 'tab-a1', entries: ['/vault/Inbox/Note1.md'], index: 0},
       {id: 'tab-a2', entries: [HUB_A, '/vault/Inbox/Z.md'], index: 1},
     ];
-    const {args, mocks, hubWorkspaces} = makeArgs({
+    const {args, mocks} = makeArgs({
       activeTodayHubUri: HUB_A,
       hubWorkspaces: {[HUB_B]: bSnapshot},
       editorWorkspaceTabs: tabsA,
@@ -259,15 +249,6 @@ describe('switchTodayHubWorkspace', () => {
     await act(async () => {
       await result.current.switchTodayHubWorkspace(HUB_B);
     });
-
-    const expectedOutgoing = tabsToStored(
-      tabsA.map(s => ({id: s.id, history: {entries: s.entries, index: s.index}})),
-    );
-    expect(hubWorkspaces[HUB_A]).toEqual({
-      editorWorkspaceTabs: expectedOutgoing,
-      activeEditorTabId: 'tab-a2',
-    });
-    expect(hubWorkspaces[HUB_B]).toEqual(bSnapshot);
 
     expect(mocks.setEditorWorkspaceTabs).toHaveBeenCalledOnce();
     const restoredTabs = mocks.setEditorWorkspaceTabs.mock.calls[0]![0] as unknown[];
@@ -319,7 +300,7 @@ describe('switchTodayHubWorkspace', () => {
     expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
   });
 
-  it('back-to-back hub switches restore from queued snapshot when setTodayHubWorkspacesForSave defers updaters', async () => {
+  it('back-to-back hub switches restore from the internal queued outgoing snapshot', async () => {
     const bSnapshot: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
       activeEditorTabId: 'tab-b1',
@@ -329,48 +310,18 @@ describe('switchTodayHubWorkspace', () => {
       {id: 'tab-a2', entries: [HUB_A, '/vault/Inbox/Z.md'], index: 1},
     ];
     const hubWorkspaces: StubWorkspaces = {[HUB_B]: bSnapshot};
-    const recordedUpdaters: Array<(prev: StubWorkspaces) => StubWorkspaces> = [];
-    const setTodayHubWorkspacesForSave = vi.fn(
-      (updaterOrValue: StubWorkspaces | ((prev: StubWorkspaces) => StubWorkspaces)) => {
-        if (typeof updaterOrValue === 'function') {
-          recordedUpdaters.push(updaterOrValue);
-        }
-      },
-    );
 
     const {args, mocks} = makeArgs({
       activeTodayHubUri: HUB_A,
       hubWorkspaces,
       editorWorkspaceTabs: tabsA,
       activeEditorTabId: 'tab-a2',
-      setTodayHubWorkspacesForSave,
     });
     const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
 
     await act(async () => {
       await result.current.switchTodayHubWorkspace(HUB_B);
       await result.current.switchTodayHubWorkspace(HUB_A);
-    });
-
-    expect(recordedUpdaters.length).toBe(2);
-    const expectedOutgoingA = tabsToStored(
-      tabsA.map(s => ({id: s.id, history: {entries: s.entries, index: s.index}})),
-    );
-    const expectedOutgoingB = tabsToStored([
-      {id: 'tab-b1', history: {entries: [HUB_B], index: 0}},
-    ]);
-
-    let state: StubWorkspaces = {...hubWorkspaces};
-    for (const up of recordedUpdaters) {
-      state = up(state);
-    }
-    expect(state[HUB_A]).toEqual({
-      editorWorkspaceTabs: expectedOutgoingA,
-      activeEditorTabId: 'tab-a2',
-    });
-    expect(state[HUB_B]).toEqual({
-      editorWorkspaceTabs: expectedOutgoingB,
-      activeEditorTabId: 'tab-b1',
     });
 
     expect(mocks.setActiveTodayHubUri).toHaveBeenLastCalledWith(HUB_A);
@@ -383,25 +334,16 @@ describe('switchTodayHubWorkspace', () => {
     expect(mocks.activateOpenTab).toHaveBeenLastCalledWith('tab-a2');
   });
 
-  it('restore does not depend on synchronous execution of setTodayHubWorkspacesForSave updater', async () => {
+  it('restores target tabs from the model-derived workspace snapshot', async () => {
     const bSnapshot: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
       activeEditorTabId: 'tab-b1',
     };
     const hubWorkspaces: StubWorkspaces = {[HUB_B]: bSnapshot};
-    const recordedUpdaters: Array<(prev: StubWorkspaces) => StubWorkspaces> = [];
-    const setTodayHubWorkspacesForSave = vi.fn(
-      (updaterOrValue: StubWorkspaces | ((prev: StubWorkspaces) => StubWorkspaces)) => {
-        if (typeof updaterOrValue === 'function') {
-          recordedUpdaters.push(updaterOrValue);
-        }
-      },
-    );
 
     const {args, mocks} = makeArgs({
       activeTodayHubUri: HUB_A,
       hubWorkspaces,
-      setTodayHubWorkspacesForSave,
     });
     const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
 
@@ -409,50 +351,9 @@ describe('switchTodayHubWorkspace', () => {
       await result.current.switchTodayHubWorkspace(HUB_B);
     });
 
-    expect(recordedUpdaters.length).toBeGreaterThanOrEqual(1);
     expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
     expect(mocks.selectNote).not.toHaveBeenCalledWith(HUB_B);
     expect(mocks.setActiveTodayHubUri).toHaveBeenCalledWith(HUB_B);
-  });
-
-  it('when syncWorkspaceModelForIncomingHub is set: calls it and skips async mirror callbacks', async () => {
-    const syncWorkspaceModelForIncomingHub = vi.fn();
-    const mirrorShadowActiveHub = vi.fn();
-    const mirrorShadowActiveWorkspaceTabs = vi.fn();
-    const mirrorShadowActiveTab = vi.fn();
-    const mirrorShadowHomeSurface = vi.fn();
-    const bSnapshot: TodayHubWorkspaceSnapshot = {
-      editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
-      activeEditorTabId: 'tab-b1',
-    };
-    const {args, mocks} = makeArgs({
-      activeTodayHubUri: HUB_A,
-      hubWorkspaces: {[HUB_B]: bSnapshot},
-      syncWorkspaceModelForIncomingHub,
-      mirrorShadowActiveHub,
-      mirrorShadowActiveWorkspaceTabs,
-      mirrorShadowActiveTab,
-      mirrorShadowHomeSurface,
-    });
-    const {result} = renderHook(() => useWorkspaceTodayHubSwitch(args));
-
-    await act(async () => {
-      await result.current.switchTodayHubWorkspace(HUB_B);
-    });
-
-    const expectedHub = normalizeEditorDocUri(HUB_B) ?? HUB_B;
-    expect(syncWorkspaceModelForIncomingHub).toHaveBeenCalledTimes(1);
-    expect(syncWorkspaceModelForIncomingHub).toHaveBeenCalledWith({
-      hubUri: expectedHub,
-      nextTabs: expect.any(Array),
-      nextActive: 'tab-b1',
-      snapshot: bSnapshot,
-    });
-    expect(mirrorShadowActiveHub).not.toHaveBeenCalled();
-    expect(mirrorShadowActiveWorkspaceTabs).not.toHaveBeenCalled();
-    expect(mirrorShadowActiveTab).not.toHaveBeenCalled();
-    expect(mirrorShadowHomeSurface).not.toHaveBeenCalled();
-    expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
   });
 
   it('empty target tabs: opens the current Home entry after clearing tabs', async () => {

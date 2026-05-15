@@ -6,6 +6,13 @@ import viteConfig from './vite.config';
 export default mergeConfig(
   viteConfig,
   defineConfig({
+    /**
+     * Vitest still runs some `.tsx` through esbuild; without this, JSX becomes
+     * `React.createElement` while `React` is not in scope (tsconfig uses `react-jsx`).
+     */
+    esbuild: {
+      jsx: 'automatic',
+    },
     test: {
       environment: 'happy-dom',
       include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],

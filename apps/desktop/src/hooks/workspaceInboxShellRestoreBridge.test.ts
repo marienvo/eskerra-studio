@@ -6,6 +6,7 @@ import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {
   applyRestoredEditorWorkspaceTabsBridge,
   migrateLegacyOpenTabsIfNeededBridge,
+  restoreInboxSelectionAfterShellRestoreBridge,
   runDeferredShellRestoreTabStateAndShadowSync,
 } from './workspaceInboxShellRestoreBridge';
 
@@ -178,5 +179,75 @@ describe('runDeferredShellRestoreTabStateAndShadowSync', () => {
 
     expect(mirrorTabs).toHaveBeenCalled();
     expect(mirrorHome).toHaveBeenCalled();
+  });
+});
+
+describe('restoreInboxSelectionAfterShellRestoreBridge', () => {
+  it('uses selectHomeCurrentNote when the restored surface is Home (no active tab)', () => {
+    const tabsRef: {current: EditorWorkspaceTab[]} = {
+      current: [{id: 't1', history: {entries: [NOTE], index: 0}}],
+    };
+    const activeTabRef: {current: string | null} = {current: null};
+    const hubRef: {current: string | null} = {current: HUB};
+    const selectNote = vi.fn();
+    const selectHomeCurrentNote = vi.fn();
+
+    restoreInboxSelectionAfterShellRestoreBridge(
+      {
+        editorWorkspaceTabsRef: tabsRef,
+        activeEditorTabIdRef: activeTabRef,
+        activeTodayHubUriRef: hubRef,
+        notesRef: {current: [{uri: NOTE}]},
+        getRestoredInboxState: () => ({
+          vaultRoot: '/vault',
+          composingNewEntry: false,
+          selectedUri: NOTE,
+          activeTodayHubUri: HUB,
+        }),
+        startNewEntry: vi.fn(),
+        selectNote,
+        selectHomeCurrentNote,
+      },
+      '/vault',
+      [NOTE],
+      1,
+    );
+
+    expect(selectHomeCurrentNote).toHaveBeenCalledWith(HUB);
+    expect(selectNote).not.toHaveBeenCalled();
+  });
+
+  it('uses selectNote when the restored surface is an active tab', () => {
+    const tabsRef: {current: EditorWorkspaceTab[]} = {
+      current: [{id: 't1', history: {entries: [NOTE], index: 0}}],
+    };
+    const activeTabRef: {current: string | null} = {current: 't1'};
+    const hubRef: {current: string | null} = {current: HUB};
+    const selectNote = vi.fn();
+    const selectHomeCurrentNote = vi.fn();
+
+    restoreInboxSelectionAfterShellRestoreBridge(
+      {
+        editorWorkspaceTabsRef: tabsRef,
+        activeEditorTabIdRef: activeTabRef,
+        activeTodayHubUriRef: hubRef,
+        notesRef: {current: [{uri: NOTE}]},
+        getRestoredInboxState: () => ({
+          vaultRoot: '/vault',
+          composingNewEntry: false,
+          selectedUri: NOTE,
+          activeTodayHubUri: HUB,
+        }),
+        startNewEntry: vi.fn(),
+        selectNote,
+        selectHomeCurrentNote,
+      },
+      '/vault',
+      [NOTE],
+      1,
+    );
+
+    expect(selectNote).toHaveBeenCalledWith(NOTE);
+    expect(selectHomeCurrentNote).not.toHaveBeenCalled();
   });
 });

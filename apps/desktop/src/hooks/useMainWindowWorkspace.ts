@@ -111,9 +111,6 @@ import {
   deriveTodayHubShowCanvas,
   deriveTodayHubSettings,
   deriveTodayHubSelectorItems,
-  deriveTodayHubWorkspacesPersistFiltered,
-  injectActiveHubIntoTodayHubPersistMap,
-  mergeHomeHistoryIntoHubSnapshotsForPersist,
 } from './workspaceTodayHubDerived';
 import {useWorkspaceTodayHubSwitch} from './workspaceTodayHubSwitch';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
@@ -134,6 +131,7 @@ import {
 import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
 import {
   applyIncomingHubWorkspaceAction,
+  syncHubWorkspacesToVaultTodayRefsAction,
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
@@ -187,7 +185,6 @@ import {
 import {
   computeEditorHistoryCanGoBack,
   computeEditorHistoryCanGoForward,
-  deriveActiveHomeStateSnapshot,
   deriveActiveTabHistorySnapshot,
   moveHomeHistoryBridge,
   openCurrentHomeAfterComposingBridge,
@@ -204,27 +201,27 @@ import {
 } from './workspaceVaultWatchEffects';
 import {useWorkspaceController} from './useWorkspaceController';
 import {
-  collectShadowDivergenceDevDiagnostics,
   deriveModelDerivedPersistencePayload,
 } from './workspacePersistenceBridge';
 import {
-  computeProjectionHubUris,
   createWorkspaceShadowMirrorCallbacks,
-  resolveProjectionActiveHubUri,
-  resolveTodayHubWorkspacesForProjection,
-  scheduleDevWorkspaceShadowModelDivergenceCheck,
 } from './workspaceShadowBridge';
 import {
+  activeEditorWorkspaceTabsFromWorkspaceModel,
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
+  legacyEditorWorkspaceTabsSignature,
   projectWorkspaceRuntimeToModel,
   resolveModelBackedLegacyTabStrip,
+  tabsControllerEditorSurface,
+  workspaceHomeStatesFromWorkspaceModel,
+  workspaceHomeStatesSignature,
   workspaceStateForIncomingHubSwitch,
 } from './workspaceRuntimeProjection';
 import {
   assignLegacyRuntimeActiveHub,
   assignLegacyRuntimeActiveSurfaceTab,
-  reconcileLegacyRuntimeHubSurfaceAfterProjection,
+  workspaceHubUriEqual,
 } from './workspaceRuntimeActiveLegacyBridge';
 import {assignLegacyEditorWorkspaceTabs} from './workspaceRuntimeTabsLegacyBridge';
 import {
@@ -265,6 +262,22 @@ const STORE_KEY_VAULT = 'vaultRoot';
 const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
 
 type NoteRow = {lastModified: number | null; name: string; uri: string};
+
+function assignLegacyHomeStatesByHub(
+  ref: {current: Record<string, WorkspaceHomeState>},
+  setHomeStatesByHub: Dispatch<SetStateAction<Record<string, WorkspaceHomeState>>>,
+  next: Record<string, WorkspaceHomeState>,
+): void {
+  ref.current = next;
+  setHomeStatesByHub(next);
+}
+
+function assignInboxShellRestored(
+  setInboxShellRestored: (next: boolean) => void,
+  next: boolean,
+): void {
+  setInboxShellRestored(next);
+}
 
 type OpenMarkdownInEditorOptions = {
   skipHistory?: boolean;
@@ -315,6 +328,10 @@ export type UseMainWindowWorkspaceResult = {
   frontmatterController: WorkspaceFrontmatterController;
   /** Test-only shadow model for the workspaceModel migration bridge. */
   workspaceShadowModelForTests?: WorkspaceModel;
+  /**
+   * Vitest only: re-run {@link collectVaultMarkdownRefs} (same trigger as `fsRefreshNonce` bump).
+   */
+  __bumpVaultMarkdownRefsScanForTests?: () => void;
 };
 
 export function useMainWindowWorkspace(options: {
@@ -365,6 +382,13 @@ export function useMainWindowWorkspace(options: {
   // showTodayHubCanvas derives from selection; see useMemo below.
   const [inboxContentByUri, setInboxContentByUri] = useState<Record<string, string>>({});
   const [vaultMarkdownRefs, setVaultMarkdownRefs] = useState<VaultMarkdownRef[]>([]);
+  /**
+   * False while `vaultMarkdownRefs` for the current `{vaultRoot, fsRefreshNonce}` fetch has not
+   * completed. `vaultMarkdownRefs` stays `[]` until the async scan finishes, so without this flag
+   * {@link syncHubWorkspacesToVaultTodayRefsAction} could prune restored hub state on an empty URI
+   * list during startup.
+   */
+  const [vaultMarkdownRefsReady, setVaultMarkdownRefsReady] = useState(false);
   const [fsRefreshNonce, setFsRefreshNonce] = useState(0);
   const [podcastFsNonce, setPodcastFsNonce] = useState(0);
   const [vaultTreeSelectionClearNonce, setVaultTreeSelectionClearNonce] = useState(0);
@@ -383,15 +407,10 @@ export function useMainWindowWorkspace(options: {
   );
   /**
    * Per-hub workspace snapshots for inactive hubs (last switch-out / restore).
-   * Active-hub **tab list** remains legacy-authoritative via runtime `editorWorkspaceTabs`.
-   * After inbox shell restore, the shadow `WorkspaceModel` is authoritative for which hub is
-   * active and whether the surface is Home vs a tab; runtime hub/tab state mirrors the model
-   * after each projection replace. Disk persistence uses model-derived payload
-   * (`serializeWorkspaceModelToPersistence`).
+   * `WorkspaceModel` is authoritative for active hub, active surface, tab strip, Home history,
+   * and disk persistence. These legacy fields remain only as synchronous mirrors for command
+   * paths that read refs before React commits.
    */
-  const [todayHubWorkspacesForSave, setTodayHubWorkspacesForSave] = useState<
-    Record<string, TodayHubWorkspaceSnapshot>
-  >({});
   const [homeStatesByHub, setHomeStatesByHub] = useState<
     Record<string, WorkspaceHomeState>
   >({});
@@ -406,8 +425,6 @@ export function useMainWindowWorkspace(options: {
   >(null);
   const {
     model: workspaceShadowModel,
-    modelRef: workspaceShadowModelRef,
-    replaceModel: replaceWorkspaceShadowModel,
     dispatchWorkspaceAction,
     dispatchWorkspaceActionSync,
   } = useWorkspaceController();
@@ -426,6 +443,10 @@ export function useMainWindowWorkspace(options: {
   const subtreeMarkdownCache = useMemo(() => new SubtreeMarkdownPresenceCache(), []);
   const inboxBodyPrefetchGenRef = useRef(0);
   const vaultRefsBuildGenRef = useRef(0);
+  const vaultMarkdownRefsFetchKeyRef = useRef<{
+    root: string | null;
+    nonce: number;
+  } | null>(null);
   const vaultMarkdownRefsRef = useRef<VaultMarkdownRef[]>([]);
   const vaultRootRef = useRef<string | null>(null);
   const selectedUriRef = useRef<string | null>(null);
@@ -696,234 +717,154 @@ export function useMainWindowWorkspace(options: {
     [vaultMarkdownRefs],
   );
 
-  const projectionVaultRootNormalized =
-    vaultRoot != null ? normalizedVaultRootPath(vaultRoot) : null;
-
-  // When the legacy map has not been populated yet (restore pending), fall back to
-  // restoredInboxState so inactive-hub snapshots are available immediately. Mirrors the same
-  // fallback used by legacyTodayHubWorkspacesPersistFiltered.
-  const todayHubWorkspacesForProjection = useMemo(
-    () =>
-      resolveTodayHubWorkspacesForProjection({
-        legacyTodayHubWorkspaces: todayHubWorkspacesForSave,
-        restoredTodayHubWorkspaces:
-          restoredInboxState?.todayHubWorkspaces as
-            | Record<string, TodayHubWorkspaceSnapshot>
-            | null
-            | undefined,
-        vaultRootNormalized: projectionVaultRootNormalized,
-      }),
-    [
-      todayHubWorkspacesForSave,
-      projectionVaultRootNormalized,
-      restoredInboxState?.todayHubWorkspaces,
-    ],
-  );
-
-  // Before vaultMarkdownRefs is populated by the async collectVaultMarkdownRefs, also include
-  // hubs from the restored state so the model has all hubs immediately after restore.
-  // After shell restore, refs are authoritative for which Today hubs exist; do not union
-  // long-lived restored JSON keys (they can resurrect deleted hubs in the projected model).
-  const projectionHubUris = useMemo(
-    () =>
-      computeProjectionHubUris({
-        workspaceModelHubUris,
-        vaultRootNormalized: projectionVaultRootNormalized,
-        restoredInboxState: inboxShellRestored ? null : restoredInboxState,
-      }),
-    [
-      workspaceModelHubUris,
-      projectionVaultRootNormalized,
-      restoredInboxState,
-      inboxShellRestored,
-    ],
-  );
-
-  // When activeTodayHubUri is null (not yet restored), use the persisted value so the model
-  // doesn't fall back to hubs[0] as active with live editorWorkspaceTabs=[].
-  const projectionActiveHubUri = resolveProjectionActiveHubUri({
-    activeTodayHubUri,
-    restoredActiveTodayHubUri: restoredInboxState?.activeTodayHubUri as string | null | undefined,
-  });
-
-  const hubForProjection = inboxShellRestored
-    ? workspaceShadowModel.activeHub ?? projectionActiveHubUri
-    : projectionActiveHubUri;
-
-  const activeShadowWorkspace =
-    workspaceShadowModel.activeHub != null
-      ? workspaceShadowModel.workspaces[workspaceShadowModel.activeHub]
-      : undefined;
-  const tabForProjection =
-    inboxShellRestored && activeShadowWorkspace !== undefined
-      ? activeSurfaceTabIdFromWorkspaceModel(workspaceShadowModel)
-      : activeEditorTabId;
-
-  const projectedWorkspaceModel = useMemo(
-    () =>
-      projectWorkspaceRuntimeToModel({
-        activeTodayHubUri: hubForProjection,
-        editorWorkspaceTabs,
-        activeEditorTabId: tabForProjection,
-        legacyHubWorkspaceSnapshots: todayHubWorkspacesForProjection,
-        homeStatesByHub,
-        hubUris: projectionHubUris,
-      }),
-    [
-      hubForProjection,
-      tabForProjection,
-      editorWorkspaceTabs,
-      todayHubWorkspacesForProjection,
-      homeStatesByHub,
-      projectionHubUris,
-    ],
-  );
-
   const modelDerivedPersistence = useMemo(
     () => deriveModelDerivedPersistencePayload(workspaceShadowModel),
     [workspaceShadowModel],
   );
 
+  const modelActiveTodayHubUri = workspaceShadowModel.activeHub;
+  const modelActiveEditorTabId = useMemo(
+    () => activeSurfaceTabIdFromWorkspaceModel(workspaceShadowModel),
+    [workspaceShadowModel],
+  );
+  const modelEditorWorkspaceTabs = useMemo(
+    () => activeEditorWorkspaceTabsFromWorkspaceModel(workspaceShadowModel),
+    [workspaceShadowModel],
+  );
+  const tabsControllerSurface = useMemo(
+    () =>
+      tabsControllerEditorSurface(
+        modelActiveTodayHubUri,
+        modelEditorWorkspaceTabs,
+        modelActiveEditorTabId,
+        editorWorkspaceTabs,
+        activeEditorTabId,
+      ),
+    [
+      modelActiveTodayHubUri,
+      modelEditorWorkspaceTabs,
+      modelActiveEditorTabId,
+      editorWorkspaceTabs,
+      activeEditorTabId,
+    ],
+  );
+  const modelHomeStatesByHub = useMemo(
+    () => workspaceHomeStatesFromWorkspaceModel(workspaceShadowModel),
+    [workspaceShadowModel],
+  );
+  const todayHubWorkspacesForSwitch = modelDerivedPersistence.todayHubWorkspaces as Record<
+    string,
+    TodayHubWorkspaceSnapshot
+  >;
+
+  useLayoutEffect(() => {
+    const prev = vaultMarkdownRefsFetchKeyRef.current;
+    const next = {root: vaultRoot, nonce: fsRefreshNonce};
+    if (
+      prev == null ||
+      prev.root !== next.root ||
+      prev.nonce !== next.nonce
+    ) {
+      vaultMarkdownRefsFetchKeyRef.current = next;
+      setVaultMarkdownRefsReady(vaultRoot == null);
+    }
+  }, [vaultRoot, fsRefreshNonce]);
+
   useLayoutEffect(() => {
     if (!inboxShellRestored) {
       return;
     }
-    replaceWorkspaceShadowModel(projectedWorkspaceModel, 'runtime projection');
-    const m = workspaceShadowModelRef.current;
-    reconcileLegacyRuntimeHubSurfaceAfterProjection({
-      model: m,
-      activeTodayHubUri,
-      activeEditorTabId,
-      hubSink: {
-        ref: activeTodayHubUriRef,
-        setActiveTodayHubUri,
-      },
-      tabSink: {
-        ref: activeEditorTabIdRef,
-        setActiveEditorTabId,
-      },
-    });
-    scheduleDevWorkspaceShadowModelDivergenceCheck({
-      devOrTest: import.meta.env.DEV || import.meta.env.MODE === 'test',
-      projected: projectedWorkspaceModel,
-      resolveExpectedFromLegacyRefs: () =>
-        projectWorkspaceRuntimeToModel({
-          activeTodayHubUri: hubForProjection,
-          editorWorkspaceTabs: editorWorkspaceTabsRef.current,
-          activeEditorTabId: activeEditorTabIdRef.current,
-          legacyHubWorkspaceSnapshots: todayHubWorkspacesForProjection,
-          homeStatesByHub,
-          hubUris: projectionHubUris,
-        }),
-      readShadowModel: () => workspaceShadowModelRef.current,
-    });
+    if (vaultRoot != null && !vaultMarkdownRefsReady) {
+      return;
+    }
+    dispatchWorkspaceActionSync('sync today hub workspaces to vault refs', m =>
+      syncHubWorkspacesToVaultTodayRefsAction(m, workspaceModelHubUris),
+    );
+    // `runDeferredShellRestoreTabStateAndShadowSync` may apply `shellRestoreProjection` in a
+    // microtask after this layout effect; that can reintroduce persisted hub keys not in
+    // `workspaceModelHubUris`. Re-run when the shadow model changes so stale hubs are pruned again.
   }, [
     inboxShellRestored,
-    projectedWorkspaceModel,
-    replaceWorkspaceShadowModel,
-    workspaceShadowModelRef,
-    activeTodayHubUri,
-    activeEditorTabId,
-    homeStatesByHub,
-    hubForProjection,
-    projectionHubUris,
-    todayHubWorkspacesForProjection,
+    workspaceModelHubUris,
+    vaultRoot,
+    vaultMarkdownRefsReady,
+    workspaceShadowModel,
+    dispatchWorkspaceActionSync,
   ]);
 
-  const legacyTodayHubWorkspacesPersistFiltered = useMemo(() => {
-    const rawMap =
-      Object.keys(todayHubWorkspacesForSave).length === 0
-        ? restoredInboxState?.todayHubWorkspaces ?? todayHubWorkspacesForSave
-        : todayHubWorkspacesForSave;
-    const filtered = deriveTodayHubWorkspacesPersistFiltered(
-      vaultMarkdownRefs,
-      rawMap,
-    );
-    const merged = mergeHomeHistoryIntoHubSnapshotsForPersist(
-      filtered,
-      homeStatesByHub,
-    );
-    return injectActiveHubIntoTodayHubPersistMap({
-      merged,
-      activeTodayHubUri,
-      homeStatesByHub,
-      editorWorkspaceTabs,
-      activeEditorTabId,
-    });
-  }, [
-    vaultMarkdownRefs,
-    todayHubWorkspacesForSave,
-    restoredInboxState,
-    homeStatesByHub,
-    activeTodayHubUri,
-    editorWorkspaceTabs,
-    activeEditorTabId,
-  ]);
-  const todayHubWorkspacesForSwitch =
-    Object.keys(todayHubWorkspacesForSave).length === 0
-      ? restoredInboxState?.todayHubWorkspaces ?? todayHubWorkspacesForSave
-      : todayHubWorkspacesForSave;
-
-  useEffect(() => {
-    const {diffs, suppress} = collectShadowDivergenceDevDiagnostics({
-      inboxShellRestored,
-      isDevOrTest: import.meta.env.DEV || import.meta.env.MODE === 'test',
-      shadowModelActiveHub: workspaceShadowModel.activeHub,
-      modelDerivedPersistence,
-      legacyRuntimePayload: {
-        activeTodayHubUri,
-        todayHubWorkspaces: legacyTodayHubWorkspacesPersistFiltered,
-      },
-      hubForProjection,
-      restoredActiveTodayHubUri:
-        typeof restoredInboxState?.activeTodayHubUri === 'string'
-          ? restoredInboxState.activeTodayHubUri
-          : null,
-      todayHubWorkspacesForProjection,
-    });
-    if (!suppress && diffs.length > 0) {
-      console.warn('[workspaceModel] persistence legacy divergence', diffs);
+  useLayoutEffect(() => {
+    if (!inboxShellRestored) {
+      return;
+    }
+    if (!workspaceHubUriEqual(activeTodayHubUriRef.current, modelActiveTodayHubUri)) {
+      assignLegacyRuntimeActiveHub(modelActiveTodayHubUri, {
+        ref: activeTodayHubUriRef,
+        setActiveTodayHubUri,
+      });
+    }
+    if (modelActiveTodayHubUri != null) {
+      const legacyTabsSig = legacyEditorWorkspaceTabsSignature(
+        editorWorkspaceTabsRef.current,
+      );
+      const modelTabsSig = legacyEditorWorkspaceTabsSignature(modelEditorWorkspaceTabs);
+      if (legacyTabsSig !== modelTabsSig) {
+        assignLegacyEditorWorkspaceTabs({
+          nextTabs: modelEditorWorkspaceTabs,
+          editorWorkspaceTabsRef,
+          setEditorWorkspaceTabs,
+        });
+      }
+      if (activeEditorTabIdRef.current !== modelActiveEditorTabId) {
+        assignLegacyRuntimeActiveSurfaceTab(modelActiveEditorTabId, {
+          ref: activeEditorTabIdRef,
+          setActiveEditorTabId,
+        });
+      }
+    }
+    if (
+      workspaceHomeStatesSignature(homeStatesByHubRef.current) !==
+      workspaceHomeStatesSignature(modelHomeStatesByHub)
+    ) {
+      homeStatesByHubRef.current = modelHomeStatesByHub;
+      setHomeStatesByHub(modelHomeStatesByHub);
     }
   }, [
     inboxShellRestored,
-    workspaceShadowModel,
-    modelDerivedPersistence,
-    activeTodayHubUri,
-    hubForProjection,
-    restoredInboxState,
-    legacyTodayHubWorkspacesPersistFiltered,
-    todayHubWorkspacesForProjection,
+    modelActiveTodayHubUri,
+    modelActiveEditorTabId,
+    modelEditorWorkspaceTabs,
+    modelHomeStatesByHub,
   ]);
 
   const workspaceSelectShowsActiveTabPill = useMemo(
     () =>
       workspaceSelectorMainShowsActiveTabPill({
         composingNewEntry,
-        activeTodayHubUri,
-        activeEditorTabId,
+        activeTodayHubUri: modelActiveTodayHubUri,
+        activeEditorTabId: modelActiveEditorTabId,
         homeState:
-          activeTodayHubUri != null
-            ? homeStatesByHub[activeTodayHubUri]
+          modelActiveTodayHubUri != null
+            ? modelHomeStatesByHub[modelActiveTodayHubUri]
             : undefined,
       }),
     [
       composingNewEntry,
-      activeTodayHubUri,
-      activeEditorTabId,
-      homeStatesByHub,
+      modelActiveTodayHubUri,
+      modelActiveEditorTabId,
+      modelHomeStatesByHub,
     ],
   );
 
   const workspaceSelectorSubLabel = useMemo(
     () =>
       workspaceSelectorSubLabelText({
-        activeTodayHubUri,
+        activeTodayHubUri: modelActiveTodayHubUri,
         homeState:
-          activeTodayHubUri != null
-            ? homeStatesByHub[activeTodayHubUri]
+          modelActiveTodayHubUri != null
+            ? modelHomeStatesByHub[modelActiveTodayHubUri]
             : undefined,
       }),
-    [activeTodayHubUri, homeStatesByHub],
+    [modelActiveTodayHubUri, modelHomeStatesByHub],
   );
 
   useEffect(() => {
@@ -2244,6 +2185,7 @@ export function useMainWindowWorkspace(options: {
       subtreeMarkdownCache.invalidateAll();
       clearBacklinkDiskBodyCache();
       setVaultSettings(null);
+      setInboxShellRestored(!inboxRestoreEnabled);
       try {
         await setVaultSession(root);
         await bootstrapVaultLayout(root, fs);
@@ -2273,7 +2215,6 @@ export function useMainWindowWorkspace(options: {
           setActiveTodayHubUri,
         });
         mirrorShadowActiveHub(null, 'hydrate reset active hub');
-        setTodayHubWorkspacesForSave({});
         editorClosedTabsStackRef.current = [];
         bumpEditorClosedStack();
         setSelectedUri(null);
@@ -2341,9 +2282,16 @@ export function useMainWindowWorkspace(options: {
       subtreeMarkdownCache,
       mirrorShadowActiveHub,
       flushInboxSaveRef,
+      inboxRestoreEnabled,
     ],
   );
 
+  const hydrateVaultRef = useRef(hydrateVault);
+  useLayoutEffect(() => {
+    hydrateVaultRef.current = hydrateVault;
+  }, [hydrateVault]);
+
+  /** One-shot persisted vault bootstrap: `hydrateVault` identity changes after restore/deps updates and must not re-trigger a full hydrate (would clear tabs + shadow). */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -2354,7 +2302,7 @@ export function useMainWindowWorkspace(options: {
         const session = (await getVaultSession())?.trim() ?? '';
         const root = fromStore || session;
         if (root && !cancelled) {
-          await hydrateVault(root);
+          await hydrateVaultRef.current(root);
         }
       } catch {
         // first launch
@@ -2367,7 +2315,7 @@ export function useMainWindowWorkspace(options: {
     return () => {
       cancelled = true;
     };
-  }, [hydrateVault]);
+  }, []);
 
   const syncWorkspaceModelRemoveOpenTabUri = useCallback(
     (markdownUri: string) => {
@@ -2451,6 +2399,7 @@ export function useMainWindowWorkspace(options: {
           return;
         }
         setVaultMarkdownRefs(refs);
+        setVaultMarkdownRefsReady(true);
       } catch (e) {
         if (ac.signal.aborted) {
           return;
@@ -2828,7 +2777,6 @@ export function useMainWindowWorkspace(options: {
         setInboxEditorYamlLeadingBeforeFrontmatter,
         setEditorBody,
         setInboxEditorResetNonce,
-        setTodayHubWorkspacesForSave,
         setEditorWorkspaceTabs,
         setActiveEditorTabId,
         setActiveTodayHubUri,
@@ -3570,20 +3518,23 @@ export function useMainWindowWorkspace(options: {
   const activeTabHistory = useMemo(
     () =>
       deriveActiveTabHistorySnapshot({
-        activeEditorTabId,
-        editorWorkspaceTabs,
+        editorWorkspaceTabs: tabsControllerSurface[0],
+        activeEditorTabId: tabsControllerSurface[1],
       }),
-    [activeEditorTabId, editorWorkspaceTabs],
+    [tabsControllerSurface],
   );
 
   const activeHomeState = useMemo(
-    () =>
-      deriveActiveHomeStateSnapshot({
-        activeEditorTabId,
-        activeTodayHubUri,
-        homeStatesByHub,
-      }),
-    [activeEditorTabId, activeTodayHubUri, homeStatesByHub],
+    () => {
+      if (modelActiveEditorTabId != null || modelActiveTodayHubUri == null) {
+        return null;
+      }
+      return (
+        modelHomeStatesByHub[modelActiveTodayHubUri] ??
+        createWorkspaceHomeState(modelActiveTodayHubUri)
+      );
+    },
+    [modelActiveEditorTabId, modelActiveTodayHubUri, modelHomeStatesByHub],
   );
 
   const editorHistoryCanGoBack = useMemo(
@@ -3695,22 +3646,38 @@ export function useMainWindowWorkspace(options: {
     moveHomeHistory,
   ]);
 
+  /** Last vault we applied the "shell not restored" reset for; avoids racing restore's `true`. */
+  const inboxShellRestoredResetVaultRef = useRef<string | null>(null);
+  const inboxRestoreEnabledPrevRef = useRef(inboxRestoreEnabled);
+
   useEffect(() => {
     if (!inboxRestoreEnabled) {
       queueMicrotask(() => {
-        setInboxShellRestored(true);
+        assignInboxShellRestored(setInboxShellRestored, true);
       });
+      inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
       return;
     }
     if (!vaultRoot) {
       queueMicrotask(() => {
         setInboxShellRestored(false);
       });
+      inboxShellRestoredResetVaultRef.current = null;
+      inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
       return;
     }
-    queueMicrotask(() => {
-      setInboxShellRestored(false);
-    });
+    const inboxRestoreJustEnabled =
+      !inboxRestoreEnabledPrevRef.current && inboxRestoreEnabled;
+    const vaultSwitched =
+      inboxShellRestoredResetVaultRef.current != null &&
+      inboxShellRestoredResetVaultRef.current !== vaultRoot;
+    if (inboxRestoreJustEnabled || vaultSwitched) {
+      queueMicrotask(() => {
+        setInboxShellRestored(false);
+      });
+    }
+    inboxShellRestoredResetVaultRef.current = vaultRoot;
+    inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
   }, [vaultRoot, inboxRestoreEnabled]);
 
   const applyRestoredEditorWorkspaceTabs = useCallback(
@@ -3754,17 +3721,19 @@ export function useMainWindowWorkspace(options: {
       restoreInboxSelectionAfterShellRestoreBridge(
         {
           editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
           activeTodayHubUriRef,
           notesRef,
           getRestoredInboxState: () => restoredInboxState,
           startNewEntry,
           selectNote,
+          selectHomeCurrentNote,
         },
         root,
         restoredTabs,
         hubUrisLength,
       ),
-    [restoredInboxState, startNewEntry, selectNote],
+    [restoredInboxState, startNewEntry, selectNote, selectHomeCurrentNote],
   );
 
   useEffect(() => {
@@ -3828,11 +3797,16 @@ export function useMainWindowWorkspace(options: {
             | null
             | undefined,
         });
-        activeTodayHubUriRef.current = activeHubFinal;
-        setTodayHubWorkspacesForSave(mergedWs);
-        setActiveTodayHubUri(activeHubFinal);
-        setHomeStatesByHub(homeHydrated);
-        setInboxShellRestored(true);
+        assignLegacyRuntimeActiveHub(activeHubFinal, {
+          ref: activeTodayHubUriRef,
+          setActiveTodayHubUri,
+        });
+        assignLegacyHomeStatesByHub(
+          homeStatesByHubRef,
+          setHomeStatesByHub,
+          homeHydrated,
+        );
+        assignInboxShellRestored(setInboxShellRestored, true);
         shellRestoreProjection = {
           activeTodayHubUri: activeHubFinal,
           hubUris,
@@ -3840,14 +3814,14 @@ export function useMainWindowWorkspace(options: {
           homeStatesByHub: homeHydrated,
         };
       } else if (vaultMarkdownRefs.length > 0) {
-        activeTodayHubUriRef.current = null;
-        setTodayHubWorkspacesForSave(restoredInboxState.todayHubWorkspaces ?? {});
-        setActiveTodayHubUri(null);
+        assignLegacyRuntimeActiveHub(null, {
+          ref: activeTodayHubUriRef,
+          setActiveTodayHubUri,
+        });
         mirrorShadowActiveHub(null, 'restore active hub');
-        setInboxShellRestored(true);
+        assignInboxShellRestored(setInboxShellRestored, true);
       } else {
-        setTodayHubWorkspacesForSave(restoredInboxState.todayHubWorkspaces ?? {});
-        setInboxShellRestored(true);
+        assignInboxShellRestored(setInboxShellRestored, true);
       }
 
       runDeferredShellRestoreTabStateAndShadowSync(
@@ -3868,7 +3842,7 @@ export function useMainWindowWorkspace(options: {
       return;
     }
     queueMicrotask(() => {
-      setInboxShellRestored(true);
+      assignInboxShellRestored(setInboxShellRestored, true);
     });
   }, [
     vaultRoot,
@@ -3903,15 +3877,12 @@ export function useMainWindowWorkspace(options: {
     if (hubs.length === 0) {
       return;
     }
-    const cur = activeTodayHubUri;
+    const cur = modelActiveTodayHubUri;
     if (cur != null && hubs.includes(cur)) {
       return;
     }
     if (cur != null && !hubs.includes(cur)) {
       void switchTodayHubWorkspace(hubs[0]!);
-      return;
-    }
-    if (activeTodayHubUriRef.current != null) {
       return;
     }
     const pick =
@@ -3926,27 +3897,18 @@ export function useMainWindowWorkspace(options: {
       setActiveTodayHubUri,
     });
     mirrorShadowActiveHub(pick, 'default active hub');
-    setTodayHubWorkspacesForSave(prev => {
-      const home =
-        homeStatesByHubRef.current[pick] ?? createWorkspaceHomeState(pick);
-      return {
-        ...prev,
-        [pick]: {
-          editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
-          activeEditorTabId: activeEditorTabIdRef.current,
-          homeHistory: {
-            entries: [...home.history.entries],
-            index: home.history.index,
-          },
-        },
-      };
-    });
+    mirrorShadowActiveWorkspaceTabs(
+      editorWorkspaceTabsRef.current,
+      activeEditorTabIdRef.current,
+      'seed shadow tabs from legacy on first default hub',
+    );
   }, [
     vaultRoot,
     inboxShellRestored,
     vaultMarkdownRefs,
-    activeTodayHubUri,
+    modelActiveTodayHubUri,
     mirrorShadowActiveHub,
+    mirrorShadowActiveWorkspaceTabs,
     switchTodayHubWorkspace,
     restoredInboxState,
   ]);
@@ -4019,7 +3981,9 @@ export function useMainWindowWorkspace(options: {
     initialVaultHydrateAttemptDone,
     tabsController: {
       editorHistoryCanGoBack, editorHistoryCanGoForward, editorHistoryGoBack, editorHistoryGoForward,
-      editorWorkspaceTabs, activeEditorTabId, activateOpenTab, closeEditorTab, reorderEditorWorkspaceTabs,
+      editorWorkspaceTabs: tabsControllerSurface[0],
+      activeEditorTabId: tabsControllerSurface[1],
+      activateOpenTab, closeEditorTab, reorderEditorWorkspaceTabs,
       closeOtherEditorTabs, closeAllEditorTabs, reopenLastClosedEditorTab, canReopenClosedEditorTab,
     },
     todayHubController: {
@@ -4032,7 +3996,7 @@ export function useMainWindowWorkspace(options: {
       persistTodayHubRow,
       todayHubCleanRowBlocked,
       todayHubSelectorItems,
-      activeTodayHubUri,
+      activeTodayHubUri: modelActiveTodayHubUri,
       persistenceActiveTodayHubUri: modelDerivedPersistence.activeTodayHubUri,
       persistenceTodayHubWorkspaces: modelDerivedPersistence.todayHubWorkspaces as Record<
         string,
@@ -4058,5 +4022,12 @@ export function useMainWindowWorkspace(options: {
     },
     workspaceShadowModelForTests:
       import.meta.env.MODE === 'test' ? workspaceShadowModel : undefined,
+    ...(import.meta.env.MODE === 'test'
+      ? {
+          __bumpVaultMarkdownRefsScanForTests: () => {
+            setFsRefreshNonce(n => n + 1);
+          },
+        }
+      : {}),
   };
 }
