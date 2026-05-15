@@ -2232,9 +2232,11 @@ export function useMainWindowWorkspace(options: {
   );
 
   const hydrateVaultRef = useRef(hydrateVault);
-  hydrateVaultRef.current = hydrateVault;
+  useLayoutEffect(() => {
+    hydrateVaultRef.current = hydrateVault;
+  }, [hydrateVault]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot persisted vault bootstrap; `hydrateVault` identity changes after restore/deps updates and must not re-trigger a full hydrate (would clear tabs + shadow).
+  /** One-shot persisted vault bootstrap: `hydrateVault` identity changes after restore/deps updates and must not re-trigger a full hydrate (would clear tabs + shadow). */
   useEffect(() => {
     let cancelled = false;
     (async () => {
