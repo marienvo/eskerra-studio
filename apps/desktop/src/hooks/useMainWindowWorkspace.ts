@@ -69,17 +69,13 @@ import {
 } from '../lib/editorDocumentHistory';
 import {
   type ClosedEditorTabRecord,
-  hasReopenableClosedEditorTab,
   popNextReopenableClosedTabRecord,
 } from '../lib/editorClosedTabStack';
 import {
-  createEditorWorkspaceTab,
   ensureActiveTabId,
   findTabById,
   findTabIdWithCurrentUri,
   firstSurvivorUriFromTabs,
-  insertTabAfterActive,
-  insertTabAtIndex,
   pickNeighborTabIdAfterRemovingTab,
   pushClosedWorkspaceTabsFromCloseAll,
   pushClosedWorkspaceTabsFromCloseOther,
@@ -118,12 +114,10 @@ import {
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
-  openTabBackgroundAction,
   remapPrefixAction,
   removeUrisAction,
   reorderTabsAction,
   normalizeWorkspaceUri,
-  type OpenTabBackgroundOptions,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
 import type {
@@ -159,10 +153,6 @@ import {
   type LastPersisted,
 } from './workspaceFsWatchReconcile';
 import {
-  applyForegroundOpenTabPlacement,
-  decideHomeOpenMode,
-} from './workspaceEditorTabs';
-import {
   computeEditorHistoryCanGoBack,
   computeEditorHistoryCanGoForward,
   deriveActiveTabHistorySnapshot,
@@ -183,6 +173,11 @@ import {useWorkspaceController} from './useWorkspaceController';
 import {useDiskConflictState} from './useDiskConflictState';
 import {useMergeViewState} from './useMergeViewState';
 import {useInboxEditorState} from './useInboxEditorState';
+import {useEditorTabsState} from './useEditorTabsState';
+import {
+  runOpenMarkdownInEditorCommand,
+  type OpenMarkdownInEditorOptions,
+} from './workspaceOpenMarkdownCommand';
 import {
   deriveModelDerivedPersistencePayload,
 } from './workspacePersistenceBridge';
@@ -213,7 +208,6 @@ import {
   type WorkspaceRenameMaintenanceSnapshot,
 } from './workspaceRenameMaintenance';
 import {
-  snapshotEditorShellScrollForOpenNote,
   remapEditorShellScrollMapExact,
   remapEditorShellScrollMapTreePrefix,
 } from './workspaceEditorScrollMap';
@@ -256,29 +250,6 @@ function assignInboxShellRestored(
 ): void {
   setInboxShellRestored(next);
 }
-
-type OpenMarkdownInEditorOptions = {
-  skipHistory?: boolean;
-  newTab?: boolean;
-  /** When `newTab` is true: default `true` (focus new tab). */
-  activateNewTab?: boolean;
-  /**
-   * When creating a new tab: insert at `activeIndex + 1` (or index `0` if no active tab)
-   * instead of appending at the end.
-   */
-  insertAfterActive?: boolean;
-  /**
-   * When creating a new tab: insert at this index (clamped to strip length).
-   * Takes precedence over `insertAfterActive`.
-   */
-  insertAtIndex?: number;
-  /** Open this note on the active workspace Home surface without changing tabs. */
-  home?: boolean;
-  /** @deprecated Use `home`. */
-  workspaceShell?: boolean;
-  /** @deprecated Use `home`. */
-  workspaceShellPreserveTabs?: boolean;
-};
 
 export type UseMainWindowWorkspaceResult = {
   vaultRoot: string | null;
@@ -388,12 +359,6 @@ export function useMainWindowWorkspace(options: {
   const [podcastFsNonce, setPodcastFsNonce] = useState(0);
   const [vaultTreeSelectionClearNonce, setVaultTreeSelectionClearNonce] = useState(0);
   const [inboxShellRestored, setInboxShellRestored] = useState(!inboxRestoreEnabled);
-  const [editorWorkspaceTabs, setEditorWorkspaceTabs] = useState<
-    EditorWorkspaceTab[]
-  >([]);
-  const [activeEditorTabId, setActiveEditorTabId] = useState<string | null>(
-    null,
-  );
   const [activeTodayHubUri, setActiveTodayHubUri] = useState<string | null>(
     null,
   );
@@ -406,10 +371,6 @@ export function useMainWindowWorkspace(options: {
   const [homeStatesByHub, setHomeStatesByHub] = useState<
     Record<string, WorkspaceHomeState>
   >({});
-  const [editorClosedStackVersion, setEditorClosedStackVersion] = useState(0);
-  const [editorClosedTabsStackSnapshot, setEditorClosedTabsStackSnapshot] = useState<
-    ClosedEditorTabRecord[]
-  >([]);
   const {
     model: workspaceShadowModel,
     dispatchWorkspaceAction,
@@ -448,12 +409,8 @@ export function useMainWindowWorkspace(options: {
   const todayHubSettingsRef = useRef<TodayHubSettings | null>(null);
   const submitNewEntryRef = useRef<() => Promise<void>>(async () => {});
   const inboxContentByUriRef = useRef<Record<string, string>>({});
-  const editorWorkspaceTabsRef = useRef<EditorWorkspaceTab[]>([]);
-  const activeEditorTabIdRef = useRef<string | null>(null);
   const activeTodayHubUriRef = useRef<string | null>(null);
   const homeStatesByHubRef = useRef<Record<string, WorkspaceHomeState>>({});
-  /** User-initiated tab closes only (for Reopen closed tab). */
-  const editorClosedTabsStackRef = useRef<ClosedEditorTabRecord[]>([]);
   const notesRef = useRef<NoteRow[]>([]);
   /** Invalidates in-flight `openMarkdownInEditor` work when a newer open supersedes it. */
   const openMarkdownGenerationRef = useRef(0);
@@ -501,6 +458,21 @@ export function useMainWindowWorkspace(options: {
     setInboxShellRestored,
   });
 
+  const {
+    editorWorkspaceTabs,
+    setEditorWorkspaceTabs,
+    editorWorkspaceTabsRef,
+    activeEditorTabId,
+    setActiveEditorTabId,
+    activeEditorTabIdRef,
+    editorClosedTabsStackRef,
+    bumpEditorClosedStack,
+    canReopenClosedEditorTab,
+  } = useEditorTabsState({
+    vaultRoot,
+    notes,
+  });
+
   useLayoutEffect(() => {
     vaultRootRef.current = vaultRoot;
   }, [vaultRoot]);
@@ -509,14 +481,6 @@ export function useMainWindowWorkspace(options: {
     inboxContentByUriRef.current = inboxContentByUri;
   }, [inboxContentByUri]);
 
-
-  useLayoutEffect(() => {
-    editorWorkspaceTabsRef.current = editorWorkspaceTabs;
-  }, [editorWorkspaceTabs]);
-
-  useLayoutEffect(() => {
-    activeEditorTabIdRef.current = activeEditorTabId;
-  }, [activeEditorTabId]);
 
   useLayoutEffect(() => {
     activeTodayHubUriRef.current = activeTodayHubUri;
@@ -613,21 +577,6 @@ export function useMainWindowWorkspace(options: {
   useLayoutEffect(() => {
     notesRef.current = notes;
   }, [notes]);
-
-  const bumpEditorClosedStack = useCallback(() => {
-    setEditorClosedStackVersion(v => v + 1);
-    setEditorClosedTabsStackSnapshot([...editorClosedTabsStackRef.current]);
-  }, []);
-
-  /* editorClosedStackVersion re-runs this when the ref-backed closed-tab stack mutates. */
-  const canReopenClosedEditorTab = useMemo(() => {
-    if (!vaultRoot) {
-      return false;
-    }
-    const noteSet = new Set(notes.map(n => n.uri.replace(/\\/g, '/')));
-    return hasReopenableClosedEditorTab(editorClosedTabsStackSnapshot, vaultRoot, noteSet);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- editorClosedStackVersion syncs ref stack mutations to UI
-  }, [vaultRoot, notes, editorClosedStackVersion, editorClosedTabsStackSnapshot]);
 
   const todayHubSelectorItems = useMemo(
     () => deriveTodayHubSelectorItems(vaultMarkdownRefs, notes),
@@ -1128,235 +1077,71 @@ export function useMainWindowWorkspace(options: {
     [fs, refreshNotes, subtreeMarkdownCache, saveActiveRef, saveChainRef, markVaultWriteSettled],
   );
 
-  const prepareInboxScrollDirectiveForOpen = useCallback(
-    (targetNorm: string, skipHistory: boolean) => {
-      if (skipHistory) {
-        const saved =
-          editorShellScrollByUriRef.current.get(targetNorm) ?? {top: 0, left: 0};
-        inboxEditorShellScrollDirectiveRef.current = {
-          kind: 'restore',
-          top: saved.top,
-          left: saved.left,
-        };
-        return;
-      }
-      inboxEditorShellScrollDirectiveRef.current = {kind: 'snapTop'};
-    },
-    [],
-  );
-
-  /** Snapshot the currently open note into the cache, and enqueue a deferred persist if dirty. */
-  const snapshotAndPersistCurrentNoteBeforeOpen = useCallback(() => {
-    const root = vaultRootRef.current;
-    const curUri = selectedUriRef.current;
-    if (curUri == null || composingNewEntryRef.current) {
-      return;
-    }
-    const snapMdForSlice =
-      inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current;
-    const snapshot = inboxEditorSliceToFullMarkdown(
-      snapMdForSlice,
-      curUri,
-      false,
-      inboxYamlFrontmatterInnerRef.current,
-      inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-    );
-    mergeInboxNoteBodyCacheRefAndState(curUri, snapshot);
-    const prev = lastPersistedRef.current;
-    const needsPersist =
-      root != null && !(prev && prev.uri === curUri && prev.markdown === snapshot);
-    if (needsPersist) {
-      enqueuePersistOutgoingNoteMarkdown(curUri, snapshot);
-    }
-  }, [
-    inboxEditorRef,
-    enqueuePersistOutgoingNoteMarkdown,
-    mergeInboxNoteBodyCacheRefAndState,
-  ]);
-
-  const tryPrefetchTargetBody = useCallback(
-    async (targetNorm: string, openGen: number): Promise<string | undefined> => {
-      try {
-        const raw = await fs.readFile(targetNorm, {encoding: 'utf8'});
-        if (openGen !== openMarkdownGenerationRef.current) {
-          return undefined;
-        }
-        return normalizeVaultMarkdownDiskRead(raw);
-      } catch (e) {
-        if (openGen !== openMarkdownGenerationRef.current) {
-          return undefined;
-        }
-        setErr(e instanceof Error ? e.message : String(e));
-        return undefined;
-      }
-    },
-    [fs],
-  );
-
-  /**
-   * After a foreground open has placed the tab, resolve the body to load (prefetched or cached),
-   * load it into the inbox editor, and commit selection state.
-   */
-  const loadOpenedNoteBodyAndApplySelection = useCallback(
-    (targetNorm: string, prefetchBody: string | undefined) => {
-      if (prefetchBody !== undefined) {
-        lastPersistedRef.current = {uri: targetNorm, markdown: prefetchBody};
-        lastPersistedExternalMutationSeqRef.current += 1;
-        inboxContentByUriRef.current = {
-          ...inboxContentByUriRef.current,
-          [targetNorm]: prefetchBody,
-        };
-      }
-      const resolvedEditorBody =
-        prefetchBody !== undefined
-          ? prefetchBody
-          : inboxContentByUriRef.current[targetNorm];
-      if (resolvedEditorBody !== undefined) {
-        lastPersistedRef.current = {uri: targetNorm, markdown: resolvedEditorBody};
-        lastPersistedExternalMutationSeqRef.current += 1;
-        eagerEditorLoadUriRef.current = targetNorm;
-        backlinksActiveBodyRef.current = resolvedEditorBody;
-        loadFullMarkdownIntoInboxEditor(resolvedEditorBody, targetNorm, 'start');
-        scheduleBacklinksDeferOneFrameAfterLoad();
-      }
-      selectedUriRef.current = targetNorm;
-      composingNewEntryRef.current = false;
-      if (prefetchBody !== undefined) {
-        setInboxContentByUri(prev => {
-          if (prev[targetNorm] === prefetchBody) {
-            return prev;
-          }
-          return {...prev, [targetNorm]: prefetchBody};
-        });
-      }
-      if (resolvedEditorBody !== undefined) {
-        setBacklinksActiveBody(resolvedEditorBody);
-      }
-      setComposingNewEntry(false);
-      setSelectedUri(targetNorm);
-    },
-    [
+  const openMarkdownCommandContext = useMemo(
+    () => ({
+      fs,
+      openMarkdownGenerationRef,
+      clearMergeViewForOpenRef,
+      autosaveSchedulerRef,
+      todayHubBridgeRef,
+      diskConflictDeferTimerRef,
+      inboxEditorShellScrollRef,
+      selectedUriRef,
+      composingNewEntryRef,
+      editorShellScrollByUriRef,
+      inboxEditorShellScrollDirectiveRef,
+      clearStaleDiskConflictsForOpen,
+      vaultRootRef,
+      inboxContentByUriRef,
+      lastPersistedRef,
+      lastPersistedExternalMutationSeqRef,
+      eagerEditorLoadUriRef,
       backlinksActiveBodyRef,
       loadFullMarkdownIntoInboxEditor,
       scheduleBacklinksDeferOneFrameAfterLoad,
+      setInboxContentByUri,
       setBacklinksActiveBody,
+      setComposingNewEntry,
+      setSelectedUri,
+      inboxEditorRef,
+      editorBodyRef,
+      inboxYamlFrontmatterInnerRef,
+      inboxEditorYamlLeadingBeforeFrontmatterRef,
+      mergeInboxNoteBodyCacheRefAndState,
+      enqueuePersistOutgoingNoteMarkdown,
+      setErr,
+      dispatchWorkspaceActionSync,
+      mirrorShadowActiveWorkspaceTabs,
+      mirrorShadowHomeSurface,
+      mirrorShadowActiveTab,
+      editorWorkspaceTabsRef,
+      activeEditorTabIdRef,
+      activeTodayHubUriRef,
+      setEditorWorkspaceTabs,
+      setActiveEditorTabId,
+      pushHomeHistoryForHub,
+    }),
+    [
+      fs,
+      autosaveSchedulerRef,
+      clearStaleDiskConflictsForOpen,
+      loadFullMarkdownIntoInboxEditor,
+      scheduleBacklinksDeferOneFrameAfterLoad,
+      setBacklinksActiveBody,
+      setErr,
+      dispatchWorkspaceActionSync,
+      mirrorShadowActiveWorkspaceTabs,
+      mirrorShadowHomeSurface,
+      mirrorShadowActiveTab,
+      setEditorWorkspaceTabs,
+      setActiveEditorTabId,
+      pushHomeHistoryForHub,
+      mergeInboxNoteBodyCacheRefAndState,
+      enqueuePersistOutgoingNoteMarkdown,
+      setComposingNewEntry,
+      setSelectedUri,
+      inboxEditorRef,
     ],
-  );
-
-  const applyBackgroundNewTabOpen = useCallback(
-    (
-      targetNorm: string,
-      options:
-        | {insertAtIndex?: number; insertAfterActive?: boolean}
-        | undefined,
-      prefetchBody: string | undefined,
-    ) => {
-      const newTab = createEditorWorkspaceTab(targetNorm);
-      const curTabs = editorWorkspaceTabsRef.current;
-      const activeId = activeEditorTabIdRef.current;
-      let nextTabsLegacy: EditorWorkspaceTab[];
-      let tabOpts: OpenTabBackgroundOptions;
-      if (
-        typeof options?.insertAtIndex === 'number'
-        && Number.isFinite(options.insertAtIndex)
-      ) {
-        nextTabsLegacy = insertTabAtIndex(curTabs, options.insertAtIndex, newTab);
-        tabOpts = {
-          placement: 'insertAtIndex',
-          tabId: newTab.id,
-          insertAtIndex: options.insertAtIndex,
-        };
-      } else if (options?.insertAfterActive) {
-        nextTabsLegacy = insertTabAfterActive(curTabs, activeId, newTab);
-        tabOpts = {
-          placement: 'insertAfterTab',
-          tabId: newTab.id,
-          insertAfterTabId: activeId,
-        };
-      } else {
-        nextTabsLegacy = [...curTabs, newTab];
-        tabOpts = {tabId: newTab.id};
-      }
-
-      const nextModel = dispatchWorkspaceActionSync(
-        'background new tab',
-        m => openTabBackgroundAction(m, targetNorm, tabOpts),
-      );
-      const {nextTabs, mismatch: tabStripMismatch} = resolveModelBackedLegacyTabStrip(
-        nextModel,
-        nextTabsLegacy,
-        'signature',
-      );
-      if (tabStripMismatch?.kind === 'signature') {
-        const warn =
-          typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
-        if (warn) {
-          const {legacySig, derivedSig} = tabStripMismatch;
-          console.warn(
-            '[workspaceModel] applyBackgroundNewTabOpen: model strip mismatch vs legacy placement; using legacy strip',
-            {legacySig, derivedSig},
-          );
-        }
-      }
-
-      assignLegacyEditorWorkspaceTabs({
-        nextTabs,
-        editorWorkspaceTabsRef,
-        setEditorWorkspaceTabs,
-        mirror: {
-          mirrorShadowActiveWorkspaceTabs,
-          activeEditorTabId: activeEditorTabIdRef.current,
-          reason: 'background open tab',
-        },
-      });
-      if (prefetchBody !== undefined) {
-        inboxContentByUriRef.current = {
-          ...inboxContentByUriRef.current,
-          [targetNorm]: prefetchBody,
-        };
-        setInboxContentByUri(prev => {
-          if (prev[targetNorm] === prefetchBody) {
-            return prev;
-          }
-          return {...prev, [targetNorm]: prefetchBody};
-        });
-      }
-    },
-    [dispatchWorkspaceActionSync, mirrorShadowActiveWorkspaceTabs],
-  );
-
-  const placeForegroundMarkdownOpen = useCallback(
-    (
-      uri: string,
-      targetNorm: string,
-      options: OpenMarkdownInEditorOptions | undefined,
-    ): {nextTabs: EditorWorkspaceTab[]; nextActiveId: string | null} => {
-      let nextTabs = editorWorkspaceTabsRef.current;
-      let nextActiveId = activeEditorTabIdRef.current;
-      const homeMode = decideHomeOpenMode({
-        targetNorm,
-        activeTodayHubUri: activeTodayHubUriRef.current,
-        activeEditorTabId: activeEditorTabIdRef.current,
-        options,
-      });
-      if (homeMode === 'home') {
-        nextTabs = [...editorWorkspaceTabsRef.current];
-        nextActiveId = null;
-        const hubUri = activeTodayHubUriRef.current;
-        if (hubUri && options?.skipHistory !== true) {
-          pushHomeHistoryForHub(hubUri, targetNorm);
-        }
-        return {nextTabs, nextActiveId};
-      }
-      return applyForegroundOpenTabPlacement({
-        uri,
-        targetNorm,
-        tabs: nextTabs,
-        activeId: nextActiveId,
-        options,
-      });
-    },
-    [pushHomeHistoryForHub],
   );
 
   const openMarkdownInEditor = useCallback(
@@ -1364,95 +1149,9 @@ export function useMainWindowWorkspace(options: {
       uri: string,
       options?: OpenMarkdownInEditorOptions,
     ) => {
-      const openGen = ++openMarkdownGenerationRef.current;
-      const targetNorm = normalizeEditorDocUri(uri);
-      clearMergeViewForOpenRef.current();
-      autosaveSchedulerRef.current.cancel();
-      const hubBridge = todayHubBridgeRef.current;
-      const needHubFlush =
-        hubBridge.getLiveRowUri() != null || hubBridge.hasPendingHubFlush();
-      if (needHubFlush) {
-        await hubBridge.flushPendingEdits().catch(() => undefined);
-      }
-      if (openGen !== openMarkdownGenerationRef.current) {
-        return;
-      }
-      if (diskConflictDeferTimerRef.current != null) {
-        window.clearTimeout(diskConflictDeferTimerRef.current);
-        diskConflictDeferTimerRef.current = null;
-      }
-      snapshotEditorShellScrollForOpenNote(
-        inboxEditorShellScrollRef.current,
-        selectedUriRef.current,
-        composingNewEntryRef.current,
-        editorShellScrollByUriRef.current,
-      );
-      clearStaleDiskConflictsForOpen(targetNorm);
-      const isBackgroundNewTab =
-        options?.newTab === true && options?.activateNewTab === false;
-
-      if (!isBackgroundNewTab) {
-        prepareInboxScrollDirectiveForOpen(targetNorm, options?.skipHistory === true);
-      }
-
-      snapshotAndPersistCurrentNoteBeforeOpen();
-      if (openGen !== openMarkdownGenerationRef.current) {
-        return;
-      }
-
-      let prefetchBody: string | undefined;
-      const root = vaultRootRef.current;
-      if (root != null && inboxContentByUriRef.current[targetNorm] === undefined) {
-        prefetchBody = await tryPrefetchTargetBody(targetNorm, openGen);
-        if (openGen !== openMarkdownGenerationRef.current) {
-          return;
-        }
-      }
-
-      if (isBackgroundNewTab) {
-        applyBackgroundNewTabOpen(targetNorm, options, prefetchBody);
-        return;
-      }
-
-      const {nextTabs, nextActiveId} = placeForegroundMarkdownOpen(
-        uri,
-        targetNorm,
-        options,
-      );
-
-      // Foreground open keeps tab strip + active surface mirrors inline with selection/load sequencing
-      // (see loadOpenedNoteBodyAndApplySelection); do not centralize with assignLegacyEditorWorkspaceTabs here.
-      editorWorkspaceTabsRef.current = nextTabs;
-      activeEditorTabIdRef.current = nextActiveId;
-      setEditorWorkspaceTabs(nextTabs);
-      setActiveEditorTabId(nextActiveId);
-      mirrorShadowActiveWorkspaceTabs(
-        nextTabs,
-        nextActiveId,
-        'foreground open tabs',
-      );
-      if (nextActiveId == null) {
-        mirrorShadowHomeSurface('foreground open home surface');
-      } else {
-        mirrorShadowActiveTab(nextActiveId, 'foreground open active tab');
-      }
-
-      loadOpenedNoteBodyAndApplySelection(targetNorm, prefetchBody);
+      await runOpenMarkdownInEditorCommand(openMarkdownCommandContext, uri, options);
     },
-    [
-      autosaveSchedulerRef,
-      inboxEditorShellScrollRef,
-      clearStaleDiskConflictsForOpen,
-      prepareInboxScrollDirectiveForOpen,
-      snapshotAndPersistCurrentNoteBeforeOpen,
-      tryPrefetchTargetBody,
-      applyBackgroundNewTabOpen,
-      placeForegroundMarkdownOpen,
-      mirrorShadowActiveWorkspaceTabs,
-      mirrorShadowHomeSurface,
-      mirrorShadowActiveTab,
-      loadOpenedNoteBodyAndApplySelection,
-    ],
+    [openMarkdownCommandContext],
   );
 
   const selectHomeCurrentNote = useCallback(
