@@ -27,11 +27,9 @@ import {
   collectVaultMarkdownRefs,
   markdownContainsTransientImageUrls,
   mergeYamlFrontmatterBody,
-  fencedFrontmatterBlockToInner,
   innerToFencedFrontmatterBlock,
   normalizeVaultBaseUri,
   parseComposeInput,
-  splitYamlFrontmatter,
   SubtreeMarkdownPresenceCache,
   trimTrailingSlashes,
   type EskerraSettings,
@@ -184,6 +182,7 @@ import {useVaultBootstrap} from './useVaultBootstrap';
 import {useWorkspaceController} from './useWorkspaceController';
 import {useDiskConflictState} from './useDiskConflictState';
 import {useMergeViewState} from './useMergeViewState';
+import {useInboxEditorState} from './useInboxEditorState';
 import {
   deriveModelDerivedPersistencePayload,
 } from './workspacePersistenceBridge';
@@ -214,7 +213,6 @@ import {
   type WorkspaceRenameMaintenanceSnapshot,
 } from './workspaceRenameMaintenance';
 import {
-  type InboxEditorShellScrollDirective,
   snapshotEditorShellScrollForOpenNote,
   remapEditorShellScrollMapExact,
   remapEditorShellScrollMapTreePrefix,
@@ -343,12 +341,39 @@ export function useMainWindowWorkspace(options: {
     inboxRestoreEnabled,
   } = options;
   const [notes, setNotes] = useState<NoteRow[]>([]);
-  const [selectedUri, setSelectedUri] = useState<string | null>(null);
-  const [editorBody, setEditorBody] = useState('');
-  const [inboxEditorResetNonce, setInboxEditorResetNonce] = useState(0);
-  const lastInboxEditorActivityAtRef = useRef(0);
-  const skipRecencyDeferForUriRef = useRef<Set<string>>(new Set());
-  const [composingNewEntry, setComposingNewEntry] = useState(false);
+  const {
+    selectedUri,
+    setSelectedUri,
+    selectedUriRef,
+    editorBody,
+    setEditorBody,
+    editorBodyRef,
+    guardedSetEditorBody,
+    inboxEditorResetNonce,
+    setInboxEditorResetNonce,
+    lastInboxEditorActivityAtRef,
+    skipRecencyDeferForUriRef,
+    composingNewEntry,
+    setComposingNewEntry,
+    composingNewEntryRef,
+    inboxYamlFrontmatterInner,
+    setInboxYamlFrontmatterInner,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatter,
+    setInboxEditorYamlLeadingBeforeFrontmatter,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    suppressEditorOnChangeRef,
+    eagerEditorLoadUriRef,
+    editorShellScrollByUriRef,
+    inboxEditorShellScrollDirectiveRef,
+    syncFrontmatterStateFromDisk,
+    applyFrontmatterInnerChange,
+    loadFullMarkdownIntoInboxEditor,
+    resetInboxEditorComposeState,
+    clearInboxSelection: clearInboxSelectionFromInboxState,
+  } = useInboxEditorState({
+    inboxEditorRef,
+  });
   // showTodayHubCanvas derives from selection; see useMemo below.
   const [inboxContentByUri, setInboxContentByUri] = useState<Record<string, string>>({});
   const [vaultMarkdownRefs, setVaultMarkdownRefs] = useState<VaultMarkdownRef[]>([]);
@@ -411,23 +436,9 @@ export function useMainWindowWorkspace(options: {
   } | null>(null);
   const vaultMarkdownRefsRef = useRef<VaultMarkdownRef[]>([]);
   const vaultRootRef = useRef<string | null>(null);
-  const selectedUriRef = useRef<string | null>(null);
-  const composingNewEntryRef = useRef(false);
   const showTodayHubCanvasRef = useRef(false);
-  const editorBodyRef = useRef('');
   const lastPersistedRef = useRef<LastPersisted | null>(null);
   const lastPersistedExternalMutationSeqRef = useRef(0);
-  const eagerEditorLoadUriRef = useRef<string | null>(null);
-  const suppressEditorOnChangeRef = useRef(false);
-  /** YAML inner (between `---` fences); paired ref for autosave hot path. */
-  const [inboxYamlFrontmatterInner, setInboxYamlFrontmatterInner] = useState<
-    string | null
-  >(null);
-  const inboxYamlFrontmatterInnerRef = useRef<string | null>(null);
-  /** Mirror of leading-before-frontmatter (paired with inner) for use in render-time memos. */
-  const [inboxEditorYamlLeadingBeforeFrontmatter, setInboxEditorYamlLeadingBeforeFrontmatter] =
-    useState('');
-  const inboxEditorYamlLeadingBeforeFrontmatterRef = useRef('');
   const todayHubBridgeRef = useRef<TodayHubWorkspaceBridge>(
     createIdleTodayHubWorkspaceBridge(),
   );
@@ -444,11 +455,6 @@ export function useMainWindowWorkspace(options: {
   /** User-initiated tab closes only (for Reopen closed tab). */
   const editorClosedTabsStackRef = useRef<ClosedEditorTabRecord[]>([]);
   const notesRef = useRef<NoteRow[]>([]);
-  const editorShellScrollByUriRef = useRef(
-    new Map<string, {top: number; left: number}>(),
-  );
-  const inboxEditorShellScrollDirectiveRef =
-    useRef<InboxEditorShellScrollDirective | null>(null);
   /** Invalidates in-flight `openMarkdownInEditor` work when a newer open supersedes it. */
   const openMarkdownGenerationRef = useRef(0);
   const flushInboxSaveForHydrateRef = useRef<() => Promise<void>>(async () => {});
@@ -496,98 +502,13 @@ export function useMainWindowWorkspace(options: {
   });
 
   useLayoutEffect(() => {
-    inboxYamlFrontmatterInnerRef.current = inboxYamlFrontmatterInner;
-  }, [inboxYamlFrontmatterInner]);
-
-  useLayoutEffect(() => {
-    inboxEditorYamlLeadingBeforeFrontmatterRef.current =
-      inboxEditorYamlLeadingBeforeFrontmatter;
-  }, [inboxEditorYamlLeadingBeforeFrontmatter]);
-
-  const syncFrontmatterStateFromDisk = useCallback(
-    (nextInner: string | null, leading: string) => {
-      inboxYamlFrontmatterInnerRef.current = nextInner;
-      setInboxYamlFrontmatterInner(nextInner);
-      inboxEditorYamlLeadingBeforeFrontmatterRef.current = leading;
-      setInboxEditorYamlLeadingBeforeFrontmatter(leading);
-    },
-    [],
-  );
-
-  const applyFrontmatterInnerChange = useCallback((nextInner: string | null) => {
-    if (composingNewEntryRef.current) {
-      return;
-    }
-    if (!selectedUriRef.current) {
-      return;
-    }
-    inboxYamlFrontmatterInnerRef.current = nextInner;
-    setInboxYamlFrontmatterInner(nextInner);
-  }, []);
-
-  useLayoutEffect(() => {
     vaultRootRef.current = vaultRoot;
   }, [vaultRoot]);
-
-  useLayoutEffect(() => {
-    selectedUriRef.current = selectedUri;
-  }, [selectedUri]);
-
-  useLayoutEffect(() => {
-    composingNewEntryRef.current = composingNewEntry;
-  }, [composingNewEntry]);
-
-  useLayoutEffect(() => {
-    editorBodyRef.current = editorBody;
-  }, [editorBody]);
 
   useLayoutEffect(() => {
     inboxContentByUriRef.current = inboxContentByUri;
   }, [inboxContentByUri]);
 
-  const guardedSetEditorBody: typeof setEditorBody = useCallback(
-    value => {
-      if (suppressEditorOnChangeRef.current) return;
-      lastInboxEditorActivityAtRef.current = Date.now();
-      setEditorBody(value);
-    },
-    [],
-  );
-
-  const loadFullMarkdownIntoInboxEditor = useCallback(
-    (
-      full: string,
-      uri: string | null,
-      selection: 'start' | 'end' | 'preserve' = 'start',
-    ) => {
-      const composing = composingNewEntryRef.current;
-      if (!uri || composing) {
-        syncFrontmatterStateFromDisk(null, '');
-        suppressEditorOnChangeRef.current = true;
-        inboxEditorRef.current?.loadMarkdown(full, {selection});
-        suppressEditorOnChangeRef.current = false;
-        setEditorBody(full);
-        editorBodyRef.current = full;
-        return;
-      }
-      const {frontmatter, body, leadingBeforeFrontmatter} =
-        splitYamlFrontmatter(full);
-      const inner =
-        frontmatter !== null
-          ? fencedFrontmatterBlockToInner(frontmatter)
-          : null;
-      syncFrontmatterStateFromDisk(
-        inner,
-        frontmatter !== null ? leadingBeforeFrontmatter : '',
-      );
-      suppressEditorOnChangeRef.current = true;
-      inboxEditorRef.current?.loadMarkdown(body, {selection});
-      suppressEditorOnChangeRef.current = false;
-      setEditorBody(body);
-      editorBodyRef.current = body;
-    },
-    [inboxEditorRef, setEditorBody, syncFrontmatterStateFromDisk],
-  );
 
   useLayoutEffect(() => {
     editorWorkspaceTabsRef.current = editorWorkspaceTabs;
@@ -1691,28 +1612,12 @@ export function useMainWindowWorkspace(options: {
     [busy, dispatchWorkspaceActionSync],
   );
 
-  /** Reset the inbox editor body, frontmatter state, and any reset-nonce-driven CodeMirror reload. */
-  const resetInboxEditorComposeState = useCallback(() => {
-    clearInboxYamlFrontmatterEditorRefs({
-      inner: inboxYamlFrontmatterInnerRef,
-      leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-      setInner: setInboxYamlFrontmatterInner,
-      setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-    });
-    setEditorBody('');
-    setInboxEditorResetNonce(n => n + 1);
-  }, []);
-
   /** Drop the active inbox selection entirely — clear refs, state, and editor. */
   const clearInboxSelection = useCallback(() => {
-    selectedUriRef.current = null;
-    composingNewEntryRef.current = false;
+    clearInboxSelectionFromInboxState();
     lastPersistedRef.current = null;
     lastPersistedExternalMutationSeqRef.current += 1;
-    setSelectedUri(null);
-    setComposingNewEntry(false);
-    resetInboxEditorComposeState();
-  }, [resetInboxEditorComposeState]);
+  }, [clearInboxSelectionFromInboxState]);
 
   const recordClosedTabAndPruneScroll = useCallback(
     (tabsBefore: readonly EditorWorkspaceTab[], tabId: string, tabClosing: EditorWorkspaceTab | undefined) => {
