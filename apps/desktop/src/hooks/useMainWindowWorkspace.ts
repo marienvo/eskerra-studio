@@ -2231,6 +2231,10 @@ export function useMainWindowWorkspace(options: {
     ],
   );
 
+  const hydrateVaultRef = useRef(hydrateVault);
+  hydrateVaultRef.current = hydrateVault;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot persisted vault bootstrap; `hydrateVault` identity changes after restore/deps updates and must not re-trigger a full hydrate (would clear tabs + shadow).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -2241,7 +2245,7 @@ export function useMainWindowWorkspace(options: {
         const session = (await getVaultSession())?.trim() ?? '';
         const root = fromStore || session;
         if (root && !cancelled) {
-          await hydrateVault(root);
+          await hydrateVaultRef.current(root);
         }
       } catch {
         // first launch
@@ -2254,7 +2258,7 @@ export function useMainWindowWorkspace(options: {
     return () => {
       cancelled = true;
     };
-  }, [hydrateVault]);
+  }, []);
 
   const syncWorkspaceModelRemoveOpenTabUri = useCallback(
     (markdownUri: string) => {
@@ -3595,22 +3599,38 @@ export function useMainWindowWorkspace(options: {
     moveHomeHistory,
   ]);
 
+  /** Last vault we applied the "shell not restored" reset for; avoids racing restore's `true`. */
+  const inboxShellRestoredResetVaultRef = useRef<string | null>(null);
+  const inboxRestoreEnabledPrevRef = useRef(inboxRestoreEnabled);
+
   useEffect(() => {
     if (!inboxRestoreEnabled) {
       queueMicrotask(() => {
         assignInboxShellRestored(setInboxShellRestored, true);
       });
+      inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
       return;
     }
     if (!vaultRoot) {
       queueMicrotask(() => {
         setInboxShellRestored(false);
       });
+      inboxShellRestoredResetVaultRef.current = null;
+      inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
       return;
     }
-    queueMicrotask(() => {
-      setInboxShellRestored(false);
-    });
+    const inboxRestoreJustEnabled =
+      !inboxRestoreEnabledPrevRef.current && inboxRestoreEnabled;
+    const vaultSwitched =
+      inboxShellRestoredResetVaultRef.current != null &&
+      inboxShellRestoredResetVaultRef.current !== vaultRoot;
+    if (inboxRestoreJustEnabled || vaultSwitched) {
+      queueMicrotask(() => {
+        setInboxShellRestored(false);
+      });
+    }
+    inboxShellRestoredResetVaultRef.current = vaultRoot;
+    inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
   }, [vaultRoot, inboxRestoreEnabled]);
 
   const applyRestoredEditorWorkspaceTabs = useCallback(
@@ -3654,17 +3674,19 @@ export function useMainWindowWorkspace(options: {
       restoreInboxSelectionAfterShellRestoreBridge(
         {
           editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
           activeTodayHubUriRef,
           notesRef,
           getRestoredInboxState: () => restoredInboxState,
           startNewEntry,
           selectNote,
+          selectHomeCurrentNote,
         },
         root,
         restoredTabs,
         hubUrisLength,
       ),
-    [restoredInboxState, startNewEntry, selectNote],
+    [restoredInboxState, startNewEntry, selectNote, selectHomeCurrentNote],
   );
 
   useEffect(() => {
