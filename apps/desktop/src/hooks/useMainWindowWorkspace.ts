@@ -9,7 +9,6 @@
  * Remaining split candidates: wiki-link routing, rename-with-maintenance, and vault bootstrap
  * side-effects → `hooks/workspace*.ts` helpers with tests for pure branches.
  */
-import {load} from '@tauri-apps/plugin-store';
 import {
   useCallback,
   useEffect,
@@ -25,7 +24,6 @@ import {
 import {
   buildInboxMarkdownFromCompose,
   collectVaultMarkdownRefs,
-  ensureDeviceInstanceId,
   markdownContainsTransientImageUrls,
   mergeYamlFrontmatterBody,
   fencedFrontmatterBlockToInner,
@@ -44,18 +42,14 @@ import {
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
 import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownImages';
 import {
-  bootstrapVaultLayout,
   createInboxMarkdownNote,
   deleteVaultMarkdownNote,
   deleteVaultTreeDirectory,
   listInboxNotes,
   moveVaultTreeItemToDirectory,
   type MoveVaultTreeItemResult,
-  readVaultLocalSettings,
-  readVaultSettings,
   renameVaultTreeDirectory,
   saveNoteMarkdown,
-  writeVaultLocalSettings,
 } from '../lib/vaultBootstrap';
 import {
   filterVaultTreeBulkMoveSources,
@@ -71,15 +65,6 @@ import {
   type TodayHubWorkspaceBridge,
 } from '../lib/todayHub';
 import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
-import {
-  getVaultSession,
-  setVaultSession,
-  startVaultWatch,
-} from '../lib/tauriVault';
-import {
-  vaultFrontmatterIndexSchedule,
-} from '../lib/tauriVaultFrontmatter';
-import {vaultSearchIndexSchedule} from '../lib/tauriVaultSearch';
 import {
   normalizeEditorDocUri,
   remapVaultUriPrefix,
@@ -176,7 +161,6 @@ import {
   type DiskConflictSoftState,
   type DiskConflictState,
   type LastPersisted,
-  fingerprintUtf16ForDebug,
 } from './workspaceFsWatchReconcile';
 import {
   applyForegroundOpenTabPlacement,
@@ -195,9 +179,9 @@ import {useWorkspaceBacklinks} from './workspaceBacklinks';
 import {useWorkspaceLinkRouting} from './workspaceLinkRouting';
 import {useWorkspacePersistence} from './workspacePersistence';
 import {
-  normalizeVaultWatchErrorReason,
   useWorkspaceVaultWatchEffects,
 } from './workspaceVaultWatchEffects';
+import {useVaultBootstrap} from './useVaultBootstrap';
 import {useWorkspaceController} from './useWorkspaceController';
 import {
   deriveModelDerivedPersistencePayload,
@@ -234,7 +218,6 @@ import {
   remapEditorShellScrollMapTreePrefix,
 } from './workspaceEditorScrollMap';
 import {cleanNoteMarkdownBody} from '../lib/cleanNoteMarkdown';
-import {captureObservabilityMessage} from '../observability/captureObservabilityMessage';
 import {
   clearInboxYamlFrontmatterEditorRefs,
   inboxEditorSliceToFullMarkdown,
@@ -252,9 +235,6 @@ import {resolveVaultLinkBaseMarkdownUri} from '../lib/resolveVaultLinkBaseMarkdo
 function normalizedVaultRootPath(vaultRoot: string): string {
   return trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
 }
-
-const STORE_PATH = 'eskerra-desktop.json';
-const STORE_KEY_VAULT = 'vaultRoot';
 
 /** Debounce scan of the active note body for backlinks (full vault scan is too heavy per keystroke). */
 const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
@@ -356,15 +336,10 @@ export function useMainWindowWorkspace(options: {
     restoredInboxState,
     inboxRestoreEnabled,
   } = options;
-  const [vaultRoot, setVaultRoot] = useState<string | null>(null);
-  const [vaultSettings, setVaultSettings] = useState<EskerraSettings | null>(null);
-  const [settingsName, setSettingsName] = useState('Eskerra');
   const [notes, setNotes] = useState<NoteRow[]>([]);
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [editorBody, setEditorBody] = useState('');
   const [inboxEditorResetNonce, setInboxEditorResetNonce] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
   const [diskConflict, setDiskConflict] = useState<DiskConflictState | null>(null);
   const diskConflictRef = useRef<DiskConflictState | null>(null);
   const [diskConflictSoft, setDiskConflictSoft] = useState<DiskConflictSoftState | null>(null);
@@ -379,9 +354,6 @@ export function useMainWindowWorkspace(options: {
   const [fsRefreshNonce, setFsRefreshNonce] = useState(0);
   const [podcastFsNonce, setPodcastFsNonce] = useState(0);
   const [vaultTreeSelectionClearNonce, setVaultTreeSelectionClearNonce] = useState(0);
-  const [deviceInstanceId, setDeviceInstanceId] = useState('');
-  const [initialVaultHydrateAttemptDone, setInitialVaultHydrateAttemptDone] =
-    useState(false);
   const [inboxShellRestored, setInboxShellRestored] = useState(!inboxRestoreEnabled);
   const [editorWorkspaceTabs, setEditorWorkspaceTabs] = useState<
     EditorWorkspaceTab[]
@@ -472,6 +444,46 @@ export function useMainWindowWorkspace(options: {
     useRef<InboxEditorShellScrollDirective | null>(null);
   /** Invalidates in-flight `openMarkdownInEditor` work when a newer open supersedes it. */
   const openMarkdownGenerationRef = useRef(0);
+  const flushInboxSaveForHydrateRef = useRef<() => Promise<void>>(async () => {});
+  const resetRenameMaintenanceStateRef = useRef<() => void>(() => {});
+  const resetWorkspaceStateForHydrateRef = useRef<() => void>(() => {});
+  const clearBacklinkDiskBodyCacheForHydrateRef = useRef<() => void>(() => {});
+
+  const refreshNotes = useCallback(
+    async (root: string) => {
+      const gen = ++inboxBodyPrefetchGenRef.current;
+      const list = await listInboxNotes(root, fs);
+      if (gen !== inboxBodyPrefetchGenRef.current) {
+        return;
+      }
+      setNotes(list);
+    },
+    [fs],
+  );
+
+  const {
+    vaultRoot,
+    vaultSettings,
+    setVaultSettings,
+    settingsName,
+    deviceInstanceId,
+    initialVaultHydrateAttemptDone,
+    busy,
+    setBusy,
+    err,
+    setErr,
+    hydrateVault,
+  } = useVaultBootstrap({
+    fs,
+    inboxRestoreEnabled,
+    flushInboxSaveRef: flushInboxSaveForHydrateRef,
+    subtreeMarkdownCache,
+    resetRenameMaintenanceStateRef,
+    clearBacklinkDiskBodyCacheRef: clearBacklinkDiskBodyCacheForHydrateRef,
+    refreshNotes,
+    resetWorkspaceStateRef: resetWorkspaceStateForHydrateRef,
+    setInboxShellRestored,
+  });
 
   useLayoutEffect(() => {
     inboxYamlFrontmatterInnerRef.current = inboxYamlFrontmatterInner;
@@ -672,6 +684,10 @@ export function useMainWindowWorkspace(options: {
   });
 
   useLayoutEffect(() => {
+    clearBacklinkDiskBodyCacheForHydrateRef.current = clearBacklinkDiskBodyCache;
+  }, [clearBacklinkDiskBodyCache]);
+
+  useLayoutEffect(() => {
     notesRef.current = notes;
   }, [notes]);
 
@@ -851,18 +867,6 @@ export function useMainWindowWorkspace(options: {
     todayHubSettingsRef.current = todayHubSettings;
   }, [todayHubSettings]);
 
-  const refreshNotes = useCallback(
-    async (root: string) => {
-      const gen = ++inboxBodyPrefetchGenRef.current;
-      const list = await listInboxNotes(root, fs);
-      if (gen !== inboxBodyPrefetchGenRef.current) {
-        return;
-      }
-      setNotes(list);
-    },
-    [fs],
-  );
-
   const [vaultWriteSettledNonce, setVaultWriteSettledNonce] = useState(0);
   const markVaultWriteSettled = useCallback(() => {
     setVaultWriteSettledNonce(n => n + 1);
@@ -872,7 +876,7 @@ export function useMainWindowWorkspace(options: {
     saveChainRef,
     saveActiveRef,
     autosaveSchedulerRef,
-    flushInboxSaveRef,
+    flushInboxSaveRef: workspacePersistenceFlushInboxSaveRef,
     mergeInboxNoteBodyCacheRefAndState,
     enqueuePersistOutgoingNoteMarkdown,
     flushInboxSave,
@@ -905,6 +909,11 @@ export function useMainWindowWorkspace(options: {
     loadFullMarkdownIntoInboxEditor,
     scheduleBacklinksDeferOneFrameAfterLoad,
   });
+
+  useLayoutEffect(() => {
+    flushInboxSaveForHydrateRef.current = workspacePersistenceFlushInboxSaveRef.current;
+  }, [workspacePersistenceFlushInboxSaveRef]);
+  const flushInboxSaveRef = workspacePersistenceFlushInboxSaveRef;
 
   const getRenameMaintenanceSnapshot =
     useCallback(async (): Promise<WorkspaceRenameMaintenanceSnapshot> => {
@@ -2115,152 +2124,51 @@ export function useMainWindowWorkspace(options: {
     })();
   }, [openMarkdownInEditor, bumpEditorClosedStack]);
 
-  const hydrateVault = useCallback(
-    async (root: string) => {
-      await flushInboxSaveRef.current();
-      editorShellScrollByUriRef.current = new Map();
-      inboxEditorShellScrollDirectiveRef.current = null;
-      setBusy(true);
-      setErr(null);
-      setDiskConflict(null);
-      diskConflictRef.current = null;
-      setDiskConflictSoft(null);
-      diskConflictSoftRef.current = null;
-      resetRenameMaintenanceState();
-      subtreeMarkdownCache.invalidateAll();
-      clearBacklinkDiskBodyCache();
-      setVaultSettings(null);
-      setInboxShellRestored(!inboxRestoreEnabled);
-      try {
-        await setVaultSession(root);
-        await bootstrapVaultLayout(root, fs);
-        const shared = await readVaultSettings(root, fs);
-        setVaultSettings(shared);
-        let local = await readVaultLocalSettings(root, fs);
-        const ensuredLocal = ensureDeviceInstanceId(local);
-        if (ensuredLocal.changed) {
-          local = ensuredLocal.settings;
-          await writeVaultLocalSettings(root, fs, local);
-        }
-        setDeviceInstanceId(local.deviceInstanceId);
-        const label = local.displayName.trim();
-        setSettingsName(label !== '' ? label : 'Eskerra');
-        await refreshNotes(root);
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs: [],
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
-        assignLegacyRuntimeActiveSurfaceTab(null, {
-          ref: activeEditorTabIdRef,
-          setActiveEditorTabId,
-        });
-        assignLegacyRuntimeActiveHub(null, {
-          ref: activeTodayHubUriRef,
-          setActiveTodayHubUri,
-        });
-        mirrorShadowActiveHub(null, 'hydrate reset active hub');
-        editorClosedTabsStackRef.current = [];
-        bumpEditorClosedStack();
-        setSelectedUri(null);
-        setComposingNewEntry(false);
-        setMergeView(null);
-        clearInboxYamlFrontmatterEditorRefs({
-          inner: inboxYamlFrontmatterInnerRef,
-          leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-          setInner: setInboxYamlFrontmatterInner,
-          setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-        });
-        setEditorBody('');
-        lastPersistedRef.current = null;
-        lastPersistedExternalMutationSeqRef.current += 1;
-        setInboxEditorResetNonce(n => n + 1);
-        setVaultRoot(root);
-        const store = await load(STORE_PATH);
-        await store.set(STORE_KEY_VAULT, root);
-        await store.save();
-        try {
-          await startVaultWatch();
-        } catch (watchError) {
-          const reason =
-            watchError instanceof Error ? watchError.message : String(watchError);
-          const normalizedReason = normalizeVaultWatchErrorReason(reason);
-          captureObservabilityMessage({
-            message: 'eskerra.desktop.vault_watch_start_failed',
-            level: 'warning',
-            extra: {
-              reason,
-              normalizedReason,
-              vaultRootHash: fingerprintUtf16ForDebug(root),
-            },
-            tags: {
-              obs_surface: 'vault_watch',
-              watch_session_id: 'start',
-              vault_root_hash: fingerprintUtf16ForDebug(root),
-              backend: 'startup',
-              reason: normalizedReason,
-            },
-            fingerprint: [
-              'eskerra.desktop',
-              'vault_watch_start_failed',
-              normalizedReason,
-            ],
-          });
-          throw watchError;
-        }
-        queueMicrotask(() => {
-          vaultSearchIndexSchedule().catch(() => undefined);
-          vaultFrontmatterIndexSchedule().catch(() => undefined);
-        });
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      fs,
-      refreshNotes,
-      resetRenameMaintenanceState,
-      clearBacklinkDiskBodyCache,
-      bumpEditorClosedStack,
-      subtreeMarkdownCache,
-      mirrorShadowActiveHub,
-      flushInboxSaveRef,
-      inboxRestoreEnabled,
-    ],
-  );
+  const resetWorkspaceStateForHydrate = useCallback(() => {
+    editorShellScrollByUriRef.current = new Map();
+    inboxEditorShellScrollDirectiveRef.current = null;
+    setDiskConflict(null);
+    diskConflictRef.current = null;
+    setDiskConflictSoft(null);
+    diskConflictSoftRef.current = null;
+    assignLegacyEditorWorkspaceTabs({
+      nextTabs: [],
+      editorWorkspaceTabsRef,
+      setEditorWorkspaceTabs,
+    });
+    assignLegacyRuntimeActiveSurfaceTab(null, {
+      ref: activeEditorTabIdRef,
+      setActiveEditorTabId,
+    });
+    assignLegacyRuntimeActiveHub(null, {
+      ref: activeTodayHubUriRef,
+      setActiveTodayHubUri,
+    });
+    mirrorShadowActiveHub(null, 'hydrate reset active hub');
+    editorClosedTabsStackRef.current = [];
+    bumpEditorClosedStack();
+    setSelectedUri(null);
+    setComposingNewEntry(false);
+    setMergeView(null);
+    clearInboxYamlFrontmatterEditorRefs({
+      inner: inboxYamlFrontmatterInnerRef,
+      leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
+      setInner: setInboxYamlFrontmatterInner,
+      setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
+    });
+    setEditorBody('');
+    lastPersistedRef.current = null;
+    lastPersistedExternalMutationSeqRef.current += 1;
+    setInboxEditorResetNonce(n => n + 1);
+  }, [bumpEditorClosedStack, mirrorShadowActiveHub]);
 
-  const hydrateVaultRef = useRef(hydrateVault);
   useLayoutEffect(() => {
-    hydrateVaultRef.current = hydrateVault;
-  }, [hydrateVault]);
+    resetWorkspaceStateForHydrateRef.current = resetWorkspaceStateForHydrate;
+  }, [resetWorkspaceStateForHydrate]);
 
-  /** One-shot persisted vault bootstrap: `hydrateVault` identity changes after restore/deps updates and must not re-trigger a full hydrate (would clear tabs + shadow). */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const store = await load(STORE_PATH);
-        const saved = await store.get<string>(STORE_KEY_VAULT);
-        const fromStore = typeof saved === 'string' ? saved.trim() : '';
-        const session = (await getVaultSession())?.trim() ?? '';
-        const root = fromStore || session;
-        if (root && !cancelled) {
-          await hydrateVaultRef.current(root);
-        }
-      } catch {
-        // first launch
-      } finally {
-        if (!cancelled) {
-          setInitialVaultHydrateAttemptDone(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useLayoutEffect(() => {
+    resetRenameMaintenanceStateRef.current = resetRenameMaintenanceState;
+  }, [resetRenameMaintenanceState]);
 
   const syncWorkspaceModelRemoveOpenTabUri = useCallback(
     (markdownUri: string) => {
