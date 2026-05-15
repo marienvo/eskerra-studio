@@ -11,7 +11,11 @@ import {
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
-import {openTabBackgroundAction, type OpenTabBackgroundOptions} from '../lib/workspaceModel';
+import {
+  openTabBackgroundAction,
+  type OpenTabBackgroundOptions,
+  type WorkspaceModel,
+} from '../lib/workspaceModel';
 import {normalizeVaultMarkdownDiskRead} from './inboxNoteBodyCache';
 import type {InboxEditorShellScrollDirective} from './workspaceEditorScrollMap';
 import {
@@ -73,10 +77,10 @@ type OpenMarkdownCommandContext = {
   mergeInboxNoteBodyCacheRefAndState: (uri: string, markdown: string) => void;
   enqueuePersistOutgoingNoteMarkdown: (uri: string, markdown: string) => void;
   setErr: Dispatch<SetStateAction<string | null>>;
-  dispatchWorkspaceActionSync: <T>(
+  dispatchWorkspaceActionSync: (
     reason: string,
-    reducer: (m: T) => T,
-  ) => T;
+    reducer: (m: WorkspaceModel) => WorkspaceModel,
+  ) => WorkspaceModel;
   mirrorShadowActiveWorkspaceTabs: (
     tabs: readonly EditorWorkspaceTab[],
     activeEditorTabId: string | null,

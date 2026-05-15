@@ -1,4 +1,12 @@
-import {useCallback, useMemo, useRef, useState, type MutableRefObject} from 'react';
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from 'react';
 
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import {
@@ -15,10 +23,10 @@ type UseEditorTabsStateOptions = {
 
 export type UseEditorTabsStateResult = {
   editorWorkspaceTabs: EditorWorkspaceTab[];
-  setEditorWorkspaceTabs: (next: EditorWorkspaceTab[]) => void;
+  setEditorWorkspaceTabs: Dispatch<SetStateAction<EditorWorkspaceTab[]>>;
   editorWorkspaceTabsRef: MutableRefObject<EditorWorkspaceTab[]>;
   activeEditorTabId: string | null;
-  setActiveEditorTabId: (next: string | null) => void;
+  setActiveEditorTabId: Dispatch<SetStateAction<string | null>>;
   activeEditorTabIdRef: MutableRefObject<string | null>;
   editorClosedTabsStackRef: MutableRefObject<ClosedEditorTabRecord[]>;
   bumpEditorClosedStack: () => void;
@@ -38,14 +46,20 @@ export function useEditorTabsState(
   const activeEditorTabIdRef = useRef<string | null>(null);
   const editorClosedTabsStackRef = useRef<ClosedEditorTabRecord[]>([]);
 
-  const setEditorWorkspaceTabs = useCallback((next: EditorWorkspaceTab[]) => {
-    editorWorkspaceTabsRef.current = next;
-    setEditorWorkspaceTabsState(next);
+  const setEditorWorkspaceTabs = useCallback((next: SetStateAction<EditorWorkspaceTab[]>) => {
+    setEditorWorkspaceTabsState(prev => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      editorWorkspaceTabsRef.current = resolved;
+      return resolved;
+    });
   }, []);
 
-  const setActiveEditorTabId = useCallback((next: string | null) => {
-    activeEditorTabIdRef.current = next;
-    setActiveEditorTabIdState(next);
+  const setActiveEditorTabId = useCallback((next: SetStateAction<string | null>) => {
+    setActiveEditorTabIdState(prev => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      activeEditorTabIdRef.current = resolved;
+      return resolved;
+    });
   }, []);
 
   const bumpEditorClosedStack = useCallback(() => {
