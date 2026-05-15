@@ -62,6 +62,35 @@ export function editorWorkspaceTabsFromModelTabEntries(
   }));
 }
 
+export function activeEditorWorkspaceTabsFromWorkspaceModel(
+  m: WorkspaceModel,
+): EditorWorkspaceTab[] {
+  const hub = m.activeHub;
+  if (hub == null) {
+    return [];
+  }
+  const ws = m.workspaces[hub];
+  if (ws == null) {
+    return [];
+  }
+  return editorWorkspaceTabsFromModelTabEntries(ws.tabs);
+}
+
+export function workspaceHomeStatesFromWorkspaceModel(
+  m: WorkspaceModel,
+): Record<string, WorkspaceHomeState> {
+  const out: Record<string, WorkspaceHomeState> = {};
+  for (const [hub, ws] of Object.entries(m.workspaces)) {
+    out[hub] = {
+      history: {
+        entries: [...ws.homeHistory.entries],
+        index: ws.homeHistory.index,
+      },
+    };
+  }
+  return out;
+}
+
 /** Stable signature for comparing legacy vs model-derived tab strips (ids + normalized histories). */
 export function legacyEditorWorkspaceTabsSignature(
   tabs: readonly EditorWorkspaceTab[],
@@ -72,6 +101,20 @@ export function legacyEditorWorkspaceTabsSignature(
       entries: t.history.entries.map(e => normalizeWorkspaceUri(e)),
       index: t.history.index,
     })),
+  );
+}
+
+export function workspaceHomeStatesSignature(
+  states: Record<string, WorkspaceHomeState>,
+): string {
+  return JSON.stringify(
+    Object.entries(states)
+      .map(([hub, state]) => ({
+        hub: normalizeWorkspaceUri(hub),
+        entries: state.history.entries.map(e => normalizeWorkspaceUri(e)),
+        index: state.history.index,
+      }))
+      .sort((a, b) => a.hub.localeCompare(b.hub)),
   );
 }
 

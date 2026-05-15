@@ -18,10 +18,13 @@ import {
   type WorkspaceModel,
 } from '../lib/workspaceModel';
 import {
+  activeEditorWorkspaceTabsFromWorkspaceModel,
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
   projectWorkspaceRuntimeToModel,
   resolveModelBackedLegacyTabStrip,
+  workspaceHomeStatesFromWorkspaceModel,
+  workspaceHomeStatesSignature,
   workspaceStateForIncomingHubSwitch,
 } from './workspaceRuntimeProjection';
 
@@ -74,6 +77,39 @@ describe('activeSurfaceTabIdFromWorkspaceModel', () => {
         workspaces: {},
       }),
     ).toBeNull();
+  });
+});
+
+describe('WorkspaceModel runtime views', () => {
+  it('derives active hub tabs and Home states without reading legacy runtime state', () => {
+    const model: WorkspaceModel = {
+      activeHub: HUB_B,
+      workspaces: {
+        [HUB_A]: {
+          tabs: [{id: 'tab-a', history: {entries: [NOTE_A], index: 0}}],
+          active: {kind: 'tab', id: 'tab-a'},
+          homeHistory: {entries: [HUB_A, NOTE_HOME], index: 1},
+        },
+        [HUB_B]: {
+          tabs: [{id: 'tab-b', history: {entries: [NOTE_B], index: 0}}],
+          active: {kind: 'tab', id: 'tab-b'},
+          homeHistory: {entries: [HUB_B], index: 0},
+        },
+      },
+    };
+
+    expect(activeEditorWorkspaceTabsFromWorkspaceModel(model)).toEqual([
+      {id: 'tab-b', history: {entries: [NOTE_B], index: 0}},
+    ]);
+
+    const homes = workspaceHomeStatesFromWorkspaceModel(model);
+    expect(homes[HUB_A]?.history).toEqual({entries: [HUB_A, NOTE_HOME], index: 1});
+    expect(workspaceHomeStatesSignature(homes)).toBe(
+      workspaceHomeStatesSignature({
+        [HUB_B]: {history: {entries: [HUB_B], index: 0}},
+        [HUB_A]: {history: {entries: [HUB_A, NOTE_HOME], index: 1}},
+      }),
+    );
   });
 });
 
