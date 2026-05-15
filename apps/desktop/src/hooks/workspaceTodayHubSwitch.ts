@@ -22,6 +22,22 @@ import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {cloneEditorWorkspaceTabs} from './workspaceEditorTabs';
 import {assignLegacyRuntimeActiveHub} from './workspaceRuntimeActiveLegacyBridge';
 
+/** Payload for `UseWorkspaceTodayHubSwitchArgs.callbacks.syncWorkspaceModelForIncomingHub`. */
+export type SyncWorkspaceModelForHubSwitchPayload = {
+  outgoing?: {
+    hubUri: string;
+    nextTabs: readonly EditorWorkspaceTab[];
+    nextActive: string | null;
+    snapshot: TodayHubWorkspaceSnapshot;
+  };
+  incoming: {
+    hubUri: string;
+    nextTabs: readonly EditorWorkspaceTab[];
+    nextActive: string | null;
+    snapshot: TodayHubWorkspaceSnapshot | undefined;
+  };
+};
+
 function snapshotTodayHubWorkspace(
   tabs: readonly EditorWorkspaceTab[],
   activeEditorTabId: string | null,
@@ -95,16 +111,10 @@ export type UseWorkspaceTodayHubSwitchArgs = {
       reason: string,
     ) => void;
     /**
-     * Applies restored incoming-hub tabs + Home stack to the shadow {@link WorkspaceModel}
-     * synchronously (same ordering point as legacy tab restore). When set, mirror callbacks are
-     * skipped — they would duplicate the same model writes asynchronously.
+     * Applies outgoing hub workspace (when switching away) then incoming hub to the shadow
+     * {@link WorkspaceModel} in one synchronous dispatch. When set, mirror callbacks are skipped.
      */
-    syncWorkspaceModelForIncomingHub?: (payload: {
-      hubUri: string;
-      nextTabs: readonly EditorWorkspaceTab[];
-      nextActive: string | null;
-      snapshot: TodayHubWorkspaceSnapshot | undefined;
-    }) => void;
+    syncWorkspaceModelForIncomingHub?: (payload: SyncWorkspaceModelForHubSwitchPayload) => void;
   };
 };
 
@@ -187,6 +197,7 @@ export function useWorkspaceTodayHubSwitch(
       }
 
       const old = activeTodayHubUriRef.current;
+      let outgoingForModel: SyncWorkspaceModelForHubSwitchPayload['outgoing'];
       if (old != null && old !== norm) {
         const outgoingSnap = snapshotTodayHubWorkspace(
           editorWorkspaceTabsRef.current,
@@ -200,10 +211,28 @@ export function useWorkspaceTodayHubSwitch(
           ...legacyTodayHubWorkspacesForSwitchRef.current,
           [old]: outgoingSnap,
         };
+        outgoingForModel = {
+          hubUri: old,
+          nextTabs: editorWorkspaceTabsRef.current,
+          nextActive: activeEditorTabIdRef.current,
+          snapshot: outgoingSnap,
+        };
       }
       const snapForTarget = legacyTodayHubWorkspacesForSwitchRef.current[norm];
 
       const {nextTabs, nextActive} = restoreTabsFromSnapshot(snapForTarget);
+
+      if (syncWorkspaceModelForIncomingHub) {
+        syncWorkspaceModelForIncomingHub({
+          outgoing: outgoingForModel,
+          incoming: {
+            hubUri: norm,
+            nextTabs,
+            nextActive,
+            snapshot: snapForTarget,
+          },
+        });
+      }
 
       // Tab strip + active tab + hub updates are intentionally interleaved before shadow mirrors;
       // centralizing only ref/setTabs would reorder versus hub/active legacy writes.
@@ -215,14 +244,7 @@ export function useWorkspaceTodayHubSwitch(
         ref: activeTodayHubUriRef,
         setActiveTodayHubUri,
       });
-      if (syncWorkspaceModelForIncomingHub) {
-        syncWorkspaceModelForIncomingHub({
-          hubUri: norm,
-          nextTabs,
-          nextActive,
-          snapshot: snapForTarget,
-        });
-      } else {
+      if (!syncWorkspaceModelForIncomingHub) {
         mirrorShadowActiveHub?.(norm, 'switch workspace active hub');
         mirrorShadowActiveWorkspaceTabs?.(
           nextTabs,

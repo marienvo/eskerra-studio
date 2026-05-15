@@ -358,31 +358,40 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       result.current.selectionController.selectNoteInNewActiveTab(NOTE_A1);
     });
 
+    let hubAOpenTabId = '';
     await waitFor(() => {
       expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toHaveLength(1);
       expect(result.current.tabsController.editorWorkspaceTabs[0]?.history.entries).toEqual([
         NOTE_A1,
       ]);
-      const tabId = result.current.tabsController.activeEditorTabId;
+      hubAOpenTabId = result.current.tabsController.activeEditorTabId!;
       expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
-        {id: tabId, history: {entries: [NOTE_A1], index: 0}},
+        {id: hubAOpenTabId, history: {entries: [NOTE_A1], index: 0}},
       ]);
       expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
         kind: 'tab',
-        id: tabId,
+        id: hubAOpenTabId,
       });
       expect(
         result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.editorWorkspaceTabs,
-      ).toEqual([{id: tabId, entries: [NOTE_A1], index: 0}]);
+      ).toEqual([{id: hubAOpenTabId, entries: [NOTE_A1], index: 0}]);
       expect(
         result.current.todayHubController.persistenceTodayHubWorkspaces[HUB_A]
           ?.activeEditorTabId,
-      ).toBe(tabId);
+      ).toBe(hubAOpenTabId);
     });
 
     await act(async () => {
       await result.current.todayHubController.switchTodayHubWorkspace(HUB_B);
+    });
+
+    expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
+      {id: hubAOpenTabId, history: {entries: [NOTE_A1], index: 0}},
+    ]);
+    expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
+      kind: 'tab',
+      id: hubAOpenTabId,
     });
 
     await waitFor(() => {

@@ -2414,24 +2414,51 @@ export function useMainWindowWorkspace(options: {
 
   const syncWorkspaceModelForIncomingHub = useCallback(
     (payload: {
-      hubUri: string;
-      nextTabs: readonly EditorWorkspaceTab[];
-      nextActive: string | null;
-      snapshot: TodayHubWorkspaceSnapshot | undefined;
+      outgoing?: {
+        hubUri: string;
+        nextTabs: readonly EditorWorkspaceTab[];
+        nextActive: string | null;
+        snapshot: TodayHubWorkspaceSnapshot;
+      };
+      incoming: {
+        hubUri: string;
+        nextTabs: readonly EditorWorkspaceTab[];
+        nextActive: string | null;
+        snapshot: TodayHubWorkspaceSnapshot | undefined;
+      };
     }) => {
-      dispatchWorkspaceActionSync('incoming workspace switch', m =>
-        applyIncomingHubWorkspaceAction(
-          m,
-          payload.hubUri,
+      dispatchWorkspaceActionSync('today hub switch', m => {
+        const home = homeStatesByHubRef.current;
+        let next = m;
+        if (payload.outgoing) {
+          const outgoingWs = workspaceStateForIncomingHubSwitch({
+            hubUri: payload.outgoing.hubUri,
+            nextTabs: payload.outgoing.nextTabs,
+            nextActive: payload.outgoing.nextActive,
+            snapshot: payload.outgoing.snapshot,
+            homeStatesByHub: home,
+          });
+          const hub = normalizeWorkspaceUri(payload.outgoing.hubUri);
+          next = {
+            ...next,
+            workspaces: {
+              ...next.workspaces,
+              [hub]: outgoingWs,
+            },
+          };
+        }
+        return applyIncomingHubWorkspaceAction(
+          next,
+          payload.incoming.hubUri,
           workspaceStateForIncomingHubSwitch({
-            hubUri: payload.hubUri,
-            nextTabs: payload.nextTabs,
-            nextActive: payload.nextActive,
-            snapshot: payload.snapshot,
-            homeStatesByHub: homeStatesByHubRef.current,
+            hubUri: payload.incoming.hubUri,
+            nextTabs: payload.incoming.nextTabs,
+            nextActive: payload.incoming.nextActive,
+            snapshot: payload.incoming.snapshot,
+            homeStatesByHub: home,
           }),
-        ),
-      );
+        );
+      });
     },
     [dispatchWorkspaceActionSync],
   );
