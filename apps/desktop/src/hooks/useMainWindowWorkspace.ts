@@ -448,6 +448,7 @@ export function useMainWindowWorkspace(options: {
   const resetRenameMaintenanceStateRef = useRef<() => void>(() => {});
   const resetWorkspaceStateForHydrateRef = useRef<() => void>(() => {});
   const clearBacklinkDiskBodyCacheForHydrateRef = useRef<() => void>(() => {});
+  const clearDiskConflictUiForHydrateRef = useRef<() => void>(() => {});
 
   const refreshNotes = useCallback(
     async (root: string) => {
@@ -460,6 +461,17 @@ export function useMainWindowWorkspace(options: {
     },
     [fs],
   );
+
+  const clearDiskConflictUiForHydrate = useCallback(() => {
+    setDiskConflict(null);
+    diskConflictRef.current = null;
+    setDiskConflictSoft(null);
+    diskConflictSoftRef.current = null;
+  }, []);
+
+  useLayoutEffect(() => {
+    clearDiskConflictUiForHydrateRef.current = clearDiskConflictUiForHydrate;
+  }, [clearDiskConflictUiForHydrate]);
 
   const {
     vaultRoot,
@@ -482,6 +494,7 @@ export function useMainWindowWorkspace(options: {
     clearBacklinkDiskBodyCacheRef: clearBacklinkDiskBodyCacheForHydrateRef,
     refreshNotes,
     resetWorkspaceStateRef: resetWorkspaceStateForHydrateRef,
+    clearDiskConflictUiForHydrateRef,
     setInboxShellRestored,
   });
 

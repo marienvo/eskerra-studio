@@ -28,6 +28,8 @@ type UseVaultBootstrapOptions = {
   clearBacklinkDiskBodyCacheRef: RefObject<() => void>;
   refreshNotes: (root: string) => Promise<void>;
   resetWorkspaceStateRef: RefObject<() => void>;
+  /** Clears disk-conflict UI from the prior vault; must run after flush, before vault async work. */
+  clearDiskConflictUiForHydrateRef: RefObject<() => void>;
   setInboxShellRestored: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -55,6 +57,7 @@ export function useVaultBootstrap(options: UseVaultBootstrapOptions): UseVaultBo
     clearBacklinkDiskBodyCacheRef,
     refreshNotes,
     resetWorkspaceStateRef,
+    clearDiskConflictUiForHydrateRef,
     setInboxShellRestored,
   } = options;
 
@@ -76,6 +79,7 @@ export function useVaultBootstrap(options: UseVaultBootstrapOptions): UseVaultBo
       clearBacklinkDiskBodyCacheRef.current?.();
       setVaultSettings(null);
       setInboxShellRestored(!inboxRestoreEnabled);
+      clearDiskConflictUiForHydrateRef.current?.();
       try {
         await setVaultSession(root);
         await bootstrapVaultLayout(root, fs);
@@ -143,6 +147,7 @@ export function useVaultBootstrap(options: UseVaultBootstrapOptions): UseVaultBo
       refreshNotes,
       resetRenameMaintenanceStateRef,
       resetWorkspaceStateRef,
+      clearDiskConflictUiForHydrateRef,
       setInboxShellRestored,
       subtreeMarkdownCache,
     ],
