@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {
   createDefaultWorkspaceState,
+  ensureWorkspaceForHubsAction,
   normalizeWorkspaceUri,
   openTabForegroundAction,
   syncHubWorkspacesToVaultTodayRefsAction,
@@ -12,6 +13,24 @@ const HUB_B = '/vault/B/Today.md';
 const NOTE = '/vault/Inbox/n.md';
 
 describe('syncHubWorkspacesToVaultTodayRefsAction', () => {
+  it('ensureWorkspaceForHubsAction returns the same model reference when already satisfied', () => {
+    const a = normalizeWorkspaceUri(HUB_A);
+    const m: WorkspaceModel = {
+      activeHub: a,
+      workspaces: {[a]: createDefaultWorkspaceState(a)},
+    };
+    expect(ensureWorkspaceForHubsAction(m, [HUB_A])).toBe(m);
+  });
+
+  it('sync returns the same model reference when hubs already match the vault list', () => {
+    const a = normalizeWorkspaceUri(HUB_A);
+    const m: WorkspaceModel = {
+      activeHub: a,
+      workspaces: {[a]: createDefaultWorkspaceState(a)},
+    };
+    expect(syncHubWorkspacesToVaultTodayRefsAction(m, [HUB_A])).toBe(m);
+  });
+
   it('removes workspace rows not in the vault hub list', () => {
     const a = normalizeWorkspaceUri(HUB_A);
     const b = normalizeWorkspaceUri(HUB_B);
