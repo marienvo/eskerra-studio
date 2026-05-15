@@ -212,6 +212,7 @@ import {
   legacyEditorWorkspaceTabsSignature,
   projectWorkspaceRuntimeToModel,
   resolveModelBackedLegacyTabStrip,
+  tabsControllerEditorSurface,
   workspaceHomeStatesFromWorkspaceModel,
   workspaceHomeStatesSignature,
   workspaceStateForIncomingHubSwitch,
@@ -714,6 +715,23 @@ export function useMainWindowWorkspace(options: {
     () => activeEditorWorkspaceTabsFromWorkspaceModel(workspaceShadowModel),
     [workspaceShadowModel],
   );
+  const tabsControllerSurface = useMemo(
+    () =>
+      tabsControllerEditorSurface(
+        modelActiveTodayHubUri,
+        modelEditorWorkspaceTabs,
+        modelActiveEditorTabId,
+        editorWorkspaceTabs,
+        activeEditorTabId,
+      ),
+    [
+      modelActiveTodayHubUri,
+      modelEditorWorkspaceTabs,
+      modelActiveEditorTabId,
+      editorWorkspaceTabs,
+      activeEditorTabId,
+    ],
+  );
   const modelHomeStatesByHub = useMemo(
     () => workspaceHomeStatesFromWorkspaceModel(workspaceShadowModel),
     [workspaceShadowModel],
@@ -749,22 +767,24 @@ export function useMainWindowWorkspace(options: {
         setActiveTodayHubUri,
       });
     }
-    const legacyTabsSig = legacyEditorWorkspaceTabsSignature(
-      editorWorkspaceTabsRef.current,
-    );
-    const modelTabsSig = legacyEditorWorkspaceTabsSignature(modelEditorWorkspaceTabs);
-    if (legacyTabsSig !== modelTabsSig) {
-      assignLegacyEditorWorkspaceTabs({
-        nextTabs: modelEditorWorkspaceTabs,
-        editorWorkspaceTabsRef,
-        setEditorWorkspaceTabs,
-      });
-    }
-    if (activeEditorTabIdRef.current !== modelActiveEditorTabId) {
-      assignLegacyRuntimeActiveSurfaceTab(modelActiveEditorTabId, {
-        ref: activeEditorTabIdRef,
-        setActiveEditorTabId,
-      });
+    if (modelActiveTodayHubUri != null) {
+      const legacyTabsSig = legacyEditorWorkspaceTabsSignature(
+        editorWorkspaceTabsRef.current,
+      );
+      const modelTabsSig = legacyEditorWorkspaceTabsSignature(modelEditorWorkspaceTabs);
+      if (legacyTabsSig !== modelTabsSig) {
+        assignLegacyEditorWorkspaceTabs({
+          nextTabs: modelEditorWorkspaceTabs,
+          editorWorkspaceTabsRef,
+          setEditorWorkspaceTabs,
+        });
+      }
+      if (activeEditorTabIdRef.current !== modelActiveEditorTabId) {
+        assignLegacyRuntimeActiveSurfaceTab(modelActiveEditorTabId, {
+          ref: activeEditorTabIdRef,
+          setActiveEditorTabId,
+        });
+      }
     }
     if (
       workspaceHomeStatesSignature(homeStatesByHubRef.current) !==
@@ -3934,8 +3954,8 @@ export function useMainWindowWorkspace(options: {
     initialVaultHydrateAttemptDone,
     tabsController: {
       editorHistoryCanGoBack, editorHistoryCanGoForward, editorHistoryGoBack, editorHistoryGoForward,
-      editorWorkspaceTabs: modelEditorWorkspaceTabs,
-      activeEditorTabId: modelActiveEditorTabId,
+      editorWorkspaceTabs: tabsControllerSurface[0],
+      activeEditorTabId: tabsControllerSurface[1],
       activateOpenTab, closeEditorTab, reorderEditorWorkspaceTabs,
       closeOtherEditorTabs, closeAllEditorTabs, reopenLastClosedEditorTab, canReopenClosedEditorTab,
     },
