@@ -88,6 +88,8 @@ Totaal komt overeen met ~4000 LOC.
 
 ### Fase 0 — Baseline & meting (1 PR, klein)
 
+**Geadviseerde LLM:** `GPT-5.4-Mini` — voldoende voor inventarisatie, ADR-tekst en een kleine smoke-test; lage kans op complexe codewijzigingen.
+
 - Snapshot huidige LOC, importgraaf en test-coverage van `useMainWindowWorkspace.ts`.
 - Voeg een ADR toe (`specs/adrs/adr-main-window-workspace-decompositie.md`) met deze doelarchitectuur en de invarianten-checklist die elke fase moet respecteren.
 - Voeg een lichte "smoke"-test (Vitest) toe die de return-shape van de hook controleert (alle controllers aanwezig, geen `undefined` velden). Dient als regressie-vangnet voor latere fases.
@@ -97,6 +99,8 @@ Totaal komt overeen met ~4000 LOC.
 ---
 
 ### Fase 1 — Shadow-workspace-model migratie afmaken (groot, eigen mini-track)
+
+**Geadviseerde LLM:** `GPT-5.5` met hoge reasoning — hoogste risico door state-bronnen, persistence en restore-contracten; gebruik een frontier model voor analyse en substap-ontwerp, eventueel `GPT-5.3 Codex` voor afgebakende codepatches.
 
 **Doel:** verwijder de legacy/projected dual-path zodat `WorkspaceModel` authoritatief is voor activeHub, tabs per hub, home-state per hub.
 
@@ -119,6 +123,8 @@ Totaal komt overeen met ~4000 LOC.
 
 ### Fase 2 — `useVaultBootstrap` extraheren (1 PR)
 
+**Geadviseerde LLM:** `GPT-5.3 Codex` — geschikt voor scoped extractie met async effecten, mocks en bestaande Vitest-paden.
+
 - Verplaats: `vaultRoot`, `vaultSettings`, `settingsName`, `deviceInstanceId`, `initialVaultHydrateAttemptDone`, `busy`, `err`, `hydrateVault`, plugin-store load/save, first-launch effect, indexer-schedule, observability voor `vault_watch_start_failed`.
 - Hook exposeert: `{vaultRoot, vaultSettings, setVaultSettings, settingsName, deviceInstanceId, initialVaultHydrateAttemptDone, busy, err, setErr, hydrateVault}`.
 - `hydrateVault` blijft een dik command, maar het is intern aan deze hook; reset-fases (tabs, hub, frontmatter, composing) krijgt het via een `resetWorkspaceState` callback uit de parent.
@@ -130,6 +136,8 @@ Totaal komt overeen met ~4000 LOC.
 
 ### Fase 3 — `useDiskConflictState` + `useMergeViewState` extraheren (1 PR)
 
+**Geadviseerde LLM:** `GPT-5.3 Codex` met hoge reasoning — disk-conflict en merge-flow zijn correctness-kritiek; laat het model expliciet testdekking en invarianten nalopen.
+
 - `useDiskConflictState`: `diskConflict`, `diskConflictSoft`, beide refs, defer-timer ref, `resolveDiskConflictReloadFromDisk`, `resolveDiskConflictKeepLocal`, `elevateDiskConflictSoftToBlocking`, `dismissDiskConflictSoft`, `clearStaleDiskConflictsForOpen`.
 - `useMergeViewState`: `mergeView`, `closeMergeView`, `tryEnterBackupMergeView`, `applyFullBackupFromMerge`, `keepMyEditsFromMerge`, `enterDiskConflictMergeView`, `applyMergedBodyFromMerge`.
 - Bestaande helpers in `workspaceFsWatchReconcile.ts` blijven; dit verplaatst alleen state-eigendom.
@@ -139,6 +147,8 @@ Totaal komt overeen met ~4000 LOC.
 ---
 
 ### Fase 4 — `workspaceTreeCommands.ts` (1 PR, evt. opgesplitst)
+
+**Geadviseerde LLM:** `GPT-5.3 Codex` — beste match voor grote codeverplaatsing, expliciete context-objecten en testbare command-functies; splits bij voorkeur per tree-command cluster.
 
 - Verplaats `deleteNote`, `deleteFolder`, `renameFolder`, `commitMovedArticleResult`, `commitMovedDirectoryResult`, `commitMoveVaultTreeResult`, `moveVaultTreeItem`, `bulkDeleteRemoveVaultEntry`, `bulkDeletePruneTabsAndScroll`, `bulkDeleteVaultTreeItems`, `bulkMoveVaultTreeItems` naar `workspaceTreeCommands.ts`.
 - Elk command krijgt een expliciete context (`{vaultRoot, fs, refs, setters, dispatchers, subtreeMarkdownCache, ...}`).
@@ -152,6 +162,8 @@ Totaal komt overeen met ~4000 LOC.
 
 ### Fase 5 — `useInboxEditorState` extraheren (1 PR)
 
+**Geadviseerde LLM:** `GPT-5.3 Codex` — scoped React-hook extractie met veel refs en setter-contracten; medium reasoning is meestal genoeg, hoog bij testfalingen.
+
 - Verplaats: `selectedUri`, `editorBody`, `inboxEditorResetNonce`, `composingNewEntry`, frontmatter inner+leading + refs, `suppressEditorOnChangeRef`, `eagerEditorLoadUriRef`, `editorShellScrollByUriRef`, `inboxEditorShellScrollDirectiveRef`, `lastInboxEditorActivityAtRef`, `skipRecencyDeferForUriRef`, `guardedSetEditorBody`, `loadFullMarkdownIntoInboxEditor`, `syncFrontmatterStateFromDisk`, `applyFrontmatterInnerChange`, `resetInboxEditorComposeState`, `clearInboxSelection`.
 - Lever zowel state als de paar locale operaties uit één hook.
 - Houd `inboxContentByUri` + `lastPersistedRef` apart (Fase 7), die hebben hun eigen invariant.
@@ -162,6 +174,8 @@ Totaal komt overeen met ~4000 LOC.
 
 ### Fase 6 — `useEditorTabsState` + `workspaceOpenMarkdownCommand.ts` (1 PR)
 
+**Geadviseerde LLM:** `GPT-5.5` voor ontwerp/risicoanalyse, daarna `GPT-5.3 Codex` voor implementatie — open-flow raakt tabplaatsing, body-load, scroll-restore en foreground/background gedrag.
+
 - `useEditorTabsState`: nu het shadow-model authoritatief is (Fase 1), is dit feitelijk een dunne facade rond model-selectors + setters die `dispatchWorkspaceAction` aanroepen. `closedTabsStack` blijft locaal — die hoort bij tabs maar niet bij persistentie.
 - `workspaceOpenMarkdownCommand.ts`: verplaats `prepareInboxScrollDirectiveForOpen`, `snapshotAndPersistCurrentNoteBeforeOpen`, `tryPrefetchTargetBody`, `loadOpenedNoteBodyAndApplySelection`, `applyBackgroundNewTabOpen`, `placeForegroundMarkdownOpen`, `openMarkdownInEditor`. Context-pattern net als Fase 4.
 
@@ -170,6 +184,8 @@ Totaal komt overeen met ~4000 LOC.
 ---
 
 ### Fase 7 — `useNotesListing` + `useInboxBodyCache` (1 PR)
+
+**Geadviseerde LLM:** `GPT-5.3 Codex` met hoge reasoning — de note-body-cache invariant is klein maar hard; focus op ownership, mutation API en mismatch-tests.
 
 - `useNotesListing`: `notes`, `notesRef`, `refreshNotes`, `fsRefreshNonce`, `podcastFsNonce`, `vaultTreeSelectionClearNonce`.
 - `useInboxBodyCache`: `inboxContentByUri` + `lastPersistedRef` + `lastPersistedExternalMutationSeqRef`. Houdt de invariant uit `CLAUDE.md` "Desktop: Note body cache" expliciet in één plek; alle mutaties gaan door deze hook (set/remove/heal). Helper `inboxNoteBodyCache.ts` blijft; hier alleen het eigenaarschap.
@@ -181,6 +197,8 @@ Totaal komt overeen met ~4000 LOC.
 
 ### Fase 8 — `useTodayHubsState` consolideren (1 PR)
 
+**Geadviseerde LLM:** `GPT-5.5` met hoge reasoning — hub-state, persistence rows en home-history hebben veel impliciete ordering; laat het model eerst een migratiematrix maken voordat het code wijzigt.
+
 - Na Fase 1 zijn `activeTodayHubUri`, `todayHubWorkspacesForSave`, `homeStatesByHub` views op het model. Bundel: `prehydrateTodayHubRows`, `persistTodayHubRow`, `todayHubCleanRowBlocked`, `syncWorkspaceModelForIncomingHub`, `syncShadowWorkspaceFromShellRestore`, `todayHubSelectorItems`, plus home-history operaties (`setHomeStateForHub`, `pushHomeHistoryForHub`, `remapHomeStatesPrefix`, `removeHomeHistoryUris`).
 - `useWorkspaceTodayHubSwitch` blijft als sub-hook intern aan `useTodayHubsState`.
 
@@ -189,6 +207,8 @@ Totaal komt overeen met ~4000 LOC.
 ---
 
 ### Fase 9 — Compose-commands + inbox-shell-restore opruimen (1 PR)
+
+**Geadviseerde LLM:** `GPT-5.3 Codex` met hoge reasoning — compose en shell-restore zijn testbaar te isoleren, maar raken restore-volgorde en editor-history; laat het model expliciet bestaande bridge-tests koppelen aan de verplaatsing.
 
 - `workspaceComposeCommands.ts`: `addNote`, `startNewEntry`, `cancelNewEntry`, `submitNewEntry`, `onCleanNoteInbox`.
 - `useInboxShellRestore`: verplaats de grote restore-`useEffect` rond regel 3770 en de drie helper-callbacks naar één sub-hook. `inboxShellRestoreHelpers.ts` + `workspaceInboxShellRestoreBridge.ts` blijven.
@@ -199,6 +219,8 @@ Totaal komt overeen met ~4000 LOC.
 ---
 
 ### Fase 10 — Eind-opruiming (1 PR, klein)
+
+**Geadviseerde LLM:** `GPT-5.4-Mini` voor documentatie en simpele cleanup, of `GPT-5.3 Codex` als er nog ref-mirror-effecten met subtiele dependency-risico's over zijn.
 
 - Verwijder onnodige state↔ref-mirror-effects waar de refs door state-stores zelf onderhouden worden.
 - Check return-shape compositie; verifieer dat de hoofdhook nu wiring + assemblage is.
