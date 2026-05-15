@@ -61,9 +61,6 @@ describe('useInboxEditorState', () => {
       }),
     );
 
-    const lastPersistedRef = {current: {uri: '/note.md', markdown: 'x'}};
-    const lastPersistedExternalMutationSeqRef = {current: 2};
-
     act(() => {
       result.current.setSelectedUri('/note.md');
       result.current.setComposingNewEntry(true);
@@ -72,10 +69,7 @@ describe('useInboxEditorState', () => {
       result.current.setInboxEditorYamlLeadingBeforeFrontmatter('lead\n');
     });
     act(() => {
-      result.current.clearInboxSelection({
-        lastPersistedRef,
-        lastPersistedExternalMutationSeqRef,
-      });
+      result.current.clearInboxSelection();
     });
 
     expect(result.current.selectedUri).toBeNull();
@@ -83,8 +77,6 @@ describe('useInboxEditorState', () => {
     expect(result.current.editorBody).toBe('');
     expect(result.current.inboxYamlFrontmatterInner).toBeNull();
     expect(result.current.inboxEditorYamlLeadingBeforeFrontmatter).toBe('');
-    expect(lastPersistedRef.current).toBeNull();
-    expect(lastPersistedExternalMutationSeqRef.current).toBe(3);
     expect(result.current.inboxEditorResetNonce).toBe(1);
   });
 });

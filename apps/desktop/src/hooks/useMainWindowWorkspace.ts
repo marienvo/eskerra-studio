@@ -1313,10 +1313,9 @@ export function useMainWindowWorkspace(options: {
 
   /** Drop the active inbox selection entirely — clear refs, state, and editor. */
   const clearInboxSelection = useCallback(() => {
-    clearInboxSelectionFromInboxState({
-      lastPersistedRef,
-      lastPersistedExternalMutationSeqRef,
-    });
+    clearInboxSelectionFromInboxState();
+    lastPersistedRef.current = null;
+    lastPersistedExternalMutationSeqRef.current += 1;
   }, [clearInboxSelectionFromInboxState]);
 
   const recordClosedTabAndPruneScroll = useCallback(

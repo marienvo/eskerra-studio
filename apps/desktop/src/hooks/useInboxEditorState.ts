@@ -55,12 +55,7 @@ export type UseInboxEditorStateResult = {
     selection?: 'start' | 'end' | 'preserve',
   ) => void;
   resetInboxEditorComposeState: () => void;
-  clearInboxSelection: (
-    options: {
-      lastPersistedRef: MutableRefObject<{uri: string; markdown: string} | null>;
-      lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
-    },
-  ) => void;
+  clearInboxSelection: () => void;
 };
 
 export function useInboxEditorState(
@@ -178,21 +173,13 @@ export function useInboxEditorState(
     setInboxEditorResetNonce(n => n + 1);
   }, []);
 
-  const clearInboxSelection = useCallback(
-    (deps: {
-      lastPersistedRef: MutableRefObject<{uri: string; markdown: string} | null>;
-      lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
-    }) => {
-      selectedUriRef.current = null;
-      composingNewEntryRef.current = false;
-      deps.lastPersistedRef.current = null;
-      deps.lastPersistedExternalMutationSeqRef.current += 1;
-      setSelectedUri(null);
-      setComposingNewEntry(false);
-      resetInboxEditorComposeState();
-    },
-    [resetInboxEditorComposeState],
-  );
+  const clearInboxSelection = useCallback(() => {
+    selectedUriRef.current = null;
+    composingNewEntryRef.current = false;
+    setSelectedUri(null);
+    setComposingNewEntry(false);
+    resetInboxEditorComposeState();
+  }, [resetInboxEditorComposeState]);
 
   return {
     selectedUri,
