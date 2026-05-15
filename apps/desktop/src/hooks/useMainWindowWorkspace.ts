@@ -131,7 +131,7 @@ import {
 import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
 import {
   applyIncomingHubWorkspaceAction,
-  ensureWorkspaceForHubsAction,
+  syncHubWorkspacesToVaultTodayRefsAction,
   closeAllTabsAction,
   closeOtherTabsAction,
   closeTabAction,
@@ -745,11 +745,8 @@ export function useMainWindowWorkspace(options: {
     if (!inboxShellRestored) {
       return;
     }
-    if (workspaceModelHubUris.length === 0) {
-      return;
-    }
-    dispatchWorkspaceActionSync('ensure today hub workspaces', m =>
-      ensureWorkspaceForHubsAction(m, workspaceModelHubUris),
+    dispatchWorkspaceActionSync('sync today hub workspaces to vault refs', m =>
+      syncHubWorkspacesToVaultTodayRefsAction(m, workspaceModelHubUris),
     );
   }, [
     inboxShellRestored,

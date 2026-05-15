@@ -1,4 +1,5 @@
 import {activateWorkspaceSelectorAction} from './activateSurface';
+import {removeUrisAction} from './external';
 import type {WorkspaceModel, WorkspaceState} from '../types';
 import {createDefaultWorkspaceState, normalizeWorkspaceUri} from '../types';
 
@@ -68,4 +69,28 @@ export function ensureWorkspaceForHubsAction(
     activeHub = normalizeWorkspaceUri(hubUris[0]!);
   }
   return {...m, workspaces, activeHub};
+}
+
+/**
+ * Drops workspace rows whose hub keys are not listed in `hubUrisFromVault`, then ensures each
+ * listed hub exists. Uses {@link removeUrisAction} with a predicate that matches **only** stale hub
+ * URIs (never `u => !allowed.has(u)`), so normal note paths in tab histories are not stripped.
+ */
+export function syncHubWorkspacesToVaultTodayRefsAction(
+  m: WorkspaceModel,
+  hubUrisFromVault: readonly string[],
+): WorkspaceModel {
+  const allowed = new Set(hubUrisFromVault.map(h => normalizeWorkspaceUri(h)));
+  const staleHubKeys = new Set<string>();
+  for (const hubKey of Object.keys(m.workspaces)) {
+    const n = normalizeWorkspaceUri(hubKey);
+    if (!allowed.has(n)) {
+      staleHubKeys.add(n);
+    }
+  }
+  const afterPrune =
+    staleHubKeys.size > 0
+      ? removeUrisAction(m, u => staleHubKeys.has(normalizeWorkspaceUri(u)))
+      : m;
+  return ensureWorkspaceForHubsAction(afterPrune, hubUrisFromVault);
 }

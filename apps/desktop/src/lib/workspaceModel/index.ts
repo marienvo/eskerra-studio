@@ -44,6 +44,7 @@ export {
   applyIncomingHubWorkspaceAction,
   ensureWorkspaceForHubsAction,
   selectWorkspaceAction,
+  syncHubWorkspacesToVaultTodayRefsAction,
 } from './actions/workspace';
 export {remapPrefixAction, removeUrisAction} from './actions/external';
 
