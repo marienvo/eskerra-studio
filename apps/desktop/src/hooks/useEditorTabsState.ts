@@ -31,7 +31,6 @@ export function useEditorTabsState(
   const {vaultRoot, notes} = options;
   const [editorWorkspaceTabs, setEditorWorkspaceTabsState] = useState<EditorWorkspaceTab[]>([]);
   const [activeEditorTabId, setActiveEditorTabIdState] = useState<string | null>(null);
-  const [editorClosedStackVersion, setEditorClosedStackVersion] = useState(0);
   const [editorClosedTabsStackSnapshot, setEditorClosedTabsStackSnapshot] = useState<
     ClosedEditorTabRecord[]
   >([]);
@@ -50,7 +49,6 @@ export function useEditorTabsState(
   }, []);
 
   const bumpEditorClosedStack = useCallback(() => {
-    setEditorClosedStackVersion(v => v + 1);
     setEditorClosedTabsStackSnapshot([...editorClosedTabsStackRef.current]);
   }, []);
 
@@ -60,7 +58,7 @@ export function useEditorTabsState(
     }
     const noteSet = new Set(notes.map(n => n.uri.replace(/\\/g, '/')));
     return hasReopenableClosedEditorTab(editorClosedTabsStackSnapshot, vaultRoot, noteSet);
-  }, [vaultRoot, notes, editorClosedStackVersion, editorClosedTabsStackSnapshot]);
+  }, [vaultRoot, notes, editorClosedTabsStackSnapshot]);
 
   return {
     editorWorkspaceTabs,
