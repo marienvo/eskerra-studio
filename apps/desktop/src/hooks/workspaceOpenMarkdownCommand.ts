@@ -225,7 +225,21 @@ function applyBackgroundNewTabOpen(
   const nextModel = ctx.dispatchWorkspaceActionSync('background new tab', m =>
     openTabBackgroundAction(m, targetNorm, tabOpts),
   );
-  const {nextTabs} = resolveModelBackedLegacyTabStrip(nextModel, nextTabsLegacy, 'signature');
+  const {nextTabs, mismatch: tabStripMismatch} = resolveModelBackedLegacyTabStrip(
+    nextModel,
+    nextTabsLegacy,
+    'signature',
+  );
+  if (tabStripMismatch?.kind === 'signature') {
+    const warn = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+    if (warn) {
+      const {legacySig, derivedSig} = tabStripMismatch;
+      console.warn(
+        '[workspaceModel] applyBackgroundNewTabOpen: model strip signature mismatch vs legacy; using legacy strip',
+        {targetNorm, legacySig, derivedSig},
+      );
+    }
+  }
   assignLegacyEditorWorkspaceTabs({
     nextTabs,
     editorWorkspaceTabsRef: ctx.editorWorkspaceTabsRef,

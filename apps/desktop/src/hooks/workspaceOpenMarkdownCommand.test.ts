@@ -1,6 +1,8 @@
 import {describe, expect, it, vi} from 'vitest';
 
+import type {WorkspaceModel} from '../lib/workspaceModel/types';
 import {runOpenMarkdownInEditorCommand} from './workspaceOpenMarkdownCommand';
+import * as workspaceRuntimeProjection from './workspaceRuntimeProjection';
 
 function createBaseContext() {
   const selectedState = {value: null as string | null};
@@ -113,5 +115,46 @@ describe('workspaceOpenMarkdownCommand', () => {
       '/vault/A/Today.md',
     );
     expect(tabsState.value).toEqual([]);
+  });
+
+  it('background new tab warns in non-production when tab strip signature mismatches', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const resolveSpy = vi
+      .spyOn(workspaceRuntimeProjection, 'resolveModelBackedLegacyTabStrip')
+      .mockReturnValue({
+        nextTabs: [
+          {
+            id: 'tab-bg',
+            history: {entries: ['/vault/Inbox/bg.md'], index: 0},
+          },
+        ],
+        derivedTabs: [],
+        matched: false,
+        mismatch: {kind: 'signature', legacySig: 'legacy-sig', derivedSig: 'derived-sig'},
+      });
+
+    const emptyModel: WorkspaceModel = {activeHub: null, workspaces: {}};
+    const {ctx} = createBaseContext();
+    ctx.inboxContentByUriRef.current['/vault/Inbox/bg.md'] = '# cached';
+    ctx.dispatchWorkspaceActionSync = vi.fn((_reason, reducer) => reducer(emptyModel));
+
+    try {
+      await runOpenMarkdownInEditorCommand(ctx as never, '/vault/Inbox/bg.md', {
+        newTab: true,
+        activateNewTab: false,
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[workspaceModel] applyBackgroundNewTabOpen: model strip signature mismatch vs legacy; using legacy strip',
+        {
+          targetNorm: '/vault/Inbox/bg.md',
+          legacySig: 'legacy-sig',
+          derivedSig: 'derived-sig',
+        },
+      );
+    } finally {
+      warnSpy.mockRestore();
+      resolveSpy.mockRestore();
+    }
   });
 });
