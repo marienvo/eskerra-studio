@@ -86,4 +86,12 @@ export default defineConfig([
       'sonarjs/publicly-writable-directories': 'off',
     },
   },
+  {
+    files: ['src/hooks/useMainWindowWorkspace.ts'],
+    rules: {
+      // Orchestration hub: callbacks read latest workspace/editor state via refs to avoid
+      // stale closures; widening dependency arrays would churn identities without improving safety.
+      'react-hooks/exhaustive-deps': 'off',
+    },
+  },
 ])

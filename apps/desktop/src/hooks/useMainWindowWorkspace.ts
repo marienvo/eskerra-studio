@@ -67,10 +67,7 @@ import {
   normalizeEditorDocUri,
   remapVaultUriPrefix,
 } from '../lib/editorDocumentHistory';
-import {
-  type ClosedEditorTabRecord,
-  popNextReopenableClosedTabRecord,
-} from '../lib/editorClosedTabStack';
+import {popNextReopenableClosedTabRecord} from '../lib/editorClosedTabStack';
 import {
   ensureActiveTabId,
   findTabById,
