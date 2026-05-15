@@ -212,18 +212,19 @@ describe('switchTodayHubWorkspace', () => {
 
     expect(syncWorkspaceModelForIncomingHub).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        hubUri: HUB_A,
-        snapshot: expect.objectContaining({
-          homeHistory: {
-            entries: [HUB_A, NOTE_A],
-            index: 1,
-          },
+        incoming: expect.objectContaining({
+          hubUri: HUB_A,
+          snapshot: expect.objectContaining({
+            homeHistory: {
+              entries: [HUB_A, NOTE_A],
+              index: 1,
+            },
+          }),
         }),
       }),
     );
-    expect(
-      syncWorkspaceModelForIncomingHub.mock.calls.at(-1)?.[0].snapshot.homeHistory,
-    ).toEqual({
+    const lastPayload = syncWorkspaceModelForIncomingHub.mock.calls.at(-1)?.[0];
+    expect(lastPayload?.incoming.snapshot?.homeHistory).toEqual({
       entries: [HUB_A, NOTE_A],
       index: 1,
     });
@@ -288,10 +289,21 @@ describe('switchTodayHubWorkspace', () => {
     const expectedHub = normalizeEditorDocUri(HUB_B) ?? HUB_B;
     expect(syncWorkspaceModelForIncomingHub).toHaveBeenCalledTimes(1);
     expect(syncWorkspaceModelForIncomingHub).toHaveBeenCalledWith({
-      hubUri: expectedHub,
-      nextTabs: expect.any(Array),
-      nextActive: 'tab-b1',
-      snapshot: bSnapshot,
+      outgoing: {
+        hubUri: HUB_A,
+        nextTabs: [],
+        nextActive: null,
+        snapshot: {
+          editorWorkspaceTabs: [],
+          activeEditorTabId: null,
+        },
+      },
+      incoming: {
+        hubUri: expectedHub,
+        nextTabs: expect.any(Array),
+        nextActive: 'tab-b1',
+        snapshot: bSnapshot,
+      },
     });
     expect(mirrorShadowActiveHub).not.toHaveBeenCalled();
     expect(mirrorShadowActiveWorkspaceTabs).not.toHaveBeenCalled();

@@ -17,6 +17,7 @@ import {
   useRef,
   useState,
   type Dispatch,
+  type MutableRefObject,
   type RefObject,
   type SetStateAction,
 } from 'react';
@@ -32,7 +33,6 @@ import {
   parseComposeInput,
   splitYamlFrontmatter,
   SubtreeMarkdownPresenceCache,
-  isVaultPathUnderAutosyncBackup,
   trimTrailingSlashes,
   type EskerraSettings,
   type VaultFilesystem,
@@ -158,8 +158,6 @@ import {
   removeHomeHistoryUrisBridge,
 } from './workspaceHomeHistoryShadowSync';
 import {
-  type DiskConflictSoftState,
-  type DiskConflictState,
   type LastPersisted,
 } from './workspaceFsWatchReconcile';
 import {
@@ -184,6 +182,8 @@ import {
 } from './workspaceVaultWatchEffects';
 import {useVaultBootstrap} from './useVaultBootstrap';
 import {useWorkspaceController} from './useWorkspaceController';
+import {useDiskConflictState} from './useDiskConflictState';
+import {useMergeViewState} from './useMergeViewState';
 import {
   deriveModelDerivedPersistencePayload,
 } from './workspacePersistenceBridge';
@@ -219,6 +219,7 @@ import {
   remapEditorShellScrollMapExact,
   remapEditorShellScrollMapTreePrefix,
 } from './workspaceEditorScrollMap';
+import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import {cleanNoteMarkdownBody} from '../lib/cleanNoteMarkdown';
 import {
   clearInboxYamlFrontmatterEditorRefs,
@@ -231,7 +232,6 @@ import {
   normalizeVaultMarkdownDiskRead,
   removeInboxNoteBodyFromCache,
 } from './inboxNoteBodyCache';
-import {resolveVaultLinkBaseMarkdownUri} from '../lib/resolveVaultLinkBaseMarkdownUri';
 
 /** Canonical vault root string for comparing persisted shell snapshots to the active vault. */
 function normalizedVaultRootPath(vaultRoot: string): string {
@@ -346,13 +346,8 @@ export function useMainWindowWorkspace(options: {
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [editorBody, setEditorBody] = useState('');
   const [inboxEditorResetNonce, setInboxEditorResetNonce] = useState(0);
-  const [diskConflict, setDiskConflict] = useState<DiskConflictState | null>(null);
-  const diskConflictRef = useRef<DiskConflictState | null>(null);
-  const [diskConflictSoft, setDiskConflictSoft] = useState<DiskConflictSoftState | null>(null);
-  const diskConflictSoftRef = useRef<DiskConflictSoftState | null>(null);
   const lastInboxEditorActivityAtRef = useRef(0);
   const skipRecencyDeferForUriRef = useRef<Set<string>>(new Set());
-  const diskConflictDeferTimerRef = useRef<number | null>(null);
   const [composingNewEntry, setComposingNewEntry] = useState(false);
   // showTodayHubCanvas derives from selection; see useMemo below.
   const [inboxContentByUri, setInboxContentByUri] = useState<Record<string, string>>({});
@@ -390,11 +385,6 @@ export function useMainWindowWorkspace(options: {
   const [editorClosedTabsStackSnapshot, setEditorClosedTabsStackSnapshot] = useState<
     ClosedEditorTabRecord[]
   >([]);
-  const [mergeView, setMergeView] = useState<
-    | null
-    | {kind: 'backup'; baseUri: string; backupUri: string}
-    | {kind: 'diskConflict'; baseUri: string; diskMarkdown: string}
-  >(null);
   const {
     model: workspaceShadowModel,
     dispatchWorkspaceAction,
@@ -466,6 +456,7 @@ export function useMainWindowWorkspace(options: {
   const resetWorkspaceStateForHydrateRef = useRef<() => void>(() => {});
   const clearBacklinkDiskBodyCacheForHydrateRef = useRef<() => void>(() => {});
   const clearDiskConflictUiForHydrateRef = useRef<() => void>(() => {});
+  const clearMergeViewForOpenRef = useRef<() => void>(() => {});
 
   const refreshNotes = useCallback(
     async (root: string) => {
@@ -478,17 +469,6 @@ export function useMainWindowWorkspace(options: {
     },
     [fs],
   );
-
-  const clearDiskConflictUiForHydrate = useCallback(() => {
-    setDiskConflict(null);
-    diskConflictRef.current = null;
-    setDiskConflictSoft(null);
-    diskConflictSoftRef.current = null;
-  }, []);
-
-  useLayoutEffect(() => {
-    clearDiskConflictUiForHydrateRef.current = clearDiskConflictUiForHydrate;
-  }, [clearDiskConflictUiForHydrate]);
 
   const {
     vaultRoot,
@@ -544,14 +524,6 @@ export function useMainWindowWorkspace(options: {
     inboxYamlFrontmatterInnerRef.current = nextInner;
     setInboxYamlFrontmatterInner(nextInner);
   }, []);
-
-  useLayoutEffect(() => {
-    diskConflictRef.current = diskConflict;
-  }, [diskConflict]);
-
-  useLayoutEffect(() => {
-    diskConflictSoftRef.current = diskConflictSoft;
-  }, [diskConflictSoft]);
 
   useLayoutEffect(() => {
     vaultRootRef.current = vaultRoot;
@@ -935,6 +907,44 @@ export function useMainWindowWorkspace(options: {
     todayHubSettingsRef.current = todayHubSettings;
   }, [todayHubSettings]);
 
+  /** Filled in layout after {@link useWorkspacePersistence}; stable identity for sub-hooks' `useCallback` deps. */
+  const autosaveSchedulerTargetRef = useRef<MutableRefObject<InboxAutosaveScheduler> | null>(null);
+  const cancelAutosave = useCallback(() => {
+    autosaveSchedulerTargetRef.current?.current.cancel();
+  }, []);
+
+  const {
+    diskConflict,
+    setDiskConflict,
+    diskConflictRef,
+    diskConflictSoft,
+    setDiskConflictSoft,
+    diskConflictSoftRef,
+    diskConflictDeferTimerRef,
+    clearDiskConflictUiForHydrate,
+    resolveDiskConflictReloadFromDisk,
+    resolveDiskConflictKeepLocal,
+    elevateDiskConflictSoftToBlocking,
+    clearBlockingDiskConflictForMergedBody,
+    dismissDiskConflictSoft,
+    clearStaleDiskConflictsForOpen,
+  } = useDiskConflictState({
+    loadFullMarkdownIntoInboxEditor,
+    scheduleBacklinksDeferOneFrameAfterLoad,
+    cancelAutosave,
+    selectedUriRef,
+    lastPersistedRef,
+    lastPersistedExternalMutationSeqRef,
+    inboxContentByUriRef,
+    skipRecencyDeferForUriRef,
+    setInboxContentByUri,
+    setErr,
+  });
+
+  useLayoutEffect(() => {
+    clearDiskConflictUiForHydrateRef.current = clearDiskConflictUiForHydrate;
+  }, [clearDiskConflictUiForHydrate]);
+
   const [vaultWriteSettledNonce, setVaultWriteSettledNonce] = useState(0);
   const markVaultWriteSettled = useCallback(() => {
     setVaultWriteSettledNonce(n => n + 1);
@@ -979,8 +989,9 @@ export function useMainWindowWorkspace(options: {
   });
 
   useLayoutEffect(() => {
+    autosaveSchedulerTargetRef.current = autosaveSchedulerRef;
     flushInboxSaveForHydrateRef.current = workspacePersistenceFlushInboxSaveRef.current;
-  });
+  }, [autosaveSchedulerRef, workspacePersistenceFlushInboxSaveRef]);
   const flushInboxSaveRef = workspacePersistenceFlushInboxSaveRef;
 
   const getRenameMaintenanceSnapshot =
@@ -1195,84 +1206,6 @@ export function useMainWindowWorkspace(options: {
     },
     [fs, refreshNotes, subtreeMarkdownCache, saveActiveRef, saveChainRef, markVaultWriteSettled],
   );
-
-  const resolveDiskConflictReloadFromDisk = useCallback(() => {
-    const c = diskConflictRef.current;
-    const uri = selectedUriRef.current;
-    if (!c || !uri || normalizeEditorDocUri(c.uri) !== normalizeEditorDocUri(uri)) {
-      return;
-    }
-    const md = c.diskMarkdown;
-    loadFullMarkdownIntoInboxEditor(md, uri, 'start');
-    scheduleBacklinksDeferOneFrameAfterLoad();
-    lastPersistedRef.current = {uri: c.uri, markdown: md};
-    lastPersistedExternalMutationSeqRef.current += 1;
-    const nextCache = mergeInboxNoteBodyIntoCache(
-      inboxContentByUriRef.current,
-      c.uri,
-      md,
-    );
-    if (nextCache) {
-      inboxContentByUriRef.current = nextCache;
-      setInboxContentByUri(prev =>
-        mergeInboxNoteBodyIntoCache(prev, c.uri, md) ?? prev,
-      );
-    }
-    setDiskConflict(null);
-    diskConflictRef.current = null;
-    setDiskConflictSoft(null);
-    diskConflictSoftRef.current = null;
-    setErr(null);
-  }, [loadFullMarkdownIntoInboxEditor, scheduleBacklinksDeferOneFrameAfterLoad]);
-
-  const resolveDiskConflictKeepLocal = useCallback(() => {
-    const c = diskConflictRef.current;
-    const uri = selectedUriRef.current;
-    if (!c || !uri || normalizeEditorDocUri(c.uri) !== normalizeEditorDocUri(uri)) {
-      return;
-    }
-    autosaveSchedulerRef.current.cancel();
-    lastPersistedRef.current = {uri: c.uri, markdown: c.diskMarkdown};
-    lastPersistedExternalMutationSeqRef.current += 1;
-    setDiskConflict(null);
-    diskConflictRef.current = null;
-    setDiskConflictSoft(null);
-    diskConflictSoftRef.current = null;
-    setErr(null);
-  }, [autosaveSchedulerRef]);
-
-  const elevateDiskConflictSoftToBlocking = useCallback(() => {
-    const s = diskConflictSoftRef.current;
-    const uri = selectedUriRef.current;
-    if (!s || !uri || normalizeEditorDocUri(s.uri) !== normalizeEditorDocUri(uri)) {
-      return;
-    }
-    autosaveSchedulerRef.current.cancel();
-    const hard: DiskConflictState = {uri: s.uri, diskMarkdown: s.diskMarkdown};
-    setDiskConflict(hard);
-    diskConflictRef.current = hard;
-    setDiskConflictSoft(null);
-    diskConflictSoftRef.current = null;
-  }, [autosaveSchedulerRef]);
-
-  const dismissDiskConflictSoft = useCallback(() => {
-    setDiskConflictSoft(null);
-    diskConflictSoftRef.current = null;
-    skipRecencyDeferForUriRef.current.clear();
-  }, []);
-
-  const clearStaleDiskConflictsForOpen = useCallback((targetNorm: string) => {
-    const prevConflict = diskConflictRef.current;
-    if (prevConflict && normalizeEditorDocUri(prevConflict.uri) !== targetNorm) {
-      setDiskConflict(null);
-      diskConflictRef.current = null;
-    }
-    const prevSoft = diskConflictSoftRef.current;
-    if (prevSoft && normalizeEditorDocUri(prevSoft.uri) !== targetNorm) {
-      setDiskConflictSoft(null);
-      diskConflictSoftRef.current = null;
-    }
-  }, []);
 
   const prepareInboxScrollDirectiveForOpen = useCallback(
     (targetNorm: string, skipHistory: boolean) => {
@@ -1512,7 +1445,7 @@ export function useMainWindowWorkspace(options: {
     ) => {
       const openGen = ++openMarkdownGenerationRef.current;
       const targetNorm = normalizeEditorDocUri(uri);
-      setMergeView(null);
+      clearMergeViewForOpenRef.current();
       autosaveSchedulerRef.current.cancel();
       const hubBridge = todayHubBridgeRef.current;
       const needHubFlush =
@@ -1661,192 +1594,46 @@ export function useMainWindowWorkspace(options: {
     });
   }, [openMarkdownInEditor]);
 
-  const closeMergeView = useCallback(() => {
-    setMergeView(null);
-  }, []);
-
-  const tryEnterBackupMergeView = useCallback(
-    async (backupUri: string): Promise<boolean> => {
-      if (!isVaultPathUnderAutosyncBackup(backupUri)) {
-        return false;
-      }
-      const baseUri = resolveVaultLinkBaseMarkdownUri({
-        composingNewEntry: composingNewEntryRef.current,
-        showTodayHubCanvas: showTodayHubCanvasRef.current,
-        todayHubWikiNavParentUri: todayHubWikiNavParentRef.current,
-        selectedUri: selectedUriRef.current,
-      });
-      if (!baseUri) {
-        return false;
-      }
-      const normBase = normalizeEditorDocUri(baseUri);
-      const normBackup = normalizeEditorDocUri(backupUri);
-      const cur = selectedUriRef.current
-        ? normalizeEditorDocUri(selectedUriRef.current)
-        : null;
-      if (cur !== normBase) {
-        await openMarkdownInEditor(normBase, {skipHistory: true});
-      }
-      setMergeView({kind: 'backup', baseUri: normBase, backupUri: normBackup});
-      return true;
-    },
-    [openMarkdownInEditor],
-  );
-
-  const applyFullBackupFromMerge = useCallback(async () => {
-    const mv = mergeView;
-    if (!mv) {
-      return;
-    }
-    if (mv.kind === 'diskConflict') {
-      resolveDiskConflictReloadFromDisk();
-      setMergeView(null);
-      return;
-    }
-    const normBase = normalizeEditorDocUri(mv.baseUri);
-    const dc = diskConflictRef.current;
-    if (dc && normalizeEditorDocUri(dc.uri) === normBase) {
-      setErr(
-        'Resolve the disk conflict on this note before replacing it from a backup.',
-      );
-      return;
-    }
-    try {
-      setErr(null);
-      const raw = await fs.readFile(mv.backupUri, {encoding: 'utf8'});
-      loadFullMarkdownIntoInboxEditor(raw, normBase, 'start');
-      const body =
-        inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current;
-      const full = inboxEditorSliceToFullMarkdown(
-        body,
-        normBase,
-        false,
-        inboxYamlFrontmatterInnerRef.current,
-        inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-      );
-      const nextCache = mergeInboxNoteBodyIntoCache(
-        inboxContentByUriRef.current,
-        normBase,
-        body,
-      );
-      if (nextCache) {
-        inboxContentByUriRef.current = nextCache;
-        setInboxContentByUri(
-          prev => mergeInboxNoteBodyIntoCache(prev, normBase, body) ?? prev,
-        );
-      }
-      backlinksActiveBodyRef.current = body;
-      setBacklinksActiveBody(body);
-      setMergeView(null);
-      enqueuePersistOutgoingNoteMarkdown(normBase, full);
-      scheduleBacklinksDeferOneFrameAfterLoad();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    }
-  }, [
+  const {
     mergeView,
-    resolveDiskConflictReloadFromDisk,
+    closeMergeView,
+    tryEnterBackupMergeView,
+    applyFullBackupFromMerge,
+    keepMyEditsFromMerge,
+    enterDiskConflictMergeView,
+    applyMergedBodyFromMerge,
+  } = useMergeViewState({
     fs,
-    loadFullMarkdownIntoInboxEditor,
+    openMarkdownInEditor,
+    selectedUriRef,
+    composingNewEntryRef,
+    showTodayHubCanvasRef,
+    todayHubWikiNavParentRef,
+    diskConflictRef,
+    diskConflictSoftRef,
+    resolveDiskConflictReloadFromDisk,
+    resolveDiskConflictKeepLocal,
+    elevateDiskConflictSoftToBlocking,
+    clearBlockingDiskConflictForMergedBody,
+    setErr,
     inboxEditorRef,
-    enqueuePersistOutgoingNoteMarkdown,
-    scheduleBacklinksDeferOneFrameAfterLoad,
+    loadFullMarkdownIntoInboxEditor,
+    editorBodyRef,
+    setEditorBody,
+    suppressEditorOnChangeRef,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    inboxContentByUriRef,
+    setInboxContentByUri,
     backlinksActiveBodyRef,
     setBacklinksActiveBody,
-  ]);
+    enqueuePersistOutgoingNoteMarkdown,
+    scheduleBacklinksDeferOneFrameAfterLoad,
+  });
 
-  const keepMyEditsFromMerge = useCallback(() => {
-    resolveDiskConflictKeepLocal();
-    setMergeView(null);
-  }, [resolveDiskConflictKeepLocal]);
-
-  const enterDiskConflictMergeView = useCallback(() => {
-    const uri = selectedUriRef.current;
-    if (!uri) return;
-    const normUri = normalizeEditorDocUri(uri);
-
-    const dc = diskConflictRef.current;
-    if (dc && normalizeEditorDocUri(dc.uri) === normUri) {
-      setMergeView({kind: 'diskConflict', baseUri: normUri, diskMarkdown: dc.diskMarkdown});
-      return;
-    }
-
-    const s = diskConflictSoftRef.current;
-    if (s && normalizeEditorDocUri(s.uri) === normUri) {
-      autosaveSchedulerRef.current.cancel();
-      const hard: DiskConflictState = {uri: s.uri, diskMarkdown: s.diskMarkdown};
-      setDiskConflict(hard);
-      diskConflictRef.current = hard;
-      setDiskConflictSoft(null);
-      diskConflictSoftRef.current = null;
-      setMergeView({kind: 'diskConflict', baseUri: normUri, diskMarkdown: s.diskMarkdown});
-    }
-  }, [autosaveSchedulerRef]);
-
-  const applyMergedBodyFromMerge = useCallback(
-    (body: string) => {
-      const mv = mergeView;
-      if (!mv) return;
-      const normBase = normalizeEditorDocUri(mv.baseUri);
-
-      if (mv.kind === 'diskConflict') {
-        autosaveSchedulerRef.current.cancel();
-        const dc = diskConflictRef.current;
-        if (dc) {
-          lastPersistedRef.current = {uri: dc.uri, markdown: dc.diskMarkdown};
-          lastPersistedExternalMutationSeqRef.current += 1;
-        }
-        setDiskConflict(null);
-        diskConflictRef.current = null;
-        setDiskConflictSoft(null);
-        diskConflictSoftRef.current = null;
-      } else {
-        const dc = diskConflictRef.current;
-        if (dc && normalizeEditorDocUri(dc.uri) === normBase) {
-          setErr('Resolve the disk conflict on this note before applying a merge.');
-          return;
-        }
-      }
-
-      suppressEditorOnChangeRef.current = true;
-      inboxEditorRef.current?.loadMarkdown(body, {selection: 'preserve'});
-      suppressEditorOnChangeRef.current = false;
-      setEditorBody(body);
-      editorBodyRef.current = body;
-
-      const nextCache = mergeInboxNoteBodyIntoCache(
-        inboxContentByUriRef.current,
-        normBase,
-        body,
-      );
-      if (nextCache) {
-        inboxContentByUriRef.current = nextCache;
-        setInboxContentByUri(prev => mergeInboxNoteBodyIntoCache(prev, normBase, body) ?? prev);
-      }
-      backlinksActiveBodyRef.current = body;
-      setBacklinksActiveBody(body);
-      setMergeView(null);
-
-      const full = inboxEditorSliceToFullMarkdown(
-        body,
-        normBase,
-        false,
-        inboxYamlFrontmatterInnerRef.current,
-        inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-      );
-      enqueuePersistOutgoingNoteMarkdown(normBase, full);
-      scheduleBacklinksDeferOneFrameAfterLoad();
-    },
-    [
-      mergeView,
-      inboxEditorRef,
-      enqueuePersistOutgoingNoteMarkdown,
-      scheduleBacklinksDeferOneFrameAfterLoad,
-      autosaveSchedulerRef,
-      backlinksActiveBodyRef,
-      setBacklinksActiveBody,
-    ],
-  );
+  useLayoutEffect(() => {
+    clearMergeViewForOpenRef.current = closeMergeView;
+  }, [closeMergeView]);
 
   const activateOpenTab = useCallback(
     (tabId: string) => {
@@ -2217,7 +2004,7 @@ export function useMainWindowWorkspace(options: {
     bumpEditorClosedStack();
     setSelectedUri(null);
     setComposingNewEntry(false);
-    setMergeView(null);
+    closeMergeView();
     clearInboxYamlFrontmatterEditorRefs({
       inner: inboxYamlFrontmatterInnerRef,
       leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -2228,7 +2015,7 @@ export function useMainWindowWorkspace(options: {
     lastPersistedRef.current = null;
     lastPersistedExternalMutationSeqRef.current += 1;
     setInboxEditorResetNonce(n => n + 1);
-  }, [bumpEditorClosedStack, mirrorShadowActiveHub]);
+  }, [bumpEditorClosedStack, closeMergeView, mirrorShadowActiveHub]);
 
   useLayoutEffect(() => {
     resetWorkspaceStateForHydrateRef.current = resetWorkspaceStateForHydrate;
@@ -2640,24 +2427,51 @@ export function useMainWindowWorkspace(options: {
 
   const syncWorkspaceModelForIncomingHub = useCallback(
     (payload: {
-      hubUri: string;
-      nextTabs: readonly EditorWorkspaceTab[];
-      nextActive: string | null;
-      snapshot: TodayHubWorkspaceSnapshot | undefined;
+      outgoing?: {
+        hubUri: string;
+        nextTabs: readonly EditorWorkspaceTab[];
+        nextActive: string | null;
+        snapshot: TodayHubWorkspaceSnapshot;
+      };
+      incoming: {
+        hubUri: string;
+        nextTabs: readonly EditorWorkspaceTab[];
+        nextActive: string | null;
+        snapshot: TodayHubWorkspaceSnapshot | undefined;
+      };
     }) => {
-      dispatchWorkspaceActionSync('incoming workspace switch', m =>
-        applyIncomingHubWorkspaceAction(
-          m,
-          payload.hubUri,
+      dispatchWorkspaceActionSync('today hub switch', m => {
+        const home = homeStatesByHubRef.current;
+        let next = m;
+        if (payload.outgoing) {
+          const outgoingWs = workspaceStateForIncomingHubSwitch({
+            hubUri: payload.outgoing.hubUri,
+            nextTabs: payload.outgoing.nextTabs,
+            nextActive: payload.outgoing.nextActive,
+            snapshot: payload.outgoing.snapshot,
+            homeStatesByHub: home,
+          });
+          const hub = normalizeWorkspaceUri(payload.outgoing.hubUri);
+          next = {
+            ...next,
+            workspaces: {
+              ...next.workspaces,
+              [hub]: outgoingWs,
+            },
+          };
+        }
+        return applyIncomingHubWorkspaceAction(
+          next,
+          payload.incoming.hubUri,
           workspaceStateForIncomingHubSwitch({
-            hubUri: payload.hubUri,
-            nextTabs: payload.nextTabs,
-            nextActive: payload.nextActive,
-            snapshot: payload.snapshot,
-            homeStatesByHub: homeStatesByHubRef.current,
+            hubUri: payload.incoming.hubUri,
+            nextTabs: payload.incoming.nextTabs,
+            nextActive: payload.incoming.nextActive,
+            snapshot: payload.incoming.snapshot,
+            homeStatesByHub: home,
           }),
-        ),
-      );
+        );
+      });
     },
     [dispatchWorkspaceActionSync],
   );

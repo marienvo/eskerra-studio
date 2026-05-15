@@ -263,6 +263,5 @@ De hoofdmigratie liet zien dat blinde verplaatsing zonder vooraf-tests zes follo
 
 ## Open vragen
 
-- Wil je dat de state-store sub-hooks (`useInboxEditorState`, etc.) eigen `__resetForTests()` exposeren conform Vitest isolation regels, of testen we ze indirect via de orchestratie-hook?
-- Is er een korte termijn waarin Fase 1 niet veilig kan (bv. lopende release-cut)? Dan Fase 2/3/5 eerst, Fase 1 daarna.
-- Moet er een specs-update naar `specs/architecture/desktop-editor.md` met de nieuwe modulekaart, of houden we het in een ADR?
+- Wil je dat de state-store sub-hooks (`useInboxEditorState`, etc.) eigen `__resetForTests()` exposeren conform Vitest isolation regels, of testen we ze indirect via de orchestratie-hook? interne __resetForTests()
+- Moet er een specs-update naar `specs/architecture/desktop-editor.md` met de nieuwe modulekaart, of houden we het in een ADR? ADR
