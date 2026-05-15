@@ -180,6 +180,22 @@ export function activeSurfaceTabIdFromWorkspaceModel(m: WorkspaceModel): string 
   return ws.active.kind === 'tab' ? ws.active.id : null;
 }
 
+/**
+ * Tab strip for shell/chrome: workspace model when `activeHub` is set; otherwise legacy React
+ * state (vaults with Inbox notes but no `Today.md` never get `activeHub`).
+ */
+export function tabsControllerEditorSurface(
+  activeHub: string | null,
+  modelTabs: readonly EditorWorkspaceTab[],
+  modelActiveId: string | null,
+  legacyTabs: readonly EditorWorkspaceTab[],
+  legacyActiveId: string | null,
+): readonly [readonly EditorWorkspaceTab[], string | null] {
+  return activeHub != null
+    ? [modelTabs, modelActiveId]
+    : [legacyTabs, legacyActiveId];
+}
+
 export type WorkspaceStateForIncomingHubSwitchArgs = {
   hubUri: string;
   nextTabs: readonly EditorWorkspaceTab[];

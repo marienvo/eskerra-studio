@@ -112,12 +112,28 @@ Totaal komt overeen met ~4000 LOC.
 4. Verwijder `projectWorkspaceRuntimeToModel`, `scheduleDevWorkspaceShadowModelDivergenceCheck`, `collectShadowDivergenceDevDiagnostics`, `legacyTodayHubWorkspacesPersistFiltered`, `mergeStoredHubWorkspaces` (alleen mergen van JSON, niet "merge twee runtime-bronnen").
 5. Wis de "legacy bridges" (`workspaceRuntimeActiveLegacyBridge`, `workspaceRuntimeTabsLegacyBridge`, `workspaceHomeHistoryShadowSync`) — die zijn `bridges` *omdat* er twee bronnen zijn; daarna niet meer nodig.
 
+**Status per 2026-05-15:** substappen 1–3 zijn gemerged (commit `d97d3efd` + follow-up patches). Substappen 4 en 5 zijn **bewust uitgesteld**: `projectWorkspaceRuntimeToModel` (aanroep in `syncShadowWorkspaceFromShellRestore`), `mergeStoredHubWorkspaces` (aanroep in shell-restore-`useEffect`), en de drie bridges (`workspaceRuntimeActiveLegacyBridge`, `workspaceRuntimeTabsLegacyBridge`, `workspaceHomeHistoryShadowSync`) leven nog in `useMainWindowWorkspace.ts`. De ADR is bijgewerkt om te documenteren dat legacy refs/state als mirror blijven bestaan. Pak deze cleanup op vóór Fase 6/8 op de huidige structuur bouwt — anders worden de bridges in nieuwe modules gekopieerd.
+
+**Werkwijze voor de resterende cleanup (substappen 4 en 5) — verplicht TDD:**
+
+De hoofdmigratie liet zien dat blinde verplaatsing zonder vooraf-tests zes follow-up bug-fix commits opleverde op precies de paden die als hoog risico waren gemarkeerd (tabs, hub-switch, mirror callbacks, shell-restore). Voor de resterende verwijdering geldt daarom strikt rood-groen:
+
+1. **Schrijf eerst een falende test** voor het gedrag dat het te verwijderen stuk levert, voordat je het verwijdert. Concreet per artefact:
+   - `projectWorkspaceRuntimeToModel`-verwijdering → test in `workspaceInboxShellRestoreBridge.test.ts` (of nieuw `workspaceShellRestoreModel.test.ts`) die de `WorkspaceModel`-toestand asserteert nà shell-restore voor: (a) lege vault zonder hubs, (b) één hub + actieve tab, (c) meerdere hubs met inactieve-hub-snapshots, (d) home-history per hub bewaard. Laat hem eerst falen tegen een tijdelijk uitgeschakelde aanroep.
+   - `mergeStoredHubWorkspaces`-verwijdering → test die de JSON→model-pad over `serializeWorkspaceModelToPersistence`/`workspaceModel`-reducers dekt voor exact dezelfde scenario's als hierboven, inclusief filter-gedrag (uri's niet meer in vault).
+   - `workspaceRuntimeActiveLegacyBridge` / `workspaceRuntimeTabsLegacyBridge` → test die asserteert dat na elke `dispatchWorkspaceAction` de afgeleide tab-strip + active-tab-id correct zijn, zónder dat de legacy setters worden aangeroepen. Vervang de bridge-call in de test eerst door een noop om hem rood te krijgen.
+   - `workspaceHomeHistoryShadowSync` → test op push/back/forward/remap van home-history die alleen via het model loopt.
+2. **Pas één artefact per PR aan.** Geen gebundelde "verwijder alle bridges"-PR. Volgorde: eerst `mergeStoredHubWorkspaces` (smalste oppervlak), dan `projectWorkspaceRuntimeToModel`, dan de drie bridges (één per PR, in volgorde: home-history → tabs → active).
+3. **Geen gedragsverandering.** Als de rode test impliceert dat het model nieuw gedrag moet leveren dat nu door de bridge wordt opgevangen, stop en herontwerp; merge geen "tijdelijke" fallback.
+4. **On-device verificatie verplicht** per PR: vault openen, hub switchen, tab sluiten/reopen, shell-restore via app-restart. Documenteer in de PR-body.
+5. **Geen nieuwe `*Bridge`/`*LegacySync` modules.** Als je tijdens de cleanup verleid wordt er één toe te voegen, is dat een signaal dat het model nog niet authoritatief genoeg is — stop en pak eerst dat schrijfpad aan.
+
 **Risico:** correctness-kritiek. Voorwaarden:
 - Bestaande tests in `workspaceRuntimeProjection.test.ts`, `workspaceShadowBridge.test.ts`, `workspaceInboxShellRestoreBridge.test.ts` blijven het contract bewaken.
 - Voeg per substap regressietests toe voor de schrijfpaden die je migreert (close-tab → model, hub-switch → model, restore → model).
 - Test on-device de inbox shell restore — dit is precies het scenario dat de duals nu opvangen.
 
-**Verwachte LOC-winst in hoofdhook:** ~400 LOC (projectie + divergentie-checks + legacy bridges).
+**Verwachte LOC-winst in hoofdhook:** ~400 LOC (projectie + divergentie-checks + legacy bridges). **Gerealiseerd na substappen 1–3:** ~49 LOC netto (4062 → 4013); de rest komt pas vrij met substappen 4 en 5.
 
 ---
 
