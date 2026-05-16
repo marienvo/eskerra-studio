@@ -140,6 +140,55 @@ describe('sanitizeTodayHubWorkspacesWithStoredTabFilter', () => {
 
     expect(out![hub]!.activeEditorTabId).toBe('a');
   });
+
+  it('treats malformed activeEditorTabId as Home when the key is present', () => {
+    const filter = () => true;
+    const hub = '/vault/A/Today.md';
+    const tabs = [
+      {id: 'a', entries: ['/vault/x.md'], index: 0},
+      {id: 'b', entries: ['/vault/y.md'], index: 0},
+    ];
+    const malformedNumber = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: tabs,
+          activeEditorTabId: 42,
+        } as TodayHubWorkspaceSnapshot,
+      },
+      filter,
+    )![hub]!.activeEditorTabId;
+    expect(malformedNumber).toBeNull();
+
+    const malformedObject = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: tabs,
+          activeEditorTabId: {oops: true},
+        } as TodayHubWorkspaceSnapshot,
+      },
+      filter,
+    )![hub]!.activeEditorTabId;
+    expect(malformedObject).toBeNull();
+  });
+
+  it('treats blank activeEditorTabId string as Home when the key is present', () => {
+    const filter = () => true;
+    const hub = '/vault/A/Today.md';
+    const out = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: [
+            {id: 'a', entries: ['/vault/x.md'], index: 0},
+            {id: 'b', entries: ['/vault/y.md'], index: 0},
+          ],
+          activeEditorTabId: '   ',
+        },
+      },
+      filter,
+    );
+
+    expect(out![hub]!.activeEditorTabId).toBeNull();
+  });
 });
 
 describe('buildRestoredEditorWorkspace', () => {
