@@ -7,6 +7,7 @@ import type {MutableRefObject} from 'react';
 import type {Dispatch, SetStateAction} from 'react';
 
 import {
+  normalizeVaultBaseUri,
   SubtreeMarkdownPresenceCache,
   trimTrailingSlashes,
   type VaultFilesystem,
@@ -19,6 +20,11 @@ import {
   renameVaultTreeDirectory,
   type MoveVaultTreeItemResult,
 } from '../lib/vaultBootstrap';
+import {
+  filterVaultTreeBulkMoveSources,
+  planVaultTreeBulkTargets,
+  type VaultTreeBulkItem,
+} from '../lib/vaultTreeBulkPlan';
 import {normalizeEditorDocUri, remapVaultUriPrefix} from '../lib/editorDocumentHistory';
 import {
   ensureActiveTabId,
@@ -31,6 +37,7 @@ import {
 } from '../lib/editorWorkspaceTabs';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
 import {remapEditorShellScrollMapExact, remapEditorShellScrollMapTreePrefix} from './workspaceEditorScrollMap';
+import {bulkDeleteUriRemovalPredicate, pruneEditorTabsAfterBulkTreeDelete} from './workspaceVaultTreeMutations';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import type {LastPersisted} from './workspaceFsWatchReconcile';
 import type {OpenMarkdownInEditorOptions} from './workspaceOpenMarkdownCommand';
@@ -92,6 +99,8 @@ export type TreeCommandContext = {
   replaceEditorWorkspaceTabs: (nextTabs: EditorWorkspaceTab[]) => void;
   /** Model-backed home history remap (same as {@link commitRenameMaintenanceResult} when URI changes). */
   remapHomeStatesPrefix: (oldPrefix: string, newPrefix: string) => void;
+  clearInboxSelection: () => void;
+  setVaultTreeSelectionClearNonce: Dispatch<SetStateAction<number>>;
 };
 
 export async function runDeleteNote(ctx: TreeCommandContext, uri: string): Promise<void> {
@@ -475,6 +484,170 @@ export async function runMoveVaultTreeItem(
     ctx.markVaultWriteSettled();
     await ctx.refreshNotes(vaultRoot);
     setFsRefreshNonce(n => n + 1);
+  } catch (e) {
+    setErr(e instanceof Error ? e.message : String(e));
+  } finally {
+    setBusy(false);
+  }
+}
+
+export async function runBulkDeleteRemoveVaultEntry(
+  ctx: TreeCommandContext,
+  entry: VaultTreeBulkItem,
+  root: string,
+): Promise<void> {
+  const {fs, subtreeMarkdownCache, setters} = ctx;
+  const {setInboxContentByUri} = setters;
+  if (entry.kind === 'article') {
+    await deleteVaultMarkdownNote(root, entry.uri, fs);
+    subtreeMarkdownCache.invalidateForMutation(root, entry.uri, 'file');
+    setInboxContentByUri(prev => {
+      if (prev[entry.uri] === undefined) {
+        return prev;
+      }
+      const next = {...prev};
+      delete next[entry.uri];
+      return next;
+    });
+    return;
+  }
+  const normDir = trimTrailingSlashes(entry.uri.replace(/\\/g, '/'));
+  await deleteVaultTreeDirectory(root, entry.uri, fs);
+  subtreeMarkdownCache.invalidateForMutation(root, entry.uri, 'directory');
+  setInboxContentByUri(prev => {
+    const next = {...prev};
+    for (const k of Object.keys(next)) {
+      const kn = k.replace(/\\/g, '/');
+      if (kn === normDir || kn.startsWith(`${normDir}/`)) {
+        delete next[k];
+      }
+    }
+    return next;
+  });
+}
+
+export function runBulkDeletePruneTabsAndScroll(
+  ctx: TreeCommandContext,
+  plan: readonly VaultTreeBulkItem[],
+): {newTabs: EditorWorkspaceTab[]; nextActive: string | null} {
+  const {refs, setters, mirrorShadowHomeSurface, mirrorShadowActiveTab, removeHomeHistoryUris} = ctx;
+  const {editorShellScrollByUriRef, editorWorkspaceTabsRef, activeEditorTabIdRef} = refs;
+  const {setEditorWorkspaceTabs, setActiveEditorTabId} = setters;
+
+  const sm = editorShellScrollByUriRef.current;
+  const {newTabs, nextActive, scrollKeysToRemove} = pruneEditorTabsAfterBulkTreeDelete({
+    editorWorkspaceTabs: editorWorkspaceTabsRef.current,
+    activeEditorTabId: activeEditorTabIdRef.current,
+    plan,
+    scrollMapKeys: sm.keys(),
+  });
+  editorWorkspaceTabsRef.current = newTabs;
+  setEditorWorkspaceTabs(newTabs);
+  activeEditorTabIdRef.current = nextActive;
+  setActiveEditorTabId(nextActive);
+  if (nextActive == null) {
+    mirrorShadowHomeSurface('bulk delete home surface');
+  } else {
+    mirrorShadowActiveTab(nextActive, 'bulk delete active tab');
+  }
+  removeHomeHistoryUris(bulkDeleteUriRemovalPredicate(plan));
+  for (const key of scrollKeysToRemove) {
+    sm.delete(key);
+  }
+  return {newTabs, nextActive};
+}
+
+export async function runBulkDeleteVaultTreeItems(
+  ctx: TreeCommandContext,
+  items: VaultTreeBulkItem[],
+): Promise<void> {
+  const {vaultRoot, refs, setters} = ctx;
+  if (!vaultRoot) {
+    return;
+  }
+  const {autosaveSchedulerRef, saveChainRef, selectedUriRef} = refs;
+  const {setBusy, setErr, setFsRefreshNonce} = setters;
+
+  const rootId = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
+  const plan = planVaultTreeBulkTargets(items, rootId);
+  if (plan.length === 0) {
+    return;
+  }
+  autosaveSchedulerRef.current.cancel();
+  const normSel = selectedUriRef.current?.replace(/\\/g, '/');
+  const shouldClearEditor =
+    normSel != null
+    && plan.some(entry => {
+      const d = trimTrailingSlashes(entry.uri.replace(/\\/g, '/'));
+      if (entry.kind === 'folder' || entry.kind === 'todayHub') {
+        return normSel === d || normSel.startsWith(`${d}/`);
+      }
+      return normSel === d;
+    });
+  if (shouldClearEditor) {
+    ctx.clearInboxSelection();
+  }
+  await saveChainRef.current.catch(() => undefined);
+  setBusy(true);
+  setErr(null);
+  try {
+    for (const entry of plan) {
+      await runBulkDeleteRemoveVaultEntry(ctx, entry, vaultRoot);
+    }
+    const {newTabs, nextActive} = runBulkDeletePruneTabsAndScroll(ctx, plan);
+    if (shouldClearEditor) {
+      const activeTab = nextActive ? findTabById(newTabs, nextActive) : undefined;
+      const nextUri =
+        (activeTab ? tabCurrentUri(activeTab) : null) ?? firstSurvivorUriFromTabs(newTabs);
+      if (nextUri) {
+        await ctx.openMarkdownInEditor(nextUri, {skipHistory: true});
+      }
+    }
+    ctx.markVaultWriteSettled();
+    await ctx.refreshNotes(vaultRoot);
+    setFsRefreshNonce(n => n + 1);
+    ctx.setVaultTreeSelectionClearNonce(n => n + 1);
+  } catch (e) {
+    setErr(e instanceof Error ? e.message : String(e));
+  } finally {
+    setBusy(false);
+  }
+}
+
+export async function runBulkMoveVaultTreeItems(
+  ctx: TreeCommandContext,
+  items: VaultTreeBulkItem[],
+  targetDirectoryUri: string,
+): Promise<void> {
+  const {vaultRoot, fs, refs, setters} = ctx;
+  if (!vaultRoot) {
+    return;
+  }
+  const {autosaveSchedulerRef} = refs;
+  const {setBusy, setErr, setFsRefreshNonce} = setters;
+
+  const rootId = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
+  const plan = filterVaultTreeBulkMoveSources(items, targetDirectoryUri, rootId);
+  if (plan.length === 0) {
+    return;
+  }
+  autosaveSchedulerRef.current.cancel();
+  await ctx.flushInboxSaveRef.current();
+  setBusy(true);
+  setErr(null);
+  try {
+    for (const entry of plan) {
+      const result = await moveVaultTreeItemToDirectory(vaultRoot, fs, {
+        sourceUri: entry.uri,
+        sourceKind: entry.kind === 'article' ? 'article' : 'folder',
+        targetDirectoryUri,
+      });
+      runCommitMoveVaultTreeResult(ctx, result);
+    }
+    ctx.markVaultWriteSettled();
+    await ctx.refreshNotes(vaultRoot);
+    setFsRefreshNonce(n => n + 1);
+    ctx.setVaultTreeSelectionClearNonce(n => n + 1);
   } catch (e) {
     setErr(e instanceof Error ? e.message : String(e));
   } finally {

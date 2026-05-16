@@ -42,16 +42,9 @@ import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownIma
 import {
   createInboxMarkdownNote,
   deleteVaultMarkdownNote,
-  deleteVaultTreeDirectory,
   listInboxNotes,
-  moveVaultTreeItemToDirectory,
   saveNoteMarkdown,
 } from '../lib/vaultBootstrap';
-import {
-  filterVaultTreeBulkMoveSources,
-  planVaultTreeBulkTargets,
-  type VaultTreeBulkItem,
-} from '../lib/vaultTreeBulkPlan';
 import {
   normalizeTodayHubRowForDisk,
   splitTodayRowIntoColumns,
@@ -149,12 +142,12 @@ import {
   runEditorHistoryGoBack,
   runEditorHistoryGoForward,
 } from './workspaceEditorHistoryNavigation';
-import {bulkDeleteUriRemovalPredicate, pruneEditorTabsAfterBulkTreeDelete} from './workspaceVaultTreeMutations';
 import {
+  runBulkDeleteVaultTreeItems,
+  runBulkMoveVaultTreeItems,
   runDeleteFolder,
   runDeleteNote,
   runMoveVaultTreeItem,
-  runCommitMoveVaultTreeResult,
   runRenameFolder,
   type TreeCommandContext,
 } from './workspaceTreeCommands';
@@ -2011,6 +2004,8 @@ export function useMainWindowWorkspace(options: {
       clearRenameNotice,
       replaceEditorWorkspaceTabs,
       remapHomeStatesPrefix,
+      clearInboxSelection,
+      setVaultTreeSelectionClearNonce,
     };
   }, [
     vaultRoot,
@@ -2039,6 +2034,8 @@ export function useMainWindowWorkspace(options: {
     clearRenameNotice,
     replaceEditorWorkspaceTabs,
     remapHomeStatesPrefix,
+    clearInboxSelection,
+    setVaultTreeSelectionClearNonce,
   ]);
 
   const selectNote = useCallback(
@@ -2352,172 +2349,16 @@ export function useMainWindowWorkspace(options: {
     [treeCommandContext],
   );
 
-  const bulkDeleteRemoveVaultEntry = useCallback(
-    async (entry: VaultTreeBulkItem, root: string) => {
-      if (entry.kind === 'article') {
-        await deleteVaultMarkdownNote(root, entry.uri, fs);
-        subtreeMarkdownCache.invalidateForMutation(root, entry.uri, 'file');
-        setInboxContentByUri(prev => {
-          if (prev[entry.uri] === undefined) {
-            return prev;
-          }
-          const next = {...prev};
-          delete next[entry.uri];
-          return next;
-        });
-        return;
-      }
-      const normDir = trimTrailingSlashes(entry.uri.replace(/\\/g, '/'));
-      await deleteVaultTreeDirectory(root, entry.uri, fs);
-      subtreeMarkdownCache.invalidateForMutation(root, entry.uri, 'directory');
-      setInboxContentByUri(prev => {
-        const next = {...prev};
-        for (const k of Object.keys(next)) {
-          const kn = k.replace(/\\/g, '/');
-          if (kn === normDir || kn.startsWith(`${normDir}/`)) {
-            delete next[k];
-          }
-        }
-        return next;
-      });
-    },
-    [fs, subtreeMarkdownCache],
-  );
-
-  const bulkDeletePruneTabsAndScroll = useCallback(
-    (plan: readonly VaultTreeBulkItem[]) => {
-      const sm = editorShellScrollByUriRef.current;
-      const {newTabs, nextActive, scrollKeysToRemove} =
-        pruneEditorTabsAfterBulkTreeDelete({
-          editorWorkspaceTabs: editorWorkspaceTabsRef.current,
-          activeEditorTabId: activeEditorTabIdRef.current,
-          plan,
-          scrollMapKeys: sm.keys(),
-        });
-      editorWorkspaceTabsRef.current = newTabs;
-      setEditorWorkspaceTabs(newTabs);
-      activeEditorTabIdRef.current = nextActive;
-      setActiveEditorTabId(nextActive);
-      if (nextActive == null) {
-        mirrorShadowHomeSurface('bulk delete home surface');
-      } else {
-        mirrorShadowActiveTab(nextActive, 'bulk delete active tab');
-      }
-      removeHomeHistoryUris(bulkDeleteUriRemovalPredicate(plan));
-      for (const key of scrollKeysToRemove) {
-        sm.delete(key);
-      }
-      return {newTabs, nextActive};
-    },
-    [removeHomeHistoryUris, mirrorShadowActiveTab, mirrorShadowHomeSurface],
-  );
-
   const bulkDeleteVaultTreeItems = useCallback(
-    async (items: VaultTreeBulkItem[]) => {
-      if (!vaultRoot) {
-        return;
-      }
-      const rootId = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-      const plan = planVaultTreeBulkTargets(items, rootId);
-      if (plan.length === 0) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      const normSel = selectedUriRef.current?.replace(/\\/g, '/');
-      const shouldClearEditor =
-        normSel != null
-        && plan.some(entry => {
-          const d = trimTrailingSlashes(entry.uri.replace(/\\/g, '/'));
-          if (entry.kind === 'folder' || entry.kind === 'todayHub') {
-            return normSel === d || normSel.startsWith(`${d}/`);
-          }
-          return normSel === d;
-        });
-      if (shouldClearEditor) {
-        clearInboxSelection();
-      }
-      await saveChainRef.current.catch(() => undefined);
-      setBusy(true);
-      setErr(null);
-      try {
-        for (const entry of plan) {
-          await bulkDeleteRemoveVaultEntry(entry, vaultRoot);
-        }
-        const {newTabs, nextActive} = bulkDeletePruneTabsAndScroll(plan);
-        if (shouldClearEditor) {
-          const activeTab = nextActive ? findTabById(newTabs, nextActive) : undefined;
-          const nextUri =
-            (activeTab ? tabCurrentUri(activeTab) : null)
-            ?? firstSurvivorUriFromTabs(newTabs);
-          if (nextUri) {
-            await openMarkdownInEditor(nextUri, {skipHistory: true});
-          }
-        }
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-        setVaultTreeSelectionClearNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      refreshNotes,
-      openMarkdownInEditor,
-      bulkDeleteRemoveVaultEntry,
-      bulkDeletePruneTabsAndScroll,
-      clearInboxSelection,
-      autosaveSchedulerRef,
-      saveChainRef,
-      markVaultWriteSettled,
-    ],
+    (items: Parameters<typeof runBulkDeleteVaultTreeItems>[1]) =>
+      runBulkDeleteVaultTreeItems(treeCommandContext, items),
+    [treeCommandContext],
   );
 
   const bulkMoveVaultTreeItems = useCallback(
-    async (items: VaultTreeBulkItem[], targetDirectoryUri: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      const rootId = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-      const plan = filterVaultTreeBulkMoveSources(items, targetDirectoryUri, rootId);
-      if (plan.length === 0) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      await flushInboxSaveRef.current();
-      setBusy(true);
-      setErr(null);
-      try {
-        for (const entry of plan) {
-          const result = await moveVaultTreeItemToDirectory(vaultRoot, fs, {
-            sourceUri: entry.uri,
-            sourceKind: entry.kind === 'article' ? 'article' : 'folder',
-            targetDirectoryUri,
-          });
-          runCommitMoveVaultTreeResult(treeCommandContext, result);
-        }
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-        setVaultTreeSelectionClearNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      treeCommandContext,
-      autosaveSchedulerRef,
-      flushInboxSaveRef,
-      markVaultWriteSettled,
-    ],
+    (items: Parameters<typeof runBulkMoveVaultTreeItems>[1], targetDirectoryUri: string) =>
+      runBulkMoveVaultTreeItems(treeCommandContext, items, targetDirectoryUri),
+    [treeCommandContext],
   );
 
   const activeTabHistory = useMemo(

@@ -5,11 +5,15 @@ import {SubtreeMarkdownPresenceCache} from '@eskerra/core';
 import {
   createEditorWorkspaceTab,
   remapAllTabsUriPrefix,
+  tabCurrentUri,
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import * as vaultBootstrap from '../lib/vaultBootstrap';
 import {
+  runBulkDeletePruneTabsAndScroll,
+  runBulkDeleteRemoveVaultEntry,
+  runBulkMoveVaultTreeItems,
   runCommitMoveVaultTreeResult,
   runDeleteFolder,
   runDeleteNote,
@@ -17,6 +21,7 @@ import {
   runRenameFolder,
   type TreeCommandContext,
 } from './workspaceTreeCommands';
+import type {VaultTreeBulkItem} from '../lib/vaultTreeBulkPlan';
 
 vi.mock('../lib/vaultBootstrap', async importOriginal => {
   const actual = await importOriginal<typeof import('../lib/vaultBootstrap')>();
@@ -93,6 +98,8 @@ function buildCtx(overrides: Partial<TreeCommandContext> = {}): TreeCommandConte
     clearRenameNotice: vi.fn(),
     replaceEditorWorkspaceTabs,
     remapHomeStatesPrefix: vi.fn(),
+    clearInboxSelection: vi.fn(),
+    setVaultTreeSelectionClearNonce: vi.fn(),
   };
 
   return {...base, ...overrides};
@@ -312,5 +319,75 @@ describe('workspaceTreeCommands', () => {
     expect(replaceEditorWorkspaceTabs).toHaveBeenCalledWith(expectedTabs);
     expect(remapHomeStatesPrefix).toHaveBeenCalledWith(prev, next);
     expect(ctx.markVaultWriteSettled).toHaveBeenCalled();
+  });
+
+  it('runBulkDeletePruneTabsAndScroll removes matching tab URIs and scroll snapshot keys', () => {
+    const tabKeep = createEditorWorkspaceTab('/vault/Inbox/keep.md');
+    const tabDrop = createEditorWorkspaceTab('/vault/Inbox/drop.md');
+    const normDrop = normalizeEditorDocUri('/vault/Inbox/drop.md');
+    const editorWorkspaceTabsRef = {current: [tabKeep, tabDrop]};
+    const activeEditorTabIdRef = {current: tabDrop.id};
+    const editorShellScrollByUriRef = {
+      current: new Map<string, {top: number; left: number}>([
+        [normDrop, {top: 1, left: 0}],
+        [normalizeEditorDocUri('/vault/Inbox/keep.md'), {top: 2, left: 0}],
+      ]),
+    };
+
+    const ctx = buildCtx({
+      refs: {
+        autosaveSchedulerRef: {current: {cancel: vi.fn(), schedule: vi.fn()}},
+        saveChainRef: {current: Promise.resolve()},
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef,
+        selectedUriRef: {current: normDrop},
+        composingNewEntryRef: {current: false},
+        editorShellScrollByUriRef,
+        inboxYamlFrontmatterInnerRef: {current: null},
+        inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
+        lastPersistedRef: {current: null},
+        lastPersistedExternalMutationSeqRef: {current: 0},
+      },
+    });
+
+    const plan: VaultTreeBulkItem[] = [{kind: 'article', uri: '/vault/Inbox/drop.md'}];
+    const {newTabs} = runBulkDeletePruneTabsAndScroll(ctx, plan);
+
+    expect(newTabs).toHaveLength(1);
+    expect(tabCurrentUri(newTabs[0]!)).toBe('/vault/Inbox/keep.md');
+    expect(editorShellScrollByUriRef.current.has(normDrop)).toBe(false);
+    expect(ctx.removeHomeHistoryUris).toHaveBeenCalled();
+  });
+
+  it('runBulkDeleteRemoveVaultEntry deletes article body from cache', async () => {
+    const setInboxContentByUri = vi.fn();
+    const base = buildCtx();
+    const ctx: TreeCommandContext = {
+      ...base,
+      setters: {...base.setters, setInboxContentByUri},
+    };
+    await runBulkDeleteRemoveVaultEntry(ctx, {kind: 'article', uri: '/vault/Inbox/z.md'}, '/vault');
+    expect(vaultBootstrap.deleteVaultMarkdownNote).toHaveBeenCalledWith(
+      '/vault',
+      '/vault/Inbox/z.md',
+      ctx.fs,
+    );
+    expect(setInboxContentByUri).toHaveBeenCalled();
+  });
+
+  it('runBulkMoveVaultTreeItems invokes move once per filtered source', async () => {
+    const ctx = buildCtx();
+    await runBulkMoveVaultTreeItems(
+      ctx,
+      [{kind: 'article', uri: '/vault/Inbox/one.md'}],
+      '/vault/Inbox/Dest',
+    );
+    expect(vaultBootstrap.moveVaultTreeItemToDirectory).toHaveBeenCalledTimes(1);
+    expect(vaultBootstrap.moveVaultTreeItemToDirectory).toHaveBeenCalledWith('/vault', ctx.fs, {
+      sourceUri: '/vault/Inbox/one.md',
+      sourceKind: 'article',
+      targetDirectoryUri: '/vault/Inbox/Dest',
+    });
+    expect(ctx.setVaultTreeSelectionClearNonce).toHaveBeenCalled();
   });
 });
