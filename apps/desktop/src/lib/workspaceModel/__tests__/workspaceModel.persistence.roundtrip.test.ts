@@ -194,4 +194,56 @@ describe('workspaceModel persistence roundtrip', () => {
     });
     expect(m).toEqual({activeHub: null, workspaces: {}});
   });
+
+  it('remaps non-canonical todayHubWorkspaces keys (backslashes and duplicate slashes)', () => {
+    const keyBackslashes = '/vault/Today/Today.md'.replace(/\//g, '\\');
+    const keyDupSlashes = '/vault//Today//Today.md';
+
+    const fromBackslashes = parseWorkspaceModelFromPersistence({
+      hubUris: [HUB],
+      activeTodayHubUri: HUB,
+      todayHubWorkspaces: {
+        [keyBackslashes]: {
+          editorWorkspaceTabs: [{id: 't1', entries: [NOTE], index: 0}],
+          activeEditorTabId: 't1',
+          homeHistory: {entries: [HUB], index: 0},
+        },
+      },
+    });
+    expect(fromBackslashes.workspaces[HUB]!.tabs[0]!.id).toBe('t1');
+
+    const fromDupSlashes = parseWorkspaceModelFromPersistence({
+      hubUris: [HUB],
+      activeTodayHubUri: HUB,
+      todayHubWorkspaces: {
+        [keyDupSlashes]: {
+          editorWorkspaceTabs: [{id: 't2', entries: [NOTE], index: 0}],
+          activeEditorTabId: 't2',
+          homeHistory: {entries: [HUB], index: 0},
+        },
+      },
+    });
+    expect(fromDupSlashes.workspaces[HUB]!.tabs[0]!.id).toBe('t2');
+  });
+
+  it('remapped keys restore inactive hub snapshots in multi-hub vaults', () => {
+    const hubA = normalizeWorkspaceUri('/vault/A/Today.md');
+    const hubB = normalizeWorkspaceUri('/vault/B/Today.md');
+    const noteB = normalizeWorkspaceUri('/vault/Inbox/B.md');
+    const weirdKeyB = '/vault//B//Today.md';
+
+    const m = parseWorkspaceModelFromPersistence({
+      hubUris: [hubA, hubB],
+      activeTodayHubUri: hubA,
+      todayHubWorkspaces: {
+        [weirdKeyB]: {
+          editorWorkspaceTabs: [{id: 'tab-b', entries: [noteB], index: 0}],
+          activeEditorTabId: 'tab-b',
+        },
+      },
+    });
+
+    expect(m.workspaces[hubB]!.tabs[0]!.id).toBe('tab-b');
+    expect(m.workspaces[hubB]!.active).toEqual({kind: 'tab', id: 'tab-b'});
+  });
 });
