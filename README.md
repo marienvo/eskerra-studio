@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | **Mobile** | [`apps/mobile/`](apps/mobile/) | React Native (**Android only**) |
 | **Desktop** | [`apps/desktop/`](apps/desktop/) | Tauri 2 + Vite + React (Linux-first; Fedora / GNOME is the reference) |
-| **Shared logic** | [`packages/eskerra-core/`](packages/eskerra-core/) | TypeScript (vault paths, settings, `VaultFilesystem`) |
+| **Shared logic** | [`packages/eskerra-core/`](packages/eskerra-core/) | TypeScript (vault paths, settings, `VaultFilesystem`, audio types) |
 
 Both apps use the same **vault layout** on disk: user-chosen root folder, then `Inbox/`, `General/`, and `/.eskerra/settings-shared.json` plus per-device `/.eskerra/settings-local.json` (see [`specs/architecture/desktop-mobile-parity.md`](specs/architecture/desktop-mobile-parity.md)).
 
