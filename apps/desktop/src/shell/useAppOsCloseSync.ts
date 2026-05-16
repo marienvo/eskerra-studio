@@ -30,6 +30,10 @@ type UseAppOsCloseSyncArgs = {
   gitStatus?: GitStatusResult | null;
   fetchFreshGitStatusForClose?: () => Promise<GitStatusResult | null>;
   closeSyncTimeoutMs?: number;
+  /** How long to wait before showing the progress overlay (ms). Default 200. Pass 0 in tests. */
+  closeSyncIndicatorDelayMs?: number;
+  /** Returns the in-flight sync promise if one is running, or null if idle. */
+  waitForCurrentRun?: () => Promise<boolean> | null;
 };
 
 type UseAppOsCloseSyncResult = {
@@ -39,8 +43,14 @@ type UseAppOsCloseSyncResult = {
    * OS-close interceptor skips the sync step and proceeds directly to shutdown.
    */
   programmaticClose: () => void;
-  /** True while an OS-close-triggered sync is in flight. */
+  /** True while a close-triggered sync (or its preflight) is in flight and has exceeded the indicator delay. */
   closeSyncInProgress: boolean;
+  /**
+   * Wraps an async close flow: shows the progress overlay after the indicator delay if the
+   * work takes longer than that, then hides it when done. Use this in both the OS-close path
+   * and the title-bar close path so both show the overlay consistently.
+   */
+  markCloseSyncActive: <T>(fn: () => Promise<T>) => Promise<T>;
 };
 
 /**
@@ -59,10 +69,22 @@ export function useAppOsCloseSync({
   gitStatus = null,
   fetchFreshGitStatusForClose,
   closeSyncTimeoutMs,
+  closeSyncIndicatorDelayMs = 200,
+  waitForCurrentRun,
 }: UseAppOsCloseSyncArgs): UseAppOsCloseSyncResult {
   const allowCloseRef = useRef(false);
   const closeSyncInProgressRef = useRef(false);
   const [closeSyncInProgress, setCloseSyncInProgress] = useState(false);
+
+  const markCloseSyncActive = useCallback(async <T>(fn: () => Promise<T>): Promise<T> => {
+    const timerId = setTimeout(() => setCloseSyncInProgress(true), closeSyncIndicatorDelayMs);
+    try {
+      return await fn();
+    } finally {
+      clearTimeout(timerId);
+      setCloseSyncInProgress(false);
+    }
+  }, [closeSyncIndicatorDelayMs]);
 
   const programmaticClose = useCallback((): void => {
     allowCloseRef.current = true;
@@ -94,40 +116,29 @@ export function useAppOsCloseSync({
   });
 
   const onOsCloseRequested = useEffectEvent(async () => {
-    await Promise.resolve(flushInboxSave()).catch(() => undefined);
-    let gitStatusForClose = gitStatus;
-    if (fetchFreshGitStatusForClose) {
-      try {
-        gitStatusForClose = await fetchFreshGitStatusForClose();
-      } catch {
-        gitStatusForClose = gitStatus;
+    await markCloseSyncActive(async () => {
+      await Promise.resolve(flushInboxSave()).catch(() => undefined);
+      let gitStatusForClose = gitStatus;
+      if (fetchFreshGitStatusForClose) {
+        try {
+          gitStatusForClose = await fetchFreshGitStatusForClose();
+        } catch {
+          gitStatusForClose = gitStatus;
+        }
       }
-    }
-
-    // Track reactive state alongside the ref so the overlay can render.
-    const wrappedRunManualSync = async (): Promise<boolean> => {
-      setCloseSyncInProgress(true);
-      try {
-        return await runManualSync();
-      } finally {
-        setCloseSyncInProgress(false);
-      }
-    };
-    try {
       await handleOsCloseRequest({
         manualSyncRequired,
         manualSyncDisabledReason,
         manualSyncRunning,
-        runManualSync: wrappedRunManualSync,
+        runManualSync,
         notify,
         close: programmaticClose,
         closeSyncInProgressRef,
         timeoutMs: closeSyncTimeoutMs,
         gitStatus: gitStatusForClose,
+        waitForCurrentRun,
       });
-    } finally {
-      setCloseSyncInProgress(false);
-    }
+    });
   });
 
   useEffect(() => {
@@ -174,5 +185,5 @@ export function useAppOsCloseSync({
     };
   }, []);
 
-  return {programmaticClose, closeSyncInProgress};
+  return {programmaticClose, closeSyncInProgress, markCloseSyncActive};
 }

@@ -209,6 +209,33 @@ describe('useManualVaultGitSync', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  it('exposes in-flight promise via waitForCurrentRun and resolves with the sync result', async () => {
+    const pending = deferred<SyncRunResult>();
+    mockRunVaultGitSync.mockReturnValue(pending.promise);
+    const {result} = renderHook(() =>
+      useManualVaultGitSync({
+        vaultPath: '/vault',
+        config,
+        notify: vi.fn(),
+        onSettled: vi.fn(),
+      }),
+    );
+
+    let runPromise!: Promise<boolean>;
+    act(() => {
+      runPromise = result.current.run();
+    });
+
+    expect(result.current.waitForCurrentRun()).toBe(runPromise);
+
+    await act(async () => {
+      pending.resolve(syncResult);
+      await runPromise;
+    });
+
+    expect(result.current.waitForCurrentRun()).toBeNull();
+  });
+
   it('does not start duplicate concurrent sync runs', async () => {
     const pending = deferred<SyncRunResult>();
     mockRunVaultGitSync.mockReturnValue(pending.promise);

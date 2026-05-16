@@ -130,6 +130,7 @@ describe('useAppGitSyncOrchestration close handling', () => {
     mockUseManualVaultGitSync.mockReturnValue({
       running: false,
       run: runManualSync,
+      waitForCurrentRun: vi.fn().mockReturnValue(null),
     });
     mockUseVaultGitAutosyncScheduler.mockReturnValue(undefined);
     mockUseVaultGitCurrentBranch.mockReturnValue({
@@ -152,6 +153,7 @@ describe('useAppGitSyncOrchestration close handling', () => {
     mockUseAppOsCloseSync.mockReturnValue({
       programmaticClose,
       closeSyncInProgress: false,
+      markCloseSyncActive: vi.fn((fn: () => Promise<unknown>) => fn()),
     });
   });
 
@@ -178,6 +180,41 @@ describe('useAppGitSyncOrchestration close handling', () => {
     await waitFor(() => expect(runManualSync).toHaveBeenCalledTimes(1));
     expect(order).toEqual(['flush', 'fresh-status', 'sync']);
     expect(programmaticClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('wraps non-instant title-bar close in markCloseSyncActive so overlay is driven', async () => {
+    const order: string[] = [];
+    let resolveMark!: () => void;
+    const markCloseSyncActive = vi.fn((fn: () => Promise<unknown>) => {
+      order.push('mark-start');
+      return fn().then(result => {
+        order.push('mark-end');
+        return result;
+      });
+    });
+    const markDeferred = new Promise<void>(resolve => { resolveMark = resolve; });
+    runManualSync.mockImplementation(async () => {
+      order.push('sync');
+      resolveMark();
+      return true;
+    });
+    mockUseAppOsCloseSync.mockReturnValue({
+      programmaticClose,
+      closeSyncInProgress: false,
+      markCloseSyncActive,
+    });
+
+    const {result} = renderOrchestration();
+
+    act(() => {
+      result.current.handleWindowCloseRequest({instant: false});
+    });
+
+    await markDeferred;
+    await waitFor(() => expect(order).toContain('mark-end'));
+
+    expect(order).toEqual(['mark-start', 'sync', 'mark-end']);
+    expect(markCloseSyncActive).toHaveBeenCalledTimes(1);
   });
 
   it('does not flush or fetch fresh status for instant title-bar close', async () => {

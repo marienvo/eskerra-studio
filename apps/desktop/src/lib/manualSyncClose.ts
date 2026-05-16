@@ -2,6 +2,64 @@ import {shouldRunVaultGitSync} from './gitSyncPreflight';
 import type {SessionNotificationTone} from './sessionNotifications';
 import type {GitStatusResult} from './tauriVaultGitSync';
 
+/** Conservative overall timeout for sync-before-close; independent of Git subcommand timeouts. */
+export const CLOSE_SYNC_TIMEOUT_MS = 30_000;
+
+function raceBooleanOrTimeout(
+  promise: Promise<boolean>,
+  timeoutMs: number,
+): Promise<'timeout' | boolean> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<'timeout'>(resolve => {
+    timeoutId = setTimeout(() => { resolve('timeout'); }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).then(result => {
+    clearTimeout(timeoutId);
+    return result;
+  });
+}
+
+const CLOSE_SYNC_TIMEOUT_USER_MESSAGE =
+  'Sync before close timed out. Eskerra stayed open so you can retry or close instantly.';
+const CLOSE_SYNC_FAILED_USER_MESSAGE = 'Sync before close failed. Eskerra stayed open.';
+
+function applyTitleBarCloseAfterSyncRace(
+  result: 'timeout' | boolean,
+  close: () => void,
+  notify: (tone: SessionNotificationTone, text: string) => void,
+  showCloseSyncFeedback: boolean,
+): void {
+  if (result === 'timeout') {
+    if (showCloseSyncFeedback) {
+      notify('error', CLOSE_SYNC_TIMEOUT_USER_MESSAGE);
+    }
+    return;
+  }
+  if (result) {
+    close();
+    return;
+  }
+  if (showCloseSyncFeedback) {
+    notify('error', CLOSE_SYNC_FAILED_USER_MESSAGE);
+  }
+}
+
+function applyOsCloseAfterSyncRace(
+  result: 'timeout' | boolean,
+  close: () => void,
+  notify: (tone: SessionNotificationTone, text: string) => void,
+): void {
+  if (result === 'timeout') {
+    notify('error', CLOSE_SYNC_TIMEOUT_USER_MESSAGE);
+    return;
+  }
+  if (result === true) {
+    close();
+    return;
+  }
+  notify('error', CLOSE_SYNC_FAILED_USER_MESSAGE);
+}
+
 type ManualSyncRunner = (opts?: {readonly silent?: boolean}) => Promise<boolean>;
 
 export function buildCloseSyncRunner(runManualSync: ManualSyncRunner): () => Promise<boolean> {
@@ -21,6 +79,10 @@ type HandleManualSyncCloseRequestArgs = {
   showCloseSyncFeedback?: boolean;
   /** Most recent git status; used for preflight to skip sync when nothing to do. */
   gitStatus?: GitStatusResult | null;
+  /** Returns the in-flight sync promise if one is running, or null if idle. */
+  waitForCurrentRun?: () => Promise<boolean> | null;
+  /** Upper bound for awaiting sync (in-flight or fresh); defaults to {@link CLOSE_SYNC_TIMEOUT_MS}. */
+  timeoutMs?: number;
 };
 
 export async function handleManualSyncCloseRequest({
@@ -34,6 +96,8 @@ export async function handleManualSyncCloseRequest({
   notifyDisabled = true,
   showCloseSyncFeedback = false,
   gitStatus,
+  waitForCurrentRun,
+  timeoutMs = CLOSE_SYNC_TIMEOUT_MS,
 }: HandleManualSyncCloseRequestArgs): Promise<void> {
   if (instant) {
     close();
@@ -41,6 +105,12 @@ export async function handleManualSyncCloseRequest({
   }
 
   if (manualSyncRunning) {
+    const inflight = waitForCurrentRun?.();
+    if (inflight == null) {
+      return;
+    }
+    const result = await raceBooleanOrTimeout(inflight, timeoutMs);
+    applyTitleBarCloseAfterSyncRace(result, close, notify, showCloseSyncFeedback);
     return;
   }
 
@@ -65,16 +135,9 @@ export async function handleManualSyncCloseRequest({
     return;
   }
 
-  const synced = await runManualSync();
-  if (synced) {
-    close();
-  } else if (showCloseSyncFeedback) {
-    notify('error', 'Sync before close failed. Eskerra stayed open.');
-  }
+  const result = await raceBooleanOrTimeout(runManualSync(), timeoutMs);
+  applyTitleBarCloseAfterSyncRace(result, close, notify, showCloseSyncFeedback);
 }
-
-/** Conservative overall timeout for sync-before-close; independent of Git subcommand timeouts. */
-export const CLOSE_SYNC_TIMEOUT_MS = 30_000;
 
 type HandleOsCloseRequestArgs = {
   manualSyncRequired?: boolean;
@@ -89,6 +152,8 @@ type HandleOsCloseRequestArgs = {
   timeoutMs?: number;
   /** Most recent git status; used for preflight to skip sync when nothing to do. */
   gitStatus?: GitStatusResult | null;
+  /** Returns the in-flight sync promise if one is running, or null if idle. */
+  waitForCurrentRun?: () => Promise<boolean> | null;
 };
 
 /**
@@ -107,6 +172,7 @@ export async function handleOsCloseRequest({
   closeSyncInProgressRef,
   timeoutMs = CLOSE_SYNC_TIMEOUT_MS,
   gitStatus,
+  waitForCurrentRun,
 }: HandleOsCloseRequestArgs): Promise<void> {
   if (closeSyncInProgressRef.current) {
     return;
@@ -126,6 +192,17 @@ export async function handleOsCloseRequest({
   }
 
   if (manualSyncRunning) {
+    const inflight = waitForCurrentRun?.();
+    if (inflight == null) {
+      return;
+    }
+    closeSyncInProgressRef.current = true;
+    try {
+      const result = await raceBooleanOrTimeout(inflight, timeoutMs);
+      applyOsCloseAfterSyncRace(result, close, notify);
+    } finally {
+      closeSyncInProgressRef.current = false;
+    }
     return;
   }
 
@@ -138,24 +215,8 @@ export async function handleOsCloseRequest({
   closeSyncInProgressRef.current = true;
 
   try {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<'timeout'>(resolve => {
-      timeoutId = setTimeout(() => { resolve('timeout'); }, timeoutMs);
-    });
-
-    const result = await Promise.race([runManualSync(), timeoutPromise]);
-    clearTimeout(timeoutId);
-
-    if (result === 'timeout') {
-      notify(
-        'error',
-        'Sync before close timed out. Eskerra stayed open so you can retry or close instantly.',
-      );
-    } else if (result === true) {
-      close();
-    } else {
-      notify('error', 'Sync before close failed. Eskerra stayed open.');
-    }
+    const result = await raceBooleanOrTimeout(runManualSync(), timeoutMs);
+    applyOsCloseAfterSyncRace(result, close, notify);
   } finally {
     closeSyncInProgressRef.current = false;
   }

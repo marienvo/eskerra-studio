@@ -230,7 +230,7 @@ describe('switchTodayHubWorkspace', () => {
     });
   });
 
-  it('snapshot-then-restore (target has tabs): keeps B snapshot, activates restored tab, does NOT call selectNote(B)', async () => {
+  it('snapshot-then-restore (target has tabs): restores tab strip but focuses home, NOT the restored tab', async () => {
     const bSnapshot: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
       activeEditorTabId: 'tab-b1',
@@ -255,12 +255,14 @@ describe('switchTodayHubWorkspace', () => {
     const restoredTabs = mocks.setEditorWorkspaceTabs.mock.calls[0]![0] as unknown[];
     expect(restoredTabs).toHaveLength(1);
 
-    expect(mocks.setActiveEditorTabId).toHaveBeenCalledWith('tab-b1');
-    expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
+    // Tab strip is restored but no tab becomes active — home surface gets focus.
+    expect(mocks.setActiveEditorTabId).toHaveBeenCalledWith(null);
+    expect(mocks.activateOpenTab).not.toHaveBeenCalled();
+    expect(mocks.selectHomeCurrentNote).toHaveBeenCalledWith(HUB_B);
     expect(mocks.selectNote).not.toHaveBeenCalledWith(HUB_B);
     expect(mocks.setActiveTodayHubUri).toHaveBeenCalledWith(HUB_B);
     expect(args.refs.activeTodayHubUriRef.current).toBe(HUB_B);
-    expect(args.refs.activeEditorTabIdRef.current).toBe('tab-b1');
+    expect(args.refs.activeEditorTabIdRef.current).toBeNull();
   });
 
   it('when syncWorkspaceModelForIncomingHub is set: calls it and skips async mirror callbacks', async () => {
@@ -303,7 +305,7 @@ describe('switchTodayHubWorkspace', () => {
       incoming: {
         hubUri: expectedHub,
         nextTabs: expect.any(Array),
-        nextActive: 'tab-b1',
+        nextActive: null,
         snapshot: bSnapshot,
       },
     });
@@ -311,7 +313,8 @@ describe('switchTodayHubWorkspace', () => {
     expect(mirrorShadowActiveWorkspaceTabs).not.toHaveBeenCalled();
     expect(mirrorShadowActiveTab).not.toHaveBeenCalled();
     expect(mirrorShadowHomeSurface).not.toHaveBeenCalled();
-    expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
+    expect(mocks.activateOpenTab).not.toHaveBeenCalled();
+    expect(mocks.selectHomeCurrentNote).toHaveBeenCalledWith(expectedHub);
   });
 
   it('back-to-back hub switches restore from the internal queued outgoing snapshot', async () => {
@@ -345,10 +348,12 @@ describe('switchTodayHubWorkspace', () => {
       'tab-a1',
       'tab-a2',
     ]);
-    expect(mocks.activateOpenTab).toHaveBeenLastCalledWith('tab-a2');
+    // Tab strip is restored but focus always goes to home surface, not the tab.
+    expect(mocks.activateOpenTab).not.toHaveBeenCalled();
+    expect(mocks.selectHomeCurrentNote).toHaveBeenLastCalledWith(HUB_A);
   });
 
-  it('restores target tabs from the model-derived workspace snapshot', async () => {
+  it('restores target tabs from the model-derived workspace snapshot but focuses home, not the tab', async () => {
     const bSnapshot: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [{id: 'tab-b1', entries: [HUB_B], index: 0}],
       activeEditorTabId: 'tab-b1',
@@ -365,7 +370,8 @@ describe('switchTodayHubWorkspace', () => {
       await result.current.switchTodayHubWorkspace(HUB_B);
     });
 
-    expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
+    expect(mocks.activateOpenTab).not.toHaveBeenCalled();
+    expect(mocks.selectHomeCurrentNote).toHaveBeenCalledWith(HUB_B);
     expect(mocks.selectNote).not.toHaveBeenCalledWith(HUB_B);
     expect(mocks.setActiveTodayHubUri).toHaveBeenCalledWith(HUB_B);
   });

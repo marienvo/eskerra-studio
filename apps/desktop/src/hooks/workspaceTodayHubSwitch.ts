@@ -10,12 +10,7 @@ import {
 import {sortedTodayHubNoteUrisFromRefs, type VaultMarkdownRef} from '@eskerra/core';
 
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-import {
-  ensureActiveTabId,
-  tabsFromStored,
-  tabsToStored,
-  type EditorWorkspaceTab,
-} from '../lib/editorWorkspaceTabs';
+import {tabsFromStored, tabsToStored, type EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
@@ -56,18 +51,15 @@ function snapshotTodayHubWorkspace(
   };
 }
 
-function restoreTabsFromSnapshot(
+/** Tab list from persisted hub snapshot; active tab id is discarded — home gets focus after a switch. */
+function cloneEditorTabsFromHubSnapshot(
   snap: TodayHubWorkspaceSnapshot | undefined,
-): {nextTabs: EditorWorkspaceTab[]; nextActive: string | null} {
+): EditorWorkspaceTab[] {
   const snapTabs = snap?.editorWorkspaceTabs;
   if (snapTabs == null || snapTabs.length === 0) {
-    return {nextTabs: [], nextActive: null};
+    return [];
   }
-  const nextTabs = cloneEditorWorkspaceTabs(tabsFromStored(snapTabs));
-  return {
-    nextTabs,
-    nextActive: ensureActiveTabId(nextTabs, snap?.activeEditorTabId ?? null),
-  };
+  return cloneEditorWorkspaceTabs(tabsFromStored(snapTabs));
 }
 
 export type UseWorkspaceTodayHubSwitchArgs = {
@@ -98,7 +90,7 @@ export type UseWorkspaceTodayHubSwitchArgs = {
   callbacks: {
     selectNote: (uri: string) => void;
     selectHomeCurrentNote: (todayNoteUri: string) => void | Promise<void>;
-    activateOpenTab: (tabId: string) => void;
+    activateOpenTab?: (tabId: string) => void;
     /** Main workspace selector control (title bar): branch per active surface / home index. */
     activateWorkspaceHomeSelector: () => void;
     mirrorShadowActiveHub?: (hubUri: string | null, reason: string) => void;
@@ -127,11 +119,9 @@ export function useWorkspaceTodayHubSwitch(
 ): UseWorkspaceTodayHubSwitchResult {
   const {
     selectHomeCurrentNote,
-    activateOpenTab,
     activateWorkspaceHomeSelector,
     mirrorShadowActiveHub,
     mirrorShadowHomeSurface,
-    mirrorShadowActiveTab,
     mirrorShadowActiveWorkspaceTabs,
     syncWorkspaceModelForIncomingHub,
   } = args.callbacks;
@@ -219,7 +209,7 @@ export function useWorkspaceTodayHubSwitch(
       }
       const snapForTarget = legacyTodayHubWorkspacesForSwitchRef.current[norm];
 
-      const {nextTabs, nextActive} = restoreTabsFromSnapshot(snapForTarget);
+      const nextTabs = cloneEditorTabsFromHubSnapshot(snapForTarget);
 
       if (syncWorkspaceModelForIncomingHub) {
         syncWorkspaceModelForIncomingHub({
@@ -227,7 +217,7 @@ export function useWorkspaceTodayHubSwitch(
           incoming: {
             hubUri: norm,
             nextTabs,
-            nextActive,
+            nextActive: null,
             snapshot: snapForTarget,
           },
         });
@@ -236,36 +226,23 @@ export function useWorkspaceTodayHubSwitch(
       // Tab strip + active tab + hub updates are intentionally interleaved before shadow mirrors;
       // centralizing only ref/setTabs would reorder versus hub/active legacy writes.
       editorWorkspaceTabsRef.current = nextTabs;
-      activeEditorTabIdRef.current = nextActive;
+      activeEditorTabIdRef.current = null;
       activeTodayHubUriRef.current = norm;
       setEditorWorkspaceTabs(nextTabs);
-      setActiveEditorTabId(nextActive);
+      setActiveEditorTabId(null);
       setActiveTodayHubUri(norm);
       if (!syncWorkspaceModelForIncomingHub) {
         mirrorShadowActiveHub?.(norm, 'switch workspace active hub');
         mirrorShadowActiveWorkspaceTabs?.(
           nextTabs,
-          nextActive,
+          null,
           'switch workspace tabs',
         );
-        if (nextActive) {
-          mirrorShadowActiveTab?.(nextActive, 'switch workspace active tab');
-        } else {
-          mirrorShadowHomeSurface?.('switch workspace home surface');
-        }
+        mirrorShadowHomeSurface?.('switch workspace home surface');
       }
-      // Do not `selectNote(norm)` when B has restored tabs: that would navigate the
-      // active tab to B's Today and overwrite e.g. a tab that was still showing A's hub note.
-      if (nextTabs.length === 0) {
-        await selectHomeCurrentNote(norm);
-      } else if (nextActive) {
-        activateOpenTab(nextActive);
-      } else {
-        await selectHomeCurrentNote(norm);
-      }
+      await selectHomeCurrentNote(norm);
     },
     [
-      activateOpenTab,
       activateWorkspaceHomeSelector,
       activeEditorTabIdRef,
       activeTodayHubUriRef,
@@ -276,7 +253,6 @@ export function useWorkspaceTodayHubSwitch(
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       inboxYamlFrontmatterInnerRef,
       mirrorShadowActiveHub,
-      mirrorShadowActiveTab,
       mirrorShadowActiveWorkspaceTabs,
       mirrorShadowHomeSurface,
       syncWorkspaceModelForIncomingHub,

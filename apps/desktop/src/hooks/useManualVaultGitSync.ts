@@ -30,33 +30,43 @@ export function useManualVaultGitSync({
 }: UseManualVaultGitSyncArgs) {
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
+  const runningPromiseRef = useRef<Promise<boolean> | null>(null);
 
-  const run = useCallback(async (opts?: {readonly silent?: boolean}): Promise<boolean> => {
+  const run = useCallback((opts?: {readonly silent?: boolean}): Promise<boolean> => {
     if (vaultPath == null || config == null || runningRef.current) {
-      return false;
+      return Promise.resolve(false);
     }
 
     runningRef.current = true;
     setRunning(true);
     onStart?.();
-    try {
-      const locksDir = await join(await appLocalDataDir(), 'locks');
-      const result = await runVaultGitSync({vaultPath, locksDir, config});
-      if (!opts?.silent) {
-        onSuccess?.(result);
+    const runPromise = (async () => {
+      try {
+        const locksDir = await join(await appLocalDataDir(), 'locks');
+        const result = await runVaultGitSync({vaultPath, locksDir, config});
+        if (!opts?.silent) {
+          onSuccess?.(result);
+        }
+        return true;
+      } catch (error) {
+        if (opts?.silent !== true) {
+          notify('error', formatVaultGitSyncError(error));
+        }
+        return false;
+      } finally {
+        onSettled();
+        runningRef.current = false;
+        runningPromiseRef.current = null;
+        setRunning(false);
       }
-      return true;
-    } catch (error) {
-      if (opts?.silent !== true) {
-        notify('error', formatVaultGitSyncError(error));
-      }
-      return false;
-    } finally {
-      onSettled();
-      runningRef.current = false;
-      setRunning(false);
-    }
+    })();
+    runningPromiseRef.current = runPromise;
+    return runPromise;
   }, [config, notify, onSettled, onStart, onSuccess, vaultPath]);
 
-  return {running, run};
+  const waitForCurrentRun = useCallback((): Promise<boolean> | null => {
+    return runningPromiseRef.current;
+  }, []);
+
+  return {running, run, waitForCurrentRun};
 }

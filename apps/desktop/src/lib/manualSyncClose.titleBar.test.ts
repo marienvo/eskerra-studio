@@ -1,4 +1,4 @@
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {
   buildCloseSyncRunner,
@@ -39,6 +39,10 @@ describe('buildCloseSyncRunner', () => {
 });
 
 describe('handleManualSyncCloseRequest', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('closes immediately with Shift bypass and does not run sync', async () => {
     const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const close = vi.fn();
@@ -130,7 +134,7 @@ describe('handleManualSyncCloseRequest', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('does not start another close sync while sync is running', async () => {
+  it('does not start another close sync while sync is running and no waitForCurrentRun provided', async () => {
     const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const close = vi.fn();
     const notify = vi.fn();
@@ -147,6 +151,139 @@ describe('handleManualSyncCloseRequest', () => {
     expect(runManualSync).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('awaits in-flight sync via waitForCurrentRun and closes on success', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+    let resolveInflight!: (value: boolean) => void;
+    const inflight = new Promise<boolean>(r => { resolveInflight = r; });
+
+    const p = handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync,
+      close,
+      notify,
+      showCloseSyncFeedback: true,
+      waitForCurrentRun: () => inflight,
+    });
+
+    resolveInflight(true);
+    await p;
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('stays open and notifies when in-flight sync fails', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+    let resolveInflight!: (value: boolean) => void;
+    const inflight = new Promise<boolean>(r => { resolveInflight = r; });
+
+    const p = handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync,
+      close,
+      notify,
+      showCloseSyncFeedback: true,
+      waitForCurrentRun: () => inflight,
+    });
+
+    resolveInflight(false);
+    await p;
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith('error', 'Sync before close failed. Eskerra stayed open.');
+  });
+
+  it('times out when in-flight sync promise never resolves and showCloseSyncFeedback', async () => {
+    vi.useFakeTimers();
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+    const inflight = new Promise<boolean>(() => {});
+
+    const p = handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync,
+      close,
+      notify,
+      showCloseSyncFeedback: true,
+      waitForCurrentRun: () => inflight,
+      timeoutMs: 5_000,
+    });
+
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(close).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
+      'error',
+      'Sync before close timed out. Eskerra stayed open so you can retry or close instantly.',
+    );
+  });
+
+  it('does not notify on in-flight timeout when showCloseSyncFeedback is false', async () => {
+    vi.useFakeTimers();
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+    const inflight = new Promise<boolean>(() => {});
+
+    const p = handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync,
+      close,
+      notify,
+      showCloseSyncFeedback: false,
+      waitForCurrentRun: () => inflight,
+      timeoutMs: 5_000,
+    });
+
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(close).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('times out when fresh sync never resolves and showCloseSyncFeedback', async () => {
+    vi.useFakeTimers();
+    const close = vi.fn();
+    const notify = vi.fn();
+
+    const p = handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: false,
+      runManualSync: () => new Promise(() => {}),
+      close,
+      notify,
+      showCloseSyncFeedback: true,
+      timeoutMs: 5_000,
+    });
+
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(close).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
+      'error',
+      'Sync before close timed out. Eskerra stayed open so you can retry or close instantly.',
+    );
   });
 
   it('closes immediately without notifying or syncing when manual sync is not required', async () => {

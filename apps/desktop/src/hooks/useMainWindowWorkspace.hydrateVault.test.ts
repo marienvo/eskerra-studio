@@ -306,14 +306,14 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     await waitFor(() => {
       expect(result.current.todayHubController.activeTodayHubUri).toBe(HUB_A);
       expect(result.current.todayHubController.persistenceActiveTodayHubUri).toBe(HUB_A);
-      expect(result.current.tabsController.activeEditorTabId).toBe('tab-a1');
+      // Tab strip is restored but workspace switch always focuses home, not a tab.
+      expect(result.current.tabsController.activeEditorTabId).toBeNull();
       expect(result.current.tabsController.editorWorkspaceTabs.map(t => t.id)).toEqual([
         'tab-a1',
       ]);
       expect(result.current.workspaceShadowModelForTests?.activeHub).toBe(HUB_A);
       expect(result.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
-        kind: 'tab',
-        id: 'tab-a1',
+        kind: 'home',
       });
     });
 
@@ -471,15 +471,16 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
       expect(restarted.current.tabsController.editorWorkspaceTabs[0]?.history.entries).toEqual([
         NOTE_A1,
       ]);
-      expect(restarted.current.selectionController.selectedUri).toBe(NOTE_A1);
-      const tabId = restarted.current.tabsController.activeEditorTabId;
+      // Workspace switch always focuses home, not the restored tab.
+      expect(restarted.current.selectionController.selectedUri).toBe(HUB_A);
+      expect(restarted.current.tabsController.activeEditorTabId).toBeNull();
+      const restoredTabId = restarted.current.tabsController.editorWorkspaceTabs[0]?.id;
       expect(restarted.current.workspaceShadowModelForTests?.activeHub).toBe(HUB_A);
       expect(restarted.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.tabs).toEqual([
-        {id: tabId, history: {entries: [NOTE_A1], index: 0}},
+        {id: restoredTabId, history: {entries: [NOTE_A1], index: 0}},
       ]);
       expect(restarted.current.workspaceShadowModelForTests?.workspaces[HUB_A]?.active).toEqual({
-        kind: 'tab',
-        id: tabId,
+        kind: 'home',
       });
     });
 

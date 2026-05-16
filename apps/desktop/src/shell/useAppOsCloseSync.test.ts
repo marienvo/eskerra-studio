@@ -79,6 +79,8 @@ function renderOsCloseSync(
     runManualSync: vi.fn().mockResolvedValue(true),
     notify: vi.fn(),
     gitStatus: localChangesStatus(),
+    // Keep indicator delay at 0 in tests so closeSyncInProgress flips synchronously
+    closeSyncIndicatorDelayMs: 0,
     ...overrides,
   };
 
