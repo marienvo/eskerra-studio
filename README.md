@@ -217,17 +217,18 @@ This is a short summary, not legal advice. For exact terms, read [`LICENSE`](LIC
 I want a Markdown app that is fast, predictable, and works out of the box. 
 No plugins required for the basics, no waiting, no hidden complexity.
 
-This project is built around that idea. 
+Eskerra is built around that idea. 
 
+Openness is part of the product. Tools people rely on should not disappear behind a company’s roadmap, patience, or survival. When software becomes part of people’s notes, habits, and workflows, the value built around it should remain in people’s hands.
 
-| Tool | Core Idea | Strength | Trade-off |
-|------|----------|----------|-----------|
-| **This App**  | Markdown runtime | **Fast, predictable, no setup** | Fewer features |
-| **Obsidian**  | Knowledge system | Flexible, huge plugin ecosystem | Complexity & inconsistency |
-| **Joplin**  | Open notebook | Fully FOSS, reliable sync | Clunky UX |
-| **Logseq**  | Outliner / graph | Powerful linking & structure | Performance, learning curve |
-| **iA Writer** ️ | Writing tool | Clean, focused experience | Limited features |
-| **Zettlr**  | Academic editor | Strong for long-form & research | Heavy, slower UI |
+| Tool | Core Idea | Strength | Trade-off | Commons |
+|------|----------|----------|-----------|-----------|
+| **Eskerra**  | Markdown runtime | **Fast, predictable, no setup** | Fewer features | ✅ FOSS, AGPL-3.0 |
+| **Obsidian**  | Knowledge system | Flexible, huge plugin ecosystem | Complexity & inconsistency | ❌ Proprietary |
+| **Joplin**  | Open notebook | Fully FOSS, reliable sync | Clunky UX | ✅ FOSS, AGPL-3.0-or-later |
+| **Logseq**  | Outliner / graph | Powerful linking & structure | Performance, learning curve | ✅ FOSS, AGPL-3.0 |
+| **iA Writer** | Writing tool | Clean, focused experience | Limited features | ❌ Proprietary |
+| **Zettlr**  | Academic editor | Strong for long-form & research | Heavy, slower UI | ✅ FOSS, GPL-3.0 |
 
 ---
 
