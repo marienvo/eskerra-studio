@@ -193,7 +193,6 @@ import {
   assignLegacyRuntimeActiveSurfaceTab,
   workspaceHubUriEqual,
 } from './workspaceRuntimeActiveLegacyBridge';
-import {assignLegacyEditorWorkspaceTabs} from './workspaceRuntimeTabsLegacyBridge';
 import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
@@ -465,6 +464,14 @@ export function useMainWindowWorkspace(options: {
     notes,
   });
 
+  const replaceEditorWorkspaceTabs = useCallback(
+    (nextTabs: EditorWorkspaceTab[]) => {
+      editorWorkspaceTabsRef.current = nextTabs;
+      setEditorWorkspaceTabs(nextTabs);
+    },
+    [editorWorkspaceTabsRef, setEditorWorkspaceTabs],
+  );
+
   useLayoutEffect(() => {
     vaultRootRef.current = vaultRoot;
   }, [vaultRoot]);
@@ -667,11 +674,7 @@ export function useMainWindowWorkspace(options: {
       );
       const modelTabsSig = legacyEditorWorkspaceTabsSignature(modelEditorWorkspaceTabs);
       if (legacyTabsSig !== modelTabsSig) {
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs: modelEditorWorkspaceTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(modelEditorWorkspaceTabs);
       }
       if (activeEditorTabIdRef.current !== modelActiveEditorTabId) {
         assignLegacyRuntimeActiveSurfaceTab(modelActiveEditorTabId, {
@@ -918,11 +921,7 @@ export function useMainWindowWorkspace(options: {
           oldUri,
           nextUri,
         );
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs: remappedRenameTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(remappedRenameTabs);
         remapHomeStatesPrefix(oldUri, nextUri);
       }
     },
@@ -1290,11 +1289,7 @@ export function useMainWindowWorkspace(options: {
         return;
       }
       const nextTabs = editorWorkspaceTabsFromModelTabEntries(ws.tabs);
-      assignLegacyEditorWorkspaceTabs({
-        nextTabs,
-        editorWorkspaceTabsRef,
-        setEditorWorkspaceTabs,
-      });
+      replaceEditorWorkspaceTabs(nextTabs);
     },
     [busy, dispatchWorkspaceActionSync],
   );
@@ -1402,11 +1397,7 @@ export function useMainWindowWorkspace(options: {
           }
         }
 
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(nextTabs);
 
         if (!wasActive) {
           return;
@@ -1471,11 +1462,7 @@ export function useMainWindowWorkspace(options: {
           derived[0]!.id === keepTabId
             ? derived
             : prevTabs.filter(t => t.id === keepTabId);
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(nextTabs);
       })();
     },
     [
@@ -1512,11 +1499,7 @@ export function useMainWindowWorkspace(options: {
         hub != null && nextModel.workspaces[hub] != null
           ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
           : [];
-      assignLegacyEditorWorkspaceTabs({
-        nextTabs,
-        editorWorkspaceTabsRef,
-        setEditorWorkspaceTabs,
-      });
+      replaceEditorWorkspaceTabs(nextTabs);
       assignLegacyRuntimeActiveSurfaceTab(null, {
         ref: activeEditorTabIdRef,
         setActiveEditorTabId,
@@ -1578,11 +1561,7 @@ export function useMainWindowWorkspace(options: {
     diskConflictRef.current = null;
     setDiskConflictSoft(null);
     diskConflictSoftRef.current = null;
-    assignLegacyEditorWorkspaceTabs({
-      nextTabs: [],
-      editorWorkspaceTabsRef,
-      setEditorWorkspaceTabs,
-    });
+    replaceEditorWorkspaceTabs([]);
     assignLegacyRuntimeActiveSurfaceTab(null, {
       ref: activeEditorTabIdRef,
       setActiveEditorTabId,
@@ -2494,11 +2473,7 @@ export function useMainWindowWorkspace(options: {
           oldUri,
           normalizedNext,
         );
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs: remappedTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(remappedTabs);
         remapHomeStatesPrefix(oldUri, normalizedNext);
         markVaultWriteSettled();
         await refreshNotes(vaultRoot);
@@ -2612,11 +2587,7 @@ export function useMainWindowWorkspace(options: {
         result.previousUri,
         result.nextUri,
       );
-      assignLegacyEditorWorkspaceTabs({
-        nextTabs: remappedMoveTabs,
-        editorWorkspaceTabsRef,
-        setEditorWorkspaceTabs,
-      });
+      replaceEditorWorkspaceTabs(remappedMoveTabs);
       remapHomeStatesPrefix(result.previousUri, result.nextUri);
     },
     [

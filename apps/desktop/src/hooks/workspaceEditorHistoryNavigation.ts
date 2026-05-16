@@ -17,7 +17,6 @@ import {
 } from '../lib/workspaceHomeNavigation';
 import {goBackAction, goForwardAction, type WorkspaceModel} from '../lib/workspaceModel';
 import type {DispatchWorkspaceModelActionSync} from './workspaceShadowBridge';
-import {assignLegacyEditorWorkspaceTabs} from './workspaceRuntimeTabsLegacyBridge';
 import {
   editorWorkspaceTabsFromModelTabEntries,
   legacyEditorWorkspaceTabsSignature,
@@ -55,11 +54,8 @@ function assignLegacyEditorTabsFromTabHistoryModel(args: {
     }
   }
 
-  assignLegacyEditorWorkspaceTabs({
-    nextTabs,
-    editorWorkspaceTabsRef: args.editorWorkspaceTabsRef,
-    setEditorWorkspaceTabs: args.setEditorWorkspaceTabs,
-  });
+  args.editorWorkspaceTabsRef.current = nextTabs;
+  args.setEditorWorkspaceTabs(nextTabs);
 }
 
 export function deriveActiveTabHistorySnapshot(args: {
