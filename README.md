@@ -36,7 +36,8 @@ Both apps use the same **vault layout** on disk: user-chosen root folder, then `
 | `npm run mobile:android` | Build/run the Android app on a device or emulator |
 | `npm run desktop` | **Desktop:** `tauri dev` (Vite + native window) |
 | `npm run desktop:build` | **Desktop:** release semver bump (same rules as APK) + production web build + `tauri build` |
-| `npm test` | `@eskerra/core` (Vitest) + `@eskerra/tokens` + `@eskerra/ds-desktop` + `@eskerra/ds-mobile` + mobile RN-Web Storybook **build** + mobile (Jest) + release helper tests |
+| `npm test` | **Phase 1 (parallel):** `npm run lint`, desktop `validate-metainfo`, Vitest/Jest across workspaces. **Phase 2 (parallel):** desktop DS + mobile RN-Web Storybook **static builds**. **Phase 3:** release helper `node --test` scripts + `assert-app-versions-align.mjs`. Requires `appstream` (`appstreamcli`) on PATH for metainfo validation. |
+| `npm run ci:all` | `npm test` then `npm run desktop:build` (full local gate) |
 | `npm run storybook:desktop -w @eskerra/ds-desktop` | Desktop design system Storybook (web, Vite) |
 | `npm run storybook:android -w @eskerra/mobile` | Mobile design system Storybook **on-device** (separate Metro entry) |
 | `npm run storybook:web -w @eskerra/ds-mobile` | Mobile DS Storybook **RN-Web** (docs / fast review, port 6007) |

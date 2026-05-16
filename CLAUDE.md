@@ -10,7 +10,8 @@ Run from repo root (npm workspaces — deps are hoisted):
 
 ```bash
 npm install                          # install all workspace deps
-npm test                             # run all tests (Vitest + Jest + scripts)
+npm test                             # lint + validate-metainfo + parallel workspace tests + Storybook builds + script tests (see test:phase1–3 in package.json)
+npm run ci:all                       # npm test then desktop:build (full local CI)
 npm run lint                         # ESLint for mobile + desktop
 npm run desktop                      # start Tauri dev (Vite + native window)
 npm run mobile                       # start Metro for Android dev

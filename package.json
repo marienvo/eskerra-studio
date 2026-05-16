@@ -24,8 +24,11 @@
     "check:eslint-suppressions": "node scripts/check-eslint-suppressions.mjs",
     "check:architecture": "npm run module-budgets:check && node scripts/check-eslint-suppressions.mjs",
     "lint": "npm run lint -w @eskerra/mobile && npm run lint -w @eskerra/desktop && npm run check:architecture",
-    "ci:all": "npm test && npm run lint && npm run validate-metainfo -w @eskerra/desktop && npm run desktop:build",
-    "test": "npm run test -w @eskerra/core && npm run test -w @eskerra/tokens && npm run check:generated -w @eskerra/tokens && npm run test -w @eskerra/ds-desktop && npm run build-storybook -w @eskerra/ds-desktop && npm run test -w @eskerra/desktop && npm run test -w @eskerra/ds-mobile && npm run build-storybook-web -w @eskerra/ds-mobile && npm run test -w @eskerra/mobile && node --test scripts/bump-release-version-lib.test.mjs && node --test scripts/sync-app-version-artifacts-lib.test.mjs && node --test scripts/tauri-desktop-build.test.mjs && node scripts/assert-app-versions-align.mjs",
+    "ci:all": "npm test && npm run desktop:build",
+    "test:phase1": "concurrently --kill-others-on-fail -s all -c auto -n lint,meta,core,tokens,dsd,desk,dsm,mob \"npm run lint\" \"npm run validate-metainfo -w @eskerra/desktop\" \"npm run test -w @eskerra/core\" \"npm run test -w @eskerra/tokens && npm run check:generated -w @eskerra/tokens\" \"npm run test -w @eskerra/ds-desktop\" \"npm run test -w @eskerra/desktop\" \"npm run test -w @eskerra/ds-mobile\" \"npm run test -w @eskerra/mobile\"",
+    "test:phase2": "concurrently --kill-others-on-fail -s all -c auto -n sbDesk,sbMob \"npm run build-storybook -w @eskerra/ds-desktop\" \"npm run build-storybook-web -w @eskerra/ds-mobile\"",
+    "test:phase3": "node --test scripts/bump-release-version-lib.test.mjs && node --test scripts/sync-app-version-artifacts-lib.test.mjs && node --test scripts/tauri-desktop-build.test.mjs && node scripts/assert-app-versions-align.mjs",
+    "test": "npm run test:phase1 && npm run test:phase2 && npm run test:phase3",
     "test:scripts": "node --test scripts/bump-release-version-lib.test.mjs scripts/sync-app-version-artifacts-lib.test.mjs scripts/tauri-desktop-build.test.mjs && node scripts/assert-app-versions-align.mjs",
     "test:storybook-web": "npm run test-storybook-web -w @eskerra/ds-mobile",
     "prepare": "husky"
@@ -36,6 +39,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "husky": "^9.1.7"
   },
   "engines": {
