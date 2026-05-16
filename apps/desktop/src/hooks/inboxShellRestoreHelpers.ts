@@ -5,14 +5,12 @@
  */
 import {
   tabsFromStored,
-  tabsToStored,
   ensureActiveTabId,
   tabCurrentUri,
 } from '../lib/editorWorkspaceTabs';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
-import {parseWorkspaceModelFromPersistence} from '../lib/workspaceModel/persistence';
 import {pickDefaultActiveTodayHubUri} from '../lib/todayHub/todayHubWorkspaceRestore';
 
 export type StoredWorkspaceRow = {id: string; entries: string[]; index: number};
@@ -222,81 +220,6 @@ export function buildRestoredEditorWorkspace(args: {
     .map(tabCurrentUri)
     .filter((u): u is string => u != null);
   return {tabs, activeEditorTabId: nextActive, uris};
-}
-
-function attachPersistedHomeHistoryToMergedHubSnapshots(args: {
-  hubUris: string[];
-  activeHub: string;
-  ws: RestoredInboxState['todayHubWorkspaces'];
-  mergedWs: Record<string, TodayHubWorkspaceSnapshot>;
-}): void {
-  const {hubUris, activeHub, ws, mergedWs} = args;
-  if (!ws || hubUris.length === 0) {
-    return;
-  }
-  const parsed = parseWorkspaceModelFromPersistence({
-    hubUris,
-    activeTodayHubUri: activeHub,
-    todayHubWorkspaces: ws as Record<string, unknown>,
-  });
-  for (const hub of hubUris) {
-    const stack = parsed.workspaces[hub]?.homeHistory;
-    if (!stack || stack.entries.length === 0) {
-      continue;
-    }
-    const cur = mergedWs[hub];
-    if (!cur) {
-      continue;
-    }
-    mergedWs[hub] = {
-      ...cur,
-      homeHistory: {
-        entries: [...stack.entries],
-        index: stack.index,
-      },
-    };
-  }
-}
-
-export function mergeStoredHubWorkspaces(args: {
-  hubUris: string[];
-  restored: RestoredInboxState;
-  filter: (raw: string) => boolean;
-  activeHub: string;
-  activeHubTabs: readonly EditorWorkspaceTab[];
-  activeHubActiveTabId: string | null;
-}): Record<string, TodayHubWorkspaceSnapshot> {
-  const {hubUris, restored, filter, activeHub, activeHubTabs, activeHubActiveTabId} = args;
-  const mergedWs: Record<string, TodayHubWorkspaceSnapshot> = {};
-  const ws = restored.todayHubWorkspaces;
-  if (ws) {
-    for (const [rawKey, snap] of Object.entries(ws)) {
-      const h = normalizeHubKey(rawKey);
-      if (!h || !hubUris.includes(h)) {
-        continue;
-      }
-      const rows = sanitizeStoredWorkspaceRows(snap.editorWorkspaceTabs, filter);
-      if (rows == null) {
-        continue;
-      }
-      const filteredRows = dropHubTodayEchoRows(h, rows);
-      const activeId = readActiveTabId(snap.activeEditorTabId);
-      const filteredTabs = tabsFromStored(filteredRows);
-      mergedWs[h] = {
-        editorWorkspaceTabs: filteredRows,
-        activeEditorTabId:
-          activeId == null || filteredRows.some(row => row.id === activeId)
-            ? activeId
-            : ensureActiveTabId(filteredTabs, activeId),
-      };
-    }
-  }
-  mergedWs[activeHub] = {
-    editorWorkspaceTabs: tabsToStored(activeHubTabs),
-    activeEditorTabId: activeHubActiveTabId,
-  };
-  attachPersistedHomeHistoryToMergedHubSnapshots({hubUris, activeHub, ws, mergedWs});
-  return mergedWs;
 }
 
 export function pickFinalActiveHub(args: {

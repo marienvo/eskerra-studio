@@ -130,11 +130,11 @@ import type {
 } from './workspaceReturnShape';
 import {
   makeStoredTabFilter,
-  mergeStoredHubWorkspaces,
   pickFinalActiveHub,
   resolveActiveHubAndTabsSource,
   restoredTodayHubWorkspaceUrisForRestore,
 } from './inboxShellRestoreHelpers';
+import {restoreShadowWorkspaceModelFromInboxState} from './workspaceShellRestoreModel';
 import {
   applyRestoredEditorWorkspaceTabsBridge,
   migrateLegacyOpenTabsIfNeededBridge,
@@ -186,7 +186,6 @@ import {
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
   legacyEditorWorkspaceTabsSignature,
-  projectWorkspaceRuntimeToModel,
   resolveModelBackedLegacyTabStrip,
   tabsControllerEditorSurface,
   workspaceHomeStatesFromWorkspaceModel,
@@ -2080,13 +2079,13 @@ export function useMainWindowWorkspace(options: {
   const syncShadowWorkspaceFromShellRestore = useCallback(
     (projection: ShellRestoreProjectionSyncArgs) => {
       dispatchWorkspaceActionSync('restore shell workspace projection', () =>
-        projectWorkspaceRuntimeToModel({
+        restoreShadowWorkspaceModelFromInboxState({
+          hubUris: projection.hubUris,
           activeTodayHubUri: projection.activeTodayHubUri,
+          todayHubWorkspaces: projection.todayHubWorkspaces,
           editorWorkspaceTabs: editorWorkspaceTabsRef.current,
           activeEditorTabId: activeEditorTabIdRef.current,
-          legacyHubWorkspaceSnapshots: projection.legacyHubWorkspaceSnapshots,
           homeStatesByHub: projection.homeStatesByHub,
-          hubUris: projection.hubUris,
         }),
       );
     },
@@ -3117,14 +3116,6 @@ export function useMainWindowWorkspace(options: {
           hubUris,
           restored: restoredInboxState,
         });
-        const mergedWs = mergeStoredHubWorkspaces({
-          hubUris,
-          restored: restoredInboxState,
-          filter,
-          activeHub: activeHubFinal,
-          activeHubTabs: editorWorkspaceTabsRef.current,
-          activeHubActiveTabId: activeEditorTabIdRef.current,
-        });
         const homeHydrated = hydrateWorkspaceHomeStatesFromPersisted({
           hubUris,
           activeTodayHubUri: activeHubFinal,
@@ -3146,7 +3137,7 @@ export function useMainWindowWorkspace(options: {
         shellRestoreProjection = {
           activeTodayHubUri: activeHubFinal,
           hubUris,
-          legacyHubWorkspaceSnapshots: mergedWs,
+          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces ?? null,
           homeStatesByHub: homeHydrated,
         };
       } else if (vaultMarkdownRefs.length > 0) {

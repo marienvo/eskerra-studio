@@ -93,7 +93,7 @@ describe('runDeferredShellRestoreTabStateAndShadowSync', () => {
       {
         activeTodayHubUri: HUB,
         hubUris: [HUB],
-        legacyHubWorkspaceSnapshots: merged,
+        todayHubWorkspaces: merged,
         homeStatesByHub: homeByHub,
       },
     );
@@ -105,7 +105,7 @@ describe('runDeferredShellRestoreTabStateAndShadowSync', () => {
     expect(sync).toHaveBeenCalledWith({
       activeTodayHubUri: HUB,
       hubUris: [HUB],
-      legacyHubWorkspaceSnapshots: merged,
+      todayHubWorkspaces: merged,
       homeStatesByHub: homeByHub,
     });
     expect(mirrorTabs).not.toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe('runDeferredShellRestoreTabStateAndShadowSync', () => {
       {
         activeTodayHubUri: null,
         hubUris: [],
-        legacyHubWorkspaceSnapshots: {},
+        todayHubWorkspaces: {},
         homeStatesByHub: {},
       },
     );
@@ -170,7 +170,7 @@ describe('runDeferredShellRestoreTabStateAndShadowSync', () => {
       {
         activeTodayHubUri: HUB,
         hubUris: [HUB],
-        legacyHubWorkspaceSnapshots: {},
+        todayHubWorkspaces: {},
         homeStatesByHub: {[HUB]: {history: {entries: [HUB], index: 0}}},
       },
     );
