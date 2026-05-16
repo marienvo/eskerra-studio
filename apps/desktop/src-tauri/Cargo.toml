@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.45.2"
+version = "0.45.3"
 description = "Desktop companion for your local Eskerra vault — notes, podcasts, and playback."
 authors = ["Eskerra contributors"]
 license = "AGPL-3.0-only"
