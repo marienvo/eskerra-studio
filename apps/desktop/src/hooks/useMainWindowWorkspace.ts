@@ -283,6 +283,10 @@ export function useMainWindowWorkspace(options: {
     inboxContentByUriRef,
     lastPersistedRef,
     lastPersistedExternalMutationSeqRef,
+    writeLastPersistedSnapshotWithoutSeqBump,
+    bumpLastPersistedExternalMutationSeq,
+    setLastPersistedSnapshot,
+    clearLastPersistedSnapshot,
   } = useInboxBodyCache();
   const [vaultMarkdownRefs, setVaultMarkdownRefs] = useState<VaultMarkdownRef[]>([]);
   /**
@@ -458,8 +462,7 @@ export function useMainWindowWorkspace(options: {
     scheduleBacklinksDeferOneFrameAfterLoad,
     cancelAutosave,
     selectedUriRef,
-    lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
+    setLastPersistedSnapshot,
     inboxContentByUriRef,
     skipRecencyDeferForUriRef,
     setInboxContentByUri,
@@ -499,7 +502,7 @@ export function useMainWindowWorkspace(options: {
     inboxContentByUriRef,
     editorBodyRef,
     lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
+    setLastPersistedSnapshot,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     inboxEditorRef,
@@ -662,8 +665,7 @@ export function useMainWindowWorkspace(options: {
         setSelectedUri(nextUri);
         const previousPersisted = lastPersistedRef.current;
         if (previousPersisted && previousPersisted.uri === oldUri) {
-          lastPersistedRef.current = {uri: nextUri, markdown: previousPersisted.markdown};
-          lastPersistedExternalMutationSeqRef.current += 1;
+          setLastPersistedSnapshot({uri: nextUri, markdown: previousPersisted.markdown});
         }
       }
       if (nextUri !== oldUri) {
@@ -677,7 +679,7 @@ export function useMainWindowWorkspace(options: {
         remapHomeStatesPrefix(oldUri, nextUri);
       }
     },
-    [remapHomeStatesPrefix],
+    [remapHomeStatesPrefix, setLastPersistedSnapshot],
   );
 
   const {
@@ -720,7 +722,7 @@ export function useMainWindowWorkspace(options: {
       vaultRootRef,
       inboxContentByUriRef,
       lastPersistedRef,
-      lastPersistedExternalMutationSeqRef,
+      setLastPersistedSnapshot,
       eagerEditorLoadUriRef,
       backlinksActiveBodyRef,
       loadFullMarkdownIntoInboxEditor,
@@ -767,6 +769,7 @@ export function useMainWindowWorkspace(options: {
       setComposingNewEntry,
       setSelectedUri,
       inboxEditorRef,
+      setLastPersistedSnapshot,
     ],
   );
 
@@ -885,9 +888,8 @@ export function useMainWindowWorkspace(options: {
   /** Drop the active inbox selection entirely — clear refs, state, and editor. */
   const clearInboxSelection = useCallback(() => {
     clearInboxSelectionFromInboxState();
-    lastPersistedRef.current = null;
-    lastPersistedExternalMutationSeqRef.current += 1;
-  }, [clearInboxSelectionFromInboxState]);
+    clearLastPersistedSnapshot();
+  }, [clearInboxSelectionFromInboxState, clearLastPersistedSnapshot]);
 
   const recordClosedTabAndPruneScroll = useCallback(
     (tabsBefore: readonly EditorWorkspaceTab[], tabId: string, tabClosing: EditorWorkspaceTab | undefined) => {
@@ -1104,8 +1106,7 @@ export function useMainWindowWorkspace(options: {
       }
       selectedUriRef.current = null;
       composingNewEntryRef.current = false;
-      lastPersistedRef.current = null;
-      lastPersistedExternalMutationSeqRef.current += 1;
+      clearLastPersistedSnapshot();
       setSelectedUri(null);
       setComposingNewEntry(false);
       clearInboxYamlFrontmatterEditorRefs({
@@ -1119,6 +1120,7 @@ export function useMainWindowWorkspace(options: {
     })();
   }, [
     bumpEditorClosedStack,
+    clearLastPersistedSnapshot,
     dispatchWorkspaceActionSync,
     flushInboxSaveRef,
     mirrorShadowHomeSurface,
@@ -1173,10 +1175,9 @@ export function useMainWindowWorkspace(options: {
       setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
     });
     setEditorBody('');
-    lastPersistedRef.current = null;
-    lastPersistedExternalMutationSeqRef.current += 1;
+    clearLastPersistedSnapshot();
     setInboxEditorResetNonce(n => n + 1);
-  }, [bumpEditorClosedStack, closeMergeView, mirrorShadowActiveHub]);
+  }, [bumpEditorClosedStack, clearLastPersistedSnapshot, closeMergeView, mirrorShadowActiveHub]);
 
   useLayoutEffect(() => {
     resetWorkspaceStateForHydrateRef.current = resetWorkspaceStateForHydrate;
@@ -1218,6 +1219,8 @@ export function useMainWindowWorkspace(options: {
     inboxContentByUriRef,
     lastPersistedRef,
     lastPersistedExternalMutationSeqRef,
+    writeLastPersistedSnapshotWithoutSeqBump,
+    bumpLastPersistedExternalMutationSeq,
     editorBodyRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -1304,8 +1307,7 @@ export function useMainWindowWorkspace(options: {
           );
         }
       }
-      lastPersistedRef.current = {uri: selectedUri, markdown: body};
-      lastPersistedExternalMutationSeqRef.current += 1;
+      setLastPersistedSnapshot({uri: selectedUri, markdown: body});
       loadFullMarkdownIntoInboxEditor(body, selectedUri, 'start');
       scheduleBacklinksDeferOneFrameAfterLoad();
     } else {
@@ -1317,16 +1319,17 @@ export function useMainWindowWorkspace(options: {
         setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
       });
       setEditorBody('');
-      lastPersistedRef.current = null;
-      lastPersistedExternalMutationSeqRef.current += 1;
+      clearLastPersistedSnapshot();
     }
   }, [
     vaultRoot,
     selectedUri,
     inboxEditorRef,
     clearInboxBacklinksDeferAfterLoad,
+    clearLastPersistedSnapshot,
     loadFullMarkdownIntoInboxEditor,
     scheduleBacklinksDeferOneFrameAfterLoad,
+    setLastPersistedSnapshot,
   ]);
 
   /**
@@ -1415,8 +1418,7 @@ export function useMainWindowWorkspace(options: {
         const raw = await fs.readFile(selectedUri, {encoding: 'utf8'});
         if (!cancelled) {
           const normalized = normalizeVaultMarkdownDiskRead(raw);
-          lastPersistedRef.current = {uri: selectedUri, markdown: normalized};
-          lastPersistedExternalMutationSeqRef.current += 1;
+          setLastPersistedSnapshot({uri: selectedUri, markdown: normalized});
           setInboxContentByUri(prev => {
             if (prev[selectedUri] === normalized) {
               return prev;
@@ -1451,6 +1453,8 @@ export function useMainWindowWorkspace(options: {
     inboxEditorRef,
     loadFullMarkdownIntoInboxEditor,
     scheduleBacklinksDeferOneFrameAfterLoad,
+    setInboxContentByUri,
+    setLastPersistedSnapshot,
   ]);
 
   const composeCommandsContext = useMemo(
@@ -1475,7 +1479,6 @@ export function useMainWindowWorkspace(options: {
         diskConflictRef,
         diskConflictSoftRef,
         lastPersistedRef,
-        lastPersistedExternalMutationSeqRef,
         editorBodyRef,
         inboxYamlFrontmatterInnerRef,
         inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -1491,6 +1494,7 @@ export function useMainWindowWorkspace(options: {
         setDiskConflict,
         setDiskConflictSoft,
         setInboxContentByUri,
+        clearLastPersistedSnapshot,
       },
       openMarkdownInEditor: (uri: string) => openMarkdownInEditor(uri),
     }),
@@ -1514,7 +1518,6 @@ export function useMainWindowWorkspace(options: {
       diskConflictRef,
       diskConflictSoftRef,
       lastPersistedRef,
-      lastPersistedExternalMutationSeqRef,
       editorBodyRef,
       inboxYamlFrontmatterInnerRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -1528,6 +1531,7 @@ export function useMainWindowWorkspace(options: {
       setDiskConflict,
       setDiskConflictSoft,
       setInboxContentByUri,
+      clearLastPersistedSnapshot,
       openMarkdownInEditor,
     ],
   );
@@ -1581,7 +1585,6 @@ export function useMainWindowWorkspace(options: {
         inboxYamlFrontmatterInnerRef,
         inboxEditorYamlLeadingBeforeFrontmatterRef,
         lastPersistedRef,
-        lastPersistedExternalMutationSeqRef,
       },
       setters: {
         setEditorWorkspaceTabs,
@@ -1596,6 +1599,8 @@ export function useMainWindowWorkspace(options: {
         setInboxYamlFrontmatterInner,
         setInboxEditorYamlLeadingBeforeFrontmatter,
         setInboxEditorResetNonce,
+        setLastPersistedSnapshot,
+        clearLastPersistedSnapshot,
       },
       mirrorShadowHomeSurface,
       mirrorShadowActiveTab,
@@ -1627,6 +1632,8 @@ export function useMainWindowWorkspace(options: {
     setInboxYamlFrontmatterInner,
     setInboxEditorYamlLeadingBeforeFrontmatter,
     setInboxEditorResetNonce,
+    setLastPersistedSnapshot,
+    clearLastPersistedSnapshot,
     mirrorShadowHomeSurface,
     mirrorShadowActiveTab,
     removeHomeHistoryUris,

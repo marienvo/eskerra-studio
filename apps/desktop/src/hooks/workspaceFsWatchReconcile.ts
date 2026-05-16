@@ -95,7 +95,8 @@ export type ReconcileFsOpenMarkdownEnv = {
   lastInboxEditorActivityAtRef: MutableRefObject<number>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   autosaveSchedulerRef: MutableRefObject<InboxAutosaveScheduler>;
-  markLastPersistedMutation: () => void;
+  writeLastPersistedSnapshotWithoutSeqBump: (next: LastPersisted | null) => void;
+  bumpLastPersistedExternalMutationSeq: () => void;
   setEditorWorkspaceTabs: Dispatch<SetStateAction<EditorWorkspaceTab[]>>;
   setActiveEditorTabId: Dispatch<SetStateAction<string | null>>;
   setDiskConflict: Dispatch<SetStateAction<DiskConflictState | null>>;
@@ -250,7 +251,8 @@ export async function applyExternalOpenNoteDeletedForFsWatch(
   } else {
     open.selectedUriRef.current = null;
     open.composingNewEntryRef.current = false;
-    open.lastPersistedRef.current = null;
+    open.writeLastPersistedSnapshotWithoutSeqBump(null);
+    open.bumpLastPersistedExternalMutationSeq();
     open.setSelectedUri(null);
     open.setComposingNewEntry(false);
     clearInboxYamlFrontmatterEditorRefs({
@@ -261,7 +263,6 @@ export async function applyExternalOpenNoteDeletedForFsWatch(
     });
     open.setEditorBody('');
     open.setInboxEditorResetNonce(n => n + 1);
-    open.markLastPersistedMutation();
   }
 }
 
@@ -285,8 +286,8 @@ async function applyReloadFromDiskForFsWatch(
   open.autosaveSchedulerRef.current.cancel();
   open.loadFullMarkdownIntoInboxEditor(diskBody, normTab, 'preserve');
   open.scheduleBacklinksDeferOneFrameAfterLoad();
-  open.lastPersistedRef.current = {uri: normTab, markdown: diskBody};
-  open.markLastPersistedMutation();
+  open.writeLastPersistedSnapshotWithoutSeqBump({uri: normTab, markdown: diskBody});
+  open.bumpLastPersistedExternalMutationSeq();
   mergeInboxCacheWithDiskBodyForUri(open, normTab, diskBody);
   clearDiskConflictRefsForMatchingUri(open, normTab);
 }
@@ -374,8 +375,8 @@ async function reconcileDiskConflictKindForSelectedTab(
       const mergedCanon = normalizeVaultMarkdownDiskRead(merged.merged);
       open.loadFullMarkdownIntoInboxEditor(mergedCanon, normTab, 'preserve');
       open.scheduleBacklinksDeferOneFrameAfterLoad();
-      open.lastPersistedRef.current = {uri: normTab, markdown: mergedCanon};
-      open.markLastPersistedMutation();
+      open.writeLastPersistedSnapshotWithoutSeqBump({uri: normTab, markdown: mergedCanon});
+      open.bumpLastPersistedExternalMutationSeq();
       mergeInboxCacheWithDiskBodyForUri(open, normTab, mergedCanon);
       clearDiskConflictRefsForMatchingUri(open, normTab);
       console.debug('[disk-merge]', {

@@ -58,6 +58,29 @@ describe('useInboxBodyCache', () => {
     expect(result.current.lastPersistedExternalMutationSeqRef.current).toBe(2);
   });
 
+  it('can update lastPersisted ref without bumping seq until bump is called separately', () => {
+    const {result} = renderHook(() => useInboxBodyCache());
+
+    act(() => {
+      result.current.writeLastPersistedSnapshotWithoutSeqBump({
+        uri: '/vault/Inbox/a.md',
+        markdown: '# silent',
+      });
+    });
+
+    expect(result.current.lastPersistedRef.current).toEqual({
+      uri: '/vault/Inbox/a.md',
+      markdown: '# silent',
+    });
+    expect(result.current.lastPersistedExternalMutationSeqRef.current).toBe(0);
+
+    act(() => {
+      result.current.bumpLastPersistedExternalMutationSeq();
+    });
+
+    expect(result.current.lastPersistedExternalMutationSeqRef.current).toBe(1);
+  });
+
   it('detects mismatches between cache and lastPersisted for the same URI', () => {
     expect(
       hasLastPersistedCacheMismatch(

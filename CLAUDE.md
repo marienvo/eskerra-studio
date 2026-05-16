@@ -191,11 +191,11 @@ Full rationale: `specs/architecture/desktop-editor.md` § "Vertical layout and c
 Applies to: `apps/desktop/**`.
 
 - **`inboxContentByUri`** must stay aligned with the latest in-memory editor text before awaiting work that can change `selectedUri` (snapshot in `openMarkdownInEditor`), and after every successful `saveNoteMarkdown` in `enqueueInboxPersist` (including when `persistTransientMarkdownImages` rewrites markdown).
-- **`lastPersistedRef`** must describe content that was written successfully (or read from disk for the current selection). Do not set it from a stale `inboxContentByUri` entry without reconciling with disk-known state.
+- **`lastPersistedRef`** must describe content that was written successfully (or read from disk for the current selection). Do not set it from a stale `inboxContentByUri` entry without reconciling with disk-known state. **Mutations** to `lastPersistedRef` and `lastPersistedExternalMutationSeqRef` must go only through `useInboxBodyCache` (`setLastPersistedSnapshot`, `clearLastPersistedSnapshot`, and for vault-watch reconcile without an external seq bump: `writeLastPersistedSnapshotWithoutSeqBump` paired with `bumpLastPersistedExternalMutationSeq`, except the open-tab probe which overrides the bump to a no-op).
 - The `useLayoutEffect` on `selectedUri` in `apps/desktop/src/hooks/useMainWindowWorkspace.ts` restores CodeMirror from cache when present; if cache and `lastPersistedRef` disagree for the same URI, disk-known (`lastPersistedRef`) wins and the cache is healed (`resolveInboxCachedBodyForEditor` in `apps/desktop/src/hooks/inboxNoteBodyCache.ts`).
 - Any new mutation path (bulk rewrite, external sync, etc.) must update or invalidate the cache entry for affected URIs.
 - Primary ownership now lives in:
-  - `apps/desktop/src/hooks/useInboxBodyCache.ts` (state + refs)
+  - `apps/desktop/src/hooks/useInboxBodyCache.ts` (state + refs + the snapshot/seq mutation API above)
   - `apps/desktop/src/hooks/workspaceOpenMarkdownCommand.ts` (open/snapshot/prefetch mutations)
   - `apps/desktop/src/hooks/useDiskConflictState.ts` (disk-reload conflict path)
   - `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (selectedUri restore + cache-heal effect)

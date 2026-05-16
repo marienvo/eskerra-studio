@@ -52,6 +52,14 @@ function buildCtx(overrides: Partial<TreeCommandContext> = {}): TreeCommandConte
   const inboxEditorYamlLeadingBeforeFrontmatterRef = {current: ''};
   const lastPersistedRef = {current: {uri: '/vault/Inbox/a.md', markdown: '# x'}};
   const lastPersistedExternalMutationSeqRef = {current: 0};
+  const setLastPersistedSnapshot = vi.fn((next: {uri: string; markdown: string}) => {
+    lastPersistedRef.current = next;
+    lastPersistedExternalMutationSeqRef.current += 1;
+  });
+  const clearLastPersistedSnapshot = vi.fn(() => {
+    lastPersistedRef.current = null;
+    lastPersistedExternalMutationSeqRef.current += 1;
+  });
   const editorShellScrollByUriRef = {
     current: new Map<string, {top: number; left: number}>(),
   };
@@ -71,7 +79,6 @@ function buildCtx(overrides: Partial<TreeCommandContext> = {}): TreeCommandConte
       inboxYamlFrontmatterInnerRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       lastPersistedRef,
-      lastPersistedExternalMutationSeqRef,
     },
     setters: {
       setEditorWorkspaceTabs: vi.fn(),
@@ -86,6 +93,8 @@ function buildCtx(overrides: Partial<TreeCommandContext> = {}): TreeCommandConte
       setInboxYamlFrontmatterInner: vi.fn(),
       setInboxEditorYamlLeadingBeforeFrontmatter: vi.fn(),
       setInboxEditorResetNonce: vi.fn(),
+      setLastPersistedSnapshot,
+      clearLastPersistedSnapshot,
     },
     mirrorShadowHomeSurface: vi.fn(),
     mirrorShadowActiveTab: vi.fn(),
@@ -102,7 +111,14 @@ function buildCtx(overrides: Partial<TreeCommandContext> = {}): TreeCommandConte
     setVaultTreeSelectionClearNonce: vi.fn(),
   };
 
-  return {...base, ...overrides};
+  const merged = {...base, ...overrides};
+  if (overrides.refs) {
+    merged.refs = {...base.refs, ...overrides.refs};
+  }
+  if (overrides.setters) {
+    merged.setters = {...base.setters, ...overrides.setters};
+  }
+  return merged;
 }
 
 describe('workspaceTreeCommands', () => {
@@ -159,6 +175,14 @@ describe('workspaceTreeCommands', () => {
     const editorShellScrollByUriRef = {
       current: new Map<string, {top: number; left: number}>(),
     };
+    const clearLastPersistedSnapshot = vi.fn(() => {
+      lastPersistedRef.current = null;
+      lastPersistedExternalMutationSeqRef.current += 1;
+    });
+    const setLastPersistedSnapshot = vi.fn((next: {uri: string; markdown: string}) => {
+      lastPersistedRef.current = next;
+      lastPersistedExternalMutationSeqRef.current += 1;
+    });
 
     const ctx = buildCtx({
       refs: {
@@ -172,7 +196,10 @@ describe('workspaceTreeCommands', () => {
         inboxYamlFrontmatterInnerRef,
         inboxEditorYamlLeadingBeforeFrontmatterRef,
         lastPersistedRef,
-        lastPersistedExternalMutationSeqRef,
+      },
+      setters: {
+        clearLastPersistedSnapshot,
+        setLastPersistedSnapshot,
       },
     });
 
@@ -251,7 +278,6 @@ describe('workspaceTreeCommands', () => {
         inboxYamlFrontmatterInnerRef: {current: null},
         inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
         lastPersistedRef: {current: {uri: `${oldPrefix}/note.md`, markdown: 'x'}},
-        lastPersistedExternalMutationSeqRef: {current: 0},
       },
       replaceEditorWorkspaceTabs,
       remapHomeStatesPrefix,
@@ -307,7 +333,6 @@ describe('workspaceTreeCommands', () => {
         inboxYamlFrontmatterInnerRef: {current: null},
         inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
         lastPersistedRef: {current: {uri: prev, markdown: 'x'}},
-        lastPersistedExternalMutationSeqRef: {current: 0},
       },
       replaceEditorWorkspaceTabs,
       remapHomeStatesPrefix,
@@ -346,7 +371,6 @@ describe('workspaceTreeCommands', () => {
         inboxYamlFrontmatterInnerRef: {current: null},
         inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
         lastPersistedRef: {current: null},
-        lastPersistedExternalMutationSeqRef: {current: 0},
       },
     });
 

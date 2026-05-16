@@ -108,6 +108,8 @@ export function useWorkspaceVaultWatchEffects(args: {
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
   lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
+  writeLastPersistedSnapshotWithoutSeqBump: (next: LastPersisted | null) => void;
+  bumpLastPersistedExternalMutationSeq: () => void;
   editorBodyRef: MutableRefObject<string>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
@@ -158,6 +160,8 @@ export function useWorkspaceVaultWatchEffects(args: {
     inboxContentByUriRef,
     lastPersistedRef,
     lastPersistedExternalMutationSeqRef,
+    writeLastPersistedSnapshotWithoutSeqBump,
+    bumpLastPersistedExternalMutationSeq,
     editorBodyRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -201,10 +205,7 @@ export function useWorkspaceVaultWatchEffects(args: {
     let lastOpenTabProbeAtMs = 0;
     let lastCoarseRefreshAtMs = 0;
     let vaultFilesChangedEventSeq = 0;
-    const markExternalLastPersistedMutation = () => {
-      lastPersistedExternalMutationSeqRef.current += 1;
-    };
-    const markProbeLastPersistedMutation = () => undefined;
+    const bumpProbeNoop = () => undefined;
 
     const reconcileFsOpenEnv: ReconcileFsOpenMarkdownEnv = {
       cancelled: () => cancelled,
@@ -218,6 +219,8 @@ export function useWorkspaceVaultWatchEffects(args: {
       diskConflictSoftRef,
       inboxContentByUriRef,
       lastPersistedRef,
+      writeLastPersistedSnapshotWithoutSeqBump,
+      bumpLastPersistedExternalMutationSeq,
       editorBodyRef,
       inboxYamlFrontmatterInnerRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -227,7 +230,6 @@ export function useWorkspaceVaultWatchEffects(args: {
       lastInboxEditorActivityAtRef,
       inboxEditorRef,
       autosaveSchedulerRef,
-      markLastPersistedMutation: markExternalLastPersistedMutation,
       setEditorWorkspaceTabs,
       setActiveEditorTabId,
       setDiskConflict,
@@ -308,7 +310,7 @@ export function useWorkspaceVaultWatchEffects(args: {
           await reconcileOpenNotesAfterFsChangeFromVaultWatch(
             {
               ...reconcileFsOpenEnv,
-              markLastPersistedMutation: markProbeLastPersistedMutation,
+              bumpLastPersistedExternalMutationSeq: bumpProbeNoop,
             },
             reconcileFsTodayEnv,
             [],
@@ -516,6 +518,8 @@ export function useWorkspaceVaultWatchEffects(args: {
     inboxContentByUriRef,
     lastPersistedRef,
     lastPersistedExternalMutationSeqRef,
+    writeLastPersistedSnapshotWithoutSeqBump,
+    bumpLastPersistedExternalMutationSeq,
     editorBodyRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,

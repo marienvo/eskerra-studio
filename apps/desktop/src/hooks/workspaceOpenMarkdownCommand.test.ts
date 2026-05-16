@@ -36,6 +36,10 @@ function createBaseContext() {
     inboxContentByUriRef: {current: cacheState},
     lastPersistedRef: {current: null as {uri: string; markdown: string} | null},
     lastPersistedExternalMutationSeqRef: {current: 0},
+    setLastPersistedSnapshot: vi.fn((next: {uri: string; markdown: string}) => {
+      ctx.lastPersistedRef.current = next;
+      ctx.lastPersistedExternalMutationSeqRef.current += 1;
+    }),
     eagerEditorLoadUriRef: {current: null as string | null},
     backlinksActiveBodyRef: {current: ''},
     loadFullMarkdownIntoInboxEditor: vi.fn(),

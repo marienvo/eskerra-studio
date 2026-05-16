@@ -56,7 +56,7 @@ type OpenMarkdownCommandContext = {
   vaultRootRef: MutableRefObject<string | null>;
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   lastPersistedRef: MutableRefObject<{uri: string; markdown: string} | null>;
-  lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
+  setLastPersistedSnapshot: (next: {uri: string; markdown: string}) => void;
   eagerEditorLoadUriRef: MutableRefObject<string | null>;
   backlinksActiveBodyRef: MutableRefObject<string>;
   loadFullMarkdownIntoInboxEditor: (
@@ -161,8 +161,7 @@ function loadOpenedNoteBodyAndApplySelection(
   prefetchBody: string | undefined,
 ): void {
   if (prefetchBody !== undefined) {
-    ctx.lastPersistedRef.current = {uri: targetNorm, markdown: prefetchBody};
-    ctx.lastPersistedExternalMutationSeqRef.current += 1;
+    ctx.setLastPersistedSnapshot({uri: targetNorm, markdown: prefetchBody});
     ctx.inboxContentByUriRef.current = {
       ...ctx.inboxContentByUriRef.current,
       [targetNorm]: prefetchBody,
@@ -171,8 +170,7 @@ function loadOpenedNoteBodyAndApplySelection(
   const resolvedEditorBody =
     prefetchBody !== undefined ? prefetchBody : ctx.inboxContentByUriRef.current[targetNorm];
   if (resolvedEditorBody !== undefined) {
-    ctx.lastPersistedRef.current = {uri: targetNorm, markdown: resolvedEditorBody};
-    ctx.lastPersistedExternalMutationSeqRef.current += 1;
+    ctx.setLastPersistedSnapshot({uri: targetNorm, markdown: resolvedEditorBody});
     ctx.eagerEditorLoadUriRef.current = targetNorm;
     ctx.backlinksActiveBodyRef.current = resolvedEditorBody;
     ctx.loadFullMarkdownIntoInboxEditor(resolvedEditorBody, targetNorm, 'start');

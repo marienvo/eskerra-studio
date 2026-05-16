@@ -50,7 +50,6 @@ export type ComposeCommandsContext = {
     diskConflictRef: MutableRefObject<DiskConflictState | null>;
     diskConflictSoftRef: MutableRefObject<DiskConflictSoftState | null>;
     lastPersistedRef: MutableRefObject<LastPersisted | null>;
-    lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
     editorBodyRef: MutableRefObject<string>;
     inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
     inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
@@ -66,6 +65,7 @@ export type ComposeCommandsContext = {
     setDiskConflict: Dispatch<SetStateAction<DiskConflictState | null>>;
     setDiskConflictSoft: Dispatch<SetStateAction<DiskConflictSoftState | null>>;
     setInboxContentByUri: Dispatch<SetStateAction<Record<string, string>>>;
+    clearLastPersistedSnapshot: () => void;
   };
   openMarkdownInEditor: (uri: string) => Promise<void>;
 };
@@ -106,8 +106,7 @@ export function runStartNewEntry(ctx: ComposeCommandsContext): void {
     ctx.refs.inboxEditorShellScrollDirectiveRef.current = {kind: 'snapTop'};
     ctx.setters.setComposingNewEntry(true);
     ctx.setters.setSelectedUri(null);
-    ctx.refs.lastPersistedRef.current = null;
-    ctx.refs.lastPersistedExternalMutationSeqRef.current += 1;
+    ctx.setters.clearLastPersistedSnapshot();
     ctx.resetInboxEditorComposeState();
   })();
 }

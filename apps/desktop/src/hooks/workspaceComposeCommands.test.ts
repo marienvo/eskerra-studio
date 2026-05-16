@@ -37,7 +37,6 @@ function createContext(): ComposeCommandsContext {
       diskConflictRef: {current: {uri: '/vault/Inbox/x.md', diskMarkdown: '# disk'}},
       diskConflictSoftRef: {current: {uri: '/vault/Inbox/y.md', diskMarkdown: '# disk'}},
       lastPersistedRef: {current: {uri: '/vault/Inbox/note.md', markdown: '# last'}},
-      lastPersistedExternalMutationSeqRef: {current: 0},
       editorBodyRef: {current: '# body'},
       inboxYamlFrontmatterInnerRef: {current: null},
       inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
@@ -53,6 +52,7 @@ function createContext(): ComposeCommandsContext {
       setDiskConflict: vi.fn(),
       setDiskConflictSoft: vi.fn(),
       setInboxContentByUri: vi.fn(),
+      clearLastPersistedSnapshot: vi.fn(),
     },
     openMarkdownInEditor: vi.fn(async () => undefined),
   };
@@ -69,7 +69,7 @@ describe('workspaceComposeCommands', () => {
     expect(ctx.flushInboxSave).toHaveBeenCalledTimes(1);
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(true);
     expect(ctx.setters.setSelectedUri).toHaveBeenCalledWith(null);
-    expect(ctx.refs.lastPersistedRef.current).toBeNull();
+    expect(ctx.setters.clearLastPersistedSnapshot).toHaveBeenCalledTimes(1);
     expect(ctx.refs.inboxEditorShellScrollDirectiveRef.current).toEqual({kind: 'snapTop'});
     expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(1);
 

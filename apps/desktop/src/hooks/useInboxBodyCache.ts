@@ -33,6 +33,13 @@ export type UseInboxBodyCacheResult = {
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
   lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
+  /**
+   * Updates disk-known snapshot without bumping `lastPersistedExternalMutationSeqRef`. Pair with
+   * {@link bumpLastPersistedExternalMutationSeq} except for vault-watch open-tab probe, which
+   * overrides the bump to detect silent disk drift without treating it as an external mutation.
+   */
+  writeLastPersistedSnapshotWithoutSeqBump: (next: LastPersisted | null) => void;
+  bumpLastPersistedExternalMutationSeq: () => void;
   setLastPersistedSnapshot: (next: LastPersisted) => void;
   clearLastPersistedSnapshot: () => void;
 };
@@ -54,15 +61,26 @@ export function useInboxBodyCache(): UseInboxBodyCacheResult {
     [],
   );
 
-  const setLastPersistedSnapshot = useCallback((next: LastPersisted) => {
+  const writeLastPersistedSnapshotWithoutSeqBump = useCallback((next: LastPersisted | null) => {
     lastPersistedRef.current = next;
+  }, []);
+
+  const bumpLastPersistedExternalMutationSeq = useCallback(() => {
     lastPersistedExternalMutationSeqRef.current += 1;
   }, []);
 
+  const setLastPersistedSnapshot = useCallback(
+    (next: LastPersisted) => {
+      writeLastPersistedSnapshotWithoutSeqBump(next);
+      bumpLastPersistedExternalMutationSeq();
+    },
+    [bumpLastPersistedExternalMutationSeq, writeLastPersistedSnapshotWithoutSeqBump],
+  );
+
   const clearLastPersistedSnapshot = useCallback(() => {
-    lastPersistedRef.current = null;
-    lastPersistedExternalMutationSeqRef.current += 1;
-  }, []);
+    writeLastPersistedSnapshotWithoutSeqBump(null);
+    bumpLastPersistedExternalMutationSeq();
+  }, [bumpLastPersistedExternalMutationSeq, writeLastPersistedSnapshotWithoutSeqBump]);
 
   return {
     inboxContentByUri: inboxContentByUriState,
@@ -70,6 +88,8 @@ export function useInboxBodyCache(): UseInboxBodyCacheResult {
     inboxContentByUriRef,
     lastPersistedRef,
     lastPersistedExternalMutationSeqRef,
+    writeLastPersistedSnapshotWithoutSeqBump,
+    bumpLastPersistedExternalMutationSeq,
     setLastPersistedSnapshot,
     clearLastPersistedSnapshot,
   };

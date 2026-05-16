@@ -53,7 +53,6 @@ export type TreeCommandRefs = {
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
-  lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
 };
 
 export type TreeCommandSetters = {
@@ -69,6 +68,8 @@ export type TreeCommandSetters = {
   setInboxYamlFrontmatterInner: Dispatch<SetStateAction<string | null>>;
   setInboxEditorYamlLeadingBeforeFrontmatter: Dispatch<SetStateAction<string>>;
   setInboxEditorResetNonce: Dispatch<SetStateAction<number>>;
+  setLastPersistedSnapshot: (next: LastPersisted) => void;
+  clearLastPersistedSnapshot: () => void;
 };
 
 export type TreeCommandContext = {
@@ -185,8 +186,6 @@ export async function runDeleteFolder(
     composingNewEntryRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
-    lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
   } = refs;
   const {
     setEditorWorkspaceTabs,
@@ -201,6 +200,7 @@ export async function runDeleteFolder(
     setInboxYamlFrontmatterInner,
     setInboxEditorYamlLeadingBeforeFrontmatter,
     setInboxEditorResetNonce,
+    clearLastPersistedSnapshot,
   } = setters;
 
   autosaveSchedulerRef.current.cancel();
@@ -211,8 +211,7 @@ export async function runDeleteFolder(
   if (clearsSelection) {
     selectedUriRef.current = null;
     composingNewEntryRef.current = false;
-    lastPersistedRef.current = null;
-    lastPersistedExternalMutationSeqRef.current += 1;
+    clearLastPersistedSnapshot();
     setSelectedUri(null);
     setComposingNewEntry(false);
     clearInboxYamlFrontmatterEditorRefs({
@@ -290,9 +289,9 @@ export async function runRenameFolder(
     editorWorkspaceTabsRef,
     editorShellScrollByUriRef,
     lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
   } = refs;
-  const {setBusy, setErr, setInboxContentByUri, setSelectedUri, setFsRefreshNonce} = setters;
+  const {setBusy, setErr, setInboxContentByUri, setSelectedUri, setFsRefreshNonce, setLastPersistedSnapshot} =
+    setters;
 
   autosaveSchedulerRef.current.cancel();
   await ctx.flushInboxSaveRef.current();
@@ -343,8 +342,7 @@ export async function runRenameFolder(
     if (lp) {
       const mappedLp = remapVaultUriPrefix(lp.uri, oldUri, normalizedNext);
       if (mappedLp) {
-        lastPersistedRef.current = {...lp, uri: mappedLp};
-        lastPersistedExternalMutationSeqRef.current += 1;
+        setLastPersistedSnapshot({...lp, uri: mappedLp});
       }
     }
     const remappedTabs = remapAllTabsUriPrefix(
@@ -366,9 +364,8 @@ export async function runRenameFolder(
 
 function applyMovedArticleResult(ctx: TreeCommandContext, previousUri: string, nextUri: string): void {
   const {refs, setters} = ctx;
-  const {selectedUriRef, editorShellScrollByUriRef, lastPersistedRef, lastPersistedExternalMutationSeqRef} =
-    refs;
-  const {setInboxContentByUri, setSelectedUri} = setters;
+  const {selectedUriRef, editorShellScrollByUriRef, lastPersistedRef} = refs;
+  const {setInboxContentByUri, setSelectedUri, setLastPersistedSnapshot} = setters;
 
   setInboxContentByUri(prev => {
     if (prev[previousUri] === undefined) {
@@ -387,8 +384,7 @@ function applyMovedArticleResult(ctx: TreeCommandContext, previousUri: string, n
   setSelectedUri(nextUri);
   const lp = lastPersistedRef.current;
   if (lp && lp.uri === previousUri) {
-    lastPersistedRef.current = {...lp, uri: nextUri};
-    lastPersistedExternalMutationSeqRef.current += 1;
+    setLastPersistedSnapshot({...lp, uri: nextUri});
   }
 }
 
@@ -398,9 +394,8 @@ function applyMovedDirectoryResult(ctx: TreeCommandContext, oldUri: string, newU
     selectedUriRef,
     editorShellScrollByUriRef,
     lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
   } = refs;
-  const {setInboxContentByUri, setSelectedUri} = setters;
+  const {setInboxContentByUri, setSelectedUri, setLastPersistedSnapshot} = setters;
 
   setInboxContentByUri(prev => {
     const next = {...prev};
@@ -425,8 +420,7 @@ function applyMovedDirectoryResult(ctx: TreeCommandContext, oldUri: string, newU
   if (lp) {
     const mappedLp = remapVaultUriPrefix(lp.uri, oldUri, newUri);
     if (mappedLp) {
-      lastPersistedRef.current = {...lp, uri: mappedLp};
-      lastPersistedExternalMutationSeqRef.current += 1;
+      setLastPersistedSnapshot({...lp, uri: mappedLp});
     }
   }
 }
