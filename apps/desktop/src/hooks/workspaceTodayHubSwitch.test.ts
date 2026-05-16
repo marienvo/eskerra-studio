@@ -259,6 +259,8 @@ describe('switchTodayHubWorkspace', () => {
     expect(mocks.activateOpenTab).toHaveBeenCalledWith('tab-b1');
     expect(mocks.selectNote).not.toHaveBeenCalledWith(HUB_B);
     expect(mocks.setActiveTodayHubUri).toHaveBeenCalledWith(HUB_B);
+    expect(args.refs.activeTodayHubUriRef.current).toBe(HUB_B);
+    expect(args.refs.activeEditorTabIdRef.current).toBe('tab-b1');
   });
 
   it('when syncWorkspaceModelForIncomingHub is set: calls it and skips async mirror callbacks', async () => {

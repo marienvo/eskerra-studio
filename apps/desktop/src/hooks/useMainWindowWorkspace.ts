@@ -189,11 +189,6 @@ import {
   workspaceStateForIncomingHubSwitch,
 } from './workspaceRuntimeProjection';
 import {
-  assignLegacyRuntimeActiveHub,
-  assignLegacyRuntimeActiveSurfaceTab,
-  workspaceHubUriEqual,
-} from './workspaceRuntimeActiveLegacyBridge';
-import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
   type WorkspaceRenameMaintenanceSnapshot,
@@ -240,6 +235,34 @@ function assignInboxShellRestored(
   next: boolean,
 ): void {
   setInboxShellRestored(next);
+}
+
+function workspaceHubUriEqual(a: string | null, b: string | null): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  return normalizeWorkspaceUri(a) === normalizeWorkspaceUri(b);
+}
+
+function replaceRuntimeActiveHub(
+  hubUri: string | null,
+  ref: MutableRefObject<string | null>,
+  setActiveTodayHubUri: Dispatch<SetStateAction<string | null>>,
+): void {
+  ref.current = hubUri;
+  setActiveTodayHubUri(hubUri);
+}
+
+function replaceRuntimeActiveSurfaceTab(
+  tabId: string | null,
+  ref: MutableRefObject<string | null>,
+  setActiveEditorTabId: Dispatch<SetStateAction<string | null>>,
+): void {
+  ref.current = tabId;
+  setActiveEditorTabId(tabId);
 }
 
 export type UseMainWindowWorkspaceResult = {
@@ -663,10 +686,11 @@ export function useMainWindowWorkspace(options: {
       return;
     }
     if (!workspaceHubUriEqual(activeTodayHubUriRef.current, modelActiveTodayHubUri)) {
-      assignLegacyRuntimeActiveHub(modelActiveTodayHubUri, {
-        ref: activeTodayHubUriRef,
+      replaceRuntimeActiveHub(
+        modelActiveTodayHubUri,
+        activeTodayHubUriRef,
         setActiveTodayHubUri,
-      });
+      );
     }
     if (modelActiveTodayHubUri != null) {
       const legacyTabsSig = legacyEditorWorkspaceTabsSignature(
@@ -677,10 +701,11 @@ export function useMainWindowWorkspace(options: {
         replaceEditorWorkspaceTabs(modelEditorWorkspaceTabs);
       }
       if (activeEditorTabIdRef.current !== modelActiveEditorTabId) {
-        assignLegacyRuntimeActiveSurfaceTab(modelActiveEditorTabId, {
-          ref: activeEditorTabIdRef,
+        replaceRuntimeActiveSurfaceTab(
+          modelActiveEditorTabId,
+          activeEditorTabIdRef,
           setActiveEditorTabId,
-        });
+        );
       }
     }
     if (
@@ -1249,10 +1274,11 @@ export function useMainWindowWorkspace(options: {
       if (!u) {
         return;
       }
-      assignLegacyRuntimeActiveSurfaceTab(tabId, {
-        ref: activeEditorTabIdRef,
+      replaceRuntimeActiveSurfaceTab(
+        tabId,
+        activeEditorTabIdRef,
         setActiveEditorTabId,
-      });
+      );
       mirrorShadowActiveTab(tabId, 'activate open tab');
       void openMarkdownInEditor(u, {skipHistory: true});
     },
@@ -1324,10 +1350,11 @@ export function useMainWindowWorkspace(options: {
   const refocusAfterClosingActiveTab = useCallback(
     async (nextTabId: string | null, nextTabs: readonly EditorWorkspaceTab[]) => {
       if (nextTabId) {
-        assignLegacyRuntimeActiveSurfaceTab(nextTabId, {
-          ref: activeEditorTabIdRef,
+        replaceRuntimeActiveSurfaceTab(
+          nextTabId,
+          activeEditorTabIdRef,
           setActiveEditorTabId,
-        });
+        );
         mirrorShadowActiveTab(nextTabId, 'close tab refocus neighbor');
       }
       const neighbor = nextTabId ? findTabById(nextTabs, nextTabId) : undefined;
@@ -1342,10 +1369,11 @@ export function useMainWindowWorkspace(options: {
         return;
       }
       if (!nextTabId) {
-        assignLegacyRuntimeActiveSurfaceTab(null, {
-          ref: activeEditorTabIdRef,
+        replaceRuntimeActiveSurfaceTab(
+          null,
+          activeEditorTabIdRef,
           setActiveEditorTabId,
-        });
+        );
         mirrorShadowHomeSurface('close tab home surface');
       }
       clearInboxSelection();
@@ -1425,10 +1453,11 @@ export function useMainWindowWorkspace(options: {
         }
         await saveChainRef.current.catch(() => undefined);
         if (activeEditorTabIdRef.current !== keepTabId) {
-          assignLegacyRuntimeActiveSurfaceTab(keepTabId, {
-            ref: activeEditorTabIdRef,
+          replaceRuntimeActiveSurfaceTab(
+            keepTabId,
+            activeEditorTabIdRef,
             setActiveEditorTabId,
-          });
+          );
           mirrorShadowActiveTab(keepTabId, 'close other tabs activate kept tab');
           await openMarkdownInEditor(keepUri, {skipHistory: true});
         } else {
@@ -1500,10 +1529,11 @@ export function useMainWindowWorkspace(options: {
           ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
           : [];
       replaceEditorWorkspaceTabs(nextTabs);
-      assignLegacyRuntimeActiveSurfaceTab(null, {
-        ref: activeEditorTabIdRef,
+      replaceRuntimeActiveSurfaceTab(
+        null,
+        activeEditorTabIdRef,
         setActiveEditorTabId,
-      });
+      );
       mirrorShadowHomeSurface('close all tabs home surface');
       const shellHubAll = activeTodayHubUriRef.current;
       if (shellHubAll) {
@@ -1562,14 +1592,12 @@ export function useMainWindowWorkspace(options: {
     setDiskConflictSoft(null);
     diskConflictSoftRef.current = null;
     replaceEditorWorkspaceTabs([]);
-    assignLegacyRuntimeActiveSurfaceTab(null, {
-      ref: activeEditorTabIdRef,
+    replaceRuntimeActiveSurfaceTab(
+      null,
+      activeEditorTabIdRef,
       setActiveEditorTabId,
-    });
-    assignLegacyRuntimeActiveHub(null, {
-      ref: activeTodayHubUriRef,
-      setActiveTodayHubUri,
-    });
+    );
+    replaceRuntimeActiveHub(null, activeTodayHubUriRef, setActiveTodayHubUri);
     mirrorShadowActiveHub(null, 'hydrate reset active hub');
     editorClosedTabsStackRef.current = [];
     bumpEditorClosedStack();
@@ -3081,10 +3109,11 @@ export function useMainWindowWorkspace(options: {
             | null
             | undefined,
         });
-        assignLegacyRuntimeActiveHub(activeHubFinal, {
-          ref: activeTodayHubUriRef,
+        replaceRuntimeActiveHub(
+          activeHubFinal,
+          activeTodayHubUriRef,
           setActiveTodayHubUri,
-        });
+        );
         assignLegacyHomeStatesByHub(
           homeStatesByHubRef,
           setHomeStatesByHub,
@@ -3098,10 +3127,7 @@ export function useMainWindowWorkspace(options: {
           homeStatesByHub: homeHydrated,
         };
       } else if (vaultMarkdownRefs.length > 0) {
-        assignLegacyRuntimeActiveHub(null, {
-          ref: activeTodayHubUriRef,
-          setActiveTodayHubUri,
-        });
+        replaceRuntimeActiveHub(null, activeTodayHubUriRef, setActiveTodayHubUri);
         mirrorShadowActiveHub(null, 'restore active hub');
         assignInboxShellRestored(setInboxShellRestored, true);
       } else {
@@ -3176,10 +3202,7 @@ export function useMainWindowWorkspace(options: {
         editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
         openTabUris: null,
       }) ?? hubs[0]!;
-    assignLegacyRuntimeActiveHub(pick, {
-      ref: activeTodayHubUriRef,
-      setActiveTodayHubUri,
-    });
+    replaceRuntimeActiveHub(pick, activeTodayHubUriRef, setActiveTodayHubUri);
     mirrorShadowActiveHub(pick, 'default active hub');
     mirrorShadowActiveWorkspaceTabs(
       editorWorkspaceTabsRef.current,
