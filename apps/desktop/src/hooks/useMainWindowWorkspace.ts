@@ -1296,13 +1296,13 @@ export function useMainWindowWorkspace(options: {
 
   /** Pick where to refocus after the active tab is closed: surviving tab → workspace shell hub → empty. */
   const refocusAfterActiveTabRemoved = useCallback(
-    async (
+    (
       closedNorm: string,
       nextTabs: readonly EditorWorkspaceTab[],
       nextActive: string | null,
-    ) => {
-      await runRefocusAfterActiveTabRemoved(tabCommandContext, closedNorm, nextTabs, nextActive);
-    },
+      options?: {wasOnHomeNoActiveTab?: boolean},
+    ) =>
+      runRefocusAfterActiveTabRemoved(tabCommandContext, closedNorm, nextTabs, nextActive, options),
     [tabCommandContext],
   );
 

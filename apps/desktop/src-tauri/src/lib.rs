@@ -3,6 +3,7 @@ mod link_rich_metadata;
 #[cfg(target_os = "linux")]
 mod linux_app_identity;
 mod r2_http;
+mod startup_theme;
 mod tiling;
 #[cfg(target_os = "linux")]
 mod tiling_gdk;
@@ -23,6 +24,7 @@ fn main_window_restore_flags() -> tauri_plugin_window_state::StateFlags {
     tauri_plugin_window_state::StateFlags::all()
         .difference(tauri_plugin_window_state::StateFlags::POSITION)
         .difference(tauri_plugin_window_state::StateFlags::DECORATIONS)
+        .difference(tauri_plugin_window_state::StateFlags::VISIBLE)
 }
 
 #[cfg(all(not(mobile), debug_assertions))]
@@ -80,6 +82,19 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             linux_app_identity::apply_linux_app_identity_branding();
             vault_watch::setup_vault_watch(app)?;
+            let startup_theme = startup_theme::load_startup_theme(app);
+            let init_script = startup_theme::initialization_script(&startup_theme);
+            let window_config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .or_else(|| app.config().app.windows.first())
+                .expect("main window config exists");
+            tauri::WebviewWindowBuilder::from_config(app, window_config)?
+                .initialization_script(init_script)
+                .build()?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

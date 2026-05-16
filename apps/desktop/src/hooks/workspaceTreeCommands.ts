@@ -87,6 +87,7 @@ export type TreeCommandContext = {
     closedNorm: string,
     nextTabs: readonly EditorWorkspaceTab[],
     nextActive: string | null,
+    options?: {wasOnHomeNoActiveTab?: boolean},
   ) => Promise<void>;
   openMarkdownInEditor: (
     uri: string,
@@ -131,8 +132,13 @@ export async function runDeleteNote(ctx: TreeCommandContext, uri: string): Promi
 
   const norm = normalizeEditorDocUri(uri);
   const wasOpen = selectedUriRef.current === norm;
+  // When the user was on workspace home (no active tab), preserve that state rather
+  // than falling back to an arbitrary surviving tab via ensureActiveTabId.
+  const wasOnHomeNoActiveTab = activeEditorTabIdRef.current === null;
   const nextTabs = removeUriFromAllTabs(editorWorkspaceTabsRef.current, u => u === norm);
-  const nextActive = ensureActiveTabId(nextTabs, activeEditorTabIdRef.current);
+  const nextActive = wasOnHomeNoActiveTab
+    ? null
+    : ensureActiveTabId(nextTabs, activeEditorTabIdRef.current);
   editorWorkspaceTabsRef.current = nextTabs;
   setEditorWorkspaceTabs(nextTabs);
   activeEditorTabIdRef.current = nextActive;
@@ -146,7 +152,7 @@ export async function runDeleteNote(ctx: TreeCommandContext, uri: string): Promi
   editorShellScrollByUriRef.current.delete(norm);
 
   if (wasOpen) {
-    await ctx.refocusAfterActiveTabRemoved(norm, nextTabs, nextActive);
+    await ctx.refocusAfterActiveTabRemoved(norm, nextTabs, nextActive, {wasOnHomeNoActiveTab});
   }
 
   setBusy(true);
@@ -208,6 +214,7 @@ export async function runDeleteFolder(
   const selected = selectedUriRef.current?.replace(/\\/g, '/');
   const clearsSelection =
     selected != null && (selected === normDir || selected.startsWith(`${normDir}/`));
+  const wasOnHomeNoActiveTab = activeEditorTabIdRef.current === null;
   if (clearsSelection) {
     selectedUriRef.current = null;
     composingNewEntryRef.current = false;
@@ -245,7 +252,9 @@ export async function runDeleteFolder(
       return u === f || u.startsWith(`${f}/`);
     };
     const newTabs = removeUriFromAllTabs(editorWorkspaceTabsRef.current, tabPred);
-    const nextActive = ensureActiveTabId(newTabs, activeEditorTabIdRef.current);
+    const nextActive = wasOnHomeNoActiveTab
+      ? null
+      : ensureActiveTabId(newTabs, activeEditorTabIdRef.current);
     editorWorkspaceTabsRef.current = newTabs;
     setEditorWorkspaceTabs(newTabs);
     activeEditorTabIdRef.current = nextActive;
@@ -257,12 +266,7 @@ export async function runDeleteFolder(
     }
     ctx.removeHomeHistoryUris(tabPred);
     if (clearsSelection) {
-      const activeTab = nextActive ? findTabById(newTabs, nextActive) : undefined;
-      const nextUri =
-        (activeTab ? tabCurrentUri(activeTab) : null) ?? firstSurvivorUriFromTabs(newTabs);
-      if (nextUri) {
-        await ctx.openMarkdownInEditor(nextUri, {skipHistory: true});
-      }
+      await ctx.refocusAfterActiveTabRemoved(normDir, newTabs, nextActive, {wasOnHomeNoActiveTab});
     }
     ctx.markVaultWriteSettled();
     await ctx.refreshNotes(vaultRoot);

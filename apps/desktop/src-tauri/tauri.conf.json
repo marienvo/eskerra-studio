@@ -17,12 +17,14 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "Eskerra",
         "width": 640,
         "height": 400,
         "minWidth": 520,
         "minHeight": 380,
         "resizable": true,
+        "visible": false,
         "fullscreen": false,
         "decorations": false,
         "transparent": true

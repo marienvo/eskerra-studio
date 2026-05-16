@@ -3,6 +3,7 @@ import {describe, expect, it, vi} from 'vitest';
 import {createEditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import {
   runActivateOpenTab,
+  runRefocusAfterActiveTabRemoved,
   runReorderEditorWorkspaceTabs,
   runSelectNote,
   type TabCommandContext,
@@ -80,5 +81,51 @@ describe('workspaceTabCommands', () => {
     expect(ctx.callbacks.openMarkdownInEditor).toHaveBeenCalledWith('/vault/Inbox/a.md', {
       skipHistory: true,
     });
+  });
+
+  it('runRefocusAfterActiveTabRemoved routes to hub home when wasOnHomeNoActiveTab is true', async () => {
+    const tab = createEditorWorkspaceTab('/vault/Inbox/other.md');
+    const ctx = buildCtx({
+      refs: {
+        editorWorkspaceTabsRef: {current: [tab]},
+        activeEditorTabIdRef: {current: null},
+        activeTodayHubUriRef: {current: '/vault/General/2025-01-06.md'},
+      },
+    });
+
+    await runRefocusAfterActiveTabRemoved(
+      ctx,
+      '/vault/Inbox/deleted.md',
+      [tab],
+      null,
+      {wasOnHomeNoActiveTab: true},
+    );
+
+    expect(ctx.callbacks.selectHomeCurrentNote).toHaveBeenCalledWith('/vault/General/2025-01-06.md');
+    expect(ctx.callbacks.openMarkdownInEditor).not.toHaveBeenCalled();
+  });
+
+  it('runRefocusAfterActiveTabRemoved opens surviving tab URI when wasOnHomeNoActiveTab is false', async () => {
+    const tab = createEditorWorkspaceTab('/vault/Inbox/other.md');
+    const ctx = buildCtx({
+      refs: {
+        editorWorkspaceTabsRef: {current: [tab]},
+        activeEditorTabIdRef: {current: tab.id},
+        activeTodayHubUriRef: {current: '/vault/General/2025-01-06.md'},
+      },
+    });
+
+    await runRefocusAfterActiveTabRemoved(
+      ctx,
+      '/vault/Inbox/deleted.md',
+      [tab],
+      tab.id,
+      {wasOnHomeNoActiveTab: false},
+    );
+
+    expect(ctx.callbacks.openMarkdownInEditor).toHaveBeenCalledWith('/vault/Inbox/other.md', {
+      skipHistory: true,
+    });
+    expect(ctx.callbacks.selectHomeCurrentNote).not.toHaveBeenCalled();
   });
 });

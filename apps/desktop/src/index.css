@@ -5,6 +5,14 @@ html {
   color-scheme: light;
 }
 
+html[data-startup-theme-lock='true'],
+html[data-startup-theme-lock='true'] *,
+html[data-startup-theme-lock='true'] *::before,
+html[data-startup-theme-lock='true'] *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
 /* :root design tokens — generated from @eskerra/tokens (see packages/eskerra-tokens); imported in main.tsx */
 
 body {

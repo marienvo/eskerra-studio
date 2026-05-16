@@ -6,7 +6,7 @@ import {
   type VaultFilesystem,
   type VaultThemeListItem,
 } from '@eskerra/core';
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 
 import {
   type VaultFilesChangedPayload,
@@ -16,6 +16,7 @@ import {
 type UseVaultThemesParams = {
   vaultRoot: string | null;
   fs: VaultFilesystem;
+  initialItems?: VaultThemeListItem[];
 };
 
 function normalizeFsPath(p: string): string {
@@ -31,20 +32,33 @@ function themesDirHit(vaultRoot: string, changedPaths: readonly string[]): boole
   });
 }
 
-export function useVaultThemes({vaultRoot, fs}: UseVaultThemesParams): {
+export function useVaultThemes({vaultRoot, fs, initialItems = []}: UseVaultThemesParams): {
   items: VaultThemeListItem[];
   ready: boolean;
   reload: () => Promise<void>;
 } {
-  const [items, setItems] = useState<VaultThemeListItem[]>([]);
-  const [ready, setReady] = useState(false);
+  const initialItemsRef = useRef(initialItems);
+  useLayoutEffect(() => {
+    initialItemsRef.current = initialItems;
+  }, [initialItems]);
+
+  const [items, setItems] = useState<VaultThemeListItem[]>(initialItems);
+  const [ready, setReady] = useState(initialItems.length > 0);
+  /** After any load with a real `vaultRoot`, closing the vault must clear items (do not keep startup seed). */
+  const hasLoadedFromVaultRef = useRef(false);
 
   const reload = useCallback(async () => {
     if (!vaultRoot) {
+      // Keep startup theme items from __ESKERRA_STARTUP_THEME__ only until first vault open.
+      if (!hasLoadedFromVaultRef.current && initialItemsRef.current.length > 0) {
+        setReady(true);
+        return;
+      }
       setItems([]);
       setReady(true);
       return;
     }
+    hasLoadedFromVaultRef.current = true;
     try {
       const next = await listVaultThemes(vaultRoot, fs);
       setItems(next);

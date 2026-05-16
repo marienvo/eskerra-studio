@@ -18,7 +18,7 @@
     "apps/desktop/src/hooks/workspaceLinkRouting.ts": 467,
     "apps/desktop/src/hooks/workspacePersistence.ts": 431,
     "apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts": 840,
-    "apps/desktop/src/hooks/workspaceTabCommands.ts": 445,
+    "apps/desktop/src/hooks/workspaceTabCommands.ts": 424,
     "apps/desktop/src/hooks/workspaceTodayHubSwitch.ts": 279,
     "apps/desktop/src/hooks/workspaceVaultWatchEffects.ts": 551,
     "apps/desktop/src/lib/cleanNoteMarkdown.ts": 1006,
