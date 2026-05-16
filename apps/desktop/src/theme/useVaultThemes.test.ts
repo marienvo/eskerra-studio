@@ -66,6 +66,51 @@ describe('useVaultThemes', () => {
     expect(listSpy).not.toHaveBeenCalled();
   });
 
+  it('clears items when vaultRoot returns to null after a vault load', async () => {
+    const fromDisk: VaultThemeListItem[] = [
+      {
+        kind: 'ok',
+        theme: {
+          id: 'disk-theme',
+          name: 'Disk',
+          source: 'vault',
+          light: {palette: ['#eeeeee']},
+          dark: {palette: ['#222222']},
+          fileName: 'disk-theme.json',
+        },
+      },
+    ];
+    const listSpy = vi.spyOn(core, 'listVaultThemes').mockResolvedValue(fromDisk);
+
+    const {result, rerender} = renderHook(
+      ({vaultRoot}: {vaultRoot: string | null}) =>
+        useVaultThemes({
+          vaultRoot,
+          fs,
+          initialItems: [startupVaultItem],
+        }),
+      {initialProps: {vaultRoot: null as string | null}},
+    );
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+    expect(result.current.items).toEqual([startupVaultItem]);
+
+    rerender({vaultRoot: '/vault'});
+    await waitFor(() => {
+      expect(listSpy).toHaveBeenCalledWith('/vault', fs);
+    });
+    await waitFor(() => {
+      expect(result.current.items).toEqual(fromDisk);
+    });
+
+    rerender({vaultRoot: null});
+    await waitFor(() => {
+      expect(result.current.items).toEqual([]);
+    });
+  });
+
   it('loads from disk when vaultRoot becomes set', async () => {
     const fromDisk: VaultThemeListItem[] = [
       {

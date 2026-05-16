@@ -44,11 +44,13 @@ export function useVaultThemes({vaultRoot, fs, initialItems = []}: UseVaultTheme
 
   const [items, setItems] = useState<VaultThemeListItem[]>(initialItems);
   const [ready, setReady] = useState(initialItems.length > 0);
+  /** After any load with a real `vaultRoot`, closing the vault must clear items (do not keep startup seed). */
+  const hasLoadedFromVaultRef = useRef(false);
 
   const reload = useCallback(async () => {
     if (!vaultRoot) {
-      // Keep startup theme items from __ESKERRA_STARTUP_THEME__ until vault hydrates.
-      if (initialItemsRef.current.length > 0) {
+      // Keep startup theme items from __ESKERRA_STARTUP_THEME__ only until first vault open.
+      if (!hasLoadedFromVaultRef.current && initialItemsRef.current.length > 0) {
         setReady(true);
         return;
       }
@@ -56,6 +58,7 @@ export function useVaultThemes({vaultRoot, fs, initialItems = []}: UseVaultTheme
       setReady(true);
       return;
     }
+    hasLoadedFromVaultRef.current = true;
     try {
       const next = await listVaultThemes(vaultRoot, fs);
       setItems(next);

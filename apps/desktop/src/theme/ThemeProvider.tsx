@@ -121,7 +121,9 @@ export function ThemeProvider({
     if (activeTheme.id !== preference.themeId) {
       return;
     }
-    if (vaultRoot !== null && vaultSettings !== null && !preferenceLoaded) {
+    // Wait for shared settings (and R2 preference when applicable) so we do not persist stale
+    // `initialPreference` or race `store.save()` with the correct vault write.
+    if (vaultRoot !== null && !preferenceLoaded) {
       return;
     }
     persistStartupThemeBootstrap({
@@ -134,7 +136,6 @@ export function ThemeProvider({
     resolvedMode,
     activeTheme,
     vaultRoot,
-    vaultSettings,
     preferenceLoaded,
   ]);
 

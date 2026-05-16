@@ -107,4 +107,24 @@ describe('ThemeProvider', () => {
 
     expect(startupMocks.persistStartupThemeBootstrap).not.toHaveBeenCalled();
   });
+
+  it('does not persist startup bootstrap until shared settings load when vault is open', async () => {
+    const setVaultSettings = vi.fn();
+
+    render(
+      <ThemeProvider
+        vaultRoot="/vault"
+        vaultSettings={null}
+        setVaultSettings={setVaultSettings}
+        fs={fs}>
+        <ActiveThemeIdProbe />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-theme-id').textContent).toBe('my-vault-theme');
+    });
+
+    expect(startupMocks.persistStartupThemeBootstrap).not.toHaveBeenCalled();
+  });
 });
