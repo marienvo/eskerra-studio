@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [main]
   schedule:
+    # Monday 21:19 UTC — weekly java-kotlin (Android) traced scan
     - cron: '19 21 * * 1'
+  workflow_dispatch:
 
 jobs:
+  # Fast languages on every push/PR (and still on schedule alongside analyze-android).
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
@@ -28,36 +31,10 @@ jobs:
             build-mode: none
           - language: rust
             build-mode: none
-          - language: java-kotlin
-            build-mode: manual
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
-      - name: Setup Node (React Native Android / CodeQL)
-        if: matrix.language == 'java-kotlin'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-
-      - name: Install npm dependencies
-        if: matrix.language == 'java-kotlin'
-        run: npm ci
-
-      - name: Setup Java
-        if: matrix.language == 'java-kotlin'
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Setup Android SDK
-        if: matrix.language == 'java-kotlin'
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006'
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -66,8 +43,53 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           # queries: security-extended,security-and-quality
 
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # Heavy Android traced build: weekly only (not on every PR/push).
+  analyze-android:
+    name: Analyze (java-kotlin / Android)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node (React Native Android / CodeQL)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: manual
+
       - name: Build Android (CodeQL trace)
-        if: matrix.language == 'java-kotlin'
         working-directory: apps/mobile/android
         env:
           SENTRY_DISABLE_AUTO_UPLOAD: 'true'
@@ -78,4 +100,4 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:java-kotlin"
