@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — baseline capture for the phased extraction plan in `.claude/plans/useMainWindowWorkspace-decompositie.md`.
+Proposed — baseline capture for the phased extraction plan in `.claude/plans/useMainWindowWorkspace-decompositie.md`, **updated after Phase 4** (vault tree commands extracted to `workspaceTreeCommands.ts`, 2026-05-16).
 
 ## Context
 
@@ -15,6 +15,44 @@ This ADR records the starting point for the phased decomposition so later PRs ca
 - File size: `4062` LOC for `apps/desktop/src/hooks/useMainWindowWorkspace.ts`.
 - Direct dependency surface: `19` `import` statements, of which `10` are local relative imports and `9` are package imports.
 - Related test surface: `19` desktop hook test files in `apps/desktop/src/hooks/` currently cover this orchestration area, including `2` direct `useMainWindowWorkspace.*` tests and `17` adjacent bridge/helper tests.
+
+## Post–Phase 4 snapshot (2026-05-16)
+
+Phase 4 moved vault tree mutations out of the orchestrator into command modules with explicit `TreeCommandContext`. This section records the **current** module boundaries and line counts so later phases compare against an up-to-date snapshot (the baseline block above stays the historical anchor).
+
+### Line counts (measured with `wc -l`)
+
+| Artifact | LOC |
+|---|---:|
+| `apps/desktop/src/hooks/useMainWindowWorkspace.ts` | 2866 |
+| `apps/desktop/src/hooks/workspaceTreeCommands.ts` | 656 |
+| `apps/desktop/src/hooks/workspaceTreeCommands.test.ts` | 393 |
+| `apps/desktop/src/hooks/workspaceVaultTreeMutations.ts` | 66 |
+
+Net change for `useMainWindowWorkspace.ts` versus the Phase 0 baseline in this ADR: **4062 → 2866** (−1196 LOC).
+
+### Orchestration module map (extracted stores and commands)
+
+These modules are composed by `useMainWindowWorkspace` today (Phase 4 complete). They are **not** the full import graph; they are the decomposition targets called out in `.claude/plans/reviewpunten-fase0-6-aanpak.md` step 5.
+
+| Module | Responsibility |
+|---|---|
+| `useVaultBootstrap.ts` | Vault root, shared/local settings, device id, `hydrateVault` and first-launch wiring |
+| `useDiskConflictState.ts` | Hard/soft disk conflict state, defer timer, resolver callbacks |
+| `useMergeViewState.ts` | Merge view state and merge/discard callbacks |
+| `useInboxEditorState.ts` | Inbox editor surface state (selection, body, frontmatter, compose guards, scroll directives); **not** the note-body cache (`inboxContentByUri` / `lastPersistedRef` — planned Phase 7) |
+| `useEditorTabsState.ts` | Editor tab strip + active tab id (facade over shadow model where applicable), closed-tab stack bump API |
+| `workspaceOpenMarkdownCommand.ts` | `runOpenMarkdownInEditorCommand` and the open pipeline sub-steps |
+| `workspaceTreeCommands.ts` | `runDeleteNote`, `runDeleteFolder`, `runRenameFolder`, `runMoveVaultTreeItem`, `runBulkDeleteVaultTreeItems`, `runBulkMoveVaultTreeItems` (+ internal commit helpers) |
+| `workspaceVaultTreeMutations.ts` | Pure helpers: bulk-delete tab/scroll pruning predicates and path collection |
+
+### Phase 0 invariants checklist
+
+The **Per-phase invariants checklist** in this ADR was added under Phase 0 and remains the authoritative gate for every decomposition PR. Step 5 does not duplicate it.
+
+### Forward work (Phases 7–10)
+
+Later planned extractions (`useNotesListing` + inbox body cache, Today hubs consolidation, compose commands + shell restore cleanup, final mirror cleanup per `.claude/plans/useMainWindowWorkspace-decompositie.md`) can proceed **without** re-disentangling inline vault tree command bodies from the orchestrator. Legacy workspace bridge modules and Phase 1 substeps 4–5 (runtime tab / shadow sync cleanup) stay on their **own** track and are unchanged by Phase 4 completion.
 
 ## Decision
 
