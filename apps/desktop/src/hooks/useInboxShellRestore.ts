@@ -24,25 +24,10 @@ import {
   runDeferredShellRestoreTabStateAndShadowSync,
   type ShellRestoreProjectionSyncArgs,
 } from './workspaceInboxShellRestoreBridge';
+import {replaceRuntimeActiveHub} from './workspaceTabCommands';
 
 function normalizedVaultRootPath(vaultRoot: string): string {
   return trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-}
-
-function assignInboxShellRestored(
-  setInboxShellRestored: (next: boolean) => void,
-  next: boolean,
-): void {
-  setInboxShellRestored(next);
-}
-
-function replaceRuntimeActiveHub(
-  hubUri: string | null,
-  ref: MutableRefObject<string | null>,
-  setActiveTodayHubUri: Dispatch<SetStateAction<string | null>>,
-): void {
-  ref.current = hubUri;
-  setActiveTodayHubUri(hubUri);
 }
 
 export type UseInboxShellRestoreArgs = {
@@ -109,7 +94,7 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
   useEffect(() => {
     if (!inboxRestoreEnabled) {
       queueMicrotask(() => {
-        assignInboxShellRestored(setInboxShellRestored, true);
+        setInboxShellRestored(true);
       });
       inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
       return;
@@ -260,7 +245,7 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
           setActiveTodayHubUri,
         );
         replaceHomeStatesByHub(homeHydrated);
-        assignInboxShellRestored(setInboxShellRestored, true);
+        setInboxShellRestored(true);
         shellRestoreProjection = {
           activeTodayHubUri: activeHubFinal,
           hubUris,
@@ -270,9 +255,9 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
       } else if (vaultMarkdownRefs.length > 0) {
         replaceRuntimeActiveHub(null, activeTodayHubUriRef, setActiveTodayHubUri);
         mirrorShadowActiveHub(null, 'restore active hub');
-        assignInboxShellRestored(setInboxShellRestored, true);
+        setInboxShellRestored(true);
       } else {
-        assignInboxShellRestored(setInboxShellRestored, true);
+        setInboxShellRestored(true);
       }
 
       runDeferredShellRestoreTabStateAndShadowSync(
@@ -293,7 +278,7 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
       return;
     }
     queueMicrotask(() => {
-      assignInboxShellRestored(setInboxShellRestored, true);
+      setInboxShellRestored(true);
     });
   }, [
     activeEditorTabIdRef,
