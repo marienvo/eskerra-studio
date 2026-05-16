@@ -6,7 +6,7 @@ import {
   type VaultFilesystem,
   type VaultThemeListItem,
 } from '@eskerra/core';
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 
 import {
   type VaultFilesChangedPayload,
@@ -37,11 +37,21 @@ export function useVaultThemes({vaultRoot, fs, initialItems = []}: UseVaultTheme
   ready: boolean;
   reload: () => Promise<void>;
 } {
+  const initialItemsRef = useRef(initialItems);
+  useLayoutEffect(() => {
+    initialItemsRef.current = initialItems;
+  }, [initialItems]);
+
   const [items, setItems] = useState<VaultThemeListItem[]>(initialItems);
   const [ready, setReady] = useState(initialItems.length > 0);
 
   const reload = useCallback(async () => {
     if (!vaultRoot) {
+      // Keep startup theme items from __ESKERRA_STARTUP_THEME__ until vault hydrates.
+      if (initialItemsRef.current.length > 0) {
+        setReady(true);
+        return;
+      }
       setItems([]);
       setReady(true);
       return;
