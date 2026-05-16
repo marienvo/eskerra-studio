@@ -8,14 +8,14 @@
 <h1 align="center">Eskerra</h1>
 
 <p align="center">
-  Eskerra is a <strong>notes + podcast</strong> companion with two apps in one repo:
+  Eskerra is a <strong>local-first Markdown notes</strong> app — a desktop editor for focused, keyboard-driven work and a mobile companion for quick capture:
 </p>
 
 | App | Location | Stack |
 | --- | --- | --- |
 | **Mobile** | [`apps/mobile/`](apps/mobile/) | React Native (**Android only**) |
 | **Desktop** | [`apps/desktop/`](apps/desktop/) | Tauri 2 + Vite + React (Linux-first; Fedora / GNOME is the reference) |
-| **Shared logic** | [`packages/eskerra-core/`](packages/eskerra-core/) | TypeScript (vault paths, settings, `VaultFilesystem`, audio types) |
+| **Shared logic** | [`packages/eskerra-core/`](packages/eskerra-core/) | TypeScript (vault paths, settings, `VaultFilesystem`) |
 
 Both apps use the same **vault layout** on disk: user-chosen root folder, then `Inbox/`, `General/`, and `/.eskerra/settings-shared.json` plus per-device `/.eskerra/settings-local.json` (see [`specs/architecture/desktop-mobile-parity.md`](specs/architecture/desktop-mobile-parity.md)).
 
@@ -37,7 +37,7 @@ Both apps use the same **vault layout** on disk: user-chosen root folder, then `
 | `npm run desktop` | **Desktop:** `tauri dev` (Vite + native window) |
 | `npm run desktop:build` | **Desktop:** release semver bump (same rules as APK) + production web build + `tauri build` |
 | `npm test` | `@eskerra/core` (Vitest) + `@eskerra/tokens` + `@eskerra/ds-desktop` + `@eskerra/ds-mobile` + mobile RN-Web Storybook **build** + mobile (Jest) + release helper tests |
-| `npm run storybook:desktop -w @eskerra/ds-desktop` | Desktop design system Storybook (web, Vite) |
+| `npm run storybook:desktop` | Desktop design system Storybook (web, Vite) |
 | `npm run storybook:android -w @eskerra/mobile` | Mobile design system Storybook **on-device** (separate Metro entry) |
 | `npm run storybook:web -w @eskerra/ds-mobile` | Mobile DS Storybook **RN-Web** (docs / fast review, port 6007) |
 | `npm run test:storybook-web` | Playwright + test-runner against static RN-Web Storybook (downloads Chromium on first run) |
@@ -56,10 +56,14 @@ npm run desktop:dev -w @eskerra/desktop
 
 ### What the mobile app does
 
-- Select a Notes directory with the Android folder picker (SAF).
-- Persist the selected tree URI in AsyncStorage.
-- Create/update `/.eskerra/settings-shared.json` (optional R2 fields only on the shared file) and `/.eskerra/settings-local.json` for per-device `deviceName` and `displayName` (both default to empty strings).
-- Debug APK build/install scripts live under [`scripts/`](scripts/) and call Gradle in [`apps/mobile/android/`](apps/mobile/android/).
+- **Inbox / quick capture** — compose and browse short Markdown notes in `Inbox/`.
+- **Vault browsing** — navigate, search (SQLite FTS5), and read any `.md` note in the vault.
+- **Note editing** — create and update Markdown notes with callout block support.
+- **Today Hub** — visual weekly workspace, mirrored from the desktop.
+- **Podcast playback** — stream MP3 episodes from `General/` podcast markdown, with lock-screen controls.
+- **Settings** — display name, vault selection (Android SAF), optional Cloudflare R2 for playlist sync.
+
+On first launch the app asks for a vault folder via the Android folder picker (SAF); the selected tree URI is persisted in AsyncStorage. Init writes `/.eskerra/settings-shared.json` and `/.eskerra/settings-local.json`.
 
 ### Extra prerequisites (Android only)
 
@@ -165,7 +169,7 @@ Production-style build:
 npm run desktop:build
 ```
 
-Vault selection, `.eskerra` settings, inbox notes, MP3 streaming, and Linux **MPRIS** (play/pause from GNOME) are described in [`specs/architecture/desktop-mobile-parity.md`](specs/architecture/desktop-mobile-parity.md).
+The vault contract, settings, editor features, and podcast playback (including Linux **MPRIS** / GNOME media keys) are described in [`specs/architecture/desktop-mobile-parity.md`](specs/architecture/desktop-mobile-parity.md).
 
 ---
 
