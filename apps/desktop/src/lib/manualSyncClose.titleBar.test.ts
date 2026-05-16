@@ -130,7 +130,7 @@ describe('handleManualSyncCloseRequest', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('does not start another close sync while sync is running', async () => {
+  it('does not start another close sync while sync is running and no waitForCurrentRun provided', async () => {
     const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const close = vi.fn();
     const notify = vi.fn();
@@ -147,6 +147,58 @@ describe('handleManualSyncCloseRequest', () => {
     expect(runManualSync).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('awaits in-flight sync via waitForCurrentRun and closes on success', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+    let resolveInflight!: (value: boolean) => void;
+    const inflight = new Promise<boolean>(r => { resolveInflight = r; });
+
+    const p = handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync,
+      close,
+      notify,
+      showCloseSyncFeedback: true,
+      waitForCurrentRun: () => inflight,
+    });
+
+    resolveInflight(true);
+    await p;
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('stays open and notifies when in-flight sync fails', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+    let resolveInflight!: (value: boolean) => void;
+    const inflight = new Promise<boolean>(r => { resolveInflight = r; });
+
+    const p = handleManualSyncCloseRequest({
+      instant: false,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync,
+      close,
+      notify,
+      showCloseSyncFeedback: true,
+      waitForCurrentRun: () => inflight,
+    });
+
+    resolveInflight(false);
+    await p;
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith('error', 'Sync before close failed. Eskerra stayed open.');
   });
 
   it('closes immediately without notifying or syncing when manual sync is not required', async () => {

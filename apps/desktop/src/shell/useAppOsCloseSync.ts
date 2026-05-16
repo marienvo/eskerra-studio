@@ -32,6 +32,8 @@ type UseAppOsCloseSyncArgs = {
   closeSyncTimeoutMs?: number;
   /** How long to wait before showing the progress overlay (ms). Default 200. Pass 0 in tests. */
   closeSyncIndicatorDelayMs?: number;
+  /** Returns the in-flight sync promise if one is running, or null if idle. */
+  waitForCurrentRun?: () => Promise<boolean> | null;
 };
 
 type UseAppOsCloseSyncResult = {
@@ -68,6 +70,7 @@ export function useAppOsCloseSync({
   fetchFreshGitStatusForClose,
   closeSyncTimeoutMs,
   closeSyncIndicatorDelayMs = 200,
+  waitForCurrentRun,
 }: UseAppOsCloseSyncArgs): UseAppOsCloseSyncResult {
   const allowCloseRef = useRef(false);
   const closeSyncInProgressRef = useRef(false);
@@ -133,6 +136,7 @@ export function useAppOsCloseSync({
         closeSyncInProgressRef,
         timeoutMs: closeSyncTimeoutMs,
         gitStatus: gitStatusForClose,
+        waitForCurrentRun,
       });
     });
   });

@@ -130,6 +130,7 @@ describe('useAppGitSyncOrchestration close handling', () => {
     mockUseManualVaultGitSync.mockReturnValue({
       running: false,
       run: runManualSync,
+      waitForCurrentRun: vi.fn().mockReturnValue(null),
     });
     mockUseVaultGitAutosyncScheduler.mockReturnValue(undefined);
     mockUseVaultGitCurrentBranch.mockReturnValue({

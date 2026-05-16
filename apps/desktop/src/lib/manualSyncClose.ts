@@ -21,6 +21,8 @@ type HandleManualSyncCloseRequestArgs = {
   showCloseSyncFeedback?: boolean;
   /** Most recent git status; used for preflight to skip sync when nothing to do. */
   gitStatus?: GitStatusResult | null;
+  /** Returns the in-flight sync promise if one is running, or null if idle. */
+  waitForCurrentRun?: () => Promise<boolean> | null;
 };
 
 export async function handleManualSyncCloseRequest({
@@ -34,6 +36,7 @@ export async function handleManualSyncCloseRequest({
   notifyDisabled = true,
   showCloseSyncFeedback = false,
   gitStatus,
+  waitForCurrentRun,
 }: HandleManualSyncCloseRequestArgs): Promise<void> {
   if (instant) {
     close();
@@ -41,6 +44,16 @@ export async function handleManualSyncCloseRequest({
   }
 
   if (manualSyncRunning) {
+    const inflight = waitForCurrentRun?.();
+    if (inflight == null) {
+      return;
+    }
+    const ok = await inflight;
+    if (ok) {
+      close();
+    } else if (showCloseSyncFeedback) {
+      notify('error', 'Sync before close failed. Eskerra stayed open.');
+    }
     return;
   }
 
@@ -89,6 +102,8 @@ type HandleOsCloseRequestArgs = {
   timeoutMs?: number;
   /** Most recent git status; used for preflight to skip sync when nothing to do. */
   gitStatus?: GitStatusResult | null;
+  /** Returns the in-flight sync promise if one is running, or null if idle. */
+  waitForCurrentRun?: () => Promise<boolean> | null;
 };
 
 /**
@@ -107,6 +122,7 @@ export async function handleOsCloseRequest({
   closeSyncInProgressRef,
   timeoutMs = CLOSE_SYNC_TIMEOUT_MS,
   gitStatus,
+  waitForCurrentRun,
 }: HandleOsCloseRequestArgs): Promise<void> {
   if (closeSyncInProgressRef.current) {
     return;
@@ -126,6 +142,21 @@ export async function handleOsCloseRequest({
   }
 
   if (manualSyncRunning) {
+    const inflight = waitForCurrentRun?.();
+    if (inflight == null) {
+      return;
+    }
+    closeSyncInProgressRef.current = true;
+    try {
+      const ok = await inflight;
+      if (ok) {
+        close();
+      } else {
+        notify('error', 'Sync before close failed. Eskerra stayed open.');
+      }
+    } finally {
+      closeSyncInProgressRef.current = false;
+    }
     return;
   }
 

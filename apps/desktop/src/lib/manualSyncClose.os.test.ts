@@ -223,7 +223,7 @@ describe('handleOsCloseRequest', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('keeps app open and does not start a second sync when manual sync is already running', async () => {
+  it('keeps app open and does not start a second sync when manual sync is already running and no waitForCurrentRun provided', async () => {
     const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     const close = vi.fn();
     const notify = vi.fn();
@@ -241,6 +241,60 @@ describe('handleOsCloseRequest', () => {
     expect(runManualSync).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('awaits in-flight sync via waitForCurrentRun and closes on success', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+    const closeSyncInProgressRef = {current: false};
+    let resolveInflight!: (value: boolean) => void;
+    const inflight = new Promise<boolean>(r => { resolveInflight = r; });
+
+    const p = handleOsCloseRequest({
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync,
+      notify,
+      close,
+      closeSyncInProgressRef,
+      waitForCurrentRun: () => inflight,
+    });
+
+    resolveInflight(true);
+    await p;
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+    expect(closeSyncInProgressRef.current).toBe(false);
+  });
+
+  it('stays open and notifies when in-flight sync fails', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const close = vi.fn();
+    const notify = vi.fn();
+    const closeSyncInProgressRef = {current: false};
+    let resolveInflight!: (value: boolean) => void;
+    const inflight = new Promise<boolean>(r => { resolveInflight = r; });
+
+    const p = handleOsCloseRequest({
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync,
+      notify,
+      close,
+      closeSyncInProgressRef,
+      waitForCurrentRun: () => inflight,
+    });
+
+    resolveInflight(false);
+    await p;
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith('error', 'Sync before close failed. Eskerra stayed open.');
+    expect(closeSyncInProgressRef.current).toBe(false);
   });
 
   it('clears closeSyncInProgressRef after sync completes', async () => {

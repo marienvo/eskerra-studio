@@ -169,6 +169,7 @@ export function useAppGitSyncOrchestration({
     notify,
     gitStatus: gitStatusForDisplay,
     fetchFreshGitStatusForClose,
+    waitForCurrentRun: manualGitSync.waitForCurrentRun,
   });
   const closeSyncDisabledNoticeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -216,6 +217,7 @@ export function useAppGitSyncOrchestration({
             notifyDisabled,
             showCloseSyncFeedback: true,
             gitStatus: gitStatusForClose,
+            waitForCurrentRun: manualGitSync.waitForCurrentRun,
           });
         });
       })();
@@ -225,6 +227,7 @@ export function useAppGitSyncOrchestration({
       flushInboxSave,
       gitStatusForDisplay,
       manualGitSync.running,
+      manualGitSync.waitForCurrentRun,
       manualSyncDisabledReason,
       markCloseSyncActive,
       notify,
