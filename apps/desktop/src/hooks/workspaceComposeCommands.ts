@@ -2,6 +2,7 @@ import type {Dispatch, MutableRefObject, RefObject, SetStateAction} from 'react'
 
 import {
   buildInboxMarkdownFromCompose,
+  innerToFencedFrontmatterBlock,
   markdownContainsTransientImageUrls,
   mergeYamlFrontmatterBody,
   parseComposeInput,
@@ -12,12 +13,11 @@ import {
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
 import {cleanNoteMarkdownBody} from '../lib/cleanNoteMarkdown';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-import {innerToFencedFrontmatterBlock} from '../lib/inboxYamlFrontmatterEditor';
 import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownImages';
 import {createInboxMarkdownNote} from '../lib/vaultBootstrap';
 import {
   mergeInboxNoteBodyIntoCache,
-  type LastPersisted,
+  type LastPersistedNote,
 } from './inboxNoteBodyCache';
 import type {DiskConflictSoftState, DiskConflictState} from './workspaceFsWatchReconcile';
 import type {InboxEditorShellScrollDirective} from './workspaceEditorScrollMap';
@@ -49,7 +49,7 @@ export type ComposeCommandsContext = {
     inboxEditorShellScrollDirectiveRef: MutableRefObject<InboxEditorShellScrollDirective | null>;
     diskConflictRef: MutableRefObject<DiskConflictState | null>;
     diskConflictSoftRef: MutableRefObject<DiskConflictSoftState | null>;
-    lastPersistedRef: MutableRefObject<LastPersisted | null>;
+    lastPersistedRef: MutableRefObject<LastPersistedNote | null>;
     editorBodyRef: MutableRefObject<string>;
     inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
     inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
