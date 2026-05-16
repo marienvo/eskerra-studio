@@ -24,7 +24,6 @@ import {
 } from './workspaceEditorTabs';
 import {snapshotEditorShellScrollForOpenNote} from './workspaceEditorScrollMap';
 import {resolveModelBackedLegacyTabStrip} from './workspaceRuntimeProjection';
-import {assignLegacyEditorWorkspaceTabs} from './workspaceRuntimeTabsLegacyBridge';
 
 export type OpenMarkdownInEditorOptions = {
   skipHistory?: boolean;
@@ -244,16 +243,13 @@ function applyBackgroundNewTabOpen(
       );
     }
   }
-  assignLegacyEditorWorkspaceTabs({
+  ctx.editorWorkspaceTabsRef.current = nextTabs;
+  ctx.setEditorWorkspaceTabs(nextTabs);
+  ctx.mirrorShadowActiveWorkspaceTabs(
     nextTabs,
-    editorWorkspaceTabsRef: ctx.editorWorkspaceTabsRef,
-    setEditorWorkspaceTabs: ctx.setEditorWorkspaceTabs,
-    mirror: {
-      mirrorShadowActiveWorkspaceTabs: ctx.mirrorShadowActiveWorkspaceTabs,
-      activeEditorTabId: ctx.activeEditorTabIdRef.current,
-      reason: 'background open tab',
-    },
-  });
+    ctx.activeEditorTabIdRef.current,
+    'background open tab',
+  );
   if (prefetchBody !== undefined) {
     ctx.inboxContentByUriRef.current = {
       ...ctx.inboxContentByUriRef.current,
