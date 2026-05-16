@@ -89,8 +89,9 @@ export function migrateLegacyOpenTabsIfNeededBridge(
 /**
  * Payload for {@link syncShadowWorkspaceFromShellRestore}.
  *
- * `todayHubWorkspaces` is the raw persisted per-hub snapshot map; the JSON→model parser
- * (`parseWorkspaceModelFromPersistence`) handles URI normalization, hub-echo row dropping,
+ * `todayHubWorkspaces` is the persisted per-hub snapshot map after restore-time tab URI
+ * filtering (`sanitizeTodayHubWorkspacesWithStoredTabFilter`); the JSON→model parser
+ * (`parseWorkspaceModelFromPersistence`) handles URI key normalization, hub-echo row dropping,
  * and per-hub `homeHistory` parsing in one place.
  */
 export type ShellRestoreProjectionSyncArgs = {

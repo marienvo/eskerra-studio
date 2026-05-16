@@ -2,10 +2,10 @@
  * Main-window vault workspace: orchestration hook (Tauri FS, editor tabs, Today hub, wiki rename).
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
- * (`useTodayHubsState`, `useInboxShellRestore`, `workspaceComposeCommands`, `workspaceTabCommands`,
- * `workspaceOpenMarkdownCommand`, `workspaceTreeCommands`, `workspaceEditorHistoryNavigation`,
- * `workspaceFsWatchReconcile`, `useVaultBootstrap`, `useDiskConflictState`,
- * `useMergeViewState`, `useWorkspacePersistence`, `useInboxBodyCache`, `useNotesListing`).
+ * (`useTodayHubsState`, `workspaceComposeCommands`, `workspaceTabCommands`, `workspaceOpenMarkdownCommand`,
+ * `workspaceTreeCommands`, `workspaceEditorHistoryNavigation`, `workspaceFsWatchReconcile`, `useVaultBootstrap`,
+ * `useDiskConflictState`, `useMergeViewState`, `useWorkspacePersistence`, `useInboxBodyCache`, `useNotesListing`,
+ * `inboxShellRestoreHelpers`, `workspaceInboxShellRestoreBridge`, `workspaceShadowBridge`).
  *
  * Remaining split candidate: final orchestration cleanup.
  */
@@ -24,7 +24,10 @@ import {
 
 import {
   collectVaultMarkdownRefs,
+  normalizeVaultBaseUri,
+  sortedTodayHubNoteUrisFromRefs,
   SubtreeMarkdownPresenceCache,
+  trimTrailingSlashes,
   type EskerraSettings,
   type VaultFilesystem,
   type VaultMarkdownRef,
@@ -36,6 +39,7 @@ import {
   type TodayHubSettings,
   type TodayHubWorkspaceBridge,
 } from '../lib/todayHub';
+import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
 import {remapAllTabsUriPrefix, type EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {
@@ -54,6 +58,20 @@ import type {
   WorkspaceTodayHubController,
   WorkspaceTreeController,
 } from './workspaceReturnShape';
+import {
+  makeStoredTabFilter,
+  pickFinalActiveHub,
+  resolveActiveHubAndTabsSource,
+  restoredTodayHubWorkspaceUrisForRestore,
+  sanitizeTodayHubWorkspacesWithStoredTabFilter,
+} from './inboxShellRestoreHelpers';
+import {
+  applyRestoredEditorWorkspaceTabsBridge,
+  migrateLegacyOpenTabsIfNeededBridge,
+  restoreInboxSelectionAfterShellRestoreBridge,
+  runDeferredShellRestoreTabStateAndShadowSync,
+  type ShellRestoreProjectionSyncArgs,
+} from './workspaceInboxShellRestoreBridge';
 import {
   computeEditorHistoryCanGoBack,
   computeEditorHistoryCanGoForward,
@@ -111,7 +129,6 @@ import {
   runSubmitNewEntry,
 } from './workspaceComposeCommands';
 import {useTodayHubsState, type TodayHubOpenMarkdown} from './useTodayHubsState';
-import {useInboxShellRestore} from './useInboxShellRestore';
 import {
   createWorkspaceShadowMirrorCallbacks,
 } from './workspaceShadowBridge';
@@ -132,6 +149,18 @@ import {
   resolveInboxCachedBodyForEditor,
   normalizeVaultMarkdownDiskRead,
 } from './inboxNoteBodyCache';
+
+/** Canonical vault root string for comparing persisted shell snapshots to the active vault. */
+function normalizedVaultRootPath(vaultRoot: string): string {
+  return trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
+}
+
+function assignInboxShellRestored(
+  setInboxShellRestored: (next: boolean) => void,
+  next: boolean,
+): void {
+  setInboxShellRestored(next);
+}
 
 /** Debounce scan of the active note body for backlinks (full vault scan is too heavy per keystroke). */
 const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
@@ -1604,7 +1633,196 @@ export function useMainWindowWorkspace(options: {
     moveHomeHistory,
   ]);
 
-  useInboxShellRestore({
+  /** Last vault we applied the "shell not restored" reset for; avoids racing restore's `true`. */
+  const inboxShellRestoredResetVaultRef = useRef<string | null>(null);
+  const inboxRestoreEnabledPrevRef = useRef(inboxRestoreEnabled);
+
+  useEffect(() => {
+    if (!inboxRestoreEnabled) {
+      queueMicrotask(() => {
+        assignInboxShellRestored(setInboxShellRestored, true);
+      });
+      inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
+      return;
+    }
+    if (!vaultRoot) {
+      queueMicrotask(() => {
+        setInboxShellRestored(false);
+      });
+      inboxShellRestoredResetVaultRef.current = null;
+      inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
+      return;
+    }
+    const inboxRestoreJustEnabled =
+      !inboxRestoreEnabledPrevRef.current && inboxRestoreEnabled;
+    const vaultSwitched =
+      inboxShellRestoredResetVaultRef.current != null &&
+      inboxShellRestoredResetVaultRef.current !== vaultRoot;
+    if (inboxRestoreJustEnabled || vaultSwitched) {
+      queueMicrotask(() => {
+        setInboxShellRestored(false);
+      });
+    }
+    inboxShellRestoredResetVaultRef.current = vaultRoot;
+    inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
+  }, [vaultRoot, inboxRestoreEnabled]);
+
+  const applyRestoredEditorWorkspaceTabs = useCallback(
+    (
+      chosenTabsSource: ReadonlyArray<{id: string; entries: string[]; index: number}>
+        | null
+        | undefined,
+      chosenActiveEditorTabId: string | null,
+      filter: (raw: string) => boolean,
+    ): string[] =>
+      applyRestoredEditorWorkspaceTabsBridge(
+        {
+          editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
+        },
+        chosenTabsSource,
+        chosenActiveEditorTabId,
+        filter,
+      ),
+    [],
+  );
+
+  const migrateLegacyOpenTabsIfNeeded = useCallback(
+    (
+      rawTabs: readonly string[] | null | undefined,
+      filter: (raw: string) => boolean,
+    ): string[] =>
+      migrateLegacyOpenTabsIfNeededBridge(
+        {
+          editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
+        },
+        rawTabs,
+        filter,
+      ),
+    [],
+  );
+
+  const restoreInboxSelectionAfterShellRestore = useCallback(
+    (root: string, restoredTabs: readonly string[], hubUrisLength: number) =>
+      restoreInboxSelectionAfterShellRestoreBridge(
+        {
+          editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
+          activeTodayHubUriRef,
+          notesRef,
+          getRestoredInboxState: () => restoredInboxState,
+          startNewEntry,
+          selectNote,
+          selectHomeCurrentNote,
+        },
+        root,
+        restoredTabs,
+        hubUrisLength,
+      ),
+    [restoredInboxState, startNewEntry, selectNote, selectHomeCurrentNote],
+  );
+
+  useEffect(() => {
+    if (!vaultRoot) {
+      return;
+    }
+    if (!inboxRestoreEnabled || inboxShellRestored) {
+      return;
+    }
+    const root = normalizedVaultRootPath(vaultRoot);
+    const restoredMatchesCurrentVault =
+      restoredInboxState != null &&
+      typeof restoredInboxState.vaultRoot === 'string' &&
+      normalizedVaultRootPath(restoredInboxState.vaultRoot) === root;
+
+    if (restoredMatchesCurrentVault) {
+      const hubUris = restoredTodayHubWorkspaceUrisForRestore({
+        currentHubUris: sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs),
+        restored: restoredInboxState.todayHubWorkspaces,
+        root,
+      });
+      const knownNoteUris = new Set(notes.map(n => n.uri));
+      const filter = makeStoredTabFilter({root, knownNoteUris});
+      const todayHubWorkspacesForPersistenceParse =
+        sanitizeTodayHubWorkspacesWithStoredTabFilter(
+          restoredInboxState.todayHubWorkspaces,
+          filter,
+        ) ?? null;
+
+      const {resolvedActiveHub, chosenTabsSource, chosenActiveEditorTabId} =
+        resolveActiveHubAndTabsSource({hubUris, restored: restoredInboxState, filter});
+
+      let restoredTabs = applyRestoredEditorWorkspaceTabs(
+        chosenTabsSource,
+        chosenActiveEditorTabId,
+        filter,
+      );
+      if (restoredTabs.length === 0 && editorWorkspaceTabsRef.current.length === 0) {
+        restoredTabs = migrateLegacyOpenTabsIfNeeded(
+          restoredInboxState.openTabUris,
+          filter,
+        );
+      }
+
+      let shellRestoreProjection: ShellRestoreProjectionSyncArgs | null = null;
+
+      if (hubUris.length > 0) {
+        const activeHubFinal = pickFinalActiveHub({
+          resolvedActiveHub,
+          hubUris,
+          restored: restoredInboxState,
+        });
+        const homeHydrated = hydrateWorkspaceHomeStatesFromPersisted({
+          hubUris,
+          activeTodayHubUri: activeHubFinal,
+          todayHubWorkspaces: todayHubWorkspacesForPersistenceParse as
+            | Record<string, unknown>
+            | null
+            | undefined,
+        });
+        replaceRuntimeActiveHub(
+          activeHubFinal,
+          activeTodayHubUriRef,
+          setActiveTodayHubUri,
+        );
+        replaceHomeStatesByHub(homeHydrated);
+        assignInboxShellRestored(setInboxShellRestored, true);
+        shellRestoreProjection = {
+          activeTodayHubUri: activeHubFinal,
+          hubUris,
+          todayHubWorkspaces: todayHubWorkspacesForPersistenceParse,
+          homeStatesByHub: homeHydrated,
+        };
+      } else if (vaultMarkdownRefs.length > 0) {
+        replaceRuntimeActiveHub(null, activeTodayHubUriRef, setActiveTodayHubUri);
+        mirrorShadowActiveHub(null, 'restore active hub');
+        assignInboxShellRestored(setInboxShellRestored, true);
+      } else {
+        assignInboxShellRestored(setInboxShellRestored, true);
+      }
+
+      runDeferredShellRestoreTabStateAndShadowSync(
+        {
+          editorWorkspaceTabsRef,
+          activeEditorTabIdRef,
+          setEditorWorkspaceTabs,
+          setActiveEditorTabId,
+          mirrorShadowActiveWorkspaceTabs,
+          mirrorShadowActiveTab,
+          mirrorShadowHomeSurface,
+          syncShadowWorkspaceFromShellRestore,
+        },
+        shellRestoreProjection,
+      );
+
+      restoreInboxSelectionAfterShellRestore(root, restoredTabs, hubUris.length);
+      return;
+    }
+    queueMicrotask(() => {
+      assignInboxShellRestored(setInboxShellRestored, true);
+    });
+  }, [
     vaultRoot,
     inboxRestoreEnabled,
     inboxShellRestored,
@@ -1628,7 +1846,7 @@ export function useMainWindowWorkspace(options: {
     startNewEntry,
     selectNote,
     selectHomeCurrentNote,
-  });
+  ]);
 
   return {
     vaultRoot,
