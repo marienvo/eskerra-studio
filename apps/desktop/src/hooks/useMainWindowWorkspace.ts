@@ -46,7 +46,6 @@ import {
   listInboxNotes,
   moveVaultTreeItemToDirectory,
   type MoveVaultTreeItemResult,
-  renameVaultTreeDirectory,
   saveNoteMarkdown,
 } from '../lib/vaultBootstrap';
 import {
@@ -156,6 +155,7 @@ import {bulkDeleteUriRemovalPredicate, pruneEditorTabsAfterBulkTreeDelete} from 
 import {
   runDeleteFolder,
   runDeleteNote,
+  runRenameFolder,
   type TreeCommandContext,
 } from './workspaceTreeCommands';
 import {useWorkspaceBacklinks} from './workspaceBacklinks';
@@ -2010,6 +2010,10 @@ export function useMainWindowWorkspace(options: {
       refreshNotes,
       refocusAfterActiveTabRemoved,
       openMarkdownInEditor,
+      flushInboxSaveRef,
+      clearRenameNotice,
+      replaceEditorWorkspaceTabs,
+      remapHomeStatesPrefix,
     };
   }, [
     vaultRoot,
@@ -2034,6 +2038,10 @@ export function useMainWindowWorkspace(options: {
     refreshNotes,
     refocusAfterActiveTabRemoved,
     openMarkdownInEditor,
+    flushInboxSaveRef,
+    clearRenameNotice,
+    replaceEditorWorkspaceTabs,
+    remapHomeStatesPrefix,
   ]);
 
   const selectNote = useCallback(
@@ -2336,98 +2344,9 @@ export function useMainWindowWorkspace(options: {
   );
 
   const renameFolder = useCallback(
-    async (directoryUri: string, nextDisplayName: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      await flushInboxSaveRef.current();
-      setBusy(true);
-      setErr(null);
-      clearRenameNotice();
-      try {
-        const oldUri = trimTrailingSlashes(directoryUri.replace(/\\/g, '/'));
-        const nextUri = await renameVaultTreeDirectory(
-          vaultRoot,
-          directoryUri,
-          nextDisplayName,
-          fs,
-        );
-        const normalizedNext = nextUri.replace(/\\/g, '/');
-        subtreeMarkdownCache.invalidateForMutation(
-          vaultRoot,
-          oldUri,
-          'directory',
-        );
-        subtreeMarkdownCache.invalidateForMutation(
-          vaultRoot,
-          normalizedNext,
-          'directory',
-        );
-        setInboxContentByUri(prev => {
-          const next = {...prev};
-          for (const k of Object.keys(prev)) {
-            const mapped = remapVaultUriPrefix(k, oldUri, normalizedNext);
-            if (mapped && mapped !== k && prev[k] !== undefined) {
-              next[mapped] = prev[k]!;
-              delete next[k];
-            }
-          }
-          return next;
-        });
-        remapEditorShellScrollMapTreePrefix(
-          editorShellScrollByUriRef.current,
-          oldUri,
-          normalizedNext,
-        );
-        {
-          let nextSel: string | null = selectedUriRef.current;
-          if (nextSel) {
-            const mappedSel = remapVaultUriPrefix(
-              nextSel.replace(/\\/g, '/'),
-              oldUri,
-              normalizedNext,
-            );
-            nextSel = mappedSel ?? nextSel;
-          }
-          selectedUriRef.current = nextSel;
-          setSelectedUri(nextSel);
-        }
-        const lp = lastPersistedRef.current;
-        if (lp) {
-          const mappedLp = remapVaultUriPrefix(lp.uri, oldUri, normalizedNext);
-          if (mappedLp) {
-            lastPersistedRef.current = {...lp, uri: mappedLp};
-            lastPersistedExternalMutationSeqRef.current += 1;
-          }
-        }
-        const remappedTabs = remapAllTabsUriPrefix(
-          editorWorkspaceTabsRef.current,
-          oldUri,
-          normalizedNext,
-        );
-        replaceEditorWorkspaceTabs(remappedTabs);
-        remapHomeStatesPrefix(oldUri, normalizedNext);
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      clearRenameNotice,
-      subtreeMarkdownCache,
-      remapHomeStatesPrefix,
-      autosaveSchedulerRef,
-      flushInboxSaveRef,
-      markVaultWriteSettled,
-    ],
+    (directoryUri: string, nextDisplayName: string) =>
+      runRenameFolder(treeCommandContext, directoryUri, nextDisplayName),
+    [treeCommandContext],
   );
 
   const commitMovedArticleResult = useCallback(

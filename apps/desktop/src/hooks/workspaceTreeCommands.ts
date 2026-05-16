@@ -15,17 +15,20 @@ import {
 import {
   deleteVaultMarkdownNote,
   deleteVaultTreeDirectory,
+  renameVaultTreeDirectory,
 } from '../lib/vaultBootstrap';
-import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
+import {normalizeEditorDocUri, remapVaultUriPrefix} from '../lib/editorDocumentHistory';
 import {
   ensureActiveTabId,
   findTabById,
   firstSurvivorUriFromTabs,
+  remapAllTabsUriPrefix,
   removeUriFromAllTabs,
   tabCurrentUri,
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
+import {remapEditorShellScrollMapTreePrefix} from './workspaceEditorScrollMap';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import type {LastPersisted} from './workspaceFsWatchReconcile';
 import type {OpenMarkdownInEditorOptions} from './workspaceOpenMarkdownCommand';
@@ -79,6 +82,14 @@ export type TreeCommandContext = {
     uri: string,
     options?: OpenMarkdownInEditorOptions,
   ) => Promise<void>;
+  /** Same ref as workspace persistence flush; required before directory rename on disk. */
+  flushInboxSaveRef: MutableRefObject<() => Promise<void>>;
+  /** Clears transient wiki-rename notices (shared with {@link useWorkspaceRenameMaintenance}). */
+  clearRenameNotice: () => void;
+  /** Updates ref + React tab strip (same helper as wiki-link rename commit path). */
+  replaceEditorWorkspaceTabs: (nextTabs: EditorWorkspaceTab[]) => void;
+  /** Model-backed home history remap (same as {@link commitRenameMaintenanceResult} when URI changes). */
+  remapHomeStatesPrefix: (oldPrefix: string, newPrefix: string) => void;
 };
 
 export async function runDeleteNote(ctx: TreeCommandContext, uri: string): Promise<void> {
@@ -243,6 +254,95 @@ export async function runDeleteFolder(
         await ctx.openMarkdownInEditor(nextUri, {skipHistory: true});
       }
     }
+    ctx.markVaultWriteSettled();
+    await ctx.refreshNotes(vaultRoot);
+    setFsRefreshNonce(n => n + 1);
+  } catch (e) {
+    setErr(e instanceof Error ? e.message : String(e));
+  } finally {
+    setBusy(false);
+  }
+}
+
+export async function runRenameFolder(
+  ctx: TreeCommandContext,
+  directoryUri: string,
+  nextDisplayName: string,
+): Promise<void> {
+  const {vaultRoot, fs, subtreeMarkdownCache, refs, setters} = ctx;
+  if (!vaultRoot) {
+    return;
+  }
+  const {
+    autosaveSchedulerRef,
+    selectedUriRef,
+    editorWorkspaceTabsRef,
+    editorShellScrollByUriRef,
+    lastPersistedRef,
+    lastPersistedExternalMutationSeqRef,
+  } = refs;
+  const {setBusy, setErr, setInboxContentByUri, setSelectedUri, setFsRefreshNonce} = setters;
+
+  autosaveSchedulerRef.current.cancel();
+  await ctx.flushInboxSaveRef.current();
+  setBusy(true);
+  setErr(null);
+  ctx.clearRenameNotice();
+  try {
+    const oldUri = trimTrailingSlashes(directoryUri.replace(/\\/g, '/'));
+    const nextUri = await renameVaultTreeDirectory(
+      vaultRoot,
+      directoryUri,
+      nextDisplayName,
+      fs,
+    );
+    const normalizedNext = nextUri.replace(/\\/g, '/');
+    subtreeMarkdownCache.invalidateForMutation(vaultRoot, oldUri, 'directory');
+    subtreeMarkdownCache.invalidateForMutation(vaultRoot, normalizedNext, 'directory');
+    setInboxContentByUri(prev => {
+      const next = {...prev};
+      for (const k of Object.keys(prev)) {
+        const mapped = remapVaultUriPrefix(k, oldUri, normalizedNext);
+        if (mapped && mapped !== k && prev[k] !== undefined) {
+          next[mapped] = prev[k]!;
+          delete next[k];
+        }
+      }
+      return next;
+    });
+    remapEditorShellScrollMapTreePrefix(
+      editorShellScrollByUriRef.current,
+      oldUri,
+      normalizedNext,
+    );
+    {
+      let nextSel: string | null = selectedUriRef.current;
+      if (nextSel) {
+        const mappedSel = remapVaultUriPrefix(
+          nextSel.replace(/\\/g, '/'),
+          oldUri,
+          normalizedNext,
+        );
+        nextSel = mappedSel ?? nextSel;
+      }
+      selectedUriRef.current = nextSel;
+      setSelectedUri(nextSel);
+    }
+    const lp = lastPersistedRef.current;
+    if (lp) {
+      const mappedLp = remapVaultUriPrefix(lp.uri, oldUri, normalizedNext);
+      if (mappedLp) {
+        lastPersistedRef.current = {...lp, uri: mappedLp};
+        lastPersistedExternalMutationSeqRef.current += 1;
+      }
+    }
+    const remappedTabs = remapAllTabsUriPrefix(
+      editorWorkspaceTabsRef.current,
+      oldUri,
+      normalizedNext,
+    );
+    ctx.replaceEditorWorkspaceTabs(remappedTabs);
+    ctx.remapHomeStatesPrefix(oldUri, normalizedNext);
     ctx.markVaultWriteSettled();
     await ctx.refreshNotes(vaultRoot);
     setFsRefreshNonce(n => n + 1);
