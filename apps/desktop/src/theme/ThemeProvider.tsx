@@ -13,6 +13,10 @@ import {useCallback, useEffect, useLayoutEffect, useMemo, useRef} from 'react';
 import {useDesktopThemePreferenceR2EtagPollingForMainWindow} from '../hooks/useDesktopThemePreferenceR2EtagPolling';
 
 import {ThemeShellContext, type ThemeShellContextValue} from './themeShellContext';
+import {
+  persistStartupThemeBootstrap,
+  readStartupThemeBootstrap,
+} from './startupThemeBootstrap';
 import {useResolvedChromeMode} from './useResolvedChromeMode';
 import {useThemePreference} from './useThemePreference';
 import {useVaultThemes} from './useVaultThemes';
@@ -46,12 +50,24 @@ export function ThemeProvider({
   fs,
   children,
 }: ThemeProviderProps) {
-  const {items: vaultThemeItems} = useVaultThemes({vaultRoot, fs});
+  const startupTheme = useMemo(() => readStartupThemeBootstrap(), []);
+  const startupVaultThemeItems = useMemo<VaultThemeListItem[]>(() => {
+    if (startupTheme?.theme.source !== 'vault') {
+      return [];
+    }
+    return [{kind: 'ok', theme: startupTheme.theme}];
+  }, [startupTheme]);
+  const {items: vaultThemeItems} = useVaultThemes({
+    vaultRoot,
+    fs,
+    initialItems: startupVaultThemeItems,
+  });
   const {preference, setPreferenceLocal, persistPreference} = useThemePreference({
     vaultRoot,
     vaultSettings,
     setVaultSettings,
     fs,
+    initialPreference: startupTheme?.preference ?? null,
   });
 
   const preferenceRef = useRef(preference);
@@ -100,6 +116,14 @@ export function ThemeProvider({
     root.dataset.uiChrome = resolvedMode;
     root.style.colorScheme = resolvedMode;
   }, [chromePalette, resolvedMode]);
+
+  useEffect(() => {
+    persistStartupThemeBootstrap({
+      preference,
+      resolvedMode,
+      theme: activeTheme,
+    }).catch(() => undefined);
+  }, [preference, resolvedMode, activeTheme]);
 
   const value = useMemo((): ThemeShellContextValue => {
     return {

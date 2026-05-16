@@ -16,6 +16,7 @@ import {
 type UseVaultThemesParams = {
   vaultRoot: string | null;
   fs: VaultFilesystem;
+  initialItems?: VaultThemeListItem[];
 };
 
 function normalizeFsPath(p: string): string {
@@ -31,13 +32,13 @@ function themesDirHit(vaultRoot: string, changedPaths: readonly string[]): boole
   });
 }
 
-export function useVaultThemes({vaultRoot, fs}: UseVaultThemesParams): {
+export function useVaultThemes({vaultRoot, fs, initialItems = []}: UseVaultThemesParams): {
   items: VaultThemeListItem[];
   ready: boolean;
   reload: () => Promise<void>;
 } {
-  const [items, setItems] = useState<VaultThemeListItem[]>([]);
-  const [ready, setReady] = useState(false);
+  const [items, setItems] = useState<VaultThemeListItem[]>(initialItems);
+  const [ready, setReady] = useState(initialItems.length > 0);
 
   const reload = useCallback(async () => {
     if (!vaultRoot) {

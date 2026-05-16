@@ -20,6 +20,7 @@ type UseThemePreferenceParams = {
   vaultSettings: EskerraSettings | null;
   setVaultSettings: Dispatch<SetStateAction<EskerraSettings | null>>;
   fs: VaultFilesystem;
+  initialPreference?: ThemePreference | null;
 };
 
 export function useThemePreference({
@@ -27,14 +28,19 @@ export function useThemePreference({
   vaultSettings,
   setVaultSettings,
   fs,
+  initialPreference = null,
 }: UseThemePreferenceParams): {
   preference: ThemePreference;
   preferenceLoaded: boolean;
   setPreferenceLocal: (next: ThemePreference) => void;
   persistPreference: (next: ThemePreference) => Promise<void>;
 } {
-  const [noVaultPreference, setNoVaultPreference] = useState<ThemePreference>(DEFAULT_THEME_PREFERENCE);
-  const [r2Preference, setR2Preference] = useState<ThemePreference>(DEFAULT_THEME_PREFERENCE);
+  const [noVaultPreference, setNoVaultPreference] = useState<ThemePreference>(
+    initialPreference ?? DEFAULT_THEME_PREFERENCE,
+  );
+  const [r2Preference, setR2Preference] = useState<ThemePreference>(
+    initialPreference ?? DEFAULT_THEME_PREFERENCE,
+  );
   const [r2Loaded, setR2Loaded] = useState(false);
   const migratedSharedToR2Ref = useRef(false);
 
@@ -45,7 +51,7 @@ export function useThemePreference({
       return noVaultPreference;
     }
     if (vaultSettings === null) {
-      return DEFAULT_THEME_PREFERENCE;
+      return initialPreference ?? DEFAULT_THEME_PREFERENCE;
     }
     if (!isR2) {
       return vaultSettings.themePreference ?? DEFAULT_THEME_PREFERENCE;
