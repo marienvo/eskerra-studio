@@ -310,6 +310,14 @@ describe('resolveInboxWikiLinkTargetWithLookup', () => {
       {notes: dupRows, inner: 'dup'},
       {notes: caseRows, inner: 'ALPHA'},
       {notes: sanitizedRows, inner: 'a:'},
+      {
+        notes: [{name: 'Johns notes.md', uri: '/vault/Inbox/Johns notes.md'}],
+        inner: "John's notes",
+      },
+      {
+        notes: [{name: 'Johns notes.md', uri: '/vault/Inbox/Johns notes.md'}],
+        inner: 'John\u2019s notes',
+      },
       {notes: NOTES, inner: '   '},
       {notes: NOTES, inner: 'foo/bar'},
     ];

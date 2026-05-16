@@ -499,6 +499,30 @@ describe('openOrCreateVaultRelativeMarkdownLink', () => {
     expect(writes.some(w => w.uri === result.uri)).toBe(true);
   });
 
+  it('returns canonicalHref when create rewrites basename after sanitization (subdir + apostrophe)', async () => {
+    const subdir = `${vaultRoot}/Inbox/subdir`;
+    const {fs, writes} = createMemoryVaultFs([
+      [vaultRoot, 'dir'],
+      [`${vaultRoot}/Inbox`, 'dir'],
+      [subdir, 'dir'],
+      [`${vaultRoot}/Inbox/a.md`, '# A'],
+    ]);
+    const notes = [{name: 'a.md', uri: `${vaultRoot}/Inbox/a.md`}];
+    const result = await openOrCreateVaultRelativeMarkdownLink({
+      href: "subdir/John's notes.md",
+      notes,
+      vaultRoot,
+      fs,
+      sourceMarkdownUriOrDir: `${vaultRoot}/Inbox/a.md`,
+    });
+    expect(result).toEqual({
+      kind: 'created',
+      uri: `${subdir}/Johns notes.md`,
+      canonicalHref: 'subdir/Johns notes.md',
+    });
+    expect(writes.some(w => w.uri === `${subdir}/Johns notes.md`)).toBe(true);
+  });
+
   it('returns unsupported for https links', async () => {
     const {fs} = createMemoryVaultFs([
       [vaultRoot, 'dir'],
