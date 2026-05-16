@@ -9,7 +9,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  node:
+  node-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +35,16 @@ jobs:
           name: storybook-ds-mobile-web
           path: packages/eskerra-ds-mobile/storybook-static-web/
           retention-days: 14
+
+  node-desktop-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
       - name: Install Linux desktop build dependencies
         run: |
           sudo apt-get update
@@ -54,3 +64,28 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
       - run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets
+
+  ci:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [node-test, node-desktop-build, desktop-rust]
+    steps:
+      - name: Require all jobs successful
+        run: |
+          fail=false
+          if [[ "${{ needs.node-test.result }}" != "success" ]]; then
+            echo "::error::node-test ended with: ${{ needs.node-test.result }}"
+            fail=true
+          fi
+          if [[ "${{ needs.node-desktop-build.result }}" != "success" ]]; then
+            echo "::error::node-desktop-build ended with: ${{ needs.node-desktop-build.result }}"
+            fail=true
+          fi
+          if [[ "${{ needs.desktop-rust.result }}" != "success" ]]; then
+            echo "::error::desktop-rust ended with: ${{ needs.desktop-rust.result }}"
+            fail=true
+          fi
+          if [[ "$fail" == "true" ]]; then
+            exit 1
+          fi
+          echo "All required checks passed."
