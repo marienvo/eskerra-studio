@@ -4,8 +4,6 @@
  * Ownership: app-level orchestration and Tauri window integration; vault editing behavior is in `VaultTab` / workspace hook.
  */
 import {open} from '@tauri-apps/plugin-dialog';
-import {isTauri} from '@tauri-apps/api/core';
-import {getCurrentWindow} from '@tauri-apps/api/window';
 import {
   useCallback,
   useLayoutEffect,
@@ -32,7 +30,6 @@ import {useEditorHistoryMouseButtons} from './hooks/useEditorHistoryMouseButtons
 import {useMainWindowWorkspace} from './hooks/useMainWindowWorkspace';
 import {usePreventMiddleClickPaste} from './hooks/usePreventMiddleClickPaste';
 import {ThemedChromeBackground} from './theme/ThemedChromeBackground';
-import {releaseStartupThemeLock} from './theme/startupThemeBootstrap';
 import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
@@ -67,7 +64,6 @@ export default function App() {
   const {tiling, tilingDebug} = useTauriWindowTiling();
 
   const appRootRef = useRef<HTMLDivElement>(null);
-  const startupWindowShownRef = useRef(false);
   const fs = useMemo(() => createTauriVaultFilesystem(), []);
   const inboxEditorRef = useRef<NoteMarkdownEditorHandle | null>(null);
   const inboxEditorShellScrollRef = useRef<HTMLDivElement | null>(null);
@@ -288,18 +284,6 @@ export default function App() {
   });
 
   useAppTauriDocumentChrome(maximized, tiling);
-
-  useLayoutEffect(() => {
-    if (startupWindowShownRef.current) {
-      return;
-    }
-    startupWindowShownRef.current = true;
-    releaseStartupThemeLock();
-    if (!isTauri()) {
-      return;
-    }
-    getCurrentWindow().show().catch(() => undefined);
-  }, []);
 
   useDesktopPlaylistR2EtagPollingForMainWindow({
     allowPolling: !desktopPlayback.localPlaybackActive,

@@ -2,6 +2,7 @@ import type {EskerraSettings} from '@eskerra/core';
 import type {ReactNode, SetStateAction} from 'react';
 
 import {ThemeProvider} from '../theme/ThemeProvider';
+import {useStartupWindowVisibility} from '../theme/useStartupWindowVisibility';
 import type {createTauriVaultFilesystem} from '../lib/tauriVault';
 
 type AppThemeShellProps = {
@@ -19,6 +20,8 @@ export function AppThemeShell({
   fs,
   children,
 }: AppThemeShellProps) {
+  useStartupWindowVisibility();
+
   return (
     <ThemeProvider
       vaultRoot={vaultRoot}

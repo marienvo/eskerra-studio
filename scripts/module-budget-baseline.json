@@ -1,6 +1,6 @@
 {
   "maxLinesByPath": {
-    "apps/desktop/src/App.tsx": 729,
+    "apps/desktop/src/App.tsx": 713,
     "apps/desktop/src/components/TodayHubCanvas.tsx": 1010,
     "apps/desktop/src/components/VaultPaneTree.tsx": 1108,
     "apps/desktop/src/components/VaultTab.tsx": 1498,
@@ -12,13 +12,13 @@
     "apps/desktop/src/editor/noteEditor/NoteMarkdownEditor.tsx": 1526,
     "apps/desktop/src/hooks/useDesktopPodcastPlayback.ts": 250,
     "apps/desktop/src/hooks/useMainWindowWorkspace.hydrateVault.test.ts": 1680,
-    "apps/desktop/src/hooks/useMainWindowWorkspace.ts": 1752,
+    "apps/desktop/src/hooks/useMainWindowWorkspace.ts": 1751,
     "apps/desktop/src/hooks/useTodayHubsState.ts": 914,
     "apps/desktop/src/hooks/workspaceFsWatchReconcile.ts": 597,
     "apps/desktop/src/hooks/workspaceLinkRouting.ts": 467,
     "apps/desktop/src/hooks/workspacePersistence.ts": 431,
     "apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts": 840,
-    "apps/desktop/src/hooks/workspaceTabCommands.ts": 455,
+    "apps/desktop/src/hooks/workspaceTabCommands.ts": 424,
     "apps/desktop/src/hooks/workspaceTodayHubSwitch.ts": 279,
     "apps/desktop/src/hooks/workspaceVaultWatchEffects.ts": 551,
     "apps/desktop/src/lib/cleanNoteMarkdown.ts": 1006,

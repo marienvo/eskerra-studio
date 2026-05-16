@@ -9,7 +9,7 @@
 
 1. **Rust init script** ([`apps/desktop/src-tauri/src/startup_theme.rs`](../../apps/desktop/src-tauri/src/startup_theme.rs)) runs before the window is shown. It reads `eskerra-desktop.json` (same logical store as the Tauri plugin store path) for `vaultRoot` and `startupTheme`, and reads `.eskerra/settings-shared.json` for `themePreference` when present.
 2. If `themePreference` is missing from shared settings (e.g. R2-only theme preference after migration), Rust still resolves using the cached `startupTheme.preference` plus the vault path so vault theme files under `.eskerra/themes/<id>.json` can load before React.
-3. **React** reads `window.__ESKERRA_STARTUP_THEME__` and may persist an updated snapshot after the UI has a consistent `preference` + `activeTheme` (see [`apps/desktop/src/theme/ThemeProvider.tsx`](../../apps/desktop/src/theme/ThemeProvider.tsx)).
+3. **React** reads `window.__ESKERRA_STARTUP_THEME__` and may persist an updated snapshot after the UI has a consistent `preference` + `activeTheme` (see [`apps/desktop/src/theme/ThemeProvider.tsx`](../../apps/desktop/src/theme/ThemeProvider.tsx)). After first layout, [`useStartupWindowVisibility`](../../apps/desktop/src/theme/useStartupWindowVisibility.ts) (invoked from [`AppThemeShell`](../../apps/desktop/src/shell/AppThemeShell.tsx)) clears the startup theme DOM lock and shows the Tauri main window when applicable.
 
 ## Cache format
 
