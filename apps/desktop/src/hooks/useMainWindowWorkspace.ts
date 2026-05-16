@@ -6,8 +6,7 @@
  * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`,
  * `workspaceHomeHistoryShadowSync`).
  *
- * Remaining split candidates: compose commands, inbox shell restore, editor history, and final
- * orchestration cleanup.
+ * Remaining split candidates: editor history and final orchestration cleanup.
  */
 import {
   useCallback,
@@ -23,23 +22,14 @@ import {
 } from 'react';
 
 import {
-  buildInboxMarkdownFromCompose,
   collectVaultMarkdownRefs,
-  markdownContainsTransientImageUrls,
-  mergeYamlFrontmatterBody,
-  innerToFencedFrontmatterBlock,
-  normalizeVaultBaseUri,
-  parseComposeInput,
   SubtreeMarkdownPresenceCache,
-  trimTrailingSlashes,
   type EskerraSettings,
   type VaultFilesystem,
   type VaultMarkdownRef,
 } from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
-import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownImages';
-import {createInboxMarkdownNote} from '../lib/vaultBootstrap';
 import {
   createIdleTodayHubWorkspaceBridge,
   type TodayHubSettings,
@@ -63,7 +53,6 @@ import {
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
-import {sortedTodayHubNoteUrisFromRefs} from '@eskerra/core';
 import {
   selectNoteActiveHubTodayOpen,
   isOnWorkspaceHome,
@@ -72,7 +61,6 @@ import {
   createWorkspaceHomeState,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
-import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
 import {
   closeAllTabsAction,
   closeOtherTabsAction,
@@ -93,19 +81,6 @@ import type {
   WorkspaceTodayHubController,
   WorkspaceTreeController,
 } from './workspaceReturnShape';
-import {
-  makeStoredTabFilter,
-  pickFinalActiveHub,
-  resolveActiveHubAndTabsSource,
-  restoredTodayHubWorkspaceUrisForRestore,
-} from './inboxShellRestoreHelpers';
-import {
-  applyRestoredEditorWorkspaceTabsBridge,
-  migrateLegacyOpenTabsIfNeededBridge,
-  restoreInboxSelectionAfterShellRestoreBridge,
-  runDeferredShellRestoreTabStateAndShadowSync,
-  type ShellRestoreProjectionSyncArgs,
-} from './workspaceInboxShellRestoreBridge';
 import {
   computeEditorHistoryCanGoBack,
   computeEditorHistoryCanGoForward,
@@ -142,7 +117,15 @@ import {
   runOpenMarkdownInEditorCommand,
   type OpenMarkdownInEditorOptions,
 } from './workspaceOpenMarkdownCommand';
+import {
+  runAddNote,
+  runCancelNewEntry,
+  runCleanNoteInbox,
+  runStartNewEntry,
+  runSubmitNewEntry,
+} from './workspaceComposeCommands';
 import {useTodayHubsState, type TodayHubOpenMarkdown} from './useTodayHubsState';
+import {useInboxShellRestore} from './useInboxShellRestore';
 import {
   createWorkspaceShadowMirrorCallbacks,
 } from './workspaceShadowBridge';
@@ -157,7 +140,6 @@ import {
 } from './workspaceRenameMaintenance';
 import {remapEditorShellScrollMapExact} from './workspaceEditorScrollMap';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
-import {cleanNoteMarkdownBody} from '../lib/cleanNoteMarkdown';
 import {
   clearInboxYamlFrontmatterEditorRefs,
   inboxEditorSliceToFullMarkdown,
@@ -169,20 +151,8 @@ import {
   normalizeVaultMarkdownDiskRead,
 } from './inboxNoteBodyCache';
 
-/** Canonical vault root string for comparing persisted shell snapshots to the active vault. */
-function normalizedVaultRootPath(vaultRoot: string): string {
-  return trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-}
-
 /** Debounce scan of the active note body for backlinks (full vault scan is too heavy per keystroke). */
 const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
-
-function assignInboxShellRestored(
-  setInboxShellRestored: (next: boolean) => void,
-  next: boolean,
-): void {
-  setInboxShellRestored(next);
-}
 
 function replaceRuntimeActiveHub(
   hubUri: string | null,
@@ -1483,57 +1453,99 @@ export function useMainWindowWorkspace(options: {
     scheduleBacklinksDeferOneFrameAfterLoad,
   ]);
 
+  const composeCommandsContext = useMemo(
+    () => ({
+      fs,
+      vaultRoot,
+      subtreeMarkdownCache,
+      markVaultWriteSettled,
+      refreshNotes,
+      flushInboxSave: () => flushInboxSaveRef.current(),
+      scheduleBacklinksDeferOneFrameAfterLoad,
+      loadFullMarkdownIntoInboxEditor,
+      resetInboxEditorComposeState,
+      todayHubCleanRowBlocked,
+      showTodayHubCanvasRef,
+      todayHubBridgeRef,
+      inboxEditorRef,
+      refs: {
+        selectedUriRef,
+        composingNewEntryRef,
+        inboxEditorShellScrollDirectiveRef,
+        diskConflictRef,
+        diskConflictSoftRef,
+        lastPersistedRef,
+        lastPersistedExternalMutationSeqRef,
+        editorBodyRef,
+        inboxYamlFrontmatterInnerRef,
+        inboxEditorYamlLeadingBeforeFrontmatterRef,
+        inboxContentByUriRef,
+      },
+      setters: {
+        setBusy,
+        setErr,
+        setFsRefreshNonce,
+        setEditorBody,
+        setComposingNewEntry,
+        setSelectedUri,
+        setDiskConflict,
+        setDiskConflictSoft,
+        setInboxContentByUri,
+      },
+      openMarkdownInEditor: (uri: string) => openMarkdownInEditor(uri),
+    }),
+    [
+      fs,
+      vaultRoot,
+      subtreeMarkdownCache,
+      markVaultWriteSettled,
+      refreshNotes,
+      flushInboxSaveRef,
+      scheduleBacklinksDeferOneFrameAfterLoad,
+      loadFullMarkdownIntoInboxEditor,
+      resetInboxEditorComposeState,
+      todayHubCleanRowBlocked,
+      showTodayHubCanvasRef,
+      todayHubBridgeRef,
+      inboxEditorRef,
+      selectedUriRef,
+      composingNewEntryRef,
+      inboxEditorShellScrollDirectiveRef,
+      diskConflictRef,
+      diskConflictSoftRef,
+      lastPersistedRef,
+      lastPersistedExternalMutationSeqRef,
+      editorBodyRef,
+      inboxYamlFrontmatterInnerRef,
+      inboxEditorYamlLeadingBeforeFrontmatterRef,
+      inboxContentByUriRef,
+      setBusy,
+      setErr,
+      setFsRefreshNonce,
+      setEditorBody,
+      setComposingNewEntry,
+      setSelectedUri,
+      setDiskConflict,
+      setDiskConflictSoft,
+      setInboxContentByUri,
+      openMarkdownInEditor,
+    ],
+  );
+
   const addNote = useCallback(
     async (title: string, body: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      setBusy(true);
-      setErr(null);
-      try {
-        const created = await createInboxMarkdownNote(vaultRoot, fs, title, body);
-        markVaultWriteSettled();
-        subtreeMarkdownCache.invalidateForMutation(
-          vaultRoot,
-          created.uri,
-          'file',
-        );
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-        await openMarkdownInEditor(created.uri);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
+      await runAddNote(composeCommandsContext, title, body);
     },
-    [vaultRoot, fs, refreshNotes, openMarkdownInEditor, subtreeMarkdownCache, markVaultWriteSettled],
+    [composeCommandsContext],
   );
 
   const startNewEntry = useCallback(() => {
-    void (async () => {
-      await flushInboxSaveRef.current();
-      setErr(null);
-      setDiskConflict(null);
-      diskConflictRef.current = null;
-      setDiskConflictSoft(null);
-      diskConflictSoftRef.current = null;
-      inboxEditorShellScrollDirectiveRef.current = {kind: 'snapTop'};
-      setComposingNewEntry(true);
-      setSelectedUri(null);
-      lastPersistedRef.current = null;
-      lastPersistedExternalMutationSeqRef.current += 1;
-      resetInboxEditorComposeState();
-    })();
-  }, [flushInboxSaveRef, resetInboxEditorComposeState]);
+    runStartNewEntry(composeCommandsContext);
+  }, [composeCommandsContext]);
 
   const cancelNewEntry = useCallback(() => {
-    void (async () => {
-      await flushInboxSaveRef.current();
-      setComposingNewEntry(false);
-      resetInboxEditorComposeState();
-    })();
-  }, [flushInboxSaveRef, resetInboxEditorComposeState]);
+    runCancelNewEntry(composeCommandsContext);
+  }, [composeCommandsContext]);
 
   /** Pick where to refocus after the active tab is closed: surviving tab → workspace shell hub → empty. */
   const refocusAfterActiveTabRemoved = useCallback(
@@ -1692,108 +1704,16 @@ export function useMainWindowWorkspace(options: {
   );
 
   const submitNewEntry = useCallback(async () => {
-    if (!vaultRoot) {
-      return;
-    }
-    setErr(null);
-    const rawBody = inboxEditorRef.current?.getMarkdown() ?? editorBody;
-    let body = rawBody;
-    try {
-      body = await persistTransientMarkdownImages(body, vaultRoot);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-      return;
-    }
-    if (markdownContainsTransientImageUrls(body)) {
-      setErr(
-        'Cannot create this note: some images are still temporary (blob or data URLs). Paste images again so they are stored under Assets/Attachments, or remove those image references.',
-      );
-      return;
-    }
-    if (body !== rawBody) {
-      inboxEditorRef.current?.loadMarkdown(body, {selection: 'preserve'});
-      scheduleBacklinksDeferOneFrameAfterLoad();
-      setEditorBody(body);
-    }
-    const {titleLine, bodyAfterBlank} = parseComposeInput(body);
-    if (!titleLine.trim()) {
-      setErr('First line is required.');
-      return;
-    }
-    const fullMarkdown = buildInboxMarkdownFromCompose(titleLine, bodyAfterBlank);
-    await addNote(titleLine, fullMarkdown);
-  }, [
-    addNote,
-    editorBody,
-    inboxEditorRef,
-    vaultRoot,
-    scheduleBacklinksDeferOneFrameAfterLoad,
-  ]);
+    await runSubmitNewEntry(composeCommandsContext, editorBody);
+  }, [composeCommandsContext, editorBody]);
 
   useLayoutEffect(() => {
     submitNewEntryRef.current = submitNewEntry;
   }, [submitNewEntry]);
 
   const onCleanNoteInbox = useCallback(() => {
-    const uri = selectedUriRef.current;
-    if (!uri || composingNewEntryRef.current) {
-      return;
-    }
-    const dc = diskConflictRef.current;
-    if (dc && normalizeEditorDocUri(dc.uri) === normalizeEditorDocUri(uri)) {
-      return;
-    }
-    const slice =
-      inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current;
-    const cleanedSlice = cleanNoteMarkdownBody(slice, uri);
-    if (cleanedSlice !== slice) {
-      const innerFm = inboxYamlFrontmatterInnerRef.current;
-      const full = mergeYamlFrontmatterBody(
-        innerFm == null ? null : innerToFencedFrontmatterBlock(innerFm),
-        cleanedSlice,
-        inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-      );
-      loadFullMarkdownIntoInboxEditor(full, uri, 'preserve');
-      scheduleBacklinksDeferOneFrameAfterLoad();
-      const norm = normalizeEditorDocUri(uri);
-      const nextCache = mergeInboxNoteBodyIntoCache(
-        inboxContentByUriRef.current,
-        norm,
-        full,
-      );
-      if (nextCache) {
-        inboxContentByUriRef.current = nextCache;
-        setInboxContentByUri(prev =>
-          mergeInboxNoteBodyIntoCache(prev, norm, full) ?? prev,
-        );
-      }
-    }
-
-    const runHubClean = async () => {
-      if (!showTodayHubCanvasRef.current || composingNewEntryRef.current) {
-        return;
-      }
-      const hubTodayUri = selectedUriRef.current;
-      if (!hubTodayUri) {
-        return;
-      }
-      const block = diskConflictRef.current;
-      if (
-        block &&
-        normalizeEditorDocUri(block.uri) === normalizeEditorDocUri(hubTodayUri)
-      ) {
-        return;
-      }
-      await todayHubBridgeRef.current.flushPendingEdits().catch(() => undefined);
-      await todayHubBridgeRef.current.cleanHubPageDayColumns().catch(() => undefined);
-    };
-    void runHubClean();
-  }, [
-    inboxEditorRef,
-    loadFullMarkdownIntoInboxEditor,
-    scheduleBacklinksDeferOneFrameAfterLoad,
-    setInboxContentByUri,
-  ]);
+    runCleanNoteInbox(composeCommandsContext);
+  }, [composeCommandsContext]);
 
   const deleteNote = useCallback(
     (uri: string) => runDeleteNote(treeCommandContext, uri),
@@ -1983,207 +1903,31 @@ export function useMainWindowWorkspace(options: {
     moveHomeHistory,
   ]);
 
-  /** Last vault we applied the "shell not restored" reset for; avoids racing restore's `true`. */
-  const inboxShellRestoredResetVaultRef = useRef<string | null>(null);
-  const inboxRestoreEnabledPrevRef = useRef(inboxRestoreEnabled);
-
-  useEffect(() => {
-    if (!inboxRestoreEnabled) {
-      queueMicrotask(() => {
-        assignInboxShellRestored(setInboxShellRestored, true);
-      });
-      inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
-      return;
-    }
-    if (!vaultRoot) {
-      queueMicrotask(() => {
-        setInboxShellRestored(false);
-      });
-      inboxShellRestoredResetVaultRef.current = null;
-      inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
-      return;
-    }
-    const inboxRestoreJustEnabled =
-      !inboxRestoreEnabledPrevRef.current && inboxRestoreEnabled;
-    const vaultSwitched =
-      inboxShellRestoredResetVaultRef.current != null &&
-      inboxShellRestoredResetVaultRef.current !== vaultRoot;
-    if (inboxRestoreJustEnabled || vaultSwitched) {
-      queueMicrotask(() => {
-        setInboxShellRestored(false);
-      });
-    }
-    inboxShellRestoredResetVaultRef.current = vaultRoot;
-    inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
-  }, [vaultRoot, inboxRestoreEnabled]);
-
-  const applyRestoredEditorWorkspaceTabs = useCallback(
-    (
-      chosenTabsSource: ReadonlyArray<{id: string; entries: string[]; index: number}>
-        | null
-        | undefined,
-      chosenActiveEditorTabId: string | null,
-      filter: (raw: string) => boolean,
-    ): string[] =>
-      applyRestoredEditorWorkspaceTabsBridge(
-        {
-          editorWorkspaceTabsRef,
-          activeEditorTabIdRef,
-        },
-        chosenTabsSource,
-        chosenActiveEditorTabId,
-        filter,
-      ),
-    [],
-  );
-
-  const migrateLegacyOpenTabsIfNeeded = useCallback(
-    (
-      rawTabs: readonly string[] | null | undefined,
-      filter: (raw: string) => boolean,
-    ): string[] =>
-      migrateLegacyOpenTabsIfNeededBridge(
-        {
-          editorWorkspaceTabsRef,
-          activeEditorTabIdRef,
-        },
-        rawTabs,
-        filter,
-      ),
-    [],
-  );
-
-  const restoreInboxSelectionAfterShellRestore = useCallback(
-    (root: string, restoredTabs: readonly string[], hubUrisLength: number) =>
-      restoreInboxSelectionAfterShellRestoreBridge(
-        {
-          editorWorkspaceTabsRef,
-          activeEditorTabIdRef,
-          activeTodayHubUriRef,
-          notesRef,
-          getRestoredInboxState: () => restoredInboxState,
-          startNewEntry,
-          selectNote,
-          selectHomeCurrentNote,
-        },
-        root,
-        restoredTabs,
-        hubUrisLength,
-      ),
-    [restoredInboxState, startNewEntry, selectNote, selectHomeCurrentNote],
-  );
-
-  useEffect(() => {
-    if (!vaultRoot) {
-      return;
-    }
-    if (!inboxRestoreEnabled || inboxShellRestored) {
-      return;
-    }
-    const root = normalizedVaultRootPath(vaultRoot);
-    const restoredMatchesCurrentVault =
-      restoredInboxState != null &&
-      typeof restoredInboxState.vaultRoot === 'string' &&
-      normalizedVaultRootPath(restoredInboxState.vaultRoot) === root;
-
-    if (restoredMatchesCurrentVault) {
-      const hubUris = restoredTodayHubWorkspaceUrisForRestore({
-        currentHubUris: sortedTodayHubNoteUrisFromRefs(vaultMarkdownRefs),
-        restored: restoredInboxState.todayHubWorkspaces,
-        root,
-      });
-      const knownNoteUris = new Set(notes.map(n => n.uri));
-      const filter = makeStoredTabFilter({root, knownNoteUris});
-
-      const {resolvedActiveHub, chosenTabsSource, chosenActiveEditorTabId} =
-        resolveActiveHubAndTabsSource({hubUris, restored: restoredInboxState, filter});
-
-      let restoredTabs = applyRestoredEditorWorkspaceTabs(
-        chosenTabsSource,
-        chosenActiveEditorTabId,
-        filter,
-      );
-      if (restoredTabs.length === 0 && editorWorkspaceTabsRef.current.length === 0) {
-        restoredTabs = migrateLegacyOpenTabsIfNeeded(
-          restoredInboxState.openTabUris,
-          filter,
-        );
-      }
-
-      let shellRestoreProjection: ShellRestoreProjectionSyncArgs | null = null;
-
-      if (hubUris.length > 0) {
-        const activeHubFinal = pickFinalActiveHub({
-          resolvedActiveHub,
-          hubUris,
-          restored: restoredInboxState,
-        });
-        const homeHydrated = hydrateWorkspaceHomeStatesFromPersisted({
-          hubUris,
-          activeTodayHubUri: activeHubFinal,
-          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces as
-            | Record<string, unknown>
-            | null
-            | undefined,
-        });
-        replaceRuntimeActiveHub(
-          activeHubFinal,
-          activeTodayHubUriRef,
-          setActiveTodayHubUri,
-        );
-        replaceHomeStatesByHub(homeHydrated);
-        assignInboxShellRestored(setInboxShellRestored, true);
-        shellRestoreProjection = {
-          activeTodayHubUri: activeHubFinal,
-          hubUris,
-          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces ?? null,
-          homeStatesByHub: homeHydrated,
-        };
-      } else if (vaultMarkdownRefs.length > 0) {
-        replaceRuntimeActiveHub(null, activeTodayHubUriRef, setActiveTodayHubUri);
-        mirrorShadowActiveHub(null, 'restore active hub');
-        assignInboxShellRestored(setInboxShellRestored, true);
-      } else {
-        assignInboxShellRestored(setInboxShellRestored, true);
-      }
-
-      runDeferredShellRestoreTabStateAndShadowSync(
-        {
-          editorWorkspaceTabsRef,
-          activeEditorTabIdRef,
-          setEditorWorkspaceTabs,
-          setActiveEditorTabId,
-          mirrorShadowActiveWorkspaceTabs,
-          mirrorShadowActiveTab,
-          mirrorShadowHomeSurface,
-          syncShadowWorkspaceFromShellRestore,
-        },
-        shellRestoreProjection,
-      );
-
-      restoreInboxSelectionAfterShellRestore(root, restoredTabs, hubUris.length);
-      return;
-    }
-    queueMicrotask(() => {
-      assignInboxShellRestored(setInboxShellRestored, true);
-    });
-  }, [
+  useInboxShellRestore({
     vaultRoot,
     inboxRestoreEnabled,
     inboxShellRestored,
+    setInboxShellRestored,
     restoredInboxState,
     notes,
+    notesRef,
     vaultMarkdownRefs,
-    applyRestoredEditorWorkspaceTabs,
-    migrateLegacyOpenTabsIfNeeded,
-    mirrorShadowActiveHub,
-    mirrorShadowActiveTab,
-    mirrorShadowActiveWorkspaceTabs,
-    mirrorShadowHomeSurface,
+    editorWorkspaceTabsRef,
+    activeEditorTabIdRef,
+    activeTodayHubUriRef,
+    setEditorWorkspaceTabs,
+    setActiveEditorTabId,
+    setActiveTodayHubUri,
     replaceHomeStatesByHub,
-    restoreInboxSelectionAfterShellRestore,
+    mirrorShadowActiveHub,
+    mirrorShadowActiveWorkspaceTabs,
+    mirrorShadowActiveTab,
+    mirrorShadowHomeSurface,
     syncShadowWorkspaceFromShellRestore,
-  ]);
+    startNewEntry,
+    selectNote,
+    selectHomeCurrentNote,
+  });
 
   return {
     vaultRoot,
