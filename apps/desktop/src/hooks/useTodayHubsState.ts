@@ -40,7 +40,6 @@ import {
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
 import {
-  isOnWorkspaceHome,
   workspaceSelectorMainShowsActiveTabPill,
   workspaceSelectorSubLabelText,
 } from '../lib/workspaceShellToday';
@@ -58,7 +57,6 @@ import {
 import {
   activeEditorWorkspaceTabsFromWorkspaceModel,
   activeSurfaceTabIdFromWorkspaceModel,
-  editorWorkspaceTabsFromModelTabEntries,
   legacyEditorWorkspaceTabsSignature,
   tabsControllerEditorSurface,
   workspaceHomeStatesFromWorkspaceModel,
@@ -451,6 +449,8 @@ export function useTodayHubsState(
     modelActiveEditorTabId,
     modelEditorWorkspaceTabs,
     modelHomeStatesByHub,
+    activeEditorTabIdRef,
+    editorWorkspaceTabsRef,
     replaceEditorWorkspaceTabs,
     replaceHomeStatesByHub,
     setActiveEditorTabId,
@@ -494,7 +494,7 @@ export function useTodayHubsState(
 
   useLayoutEffect(() => {
     showTodayHubCanvasRef.current = showTodayHubCanvas;
-  }, [showTodayHubCanvas]);
+  }, [showTodayHubCanvas, showTodayHubCanvasRef]);
 
   const todayHubSettings = useMemo(
     (): TodayHubSettings | null =>
@@ -518,7 +518,7 @@ export function useTodayHubsState(
 
   useLayoutEffect(() => {
     todayHubSettingsRef.current = todayHubSettings;
-  }, [todayHubSettings]);
+  }, [todayHubSettings, todayHubSettingsRef]);
 
   const prehydrateTodayHubRows = useCallback(
     async (uris: readonly string[]) => {
@@ -550,7 +550,14 @@ export function useTodayHubsState(
         setInboxContentByUri(prev => ({...prev, ...updates}));
       }
     },
-    [fs, inboxContentByUriRef, saveChainRef, setInboxContentByUri, vaultRootRef],
+    [
+      fs,
+      inboxContentByUriRef,
+      saveChainRef,
+      setInboxContentByUri,
+      todayHubRowLastPersistedRef,
+      vaultRootRef,
+    ],
   );
 
   const persistTodayHubRow = useCallback(
@@ -637,6 +644,7 @@ export function useTodayHubsState(
       setFsRefreshNonce,
       setInboxContentByUri,
       subtreeMarkdownCache,
+      todayHubRowLastPersistedRef,
       vaultRootRef,
     ],
   );
@@ -659,14 +667,14 @@ export function useTodayHubsState(
     }
     if (activeEditorTabIdRef.current != null) {
       mirrorShadowHomeSurface('workspace selector home surface');
-      void selectHomeCurrentNote(hub);
+      selectHomeCurrentNote(hub).catch(() => undefined);
       return;
     }
     const home =
       homeStatesByHubRef.current[hub] ?? createWorkspaceHomeState(hub);
     if (home.history.index <= 0) {
       if (selectedUriRef.current == null) {
-        void selectHomeCurrentNote(hub);
+        selectHomeCurrentNote(hub).catch(() => undefined);
       }
       return;
     }
@@ -679,7 +687,9 @@ export function useTodayHubsState(
       history: {...home.history, index: 0},
     };
     setHomeStateForHub(hub, resetHome);
-    void openMarkdownInEditorRef.current(hubTodayUri, {home: true, skipHistory: true});
+    openMarkdownInEditorRef
+      .current(hubTodayUri, {home: true, skipHistory: true})
+      .catch(() => undefined);
   }, [
     activeEditorTabIdRef,
     mirrorShadowHomeSurface,
@@ -697,11 +707,13 @@ export function useTodayHubsState(
     const home =
       homeStatesByHubRef.current[hub] ?? createWorkspaceHomeState(hub);
     const uri = homeCurrentUri(home) ?? hub;
-    void openMarkdownInEditorRef.current(uri, {
-      newTab: true,
-      activateNewTab: false,
-      insertAfterActive: true,
-    });
+    openMarkdownInEditorRef
+      .current(uri, {
+        newTab: true,
+        activateNewTab: false,
+        insertAfterActive: true,
+      })
+      .catch(() => undefined);
   }, [openMarkdownInEditorRef]);
 
   const syncWorkspaceModelForIncomingHub = useCallback(
@@ -829,7 +841,7 @@ export function useTodayHubsState(
       return;
     }
     if (cur != null && !hubs.includes(cur)) {
-      void switchTodayHubWorkspace(hubs[0]!);
+      switchTodayHubWorkspace(hubs[0]!).catch(() => undefined);
       return;
     }
     const pick =

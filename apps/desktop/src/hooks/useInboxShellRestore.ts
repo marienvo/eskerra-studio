@@ -8,7 +8,6 @@ import {
 } from '@eskerra/core';
 
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
-import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {hydrateWorkspaceHomeStatesFromPersisted} from '../lib/workspaceHomePersistence';
 import {
