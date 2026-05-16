@@ -1,4 +1,4 @@
-# ADR: `useMainWindowWorkspace` decompositie baseline
+# ADR 002: `useMainWindowWorkspace` decompositie baseline
 
 ## Status
 
@@ -21,7 +21,7 @@ This ADR records the starting point for the phased decomposition so later PRs ca
 1. Keep the decomposition phased and PR-sized.
 2. Treat the workspace model migration as the primary ordering constraint.
 3. Add a shape-level smoke test before larger refactors so the hook return contract has a cheap regression sentinel.
-4. Use the existing desktop Vitest isolation rules and the current integration harness for baseline validation.
+4. Use the existing desktop Vitest isolation rules ([ADR 001](./001-adr-vitest-desktop-test-isolation.md)) and the current integration harness for baseline validation.
 
 ## Phase 1 Matrix
 
@@ -42,3 +42,28 @@ The old runtime-projection layout effect and DEV persistence divergence check ar
 - The baseline is explicit and can be updated in later phases when the hook shrinks.
 - The smoke test gives a low-cost guard against accidental return-shape regressions while the hook is being split.
 - Phase 1 keeps legacy refs/state for imperative command compatibility, but they are now mirrors rather than the read source for persistence, selector display, tab return shape, and history button state.
+
+## Per-phase invariants checklist
+
+Each PR in this decomposition must explicitly verify the following (see also the PR checklist in `.claude/plans/reviewpunten-fase0-6-aanpak.md`).
+
+1. **Note-body cache** (`CLAUDE.md`, Desktop: Note body cache): keep `inboxContentByUri`, `lastPersistedRef`, and `lastPersistedExternalMutationSeqRef` **in sync together** for every change that touches editor or on-disk note body state.
+2. **Vault disk sync** (`CLAUDE.md`, Desktop: Vault disk sync invariants): do not weaken watcher routing, cache invalidation, or conflict classification without concurrent tests and spec updates where needed.
+3. **Vitest isolation** ([ADR 001](./001-adr-vitest-desktop-test-isolation.md), `CLAUDE.md`): `restoreMocks: false`, `isolate: true`, and **no** `@tauri-apps/*` imports in `vitest.setup.ts` at module scope.
+4. **CodeMirror layout** (`CLAUDE.md`, Desktop: CodeMirror layout): use `padding`, not `margin`, for vertical spacing on `.cm-line`, line decorations, and block-widget roots whose height CodeMirror measures.
+
+## Test execution
+
+Run the desktop smoke test (`useMainWindowWorkspace.smoke.test.ts` via Vitest) with **`apps/desktop` as the current working directory**:
+
+```bash
+cd apps/desktop && npx vitest run
+```
+
+From the monorepo root (for example `npx vitest run apps/desktop/...`), the same suite can fail with `document is not defined` because the happy-dom environment is not initialized the way this workspace expects.
+
+## `__resetForTests()` policy
+
+- **`renderHook`-tested state-store sub-hooks** (for example `useVaultBootstrap`, `useDiskConflictState`) normally get a fresh hook instance per test and **do not** need a module-level `__resetForTests()` export.
+- **`vitest.setup.ts` teardown** may call `__resetForTests()` only from modules that **do not** import `@tauri-apps/*` at module scope; see [ADR 001](./001-adr-vitest-desktop-test-isolation.md).
+- **Modules that import Tauri at module scope** should still export `__resetForTests()` where needed, but tests that mock Tauri must call it from `beforeEach` / `afterEach` in those files — not from global setup before the mocks are installed.

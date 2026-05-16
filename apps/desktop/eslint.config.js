@@ -16,7 +16,7 @@ export default defineConfig([
         {
           selector: 'Property[key.name="isolate"][value.value=false]',
           message:
-            'Do not set Vitest test.isolate to false without superseding specs/adrs/adr-vitest-desktop-test-isolation.md.',
+            'Do not set Vitest test.isolate to false without superseding specs/adrs/001-adr-vitest-desktop-test-isolation.md.',
         },
       ],
     },

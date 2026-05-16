@@ -125,7 +125,7 @@ When proposing a new dependency, provider, startup initialization, background pr
 
 ### Desktop Vitest isolation (`apps/desktop/`)
 
-Authoritative detail: `specs/adrs/adr-vitest-desktop-test-isolation.md`.
+Authoritative detail: `specs/adrs/001-adr-vitest-desktop-test-isolation.md`.
 
 - `vitest.setup.ts` runs RTL `cleanup()` in `afterEach`; restores real timers; calls `vi.unstubAllGlobals()` / `unstubAllEnvs()`; clears `localStorage` / `sessionStorage` / `document.body`; clears cookies in `beforeEach`.
 - Keep **`restoreMocks: false`** in `vitest.config.ts`. `restoreMocks: true` resets `vi.mock()` factories and breaks module mocks (e.g., `@tauri-apps/plugin-store`). Use `clearMocks: true` only; use `vi.spyOn(...).mockRestore()` inside a test file when you need the real implementation back.

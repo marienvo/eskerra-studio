@@ -124,4 +124,4 @@ If any of these are unmet, the loop has not exited cleanly — write that up hon
 - Do not add a `.github/pull_request_template.md` yet. The repository currently has one active contributor; a formal PR template is premature. The logbook PR entry in [`logbook.md`](./logbook.md) is the working substitute. A real PR template lands in a later contributor-readiness phase, after the first two-week loop closes or when a second human contributor is imminent — whichever comes first.
 - Do not add `CONTRIBUTING.md` yet. Same reasoning: contributor-facing process docs are a phase-4 deliverable in the follow-up plan, not part of this loop.
 - Do not write new specs for hypothetical future phases. Write specs when the work is imminent.
-- Do not lower test isolation guarantees. The `restoreMocks: false` / `isolate: true` rules in [`specs/adrs/adr-vitest-desktop-test-isolation.md`](../adrs/adr-vitest-desktop-test-isolation.md) stand.
+- Do not lower test isolation guarantees. The `restoreMocks: false` / `isolate: true` rules in [`specs/adrs/001-adr-vitest-desktop-test-isolation.md`](../adrs/001-adr-vitest-desktop-test-isolation.md) stand.

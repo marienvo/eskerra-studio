@@ -94,13 +94,13 @@ Totaal komt overeen met ~4000 LOC.
 **Geadviseerde LLM:** `GPT-5.4-Mini` — voldoende voor inventarisatie, ADR-tekst en een kleine smoke-test; lage kans op complexe codewijzigingen.
 
 - Snapshot huidige LOC, importgraaf en test-coverage van `useMainWindowWorkspace.ts`.
-- Voeg een ADR toe (`specs/adrs/adr-main-window-workspace-decompositie.md`) met deze doelarchitectuur en de invarianten-checklist die elke fase moet respecteren.
+- Voeg een ADR toe (`specs/adrs/002-adr-main-window-workspace-decompositie.md`) met deze doelarchitectuur en de invarianten-checklist die elke fase moet respecteren.
 - Voeg een lichte "smoke"-test (Vitest) toe die de return-shape van de hook controleert (alle controllers aanwezig, geen `undefined` velden). Dient als regressie-vangnet voor latere fases.
 
 **Acceptatie:** ADR gemerged, smoke-test groen, getallen vastgelegd.
 
 **Review (2026-05-15):**
-- ✓ ADR aangemaakt: `specs/adrs/adr-main-window-workspace-decompositie.md` (commits `bcf919bc`, `c87458a2`).
+- ✓ ADR aangemaakt: `specs/adrs/002-adr-main-window-workspace-decompositie.md` (commits `bcf919bc`, `c87458a2`).
 - ✓ Smoke-test aangemaakt: `apps/desktop/src/hooks/useMainWindowWorkspace.smoke.test.ts` (155 LOC, dekt alle 21 top-level keys + alle nested controller keys). Slaagt onder `apps/desktop` vitest-config (let op: gebruikt `happy-dom`; rechtstreeks via root `npx vitest` zonder workspace-context faalt met "document is not defined" — niet kritiek, wel goed om te documenteren in de uitvoeringsinstructie van latere fases).
 - ✓ Baseline LOC vastgelegd: 4062 (zie ADR).
 - ⚠ De ADR bevat een Phase 1 matrix maar mist de in dit plan beloofde **invarianten-checklist die elke fase moet respecteren** (note-body cache, disk-sync, vitest isolation, CodeMirror layout). Die staat alleen impliciet in dit plan. Aanbeveling: voeg een korte checklist-sectie aan de ADR toe of laat fase 10 de ADR consolideren.
