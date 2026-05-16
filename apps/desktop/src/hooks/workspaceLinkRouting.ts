@@ -8,7 +8,6 @@ import {
 
 import {
   getGeneralDirectoryUri,
-  getInboxDirectoryUri,
   isBrowserOpenableMarkdownHref,
   normalizeVaultBaseUri,
   wikiLinkInnerBrowserOpenableHref,
@@ -33,59 +32,20 @@ import {
   openOrCreateVaultWikiPathMarkdownLink,
 } from '../lib/inboxWikiLinkNavigation';
 import {openSystemBrowserUrl} from '../lib/openSystemBrowserUrl';
+import {
+  CANNOT_CREATE_PARENT_ERROR_MESSAGE,
+  canonicalWikiPathReplacementInner,
+  pickLinkReplacementSurface,
+  pickVaultLinkFallbackSource,
+  projectVaultMarkdownNoteRefs,
+  type WorkspaceLinkOpenMarkdownInEditor,
+} from '../lib/workspaceLinkRoutingHelpers';
 import {isOnWorkspaceHome} from '../lib/workspaceShellToday';
 
 import type {WorkspaceLinkController} from './workspaceReturnShape';
 
-export function pickVaultLinkFallbackSource(args: {
-  base: string;
-  composingNewEntry: boolean;
-  showTodayHubCanvas: boolean;
-  todayHubWikiNavParent: string | null;
-  selectedUri: string | null;
-}): string {
-  const {
-    base,
-    composingNewEntry,
-    showTodayHubCanvas,
-    todayHubWikiNavParent,
-    selectedUri,
-  } = args;
-  if (composingNewEntry) {
-    return getInboxDirectoryUri(base);
-  }
-  if (showTodayHubCanvas) {
-    return getGeneralDirectoryUri(base);
-  }
-  return todayHubWikiNavParent ?? selectedUri ?? getInboxDirectoryUri(base);
-}
-
-export function canonicalWikiPathReplacementInner(
-  inner: string,
-  canonicalHref: string,
-): string {
-  const pipeAt = inner.indexOf('|');
-  return pipeAt >= 0 ? `${canonicalHref}${inner.slice(pipeAt)}` : canonicalHref;
-}
-
-export function pickLinkReplacementSurface(args: {
-  hasTodayHubCellEditor: boolean;
-  todayHubWikiNavParent: string | null;
-}): 'todayHubCell' | 'inbox' {
-  return args.hasTodayHubCellEditor && args.todayHubWikiNavParent != null
-    ? 'todayHubCell'
-    : 'inbox';
-}
-
-export type WorkspaceLinkOpenMarkdownInEditor = (
-  uri: string,
-  options?: {
-    newTab?: boolean;
-    activateNewTab?: boolean;
-    insertAfterActive?: boolean;
-    home?: boolean;
-  },
-) => Promise<void>;
+export type {WorkspaceLinkOpenMarkdownInEditor};
+export {canonicalWikiPathReplacementInner, pickLinkReplacementSurface, pickVaultLinkFallbackSource};
 
 export function useWorkspaceLinkRouting(args: {
   vaultRoot: string | null;
@@ -194,6 +154,17 @@ export function useWorkspaceLinkRouting(args: {
     ],
   );
 
+  /** Invalidates the subtree cache, refreshes notes, and bumps the FS nonce after a note is created. */
+  const finalizeCreatedVaultMarkdownNote = useCallback(
+    async (uri: string) => {
+      if (!vaultRoot) return;
+      subtreeMarkdownCache.invalidateForMutation(vaultRoot, uri, 'file');
+      await refreshNotes(vaultRoot);
+      setFsRefreshNonce(n => n + 1);
+    },
+    [vaultRoot, subtreeMarkdownCache, refreshNotes, setFsRefreshNonce],
+  );
+
   /** Apply a canonical wiki-link inner replacement to the right editor (Today Hub cell or main inbox). */
   const replaceWikiLinkInnerAtTargetEditor = useCallback(
     (at: number, expectedInner: string, replacementInner: string) => {
@@ -207,6 +178,24 @@ export function useWorkspaceLinkRouting(args: {
         return;
       }
       inboxEditorRef.current?.replaceWikiLinkInnerAt({at, expectedInner, replacementInner});
+    },
+    [inboxEditorRef, todayHubCellEditorRef, todayHubWikiNavParentRef],
+  );
+
+  /** Apply a canonical relative-link href replacement to the right editor (Today Hub cell or main inbox). */
+  const replaceMarkdownLinkHrefAtTargetEditor = useCallback(
+    (at: number, expectedHref: string, replacementHref: string) => {
+      const hubEd = todayHubCellEditorRef.current;
+      const surface = pickLinkReplacementSurface({
+        hasTodayHubCellEditor: hubEd != null,
+        todayHubWikiNavParent: todayHubWikiNavParentRef.current,
+      });
+      const replacement = {at, expectedHref, replacementHref};
+      if (surface === 'todayHubCell') {
+        hubEd?.replaceMarkdownLinkHrefAt(replacement);
+        return;
+      }
+      inboxEditorRef.current?.replaceMarkdownLinkHrefAt(replacement);
     },
     [inboxEditorRef, todayHubCellEditorRef, todayHubWikiNavParentRef],
   );
@@ -233,30 +222,27 @@ export function useWorkspaceLinkRouting(args: {
       });
       const relResult = await openOrCreateVaultWikiPathMarkdownLink({
         inner,
-        notes: vaultMarkdownRefsRef.current.map(r => ({name: r.name, uri: r.uri})),
+        notes: projectVaultMarkdownNoteRefs(vaultMarkdownRefsRef.current),
         vaultRoot,
         fs,
         fallbackSourceMarkdownUriOrDir: wikiPathFallbackSource,
       });
       if (relResult.kind === 'cannot_create_parent') {
-        setErr(
-          'That file was not found on disk (check spelling and special characters). Notebox cannot create notes inside dot-prefixed hidden folders (names starting with .).',
-        );
+        setErr(CANNOT_CREATE_PARENT_ERROR_MESSAGE);
         return true;
       }
       if (relResult.kind !== 'open' && relResult.kind !== 'created') {
         return false;
       }
-      if (relResult.kind === 'created') {
-        subtreeMarkdownCache.invalidateForMutation(vaultRoot, relResult.uri, 'file');
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } else if (relResult.canonicalHref) {
+      if (relResult.canonicalHref) {
         replaceWikiLinkInnerAtTargetEditor(
           at,
           inner,
           canonicalWikiPathReplacementInner(inner, relResult.canonicalHref),
         );
+      }
+      if (relResult.kind === 'created') {
+        await finalizeCreatedVaultMarkdownNote(relResult.uri);
       }
       await routeOpenedVaultLink(relResult.uri, {
         openInBackgroundTab,
@@ -267,17 +253,15 @@ export function useWorkspaceLinkRouting(args: {
     [
       vaultRoot,
       fs,
-      refreshNotes,
+      finalizeCreatedVaultMarkdownNote,
       replaceWikiLinkInnerAtTargetEditor,
       routeOpenedVaultLink,
-      subtreeMarkdownCache,
       composingNewEntryRef,
       showTodayHubCanvasRef,
       todayHubWikiNavParentRef,
       selectedUriRef,
       vaultMarkdownRefsRef,
       setErr,
-      setFsRefreshNonce,
     ],
   );
 
@@ -289,12 +273,11 @@ export function useWorkspaceLinkRouting(args: {
       const {inner, at, openInBackgroundTab} = payload;
       if (!vaultRoot) return;
       if (result.kind === 'open' || result.kind === 'created') {
-        if (result.kind === 'created') {
-          subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.uri, 'file');
-          await refreshNotes(vaultRoot);
-          setFsRefreshNonce(n => n + 1);
-        } else if (result.canonicalInner) {
+        if (result.canonicalInner) {
           replaceWikiLinkInnerAtTargetEditor(at, inner, result.canonicalInner);
+        }
+        if (result.kind === 'created') {
+          await finalizeCreatedVaultMarkdownNote(result.uri);
         }
         await routeOpenedVaultLink(result.uri, {
           openInBackgroundTab,
@@ -328,13 +311,11 @@ export function useWorkspaceLinkRouting(args: {
     },
     [
       vaultRoot,
-      refreshNotes,
+      finalizeCreatedVaultMarkdownNote,
       replaceWikiLinkInnerAtTargetEditor,
       routeOpenedVaultLink,
       handleWikiLinkPathNotSupported,
-      subtreeMarkdownCache,
       setErr,
-      setFsRefreshNonce,
     ],
   );
 
@@ -361,7 +342,7 @@ export function useWorkspaceLinkRouting(args: {
             : null;
         const result = await openOrCreateInboxWikiLinkTarget({
           inner,
-          notes: vaultMarkdownRefsRef.current.map(r => ({name: r.name, uri: r.uri})),
+          notes: projectVaultMarkdownNoteRefs(vaultMarkdownRefsRef.current),
           vaultRoot,
           fs,
           activeMarkdownUri: composingNewEntryRef.current ? null : wikiParent,
@@ -414,35 +395,17 @@ export function useWorkspaceLinkRouting(args: {
       try {
         const result = await openOrCreateVaultRelativeMarkdownLink({
           href,
-          notes: vaultMarkdownRefsRef.current.map(r => ({
-            name: r.name,
-            uri: r.uri,
-          })),
+          notes: projectVaultMarkdownNoteRefs(vaultMarkdownRefsRef.current),
           vaultRoot,
           fs,
           sourceMarkdownUriOrDir,
         });
         if (result.kind === 'open' || result.kind === 'created') {
+          if (result.canonicalHref) {
+            replaceMarkdownLinkHrefAtTargetEditor(at, href, result.canonicalHref);
+          }
           if (result.kind === 'created') {
-            subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.uri, 'file');
-            await refreshNotes(vaultRoot);
-            setFsRefreshNonce(n => n + 1);
-          } else if (result.canonicalHref) {
-            const hubEd = todayHubCellEditorRef.current;
-            const replacement = {
-              at,
-              expectedHref: href,
-              replacementHref: result.canonicalHref,
-            };
-            const surface = pickLinkReplacementSurface({
-              hasTodayHubCellEditor: hubEd != null,
-              todayHubWikiNavParent: todayHubWikiNavParentRef.current,
-            });
-            if (surface === 'todayHubCell') {
-              hubEd?.replaceMarkdownLinkHrefAt(replacement);
-            } else {
-              inboxEditorRef.current?.replaceMarkdownLinkHrefAt(replacement);
-            }
+            await finalizeCreatedVaultMarkdownNote(result.uri);
           }
           await routeOpenedVaultLink(result.uri, {
             openInBackgroundTab,
@@ -451,9 +414,7 @@ export function useWorkspaceLinkRouting(args: {
           return;
         }
         if (result.kind === 'cannot_create_parent') {
-          setErr(
-            'That file was not found on disk (check spelling and special characters). Notebox cannot create notes inside dot-prefixed hidden folders (names starting with .).',
-          );
+          setErr(CANNOT_CREATE_PARENT_ERROR_MESSAGE);
           return;
         }
         setErr('This link is not a relative vault markdown note.');
@@ -464,10 +425,9 @@ export function useWorkspaceLinkRouting(args: {
     [
       vaultRoot,
       fs,
-      refreshNotes,
-      inboxEditorRef,
+      finalizeCreatedVaultMarkdownNote,
+      replaceMarkdownLinkHrefAtTargetEditor,
       routeOpenedVaultLink,
-      subtreeMarkdownCache,
       flushInboxSaveRef,
       composingNewEntryRef,
       showTodayHubCanvasRef,
@@ -475,8 +435,6 @@ export function useWorkspaceLinkRouting(args: {
       selectedUriRef,
       vaultMarkdownRefsRef,
       setErr,
-      setFsRefreshNonce,
-      todayHubCellEditorRef,
     ],
   );
 

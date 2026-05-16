@@ -135,6 +135,31 @@ describe('resolveInboxWikiLinkTarget', () => {
       reason: 'path_not_supported',
     });
   });
+
+  it('matches file via bySanitizedKey when link uses straight apostrophe but file has none', () => {
+    const rows = [{name: 'Johns notes.md', uri: '/vault/Inbox/Johns notes.md'}];
+    expect(resolveInboxWikiLinkTarget(rows, "John's notes")).toEqual({
+      kind: 'open',
+      note: rows[0],
+      canonicalInner: 'Johns notes',
+    });
+  });
+
+  it('matches file via bySanitizedKey when link uses curly apostrophe (U+2019) but file has none', () => {
+    const rows = [{name: 'Johns notes.md', uri: '/vault/Inbox/Johns notes.md'}];
+    expect(resolveInboxWikiLinkTarget(rows, 'John’s notes')).toEqual({
+      kind: 'open',
+      note: rows[0],
+      canonicalInner: 'Johns notes',
+    });
+  });
+
+  it('cross-device: straight and curly apostrophe link both match the same sanitized file', () => {
+    const rows = [{name: 'Johns notes.md', uri: '/vault/Inbox/Johns notes.md'}];
+    const straight = resolveInboxWikiLinkTarget(rows, "John's notes");
+    const curly = resolveInboxWikiLinkTarget(rows, 'John’s notes');
+    expect(straight).toEqual(curly);
+  });
 });
 
 describe('wikiLinkInnerBrowserOpenableHref', () => {
@@ -285,6 +310,14 @@ describe('resolveInboxWikiLinkTargetWithLookup', () => {
       {notes: dupRows, inner: 'dup'},
       {notes: caseRows, inner: 'ALPHA'},
       {notes: sanitizedRows, inner: 'a:'},
+      {
+        notes: [{name: 'Johns notes.md', uri: '/vault/Inbox/Johns notes.md'}],
+        inner: "John's notes",
+      },
+      {
+        notes: [{name: 'Johns notes.md', uri: '/vault/Inbox/Johns notes.md'}],
+        inner: 'John\u2019s notes',
+      },
       {notes: NOTES, inner: '   '},
       {notes: NOTES, inner: 'foo/bar'},
     ];

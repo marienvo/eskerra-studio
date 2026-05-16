@@ -320,7 +320,83 @@ describe('openOrCreateInboxWikiLinkTarget', () => {
     expect(result).toEqual({
       kind: 'created',
       uri: `${vaultRoot}/Inbox/Hello World.md`,
+      canonicalInner: 'Hello World',
     });
+  });
+
+  it('returns canonicalInner when apostrophe is stripped from created file name', async () => {
+    const {fs, writes} = createMemoryVaultFs([
+      [vaultRoot, 'dir'],
+      [`${vaultRoot}/Inbox`, 'dir'],
+      [`${vaultRoot}/General`, 'dir'],
+    ]);
+    const result = await openOrCreateInboxWikiLinkTarget({
+      inner: "John's notes",
+      notes: [],
+      vaultRoot,
+      fs,
+    });
+    expect(result).toEqual({
+      kind: 'created',
+      uri: `${vaultRoot}/Inbox/Johns notes.md`,
+      canonicalInner: 'Johns notes',
+    });
+    expect(writes.some(w => w.uri === `${vaultRoot}/Inbox/Johns notes.md`)).toBe(true);
+  });
+
+  it('returns canonicalInner when curly apostrophe (U+2019) is stripped from created file name', async () => {
+    const {fs} = createMemoryVaultFs([
+      [vaultRoot, 'dir'],
+      [`${vaultRoot}/Inbox`, 'dir'],
+      [`${vaultRoot}/General`, 'dir'],
+    ]);
+    const result = await openOrCreateInboxWikiLinkTarget({
+      inner: 'John’s notes',
+      notes: [],
+      vaultRoot,
+      fs,
+    });
+    expect(result).toEqual({
+      kind: 'created',
+      uri: `${vaultRoot}/Inbox/Johns notes.md`,
+      canonicalInner: 'Johns notes',
+    });
+  });
+
+  it('preserves display text in canonicalInner when apostrophe is stripped', async () => {
+    const {fs} = createMemoryVaultFs([
+      [vaultRoot, 'dir'],
+      [`${vaultRoot}/Inbox`, 'dir'],
+      [`${vaultRoot}/General`, 'dir'],
+    ]);
+    // Display text ("John's") is used as the note title; apostrophe stripped → Johns.md
+    // canonicalInner: target becomes sanitized stem; display text preserved as-is
+    const result = await openOrCreateInboxWikiLinkTarget({
+      inner: "John's notes|John's",
+      notes: [],
+      vaultRoot,
+      fs,
+    });
+    expect(result).toEqual({
+      kind: 'created',
+      uri: `${vaultRoot}/Inbox/Johns.md`,
+      canonicalInner: "Johns|John's",
+    });
+  });
+
+  it('omits canonicalInner when file name matches the original inner', async () => {
+    const {fs} = createMemoryVaultFs([
+      [vaultRoot, 'dir'],
+      [`${vaultRoot}/Inbox`, 'dir'],
+      [`${vaultRoot}/General`, 'dir'],
+    ]);
+    const result = await openOrCreateInboxWikiLinkTarget({
+      inner: 'clean name',
+      notes: [],
+      vaultRoot,
+      fs,
+    });
+    expect(result).toEqual({kind: 'created', uri: `${vaultRoot}/Inbox/clean name.md`});
   });
 
   it('returns ambiguous when multiple note refs share the same stem', async () => {
@@ -421,6 +497,54 @@ describe('openOrCreateVaultRelativeMarkdownLink', () => {
     }
     expect(result.uri).toBe(`${generalDir}/from hub context.md`);
     expect(writes.some(w => w.uri === result.uri)).toBe(true);
+  });
+
+  it('returns canonicalHref when create rewrites basename after sanitization (subdir + apostrophe)', async () => {
+    const subdir = `${vaultRoot}/Inbox/subdir`;
+    const {fs, writes} = createMemoryVaultFs([
+      [vaultRoot, 'dir'],
+      [`${vaultRoot}/Inbox`, 'dir'],
+      [subdir, 'dir'],
+      [`${vaultRoot}/Inbox/a.md`, '# A'],
+    ]);
+    const notes = [{name: 'a.md', uri: `${vaultRoot}/Inbox/a.md`}];
+    const result = await openOrCreateVaultRelativeMarkdownLink({
+      href: "subdir/John's notes.md",
+      notes,
+      vaultRoot,
+      fs,
+      sourceMarkdownUriOrDir: `${vaultRoot}/Inbox/a.md`,
+    });
+    expect(result).toEqual({
+      kind: 'created',
+      uri: `${subdir}/Johns notes.md`,
+      canonicalHref: 'subdir/Johns notes.md',
+    });
+    expect(writes.some(w => w.uri === `${subdir}/Johns notes.md`)).toBe(true);
+  });
+
+  it('returns canonicalHref preserving fragment and query when create sanitizes basename', async () => {
+    const subdir = `${vaultRoot}/Inbox/subdir`;
+    const {fs, writes} = createMemoryVaultFs([
+      [vaultRoot, 'dir'],
+      [`${vaultRoot}/Inbox`, 'dir'],
+      [subdir, 'dir'],
+      [`${vaultRoot}/Inbox/a.md`, '# A'],
+    ]);
+    const notes = [{name: 'a.md', uri: `${vaultRoot}/Inbox/a.md`}];
+    const result = await openOrCreateVaultRelativeMarkdownLink({
+      href: "subdir/John's notes.md?v=1#section",
+      notes,
+      vaultRoot,
+      fs,
+      sourceMarkdownUriOrDir: `${vaultRoot}/Inbox/a.md`,
+    });
+    expect(result).toEqual({
+      kind: 'created',
+      uri: `${subdir}/Johns notes.md`,
+      canonicalHref: 'subdir/Johns notes.md?v=1#section',
+    });
+    expect(writes.some(w => w.uri === `${subdir}/Johns notes.md`)).toBe(true);
   });
 
   it('returns unsupported for https links', async () => {
