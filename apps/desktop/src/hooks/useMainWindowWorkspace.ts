@@ -45,7 +45,6 @@ import {
   deleteVaultTreeDirectory,
   listInboxNotes,
   moveVaultTreeItemToDirectory,
-  type MoveVaultTreeItemResult,
   saveNoteMarkdown,
 } from '../lib/vaultBootstrap';
 import {
@@ -64,7 +63,6 @@ import {
 import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
 import {
   normalizeEditorDocUri,
-  remapVaultUriPrefix,
 } from '../lib/editorDocumentHistory';
 import {popNextReopenableClosedTabRecord} from '../lib/editorClosedTabStack';
 import {
@@ -155,6 +153,8 @@ import {bulkDeleteUriRemovalPredicate, pruneEditorTabsAfterBulkTreeDelete} from 
 import {
   runDeleteFolder,
   runDeleteNote,
+  runMoveVaultTreeItem,
+  runCommitMoveVaultTreeResult,
   runRenameFolder,
   type TreeCommandContext,
 } from './workspaceTreeCommands';
@@ -196,10 +196,7 @@ import {
   type WorkspaceRenameMaintenanceCommitArgs,
   type WorkspaceRenameMaintenanceSnapshot,
 } from './workspaceRenameMaintenance';
-import {
-  remapEditorShellScrollMapExact,
-  remapEditorShellScrollMapTreePrefix,
-} from './workspaceEditorScrollMap';
+import {remapEditorShellScrollMapExact} from './workspaceEditorScrollMap';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import {cleanNoteMarkdownBody} from '../lib/cleanNoteMarkdown';
 import {
@@ -2349,146 +2346,10 @@ export function useMainWindowWorkspace(options: {
     [treeCommandContext],
   );
 
-  const commitMovedArticleResult = useCallback(
-    (previousUri: string, nextUri: string) => {
-      setInboxContentByUri(prev => {
-        if (prev[previousUri] === undefined) {
-          return prev;
-        }
-        const next = {...prev};
-        next[nextUri] = next[previousUri]!;
-        delete next[previousUri];
-        return next;
-      });
-      remapEditorShellScrollMapExact(
-        editorShellScrollByUriRef.current,
-        previousUri,
-        nextUri,
-      );
-      if (selectedUriRef.current !== previousUri) {
-        return;
-      }
-      selectedUriRef.current = nextUri;
-      setSelectedUri(nextUri);
-      const lp = lastPersistedRef.current;
-      if (lp && lp.uri === previousUri) {
-        lastPersistedRef.current = {...lp, uri: nextUri};
-        lastPersistedExternalMutationSeqRef.current += 1;
-      }
-    },
-    [],
-  );
-
-  const commitMovedDirectoryResult = useCallback(
-    (oldUri: string, newUri: string) => {
-      setInboxContentByUri(prev => {
-        const next = {...prev};
-        for (const k of Object.keys(prev)) {
-          const mapped = remapVaultUriPrefix(k, oldUri, newUri);
-          if (mapped && mapped !== k && prev[k] !== undefined) {
-            next[mapped] = prev[k]!;
-            delete next[k];
-          }
-        }
-        return next;
-      });
-      remapEditorShellScrollMapTreePrefix(
-        editorShellScrollByUriRef.current,
-        oldUri,
-        newUri,
-      );
-      let nextSel: string | null = selectedUriRef.current;
-      if (nextSel) {
-        const mappedSel = remapVaultUriPrefix(
-          nextSel.replace(/\\/g, '/'),
-          oldUri,
-          newUri,
-        );
-        nextSel = mappedSel ?? nextSel;
-      }
-      selectedUriRef.current = nextSel;
-      setSelectedUri(nextSel);
-      const lp = lastPersistedRef.current;
-      if (lp) {
-        const mappedLp = remapVaultUriPrefix(lp.uri, oldUri, newUri);
-        if (mappedLp) {
-          lastPersistedRef.current = {...lp, uri: mappedLp};
-          lastPersistedExternalMutationSeqRef.current += 1;
-        }
-      }
-    },
-    [],
-  );
-
-  const commitMoveVaultTreeResult = useCallback(
-    (result: MoveVaultTreeItemResult) => {
-      if (!vaultRoot || result.previousUri === result.nextUri) {
-        return;
-      }
-      const invKind = result.movedKind === 'article' ? 'file' : 'directory';
-      subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.previousUri, invKind);
-      subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.nextUri, invKind);
-
-      if (result.movedKind === 'article') {
-        commitMovedArticleResult(result.previousUri, result.nextUri);
-      } else {
-        commitMovedDirectoryResult(result.previousUri, result.nextUri);
-      }
-      const remappedMoveTabs = remapAllTabsUriPrefix(
-        editorWorkspaceTabsRef.current,
-        result.previousUri,
-        result.nextUri,
-      );
-      replaceEditorWorkspaceTabs(remappedMoveTabs);
-      remapHomeStatesPrefix(result.previousUri, result.nextUri);
-    },
-    [
-      vaultRoot,
-      subtreeMarkdownCache,
-      commitMovedArticleResult,
-      commitMovedDirectoryResult,
-      remapHomeStatesPrefix,
-    ],
-  );
-
   const moveVaultTreeItem = useCallback(
-    async (
-      sourceUri: string,
-      sourceKind: 'folder' | 'article',
-      targetDirectoryUri: string,
-    ) => {
-      if (!vaultRoot) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      await flushInboxSaveRef.current();
-      setBusy(true);
-      setErr(null);
-      try {
-        const result = await moveVaultTreeItemToDirectory(vaultRoot, fs, {
-          sourceUri,
-          sourceKind,
-          targetDirectoryUri,
-        });
-        commitMoveVaultTreeResult(result);
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      commitMoveVaultTreeResult,
-      autosaveSchedulerRef,
-      flushInboxSaveRef,
-      markVaultWriteSettled,
-    ],
+    (sourceUri: string, sourceKind: 'folder' | 'article', targetDirectoryUri: string) =>
+      runMoveVaultTreeItem(treeCommandContext, sourceUri, sourceKind, targetDirectoryUri),
+    [treeCommandContext],
   );
 
   const bulkDeleteRemoveVaultEntry = useCallback(
@@ -2636,7 +2497,7 @@ export function useMainWindowWorkspace(options: {
             sourceKind: entry.kind === 'article' ? 'article' : 'folder',
             targetDirectoryUri,
           });
-          commitMoveVaultTreeResult(result);
+          runCommitMoveVaultTreeResult(treeCommandContext, result);
         }
         markVaultWriteSettled();
         await refreshNotes(vaultRoot);
@@ -2652,7 +2513,7 @@ export function useMainWindowWorkspace(options: {
       vaultRoot,
       fs,
       refreshNotes,
-      commitMoveVaultTreeResult,
+      treeCommandContext,
       autosaveSchedulerRef,
       flushInboxSaveRef,
       markVaultWriteSettled,

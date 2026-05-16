@@ -9,7 +9,14 @@ import {
 } from '../lib/editorWorkspaceTabs';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import * as vaultBootstrap from '../lib/vaultBootstrap';
-import {runDeleteFolder, runDeleteNote, runRenameFolder, type TreeCommandContext} from './workspaceTreeCommands';
+import {
+  runCommitMoveVaultTreeResult,
+  runDeleteFolder,
+  runDeleteNote,
+  runMoveVaultTreeItem,
+  runRenameFolder,
+  type TreeCommandContext,
+} from './workspaceTreeCommands';
 
 vi.mock('../lib/vaultBootstrap', async importOriginal => {
   const actual = await importOriginal<typeof import('../lib/vaultBootstrap')>();
@@ -18,6 +25,11 @@ vi.mock('../lib/vaultBootstrap', async importOriginal => {
     deleteVaultMarkdownNote: vi.fn(async () => undefined),
     deleteVaultTreeDirectory: vi.fn(async () => undefined),
     renameVaultTreeDirectory: vi.fn(async () => '/vault/Inbox/Renamed'),
+    moveVaultTreeItemToDirectory: vi.fn(async () => ({
+      previousUri: '/vault/Inbox/x.md',
+      nextUri: '/vault/Inbox/y.md',
+      movedKind: 'article' as const,
+    })),
   };
 });
 
@@ -92,6 +104,12 @@ describe('workspaceTreeCommands', () => {
     vi.mocked(vaultBootstrap.deleteVaultTreeDirectory).mockClear();
     vi.mocked(vaultBootstrap.renameVaultTreeDirectory).mockClear();
     vi.mocked(vaultBootstrap.renameVaultTreeDirectory).mockResolvedValue('/vault/Inbox/Renamed');
+    vi.mocked(vaultBootstrap.moveVaultTreeItemToDirectory).mockClear();
+    vi.mocked(vaultBootstrap.moveVaultTreeItemToDirectory).mockResolvedValue({
+      previousUri: '/vault/Inbox/x.md',
+      nextUri: '/vault/Inbox/y.md',
+      movedKind: 'article',
+    });
   });
 
   it('runDeleteNote returns early when vaultRoot is null', async () => {
@@ -239,5 +257,60 @@ describe('workspaceTreeCommands', () => {
     expect(replaceEditorWorkspaceTabs).toHaveBeenCalledWith(expectedTabs);
     expect(remapHomeStatesPrefix).toHaveBeenCalledWith(oldPrefix, newPrefix);
     expect(ctx.refs.selectedUriRef.current).toBe(normalizeEditorDocUri(`${newPrefix}/note.md`));
+  });
+
+  it('runCommitMoveVaultTreeResult skips tab and home updates when URIs are unchanged', () => {
+    const ctx = buildCtx();
+    runCommitMoveVaultTreeResult(ctx, {
+      previousUri: '/vault/Inbox/same.md',
+      nextUri: '/vault/Inbox/same.md',
+      movedKind: 'article',
+    });
+    expect(ctx.replaceEditorWorkspaceTabs).not.toHaveBeenCalled();
+    expect(ctx.remapHomeStatesPrefix).not.toHaveBeenCalled();
+  });
+
+  it('runMoveVaultTreeItem updates the tab strip via replaceEditorWorkspaceTabs', async () => {
+    const prev = '/vault/Inbox/moveMe.md';
+    const next = '/vault/Inbox/Dest/moveMe.md';
+    const tab = createEditorWorkspaceTab(prev);
+    const editorWorkspaceTabsRef = {current: [tab]};
+    const replaceEditorWorkspaceTabs = vi.fn((nextTabs: EditorWorkspaceTab[]) => {
+      editorWorkspaceTabsRef.current = nextTabs;
+    });
+    const remapHomeStatesPrefix = vi.fn();
+
+    vi.mocked(vaultBootstrap.moveVaultTreeItemToDirectory).mockResolvedValue({
+      previousUri: prev,
+      nextUri: next,
+      movedKind: 'article',
+    });
+
+    const ctx = buildCtx({
+      refs: {
+        autosaveSchedulerRef: {current: {cancel: vi.fn(), schedule: vi.fn()}},
+        saveChainRef: {current: Promise.resolve()},
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef: {current: tab.id},
+        selectedUriRef: {current: normalizeEditorDocUri(prev)},
+        composingNewEntryRef: {current: false},
+        editorShellScrollByUriRef: {
+          current: new Map<string, {top: number; left: number}>(),
+        },
+        inboxYamlFrontmatterInnerRef: {current: null},
+        inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
+        lastPersistedRef: {current: {uri: prev, markdown: 'x'}},
+        lastPersistedExternalMutationSeqRef: {current: 0},
+      },
+      replaceEditorWorkspaceTabs,
+      remapHomeStatesPrefix,
+    });
+
+    const expectedTabs = remapAllTabsUriPrefix([tab], prev, next);
+    await runMoveVaultTreeItem(ctx, prev, 'article', '/vault/Inbox/Dest');
+
+    expect(replaceEditorWorkspaceTabs).toHaveBeenCalledWith(expectedTabs);
+    expect(remapHomeStatesPrefix).toHaveBeenCalledWith(prev, next);
+    expect(ctx.markVaultWriteSettled).toHaveBeenCalled();
   });
 });

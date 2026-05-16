@@ -15,7 +15,9 @@ import {
 import {
   deleteVaultMarkdownNote,
   deleteVaultTreeDirectory,
+  moveVaultTreeItemToDirectory,
   renameVaultTreeDirectory,
+  type MoveVaultTreeItemResult,
 } from '../lib/vaultBootstrap';
 import {normalizeEditorDocUri, remapVaultUriPrefix} from '../lib/editorDocumentHistory';
 import {
@@ -28,7 +30,7 @@ import {
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
-import {remapEditorShellScrollMapTreePrefix} from './workspaceEditorScrollMap';
+import {remapEditorShellScrollMapExact, remapEditorShellScrollMapTreePrefix} from './workspaceEditorScrollMap';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import type {LastPersisted} from './workspaceFsWatchReconcile';
 import type {OpenMarkdownInEditorOptions} from './workspaceOpenMarkdownCommand';
@@ -343,6 +345,133 @@ export async function runRenameFolder(
     );
     ctx.replaceEditorWorkspaceTabs(remappedTabs);
     ctx.remapHomeStatesPrefix(oldUri, normalizedNext);
+    ctx.markVaultWriteSettled();
+    await ctx.refreshNotes(vaultRoot);
+    setFsRefreshNonce(n => n + 1);
+  } catch (e) {
+    setErr(e instanceof Error ? e.message : String(e));
+  } finally {
+    setBusy(false);
+  }
+}
+
+function applyMovedArticleResult(ctx: TreeCommandContext, previousUri: string, nextUri: string): void {
+  const {refs, setters} = ctx;
+  const {selectedUriRef, editorShellScrollByUriRef, lastPersistedRef, lastPersistedExternalMutationSeqRef} =
+    refs;
+  const {setInboxContentByUri, setSelectedUri} = setters;
+
+  setInboxContentByUri(prev => {
+    if (prev[previousUri] === undefined) {
+      return prev;
+    }
+    const next = {...prev};
+    next[nextUri] = next[previousUri]!;
+    delete next[previousUri];
+    return next;
+  });
+  remapEditorShellScrollMapExact(editorShellScrollByUriRef.current, previousUri, nextUri);
+  if (selectedUriRef.current !== previousUri) {
+    return;
+  }
+  selectedUriRef.current = nextUri;
+  setSelectedUri(nextUri);
+  const lp = lastPersistedRef.current;
+  if (lp && lp.uri === previousUri) {
+    lastPersistedRef.current = {...lp, uri: nextUri};
+    lastPersistedExternalMutationSeqRef.current += 1;
+  }
+}
+
+function applyMovedDirectoryResult(ctx: TreeCommandContext, oldUri: string, newUri: string): void {
+  const {refs, setters} = ctx;
+  const {
+    selectedUriRef,
+    editorShellScrollByUriRef,
+    lastPersistedRef,
+    lastPersistedExternalMutationSeqRef,
+  } = refs;
+  const {setInboxContentByUri, setSelectedUri} = setters;
+
+  setInboxContentByUri(prev => {
+    const next = {...prev};
+    for (const k of Object.keys(prev)) {
+      const mapped = remapVaultUriPrefix(k, oldUri, newUri);
+      if (mapped && mapped !== k && prev[k] !== undefined) {
+        next[mapped] = prev[k]!;
+        delete next[k];
+      }
+    }
+    return next;
+  });
+  remapEditorShellScrollMapTreePrefix(editorShellScrollByUriRef.current, oldUri, newUri);
+  let nextSel: string | null = selectedUriRef.current;
+  if (nextSel) {
+    const mappedSel = remapVaultUriPrefix(nextSel.replace(/\\/g, '/'), oldUri, newUri);
+    nextSel = mappedSel ?? nextSel;
+  }
+  selectedUriRef.current = nextSel;
+  setSelectedUri(nextSel);
+  const lp = lastPersistedRef.current;
+  if (lp) {
+    const mappedLp = remapVaultUriPrefix(lp.uri, oldUri, newUri);
+    if (mappedLp) {
+      lastPersistedRef.current = {...lp, uri: mappedLp};
+      lastPersistedExternalMutationSeqRef.current += 1;
+    }
+  }
+}
+
+export function runCommitMoveVaultTreeResult(
+  ctx: TreeCommandContext,
+  result: MoveVaultTreeItemResult,
+): void {
+  const {vaultRoot, subtreeMarkdownCache, refs} = ctx;
+  if (!vaultRoot || result.previousUri === result.nextUri) {
+    return;
+  }
+  const invKind = result.movedKind === 'article' ? 'file' : 'directory';
+  subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.previousUri, invKind);
+  subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.nextUri, invKind);
+
+  if (result.movedKind === 'article') {
+    applyMovedArticleResult(ctx, result.previousUri, result.nextUri);
+  } else {
+    applyMovedDirectoryResult(ctx, result.previousUri, result.nextUri);
+  }
+  const remappedMoveTabs = remapAllTabsUriPrefix(
+    refs.editorWorkspaceTabsRef.current,
+    result.previousUri,
+    result.nextUri,
+  );
+  ctx.replaceEditorWorkspaceTabs(remappedMoveTabs);
+  ctx.remapHomeStatesPrefix(result.previousUri, result.nextUri);
+}
+
+export async function runMoveVaultTreeItem(
+  ctx: TreeCommandContext,
+  sourceUri: string,
+  sourceKind: 'folder' | 'article',
+  targetDirectoryUri: string,
+): Promise<void> {
+  const {vaultRoot, fs, refs, setters} = ctx;
+  if (!vaultRoot) {
+    return;
+  }
+  const {autosaveSchedulerRef} = refs;
+  const {setBusy, setErr, setFsRefreshNonce} = setters;
+
+  autosaveSchedulerRef.current.cancel();
+  await ctx.flushInboxSaveRef.current();
+  setBusy(true);
+  setErr(null);
+  try {
+    const result = await moveVaultTreeItemToDirectory(vaultRoot, fs, {
+      sourceUri,
+      sourceKind,
+      targetDirectoryUri,
+    });
+    runCommitMoveVaultTreeResult(ctx, result);
     ctx.markVaultWriteSettled();
     await ctx.refreshNotes(vaultRoot);
     setFsRefreshNonce(n => n + 1);
