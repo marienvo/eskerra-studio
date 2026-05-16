@@ -203,7 +203,7 @@ export function useAppGitSyncOrchestration({
         }
 
         await markCloseSyncActive(async () => {
-          await Promise.resolve(flushInboxSave()).catch(() => undefined);
+          try { await flushInboxSave(); } catch { /* ignore flush errors on close */ }
           const gitStatusForClose = await fetchFreshGitStatusForClose();
           await handleManualSyncCloseRequest({
             instant: false,
