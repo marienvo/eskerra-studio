@@ -18,31 +18,34 @@ This ADR records the Phase 0 baseline and the post–Phase 10 decomposition snap
 
 ## Post–Phase 10 snapshot (2026-05-16)
 
-Phases **7–10** landed additional stores and command modules (`useNotesListing`, `useInboxBodyCache`, `useTodayHubsState`, `useInboxShellRestore`, `workspaceComposeCommands`) while shrinking the orchestrator. This section records **current** module boundaries and line counts so later work compares against an up-to-date snapshot (the baseline block above stays the historical anchor).
+Phases **7–10** landed additional stores and command modules (`useNotesListing`, `useInboxBodyCache`, `useTodayHubsState`, `useInboxShellRestore`, `workspaceComposeCommands`); **Phase 11** added `workspaceTabCommands` for editor tab strip commands. This section records **current** module boundaries and line counts so later work compares against an up-to-date snapshot (the baseline block above stays the historical anchor).
 
 ### Line counts (measured with `wc -l`)
 
 | Artifact | LOC |
 |---|---:|
-| `apps/desktop/src/hooks/useMainWindowWorkspace.ts` | 2049 |
+| `apps/desktop/src/hooks/useMainWindowWorkspace.ts` | 1750 |
 | `apps/desktop/src/hooks/useNotesListing.ts` | 67 |
 | `apps/desktop/src/hooks/useNotesListing.test.ts` | 71 |
 | `apps/desktop/src/hooks/useInboxBodyCache.ts` | 96 |
 | `apps/desktop/src/hooks/useInboxBodyCache.test.ts` | 106 |
 | `apps/desktop/src/hooks/useTodayHubsState.ts` | 913 |
-| `apps/desktop/src/hooks/useTodayHubsState.test.ts` | 133 |
+| `apps/desktop/src/hooks/useTodayHubsState.test.ts` | 375 |
 | `apps/desktop/src/hooks/useInboxShellRestore.ts` | 322 |
+| `apps/desktop/src/hooks/useInboxShellRestore.test.ts` | 219 |
 | `apps/desktop/src/hooks/workspaceComposeCommands.ts` | 204 |
-| `apps/desktop/src/hooks/workspaceComposeCommands.test.ts` | 103 |
+| `apps/desktop/src/hooks/workspaceComposeCommands.test.ts` | 203 |
+| `apps/desktop/src/hooks/workspaceTabCommands.ts` | 444 |
+| `apps/desktop/src/hooks/workspaceTabCommands.test.ts` | 84 |
 | `apps/desktop/src/hooks/workspaceTreeCommands.ts` | 650 |
 | `apps/desktop/src/hooks/workspaceTreeCommands.test.ts` | 417 |
 | `apps/desktop/src/hooks/workspaceVaultTreeMutations.ts` | 66 |
 
-Net change for `useMainWindowWorkspace.ts` versus the Phase 0 baseline in this ADR: **4062 → 2049** (−2013 LOC).
+Net change for `useMainWindowWorkspace.ts` versus the Phase 0 baseline in this ADR: **4062 → 1750** (−2312 LOC).
 
 ### Orchestration module map (extracted stores and commands)
 
-These modules are composed by `useMainWindowWorkspace` today through **Phase 10**. They are **not** the full import graph; they are the main decomposition surfaces for workspace orchestration.
+These modules are composed by `useMainWindowWorkspace` today through **Phase 11**. They are **not** the full import graph; they are the main decomposition surfaces for workspace orchestration.
 
 | Module | Responsibility |
 |---|---|
@@ -56,6 +59,7 @@ These modules are composed by `useMainWindowWorkspace` today through **Phase 10*
 | `useTodayHubsState.ts` | Today hub shell state, hub switch, row prehydrate/persist, home history mirrors, vault Today ref sync helpers |
 | `useInboxShellRestore.ts` | Persisted inbox shell restore effect + bridge callbacks into workspace / shadow model |
 | `workspaceComposeCommands.ts` | Compose flows: `runStartNewEntry`, `runCancelNewEntry`, `runSubmitNewEntry`, `runCleanNoteInbox`, `runAddNote` |
+| `workspaceTabCommands.ts` | Editor tab strip: activate/reorder/close/reopen/select/refocus + `replaceRuntimeActiveSurfaceTab` / `replaceRuntimeActiveHub` helpers used by hydrate reset |
 | `workspaceOpenMarkdownCommand.ts` | `runOpenMarkdownInEditorCommand` and the open pipeline sub-steps |
 | `workspaceTreeCommands.ts` | Vault tree mutations: delete/rename/move/bulk (+ internal commit helpers) via `TreeCommandContext` |
 | `workspaceVaultTreeMutations.ts` | Pure helpers: bulk-delete tab/scroll pruning predicates and path collection |
@@ -69,8 +73,8 @@ The **Per-phase invariants checklist** in this ADR was added under Phase 0 and r
 
 ### Forward work (Phase 11+)
 
-1. **Tab command extraction** — Move large tab helpers (`closeEditorTab`, `closeOtherEditorTabs`, `closeAllEditorTabs`, reorder/reopen/activate/select/refocus paths, ~350 LOC class) into a `workspaceTabCommands.ts` (or equivalent) with a `TabCommandContext`, matching the pattern used for tree commands and open-markdown. This is the largest remaining shrink lever for `useMainWindowWorkspace.ts`; a realistic post-extraction target for the orchestrator is on the order of **~1700 LOC** (not the original 600–800 LOC plan ceiling unless multiple optional splits also land).
-2. **Risk-path tests** — Add focused Vitest coverage for `useTodayHubsState` (hub switch, prehydrate/persist rows, `syncHubWorkspacesToVaultTodayRefsAction` ordering vs `vaultMarkdownRefsReady`) and for `useInboxShellRestore` before stacking more extractions on top.
+1. **Tab command extraction** — **Done (2026-05-16):** `workspaceTabCommands.ts` + `TabCommandContext` mirror the tree/open-markdown command pattern; the orchestrator wires a memoized context into thin `useCallback` delegates.
+2. **Risk-path tests** — Expand Vitest coverage for tab-command edge cases (model strip mismatch logging, close-all empty vault shell) and keep `useTodayHubsState` / `useInboxShellRestore` suites current as those surfaces change.
 3. **Optional structural splits** — Split `useTodayHubsState` into a smaller state-store vs orchestration module; optionally extract a thin `useEditorHistory` (~130 LOC) from the main hook.
 4. **Legacy bridge / Phase 1 follow-ups** — Runtime tab / shadow sync cleanup and other bridge-only items stay on their **own** track; they are not blocked by Phase 10 completion.
 
