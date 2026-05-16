@@ -236,14 +236,63 @@ function asRecordOrNull(v: unknown): Record<string, unknown> | null {
   return v as Record<string, unknown>;
 }
 
+/** Hub keys on disk may use legacy `\\` separators or duplicated `/` segments; align with vault hub keys. */
+function normalizePersistedHubWorkspaceMapKey(rawKey: string): string {
+  return normalizeWorkspaceUri(normalizeVaultSlashes(rawKey));
+}
+
+function persistedSnapshotTabCount(rawVal: unknown): number {
+  const rec = asRecordOrNull(rawVal);
+  if (!rec) {
+    return -1;
+  }
+  const tabs = rec.editorWorkspaceTabs;
+  return Array.isArray(tabs) ? tabs.length : -1;
+}
+
+/**
+ * Remaps `todayHubWorkspaces` keys to the same normalization used for {@link sortedNormalizedHubs}
+ * entries so {@link parseWorkspaceModelFromPersistence} can resolve per-hub snapshots.
+ */
+function normalizeTodayHubWorkspacesMapKeys(
+  map: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null | undefined {
+  if (map == null || typeof map !== 'object') {
+    return map;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [rawKey, rawVal] of Object.entries(map)) {
+    if (typeof rawKey !== 'string') {
+      continue;
+    }
+    if (rawVal === null || typeof rawVal !== 'object' || Array.isArray(rawVal)) {
+      continue;
+    }
+    const norm = normalizePersistedHubWorkspaceMapKey(rawKey);
+    if (!norm) {
+      continue;
+    }
+    const prev = out[norm];
+    if (prev !== undefined) {
+      const prevScore = persistedSnapshotTabCount(prev);
+      const nextScore = persistedSnapshotTabCount(rawVal);
+      if (prevScore >= nextScore) {
+        continue;
+      }
+    }
+    out[norm] = rawVal;
+  }
+  return out;
+}
+
 function resolveActiveHubUri(args: ParseWorkspacePersistenceArgs, hubs: readonly string[]): string | null {
   if (hubs.length === 0) {
     return null;
   }
   const raw = args.activeTodayHubUri;
   if (typeof raw === 'string') {
-    const n = normalizeWorkspaceUri(raw);
-    if (hubs.some(h => h === n)) {
+    const n = normalizePersistedHubWorkspaceMapKey(raw);
+    if (n && hubs.some(h => h === n)) {
       return n;
     }
   }
@@ -324,7 +373,7 @@ export function parseWorkspaceModelFromPersistence(args: ParseWorkspacePersisten
     return {activeHub: null, workspaces: {}};
   }
 
-  const map = args.todayHubWorkspaces;
+  const map = normalizeTodayHubWorkspacesMapKeys(args.todayHubWorkspaces);
   const workspaces: Record<string, WorkspaceState> = {};
 
   for (const hub of hubs) {

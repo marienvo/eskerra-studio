@@ -1,4 +1,4 @@
-# ADR: Vitest desktop test isolation and singleton resets
+# ADR 001: Vitest desktop test isolation and singleton resets
 
 ## Status
 

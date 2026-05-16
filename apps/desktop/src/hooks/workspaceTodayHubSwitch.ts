@@ -20,7 +20,6 @@ import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEd
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {cloneEditorWorkspaceTabs} from './workspaceEditorTabs';
-import {assignLegacyRuntimeActiveHub} from './workspaceRuntimeActiveLegacyBridge';
 
 /** Payload for `UseWorkspaceTodayHubSwitchArgs.callbacks.syncWorkspaceModelForIncomingHub`. */
 export type SyncWorkspaceModelForHubSwitchPayload = {
@@ -238,12 +237,10 @@ export function useWorkspaceTodayHubSwitch(
       // centralizing only ref/setTabs would reorder versus hub/active legacy writes.
       editorWorkspaceTabsRef.current = nextTabs;
       activeEditorTabIdRef.current = nextActive;
+      activeTodayHubUriRef.current = norm;
       setEditorWorkspaceTabs(nextTabs);
       setActiveEditorTabId(nextActive);
-      assignLegacyRuntimeActiveHub(norm, {
-        ref: activeTodayHubUriRef,
-        setActiveTodayHubUri,
-      });
+      setActiveTodayHubUri(norm);
       if (!syncWorkspaceModelForIncomingHub) {
         mirrorShadowActiveHub?.(norm, 'switch workspace active hub');
         mirrorShadowActiveWorkspaceTabs?.(

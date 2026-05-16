@@ -9,4 +9,4 @@ alwaysApply: true
 - Match testing tools to the implementation language (for example: Jest/Vitest for TypeScript, pytest for Python, `go test` for Go).
 - Treat failing tests as blockers: all relevant tests must pass before a change is considered done.
 - When a bug is fixed, add or update a test that proves the fix.
-- **Desktop (`apps/desktop`) Vitest:** harness, mock strategy, and Tauri-safe `vitest.setup.ts` imports are described in **`vitest-desktop-test-isolation`** and `specs/adrs/adr-vitest-desktop-test-isolation.md`.
+- **Desktop (`apps/desktop`) Vitest:** harness, mock strategy, and Tauri-safe `vitest.setup.ts` imports are described in **`vitest-desktop-test-isolation`** and `specs/adrs/001-adr-vitest-desktop-test-isolation.md`.

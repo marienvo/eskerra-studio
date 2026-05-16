@@ -2,9 +2,8 @@
  * Main-window vault workspace: orchestration hook (Tauri FS, editor tabs, Today hub, wiki rename).
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
- * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceEditorHistoryNavigation`, `workspaceVaultTreeMutations`, `inboxShellRestoreHelpers`,
- * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`,
- * `workspaceHomeHistoryShadowSync`).
+ * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceEditorHistoryNavigation`, `workspaceVaultTreeMutations`, `workspaceTreeCommands`, `inboxShellRestoreHelpers`,
+ * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`).
  *
  * Remaining split candidates: wiki-link routing, rename-with-maintenance, and vault bootstrap
  * side-effects → `hooks/workspace*.ts` helpers with tests for pure branches.
@@ -42,18 +41,9 @@ import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownIma
 import {
   createInboxMarkdownNote,
   deleteVaultMarkdownNote,
-  deleteVaultTreeDirectory,
   listInboxNotes,
-  moveVaultTreeItemToDirectory,
-  type MoveVaultTreeItemResult,
-  renameVaultTreeDirectory,
   saveNoteMarkdown,
 } from '../lib/vaultBootstrap';
-import {
-  filterVaultTreeBulkMoveSources,
-  planVaultTreeBulkTargets,
-  type VaultTreeBulkItem,
-} from '../lib/vaultTreeBulkPlan';
 import {
   normalizeTodayHubRowForDisk,
   splitTodayRowIntoColumns,
@@ -65,11 +55,9 @@ import {
 import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
 import {
   normalizeEditorDocUri,
-  remapVaultUriPrefix,
 } from '../lib/editorDocumentHistory';
 import {popNextReopenableClosedTabRecord} from '../lib/editorClosedTabStack';
 import {
-  ensureActiveTabId,
   findTabById,
   findTabIdWithCurrentUri,
   firstSurvivorUriFromTabs,
@@ -77,7 +65,6 @@ import {
   pushClosedWorkspaceTabsFromCloseAll,
   pushClosedWorkspaceTabsFromCloseOther,
   remapAllTabsUriPrefix,
-  removeUriFromAllTabs,
   reorderEditorWorkspaceTabsInArray,
   tabCurrentUri,
   tabsToStored,
@@ -130,11 +117,12 @@ import type {
 } from './workspaceReturnShape';
 import {
   makeStoredTabFilter,
-  mergeStoredHubWorkspaces,
   pickFinalActiveHub,
   resolveActiveHubAndTabsSource,
   restoredTodayHubWorkspaceUrisForRestore,
+  sanitizeTodayHubWorkspacesWithStoredTabFilter,
 } from './inboxShellRestoreHelpers';
+import {restoreShadowWorkspaceModelFromInboxState} from './workspaceShellRestoreModel';
 import {
   applyRestoredEditorWorkspaceTabsBridge,
   migrateLegacyOpenTabsIfNeededBridge,
@@ -142,10 +130,6 @@ import {
   runDeferredShellRestoreTabStateAndShadowSync,
   type ShellRestoreProjectionSyncArgs,
 } from './workspaceInboxShellRestoreBridge';
-import {
-  remapHomeStatesPrefixBridge,
-  removeHomeHistoryUrisBridge,
-} from './workspaceHomeHistoryShadowSync';
 import {
   type LastPersisted,
 } from './workspaceFsWatchReconcile';
@@ -158,7 +142,15 @@ import {
   runEditorHistoryGoBack,
   runEditorHistoryGoForward,
 } from './workspaceEditorHistoryNavigation';
-import {bulkDeleteUriRemovalPredicate, pruneEditorTabsAfterBulkTreeDelete} from './workspaceVaultTreeMutations';
+import {
+  runBulkDeleteVaultTreeItems,
+  runBulkMoveVaultTreeItems,
+  runDeleteFolder,
+  runDeleteNote,
+  runMoveVaultTreeItem,
+  runRenameFolder,
+  type TreeCommandContext,
+} from './workspaceTreeCommands';
 import {useWorkspaceBacklinks} from './workspaceBacklinks';
 import {useWorkspaceLinkRouting} from './workspaceLinkRouting';
 import {useWorkspacePersistence} from './workspacePersistence';
@@ -186,7 +178,6 @@ import {
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
   legacyEditorWorkspaceTabsSignature,
-  projectWorkspaceRuntimeToModel,
   resolveModelBackedLegacyTabStrip,
   tabsControllerEditorSurface,
   workspaceHomeStatesFromWorkspaceModel,
@@ -194,20 +185,11 @@ import {
   workspaceStateForIncomingHubSwitch,
 } from './workspaceRuntimeProjection';
 import {
-  assignLegacyRuntimeActiveHub,
-  assignLegacyRuntimeActiveSurfaceTab,
-  workspaceHubUriEqual,
-} from './workspaceRuntimeActiveLegacyBridge';
-import {assignLegacyEditorWorkspaceTabs} from './workspaceRuntimeTabsLegacyBridge';
-import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
   type WorkspaceRenameMaintenanceSnapshot,
 } from './workspaceRenameMaintenance';
-import {
-  remapEditorShellScrollMapExact,
-  remapEditorShellScrollMapTreePrefix,
-} from './workspaceEditorScrollMap';
+import {remapEditorShellScrollMapExact} from './workspaceEditorScrollMap';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import {cleanNoteMarkdownBody} from '../lib/cleanNoteMarkdown';
 import {
@@ -246,6 +228,34 @@ function assignInboxShellRestored(
   next: boolean,
 ): void {
   setInboxShellRestored(next);
+}
+
+function workspaceHubUriEqual(a: string | null, b: string | null): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  return normalizeWorkspaceUri(a) === normalizeWorkspaceUri(b);
+}
+
+function replaceRuntimeActiveHub(
+  hubUri: string | null,
+  ref: MutableRefObject<string | null>,
+  setActiveTodayHubUri: Dispatch<SetStateAction<string | null>>,
+): void {
+  ref.current = hubUri;
+  setActiveTodayHubUri(hubUri);
+}
+
+function replaceRuntimeActiveSurfaceTab(
+  tabId: string | null,
+  ref: MutableRefObject<string | null>,
+  setActiveEditorTabId: Dispatch<SetStateAction<string | null>>,
+): void {
+  ref.current = tabId;
+  setActiveEditorTabId(tabId);
 }
 
 export type UseMainWindowWorkspaceResult = {
@@ -470,6 +480,14 @@ export function useMainWindowWorkspace(options: {
     notes,
   });
 
+  const replaceEditorWorkspaceTabs = useCallback(
+    (nextTabs: EditorWorkspaceTab[]) => {
+      editorWorkspaceTabsRef.current = nextTabs;
+      setEditorWorkspaceTabs(nextTabs);
+    },
+    [editorWorkspaceTabsRef, setEditorWorkspaceTabs],
+  );
+
   useLayoutEffect(() => {
     vaultRootRef.current = vaultRoot;
   }, [vaultRoot]);
@@ -487,42 +505,38 @@ export function useMainWindowWorkspace(options: {
     homeStatesByHubRef.current = homeStatesByHub;
   }, [homeStatesByHub]);
 
+  const projectHomeStatesFromModel = useCallback(
+    (nextModel: WorkspaceModel) => {
+      const next = workspaceHomeStatesFromWorkspaceModel(nextModel);
+      homeStatesByHubRef.current = next;
+      setHomeStatesByHub(next);
+    },
+    [],
+  );
+
   const remapHomeStatesPrefix = useCallback(
     (oldPrefix: string, newPrefix: string) => {
       if (oldPrefix === newPrefix) {
         return;
       }
-      remapHomeStatesPrefixBridge(
-        {
-          homeStatesByHubRef,
-          setHomeStatesByHub,
-        },
-        oldPrefix,
-        newPrefix,
-      );
-      dispatchWorkspaceActionSync(
+      const nextModel = dispatchWorkspaceActionSync(
         'remap vault uri prefix',
         m => remapPrefixAction(m, oldPrefix, newPrefix),
       );
+      projectHomeStatesFromModel(nextModel);
     },
-    [dispatchWorkspaceActionSync],
+    [dispatchWorkspaceActionSync, projectHomeStatesFromModel],
   );
 
   const removeHomeHistoryUris = useCallback(
     (shouldRemove: (normalizedUri: string) => boolean) => {
-      removeHomeHistoryUrisBridge(
-        {
-          homeStatesByHubRef,
-          setHomeStatesByHub,
-        },
-        shouldRemove,
-      );
-      dispatchWorkspaceActionSync(
+      const nextModel = dispatchWorkspaceActionSync(
         'remove uris',
         m => removeUrisAction(m, shouldRemove),
       );
+      projectHomeStatesFromModel(nextModel);
     },
-    [dispatchWorkspaceActionSync],
+    [dispatchWorkspaceActionSync, projectHomeStatesFromModel],
   );
 
   const setHomeStateForHub = useCallback(
@@ -665,10 +679,11 @@ export function useMainWindowWorkspace(options: {
       return;
     }
     if (!workspaceHubUriEqual(activeTodayHubUriRef.current, modelActiveTodayHubUri)) {
-      assignLegacyRuntimeActiveHub(modelActiveTodayHubUri, {
-        ref: activeTodayHubUriRef,
+      replaceRuntimeActiveHub(
+        modelActiveTodayHubUri,
+        activeTodayHubUriRef,
         setActiveTodayHubUri,
-      });
+      );
     }
     if (modelActiveTodayHubUri != null) {
       const legacyTabsSig = legacyEditorWorkspaceTabsSignature(
@@ -676,17 +691,14 @@ export function useMainWindowWorkspace(options: {
       );
       const modelTabsSig = legacyEditorWorkspaceTabsSignature(modelEditorWorkspaceTabs);
       if (legacyTabsSig !== modelTabsSig) {
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs: modelEditorWorkspaceTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(modelEditorWorkspaceTabs);
       }
       if (activeEditorTabIdRef.current !== modelActiveEditorTabId) {
-        assignLegacyRuntimeActiveSurfaceTab(modelActiveEditorTabId, {
-          ref: activeEditorTabIdRef,
+        replaceRuntimeActiveSurfaceTab(
+          modelActiveEditorTabId,
+          activeEditorTabIdRef,
           setActiveEditorTabId,
-        });
+        );
       }
     }
     if (
@@ -927,11 +939,7 @@ export function useMainWindowWorkspace(options: {
           oldUri,
           nextUri,
         );
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs: remappedRenameTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(remappedRenameTabs);
         remapHomeStatesPrefix(oldUri, nextUri);
       }
     },
@@ -1259,10 +1267,11 @@ export function useMainWindowWorkspace(options: {
       if (!u) {
         return;
       }
-      assignLegacyRuntimeActiveSurfaceTab(tabId, {
-        ref: activeEditorTabIdRef,
+      replaceRuntimeActiveSurfaceTab(
+        tabId,
+        activeEditorTabIdRef,
         setActiveEditorTabId,
-      });
+      );
       mirrorShadowActiveTab(tabId, 'activate open tab');
       void openMarkdownInEditor(u, {skipHistory: true});
     },
@@ -1299,11 +1308,7 @@ export function useMainWindowWorkspace(options: {
         return;
       }
       const nextTabs = editorWorkspaceTabsFromModelTabEntries(ws.tabs);
-      assignLegacyEditorWorkspaceTabs({
-        nextTabs,
-        editorWorkspaceTabsRef,
-        setEditorWorkspaceTabs,
-      });
+      replaceEditorWorkspaceTabs(nextTabs);
     },
     [busy, dispatchWorkspaceActionSync],
   );
@@ -1338,10 +1343,11 @@ export function useMainWindowWorkspace(options: {
   const refocusAfterClosingActiveTab = useCallback(
     async (nextTabId: string | null, nextTabs: readonly EditorWorkspaceTab[]) => {
       if (nextTabId) {
-        assignLegacyRuntimeActiveSurfaceTab(nextTabId, {
-          ref: activeEditorTabIdRef,
+        replaceRuntimeActiveSurfaceTab(
+          nextTabId,
+          activeEditorTabIdRef,
           setActiveEditorTabId,
-        });
+        );
         mirrorShadowActiveTab(nextTabId, 'close tab refocus neighbor');
       }
       const neighbor = nextTabId ? findTabById(nextTabs, nextTabId) : undefined;
@@ -1356,10 +1362,11 @@ export function useMainWindowWorkspace(options: {
         return;
       }
       if (!nextTabId) {
-        assignLegacyRuntimeActiveSurfaceTab(null, {
-          ref: activeEditorTabIdRef,
+        replaceRuntimeActiveSurfaceTab(
+          null,
+          activeEditorTabIdRef,
           setActiveEditorTabId,
-        });
+        );
         mirrorShadowHomeSurface('close tab home surface');
       }
       clearInboxSelection();
@@ -1411,11 +1418,7 @@ export function useMainWindowWorkspace(options: {
           }
         }
 
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(nextTabs);
 
         if (!wasActive) {
           return;
@@ -1443,10 +1446,11 @@ export function useMainWindowWorkspace(options: {
         }
         await saveChainRef.current.catch(() => undefined);
         if (activeEditorTabIdRef.current !== keepTabId) {
-          assignLegacyRuntimeActiveSurfaceTab(keepTabId, {
-            ref: activeEditorTabIdRef,
+          replaceRuntimeActiveSurfaceTab(
+            keepTabId,
+            activeEditorTabIdRef,
             setActiveEditorTabId,
-          });
+          );
           mirrorShadowActiveTab(keepTabId, 'close other tabs activate kept tab');
           await openMarkdownInEditor(keepUri, {skipHistory: true});
         } else {
@@ -1480,11 +1484,7 @@ export function useMainWindowWorkspace(options: {
           derived[0]!.id === keepTabId
             ? derived
             : prevTabs.filter(t => t.id === keepTabId);
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
+        replaceEditorWorkspaceTabs(nextTabs);
       })();
     },
     [
@@ -1521,15 +1521,12 @@ export function useMainWindowWorkspace(options: {
         hub != null && nextModel.workspaces[hub] != null
           ? editorWorkspaceTabsFromModelTabEntries(nextModel.workspaces[hub].tabs)
           : [];
-      assignLegacyEditorWorkspaceTabs({
-        nextTabs,
-        editorWorkspaceTabsRef,
-        setEditorWorkspaceTabs,
-      });
-      assignLegacyRuntimeActiveSurfaceTab(null, {
-        ref: activeEditorTabIdRef,
+      replaceEditorWorkspaceTabs(nextTabs);
+      replaceRuntimeActiveSurfaceTab(
+        null,
+        activeEditorTabIdRef,
         setActiveEditorTabId,
-      });
+      );
       mirrorShadowHomeSurface('close all tabs home surface');
       const shellHubAll = activeTodayHubUriRef.current;
       if (shellHubAll) {
@@ -1587,19 +1584,13 @@ export function useMainWindowWorkspace(options: {
     diskConflictRef.current = null;
     setDiskConflictSoft(null);
     diskConflictSoftRef.current = null;
-    assignLegacyEditorWorkspaceTabs({
-      nextTabs: [],
-      editorWorkspaceTabsRef,
-      setEditorWorkspaceTabs,
-    });
-    assignLegacyRuntimeActiveSurfaceTab(null, {
-      ref: activeEditorTabIdRef,
+    replaceEditorWorkspaceTabs([]);
+    replaceRuntimeActiveSurfaceTab(
+      null,
+      activeEditorTabIdRef,
       setActiveEditorTabId,
-    });
-    assignLegacyRuntimeActiveHub(null, {
-      ref: activeTodayHubUriRef,
-      setActiveTodayHubUri,
-    });
+    );
+    replaceRuntimeActiveHub(null, activeTodayHubUriRef, setActiveTodayHubUri);
     mirrorShadowActiveHub(null, 'hydrate reset active hub');
     editorClosedTabsStackRef.current = [];
     bumpEditorClosedStack();
@@ -1629,19 +1620,13 @@ export function useMainWindowWorkspace(options: {
   const syncWorkspaceModelRemoveOpenTabUri = useCallback(
     (markdownUri: string) => {
       const target = normalizeWorkspaceUri(markdownUri);
-      removeHomeHistoryUrisBridge(
-        {homeStatesByHubRef, setHomeStatesByHub},
-        u => u === target,
+      const nextModel = dispatchWorkspaceActionSync(
+        'vault watch removed open note',
+        m => removeUrisAction(m, u => u === target),
       );
-      dispatchWorkspaceActionSync('vault watch removed open note', m =>
-        removeUrisAction(m, u => u === target),
-      );
+      projectHomeStatesFromModel(nextModel);
     },
-    [
-      dispatchWorkspaceActionSync,
-      homeStatesByHubRef,
-      setHomeStatesByHub,
-    ],
+    [dispatchWorkspaceActionSync, projectHomeStatesFromModel],
   );
 
   useWorkspaceVaultWatchEffects({
@@ -1976,6 +1961,83 @@ export function useMainWindowWorkspace(options: {
     [openMarkdownInEditor, clearInboxSelection, selectHomeCurrentNote],
   );
 
+  const treeCommandContext = useMemo((): TreeCommandContext => {
+    return {
+      vaultRoot,
+      fs,
+      subtreeMarkdownCache,
+      refs: {
+        autosaveSchedulerRef,
+        saveChainRef,
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef,
+        selectedUriRef,
+        composingNewEntryRef,
+        editorShellScrollByUriRef,
+        inboxYamlFrontmatterInnerRef,
+        inboxEditorYamlLeadingBeforeFrontmatterRef,
+        lastPersistedRef,
+        lastPersistedExternalMutationSeqRef,
+      },
+      setters: {
+        setEditorWorkspaceTabs,
+        setActiveEditorTabId,
+        setInboxContentByUri,
+        setBusy,
+        setErr,
+        setFsRefreshNonce,
+        setSelectedUri,
+        setComposingNewEntry,
+        setEditorBody,
+        setInboxYamlFrontmatterInner,
+        setInboxEditorYamlLeadingBeforeFrontmatter,
+        setInboxEditorResetNonce,
+      },
+      mirrorShadowHomeSurface,
+      mirrorShadowActiveTab,
+      removeHomeHistoryUris,
+      markVaultWriteSettled,
+      refreshNotes,
+      refocusAfterActiveTabRemoved,
+      openMarkdownInEditor,
+      flushInboxSaveRef,
+      clearRenameNotice,
+      replaceEditorWorkspaceTabs,
+      remapHomeStatesPrefix,
+      clearInboxSelection,
+      setVaultTreeSelectionClearNonce,
+    };
+  }, [
+    vaultRoot,
+    fs,
+    subtreeMarkdownCache,
+    setEditorWorkspaceTabs,
+    setActiveEditorTabId,
+    setInboxContentByUri,
+    setBusy,
+    setErr,
+    setFsRefreshNonce,
+    setSelectedUri,
+    setComposingNewEntry,
+    setEditorBody,
+    setInboxYamlFrontmatterInner,
+    setInboxEditorYamlLeadingBeforeFrontmatter,
+    setInboxEditorResetNonce,
+    mirrorShadowHomeSurface,
+    mirrorShadowActiveTab,
+    removeHomeHistoryUris,
+    markVaultWriteSettled,
+    refreshNotes,
+    refocusAfterActiveTabRemoved,
+    openMarkdownInEditor,
+    flushInboxSaveRef,
+    clearRenameNotice,
+    replaceEditorWorkspaceTabs,
+    remapHomeStatesPrefix,
+    clearInboxSelection,
+    setVaultTreeSelectionClearNonce,
+  ]);
+
   const selectNote = useCallback(
     (uri: string) => {
       const existingId = findTabIdWithCurrentUri(editorWorkspaceTabsRef.current, uri);
@@ -2080,13 +2142,13 @@ export function useMainWindowWorkspace(options: {
   const syncShadowWorkspaceFromShellRestore = useCallback(
     (projection: ShellRestoreProjectionSyncArgs) => {
       dispatchWorkspaceActionSync('restore shell workspace projection', () =>
-        projectWorkspaceRuntimeToModel({
+        restoreShadowWorkspaceModelFromInboxState({
+          hubUris: projection.hubUris,
           activeTodayHubUri: projection.activeTodayHubUri,
+          todayHubWorkspaces: projection.todayHubWorkspaces,
           editorWorkspaceTabs: editorWorkspaceTabsRef.current,
           activeEditorTabId: activeEditorTabIdRef.current,
-          legacyHubWorkspaceSnapshots: projection.legacyHubWorkspaceSnapshots,
           homeStatesByHub: projection.homeStatesByHub,
-          hubUris: projection.hubUris,
         }),
       );
     },
@@ -2243,71 +2305,8 @@ export function useMainWindowWorkspace(options: {
   ]);
 
   const deleteNote = useCallback(
-    async (uri: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      await saveChainRef.current.catch(() => undefined);
-
-      const norm = normalizeEditorDocUri(uri);
-      const wasOpen = selectedUriRef.current === norm;
-      const nextTabs = removeUriFromAllTabs(
-        editorWorkspaceTabsRef.current,
-        u => u === norm,
-      );
-      const nextActive = ensureActiveTabId(
-        nextTabs,
-        activeEditorTabIdRef.current,
-      );
-      editorWorkspaceTabsRef.current = nextTabs;
-      setEditorWorkspaceTabs(nextTabs);
-      activeEditorTabIdRef.current = nextActive;
-      setActiveEditorTabId(nextActive);
-      if (nextActive == null) {
-        mirrorShadowHomeSurface('delete note home surface');
-      } else {
-        mirrorShadowActiveTab(nextActive, 'delete note active tab');
-      }
-      removeHomeHistoryUris(u => u === norm);
-      editorShellScrollByUriRef.current.delete(norm);
-
-      if (wasOpen) {
-        await refocusAfterActiveTabRemoved(norm, nextTabs, nextActive);
-      }
-
-      setBusy(true);
-      setErr(null);
-      try {
-        await deleteVaultMarkdownNote(vaultRoot, uri, fs);
-        subtreeMarkdownCache.invalidateForMutation(vaultRoot, uri, 'file');
-        setInboxContentByUri(prev => {
-          const next = {...prev};
-          delete next[uri];
-          return next;
-        });
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      subtreeMarkdownCache,
-      autosaveSchedulerRef,
-      refocusAfterActiveTabRemoved,
-      removeHomeHistoryUris,
-      mirrorShadowActiveTab,
-      mirrorShadowHomeSurface,
-      saveChainRef,
-      markVaultWriteSettled,
-    ],
+    (uri: string) => runDeleteNote(treeCommandContext, uri),
+    [treeCommandContext],
   );
 
   const linkController = useWorkspaceLinkRouting({
@@ -2334,521 +2333,32 @@ export function useMainWindowWorkspace(options: {
   });
 
   const deleteFolder = useCallback(
-    async (directoryUri: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      const normDir = trimTrailingSlashes(directoryUri.replace(/\\/g, '/'));
-      const selected = selectedUriRef.current?.replace(/\\/g, '/');
-      const clearsSelection =
-        selected != null
-        && (selected === normDir || selected.startsWith(`${normDir}/`));
-      if (clearsSelection) {
-        selectedUriRef.current = null;
-        composingNewEntryRef.current = false;
-        lastPersistedRef.current = null;
-        lastPersistedExternalMutationSeqRef.current += 1;
-        setSelectedUri(null);
-        setComposingNewEntry(false);
-        clearInboxYamlFrontmatterEditorRefs({
-          inner: inboxYamlFrontmatterInnerRef,
-          leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-          setInner: setInboxYamlFrontmatterInner,
-          setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-        });
-        setEditorBody('');
-        setInboxEditorResetNonce(n => n + 1);
-      }
-      await saveChainRef.current.catch(() => undefined);
-      setBusy(true);
-      setErr(null);
-      try {
-        await deleteVaultTreeDirectory(vaultRoot, directoryUri, fs);
-        subtreeMarkdownCache.invalidateForMutation(
-          vaultRoot,
-          directoryUri,
-          'directory',
-        );
-        setInboxContentByUri(prev => {
-          const norm = normDir;
-          const next = {...prev};
-          for (const k of Object.keys(next)) {
-            const kn = k.replace(/\\/g, '/');
-            if (kn === norm || kn.startsWith(`${norm}/`)) {
-              delete next[k];
-            }
-          }
-          return next;
-        });
-        const tabPred = (u: string) => {
-          const f = normDir;
-          return u === f || u.startsWith(`${f}/`);
-        };
-        const newTabs = removeUriFromAllTabs(
-          editorWorkspaceTabsRef.current,
-          tabPred,
-        );
-        const nextActive = ensureActiveTabId(
-          newTabs,
-          activeEditorTabIdRef.current,
-        );
-        editorWorkspaceTabsRef.current = newTabs;
-        setEditorWorkspaceTabs(newTabs);
-        activeEditorTabIdRef.current = nextActive;
-        setActiveEditorTabId(nextActive);
-        if (nextActive == null) {
-          mirrorShadowHomeSurface('delete folder home surface');
-        } else {
-          mirrorShadowActiveTab(nextActive, 'delete folder active tab');
-        }
-        removeHomeHistoryUris(tabPred);
-        if (clearsSelection) {
-          const activeTab = nextActive
-            ? findTabById(newTabs, nextActive)
-            : undefined;
-          const nextUri =
-            (activeTab ? tabCurrentUri(activeTab) : null)
-            ?? firstSurvivorUriFromTabs(newTabs);
-          if (nextUri) {
-            await openMarkdownInEditor(nextUri, {skipHistory: true});
-          }
-        }
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      openMarkdownInEditor,
-      subtreeMarkdownCache,
-      autosaveSchedulerRef,
-      removeHomeHistoryUris,
-      mirrorShadowActiveTab,
-      mirrorShadowHomeSurface,
-      saveChainRef,
-      markVaultWriteSettled,
-    ],
+    (directoryUri: string) => runDeleteFolder(treeCommandContext, directoryUri),
+    [treeCommandContext],
   );
 
   const renameFolder = useCallback(
-    async (directoryUri: string, nextDisplayName: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      await flushInboxSaveRef.current();
-      setBusy(true);
-      setErr(null);
-      clearRenameNotice();
-      try {
-        const oldUri = trimTrailingSlashes(directoryUri.replace(/\\/g, '/'));
-        const nextUri = await renameVaultTreeDirectory(
-          vaultRoot,
-          directoryUri,
-          nextDisplayName,
-          fs,
-        );
-        const normalizedNext = nextUri.replace(/\\/g, '/');
-        subtreeMarkdownCache.invalidateForMutation(
-          vaultRoot,
-          oldUri,
-          'directory',
-        );
-        subtreeMarkdownCache.invalidateForMutation(
-          vaultRoot,
-          normalizedNext,
-          'directory',
-        );
-        setInboxContentByUri(prev => {
-          const next = {...prev};
-          for (const k of Object.keys(prev)) {
-            const mapped = remapVaultUriPrefix(k, oldUri, normalizedNext);
-            if (mapped && mapped !== k && prev[k] !== undefined) {
-              next[mapped] = prev[k]!;
-              delete next[k];
-            }
-          }
-          return next;
-        });
-        remapEditorShellScrollMapTreePrefix(
-          editorShellScrollByUriRef.current,
-          oldUri,
-          normalizedNext,
-        );
-        {
-          let nextSel: string | null = selectedUriRef.current;
-          if (nextSel) {
-            const mappedSel = remapVaultUriPrefix(
-              nextSel.replace(/\\/g, '/'),
-              oldUri,
-              normalizedNext,
-            );
-            nextSel = mappedSel ?? nextSel;
-          }
-          selectedUriRef.current = nextSel;
-          setSelectedUri(nextSel);
-        }
-        const lp = lastPersistedRef.current;
-        if (lp) {
-          const mappedLp = remapVaultUriPrefix(lp.uri, oldUri, normalizedNext);
-          if (mappedLp) {
-            lastPersistedRef.current = {...lp, uri: mappedLp};
-            lastPersistedExternalMutationSeqRef.current += 1;
-          }
-        }
-        const remappedTabs = remapAllTabsUriPrefix(
-          editorWorkspaceTabsRef.current,
-          oldUri,
-          normalizedNext,
-        );
-        assignLegacyEditorWorkspaceTabs({
-          nextTabs: remappedTabs,
-          editorWorkspaceTabsRef,
-          setEditorWorkspaceTabs,
-        });
-        remapHomeStatesPrefix(oldUri, normalizedNext);
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      clearRenameNotice,
-      subtreeMarkdownCache,
-      remapHomeStatesPrefix,
-      autosaveSchedulerRef,
-      flushInboxSaveRef,
-      markVaultWriteSettled,
-    ],
-  );
-
-  const commitMovedArticleResult = useCallback(
-    (previousUri: string, nextUri: string) => {
-      setInboxContentByUri(prev => {
-        if (prev[previousUri] === undefined) {
-          return prev;
-        }
-        const next = {...prev};
-        next[nextUri] = next[previousUri]!;
-        delete next[previousUri];
-        return next;
-      });
-      remapEditorShellScrollMapExact(
-        editorShellScrollByUriRef.current,
-        previousUri,
-        nextUri,
-      );
-      if (selectedUriRef.current !== previousUri) {
-        return;
-      }
-      selectedUriRef.current = nextUri;
-      setSelectedUri(nextUri);
-      const lp = lastPersistedRef.current;
-      if (lp && lp.uri === previousUri) {
-        lastPersistedRef.current = {...lp, uri: nextUri};
-        lastPersistedExternalMutationSeqRef.current += 1;
-      }
-    },
-    [],
-  );
-
-  const commitMovedDirectoryResult = useCallback(
-    (oldUri: string, newUri: string) => {
-      setInboxContentByUri(prev => {
-        const next = {...prev};
-        for (const k of Object.keys(prev)) {
-          const mapped = remapVaultUriPrefix(k, oldUri, newUri);
-          if (mapped && mapped !== k && prev[k] !== undefined) {
-            next[mapped] = prev[k]!;
-            delete next[k];
-          }
-        }
-        return next;
-      });
-      remapEditorShellScrollMapTreePrefix(
-        editorShellScrollByUriRef.current,
-        oldUri,
-        newUri,
-      );
-      let nextSel: string | null = selectedUriRef.current;
-      if (nextSel) {
-        const mappedSel = remapVaultUriPrefix(
-          nextSel.replace(/\\/g, '/'),
-          oldUri,
-          newUri,
-        );
-        nextSel = mappedSel ?? nextSel;
-      }
-      selectedUriRef.current = nextSel;
-      setSelectedUri(nextSel);
-      const lp = lastPersistedRef.current;
-      if (lp) {
-        const mappedLp = remapVaultUriPrefix(lp.uri, oldUri, newUri);
-        if (mappedLp) {
-          lastPersistedRef.current = {...lp, uri: mappedLp};
-          lastPersistedExternalMutationSeqRef.current += 1;
-        }
-      }
-    },
-    [],
-  );
-
-  const commitMoveVaultTreeResult = useCallback(
-    (result: MoveVaultTreeItemResult) => {
-      if (!vaultRoot || result.previousUri === result.nextUri) {
-        return;
-      }
-      const invKind = result.movedKind === 'article' ? 'file' : 'directory';
-      subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.previousUri, invKind);
-      subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.nextUri, invKind);
-
-      if (result.movedKind === 'article') {
-        commitMovedArticleResult(result.previousUri, result.nextUri);
-      } else {
-        commitMovedDirectoryResult(result.previousUri, result.nextUri);
-      }
-      const remappedMoveTabs = remapAllTabsUriPrefix(
-        editorWorkspaceTabsRef.current,
-        result.previousUri,
-        result.nextUri,
-      );
-      assignLegacyEditorWorkspaceTabs({
-        nextTabs: remappedMoveTabs,
-        editorWorkspaceTabsRef,
-        setEditorWorkspaceTabs,
-      });
-      remapHomeStatesPrefix(result.previousUri, result.nextUri);
-    },
-    [
-      vaultRoot,
-      subtreeMarkdownCache,
-      commitMovedArticleResult,
-      commitMovedDirectoryResult,
-      remapHomeStatesPrefix,
-    ],
+    (directoryUri: string, nextDisplayName: string) =>
+      runRenameFolder(treeCommandContext, directoryUri, nextDisplayName),
+    [treeCommandContext],
   );
 
   const moveVaultTreeItem = useCallback(
-    async (
-      sourceUri: string,
-      sourceKind: 'folder' | 'article',
-      targetDirectoryUri: string,
-    ) => {
-      if (!vaultRoot) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      await flushInboxSaveRef.current();
-      setBusy(true);
-      setErr(null);
-      try {
-        const result = await moveVaultTreeItemToDirectory(vaultRoot, fs, {
-          sourceUri,
-          sourceKind,
-          targetDirectoryUri,
-        });
-        commitMoveVaultTreeResult(result);
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      commitMoveVaultTreeResult,
-      autosaveSchedulerRef,
-      flushInboxSaveRef,
-      markVaultWriteSettled,
-    ],
-  );
-
-  const bulkDeleteRemoveVaultEntry = useCallback(
-    async (entry: VaultTreeBulkItem, root: string) => {
-      if (entry.kind === 'article') {
-        await deleteVaultMarkdownNote(root, entry.uri, fs);
-        subtreeMarkdownCache.invalidateForMutation(root, entry.uri, 'file');
-        setInboxContentByUri(prev => {
-          if (prev[entry.uri] === undefined) {
-            return prev;
-          }
-          const next = {...prev};
-          delete next[entry.uri];
-          return next;
-        });
-        return;
-      }
-      const normDir = trimTrailingSlashes(entry.uri.replace(/\\/g, '/'));
-      await deleteVaultTreeDirectory(root, entry.uri, fs);
-      subtreeMarkdownCache.invalidateForMutation(root, entry.uri, 'directory');
-      setInboxContentByUri(prev => {
-        const next = {...prev};
-        for (const k of Object.keys(next)) {
-          const kn = k.replace(/\\/g, '/');
-          if (kn === normDir || kn.startsWith(`${normDir}/`)) {
-            delete next[k];
-          }
-        }
-        return next;
-      });
-    },
-    [fs, subtreeMarkdownCache],
-  );
-
-  const bulkDeletePruneTabsAndScroll = useCallback(
-    (plan: readonly VaultTreeBulkItem[]) => {
-      const sm = editorShellScrollByUriRef.current;
-      const {newTabs, nextActive, scrollKeysToRemove} =
-        pruneEditorTabsAfterBulkTreeDelete({
-          editorWorkspaceTabs: editorWorkspaceTabsRef.current,
-          activeEditorTabId: activeEditorTabIdRef.current,
-          plan,
-          scrollMapKeys: sm.keys(),
-        });
-      editorWorkspaceTabsRef.current = newTabs;
-      setEditorWorkspaceTabs(newTabs);
-      activeEditorTabIdRef.current = nextActive;
-      setActiveEditorTabId(nextActive);
-      if (nextActive == null) {
-        mirrorShadowHomeSurface('bulk delete home surface');
-      } else {
-        mirrorShadowActiveTab(nextActive, 'bulk delete active tab');
-      }
-      removeHomeHistoryUris(bulkDeleteUriRemovalPredicate(plan));
-      for (const key of scrollKeysToRemove) {
-        sm.delete(key);
-      }
-      return {newTabs, nextActive};
-    },
-    [removeHomeHistoryUris, mirrorShadowActiveTab, mirrorShadowHomeSurface],
+    (sourceUri: string, sourceKind: 'folder' | 'article', targetDirectoryUri: string) =>
+      runMoveVaultTreeItem(treeCommandContext, sourceUri, sourceKind, targetDirectoryUri),
+    [treeCommandContext],
   );
 
   const bulkDeleteVaultTreeItems = useCallback(
-    async (items: VaultTreeBulkItem[]) => {
-      if (!vaultRoot) {
-        return;
-      }
-      const rootId = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-      const plan = planVaultTreeBulkTargets(items, rootId);
-      if (plan.length === 0) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      const normSel = selectedUriRef.current?.replace(/\\/g, '/');
-      const shouldClearEditor =
-        normSel != null
-        && plan.some(entry => {
-          const d = trimTrailingSlashes(entry.uri.replace(/\\/g, '/'));
-          if (entry.kind === 'folder' || entry.kind === 'todayHub') {
-            return normSel === d || normSel.startsWith(`${d}/`);
-          }
-          return normSel === d;
-        });
-      if (shouldClearEditor) {
-        clearInboxSelection();
-      }
-      await saveChainRef.current.catch(() => undefined);
-      setBusy(true);
-      setErr(null);
-      try {
-        for (const entry of plan) {
-          await bulkDeleteRemoveVaultEntry(entry, vaultRoot);
-        }
-        const {newTabs, nextActive} = bulkDeletePruneTabsAndScroll(plan);
-        if (shouldClearEditor) {
-          const activeTab = nextActive ? findTabById(newTabs, nextActive) : undefined;
-          const nextUri =
-            (activeTab ? tabCurrentUri(activeTab) : null)
-            ?? firstSurvivorUriFromTabs(newTabs);
-          if (nextUri) {
-            await openMarkdownInEditor(nextUri, {skipHistory: true});
-          }
-        }
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-        setVaultTreeSelectionClearNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      refreshNotes,
-      openMarkdownInEditor,
-      bulkDeleteRemoveVaultEntry,
-      bulkDeletePruneTabsAndScroll,
-      clearInboxSelection,
-      autosaveSchedulerRef,
-      saveChainRef,
-      markVaultWriteSettled,
-    ],
+    (items: Parameters<typeof runBulkDeleteVaultTreeItems>[1]) =>
+      runBulkDeleteVaultTreeItems(treeCommandContext, items),
+    [treeCommandContext],
   );
 
   const bulkMoveVaultTreeItems = useCallback(
-    async (items: VaultTreeBulkItem[], targetDirectoryUri: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      const rootId = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-      const plan = filterVaultTreeBulkMoveSources(items, targetDirectoryUri, rootId);
-      if (plan.length === 0) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      await flushInboxSaveRef.current();
-      setBusy(true);
-      setErr(null);
-      try {
-        for (const entry of plan) {
-          const result = await moveVaultTreeItemToDirectory(vaultRoot, fs, {
-            sourceUri: entry.uri,
-            sourceKind: entry.kind === 'article' ? 'article' : 'folder',
-            targetDirectoryUri,
-          });
-          commitMoveVaultTreeResult(result);
-        }
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-        setVaultTreeSelectionClearNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      commitMoveVaultTreeResult,
-      autosaveSchedulerRef,
-      flushInboxSaveRef,
-      markVaultWriteSettled,
-    ],
+    (items: Parameters<typeof runBulkMoveVaultTreeItems>[1], targetDirectoryUri: string) =>
+      runBulkMoveVaultTreeItems(treeCommandContext, items, targetDirectoryUri),
+    [treeCommandContext],
   );
 
   const activeTabHistory = useMemo(
@@ -3093,6 +2603,11 @@ export function useMainWindowWorkspace(options: {
       });
       const knownNoteUris = new Set(notes.map(n => n.uri));
       const filter = makeStoredTabFilter({root, knownNoteUris});
+      const todayHubWorkspacesForPersistenceParse =
+        sanitizeTodayHubWorkspacesWithStoredTabFilter(
+          restoredInboxState.todayHubWorkspaces,
+          filter,
+        ) ?? null;
 
       const {resolvedActiveHub, chosenTabsSource, chosenActiveEditorTabId} =
         resolveActiveHubAndTabsSource({hubUris, restored: restoredInboxState, filter});
@@ -3117,26 +2632,19 @@ export function useMainWindowWorkspace(options: {
           hubUris,
           restored: restoredInboxState,
         });
-        const mergedWs = mergeStoredHubWorkspaces({
-          hubUris,
-          restored: restoredInboxState,
-          filter,
-          activeHub: activeHubFinal,
-          activeHubTabs: editorWorkspaceTabsRef.current,
-          activeHubActiveTabId: activeEditorTabIdRef.current,
-        });
         const homeHydrated = hydrateWorkspaceHomeStatesFromPersisted({
           hubUris,
           activeTodayHubUri: activeHubFinal,
-          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces as
+          todayHubWorkspaces: todayHubWorkspacesForPersistenceParse as
             | Record<string, unknown>
             | null
             | undefined,
         });
-        assignLegacyRuntimeActiveHub(activeHubFinal, {
-          ref: activeTodayHubUriRef,
+        replaceRuntimeActiveHub(
+          activeHubFinal,
+          activeTodayHubUriRef,
           setActiveTodayHubUri,
-        });
+        );
         assignLegacyHomeStatesByHub(
           homeStatesByHubRef,
           setHomeStatesByHub,
@@ -3146,14 +2654,11 @@ export function useMainWindowWorkspace(options: {
         shellRestoreProjection = {
           activeTodayHubUri: activeHubFinal,
           hubUris,
-          legacyHubWorkspaceSnapshots: mergedWs,
+          todayHubWorkspaces: todayHubWorkspacesForPersistenceParse,
           homeStatesByHub: homeHydrated,
         };
       } else if (vaultMarkdownRefs.length > 0) {
-        assignLegacyRuntimeActiveHub(null, {
-          ref: activeTodayHubUriRef,
-          setActiveTodayHubUri,
-        });
+        replaceRuntimeActiveHub(null, activeTodayHubUriRef, setActiveTodayHubUri);
         mirrorShadowActiveHub(null, 'restore active hub');
         assignInboxShellRestored(setInboxShellRestored, true);
       } else {
@@ -3228,10 +2733,7 @@ export function useMainWindowWorkspace(options: {
         editorWorkspaceTabs: tabsToStored(editorWorkspaceTabsRef.current),
         openTabUris: null,
       }) ?? hubs[0]!;
-    assignLegacyRuntimeActiveHub(pick, {
-      ref: activeTodayHubUriRef,
-      setActiveTodayHubUri,
-    });
+    replaceRuntimeActiveHub(pick, activeTodayHubUriRef, setActiveTodayHubUri);
     mirrorShadowActiveHub(pick, 'default active hub');
     mirrorShadowActiveWorkspaceTabs(
       editorWorkspaceTabsRef.current,

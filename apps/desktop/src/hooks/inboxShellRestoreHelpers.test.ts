@@ -3,8 +3,10 @@ import {describe, expect, it} from 'vitest';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {
   buildRestoredEditorWorkspace,
+  makeStoredTabFilter,
   restoredTodayHubWorkspaceKeysForVault,
   restoredTodayHubWorkspaceUrisForRestore,
+  sanitizeTodayHubWorkspacesWithStoredTabFilter,
 } from './inboxShellRestoreHelpers';
 
 const emptySnap = {} as TodayHubWorkspaceSnapshot;
@@ -62,6 +64,130 @@ describe('restoredTodayHubWorkspaceUrisForRestore', () => {
         root,
       }),
     ).toEqual(['/vault/A/Today.md']);
+  });
+});
+
+describe('sanitizeTodayHubWorkspacesWithStoredTabFilter', () => {
+  it('strips invalid tab URIs from every hub snapshot and reclamps active tab id', () => {
+    const root = '/vault';
+    const filter = makeStoredTabFilter({
+      root,
+      knownNoteUris: new Set(['/vault/Inbox/keep.md']),
+    });
+    const hubA = '/vault/A/Today.md';
+    const hubB = '/vault/B/Today.md';
+    const out = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hubA]: {
+          editorWorkspaceTabs: [
+            {id: 'ok', entries: ['/vault/Inbox/keep.md'], index: 0},
+            {id: 'outside', entries: ['/other-vault/Inbox/x.md'], index: 0},
+          ],
+          activeEditorTabId: 'outside',
+        },
+        [hubB]: {
+          editorWorkspaceTabs: [{id: 'non-md', entries: ['/vault/Inbox/readme.txt'], index: 0}],
+          activeEditorTabId: 'non-md',
+        },
+      },
+      filter,
+    );
+
+    expect(out![hubA]!.editorWorkspaceTabs.map(t => t.id)).toEqual(['ok']);
+    expect(out![hubA]!.activeEditorTabId).toBe('ok');
+    expect(out![hubB]!.editorWorkspaceTabs).toEqual([]);
+    expect(out![hubB]!.activeEditorTabId).toBeNull();
+  });
+
+  it('keeps explicit Home (activeEditorTabId null) when tabs remain after filtering', () => {
+    const root = '/vault';
+    const filter = makeStoredTabFilter({
+      root,
+      knownNoteUris: new Set(['/vault/Inbox/keep.md']),
+    });
+    const hub = '/vault/A/Today.md';
+    const out = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: [
+            {id: 't1', entries: ['/vault/Inbox/keep.md'], index: 0},
+            {id: 't2', entries: ['/vault/Inbox/keep.md'], index: 0},
+          ],
+          activeEditorTabId: null,
+        },
+      },
+      filter,
+    );
+
+    expect(out![hub]!.editorWorkspaceTabs).toHaveLength(2);
+    expect(out![hub]!.activeEditorTabId).toBeNull();
+  });
+
+  it('defaults to first tab when activeEditorTabId is absent (legacy snapshots)', () => {
+    const filter = () => true;
+    const hub = '/vault/A/Today.md';
+    const out = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: [
+            {id: 'a', entries: ['/vault/x.md'], index: 0},
+            {id: 'b', entries: ['/vault/y.md'], index: 0},
+          ],
+        },
+      },
+      filter,
+    );
+
+    expect(out![hub]!.activeEditorTabId).toBe('a');
+  });
+
+  it('treats malformed activeEditorTabId as Home when the key is present', () => {
+    const filter = () => true;
+    const hub = '/vault/A/Today.md';
+    const tabs = [
+      {id: 'a', entries: ['/vault/x.md'], index: 0},
+      {id: 'b', entries: ['/vault/y.md'], index: 0},
+    ];
+    const malformedNumber = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: tabs,
+          activeEditorTabId: 42,
+        } as TodayHubWorkspaceSnapshot,
+      },
+      filter,
+    )![hub]!.activeEditorTabId;
+    expect(malformedNumber).toBeNull();
+
+    const malformedObject = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: tabs,
+          activeEditorTabId: {oops: true},
+        } as TodayHubWorkspaceSnapshot,
+      },
+      filter,
+    )![hub]!.activeEditorTabId;
+    expect(malformedObject).toBeNull();
+  });
+
+  it('treats blank activeEditorTabId string as Home when the key is present', () => {
+    const filter = () => true;
+    const hub = '/vault/A/Today.md';
+    const out = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: [
+            {id: 'a', entries: ['/vault/x.md'], index: 0},
+            {id: 'b', entries: ['/vault/y.md'], index: 0},
+          ],
+          activeEditorTabId: '   ',
+        },
+      },
+      filter,
+    );
+
+    expect(out![hub]!.activeEditorTabId).toBeNull();
   });
 });
 

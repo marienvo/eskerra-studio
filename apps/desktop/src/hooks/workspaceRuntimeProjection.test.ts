@@ -21,7 +21,6 @@ import {
   activeEditorWorkspaceTabsFromWorkspaceModel,
   activeSurfaceTabIdFromWorkspaceModel,
   editorWorkspaceTabsFromModelTabEntries,
-  projectWorkspaceRuntimeToModel,
   resolveModelBackedLegacyTabStrip,
   workspaceHomeStatesFromWorkspaceModel,
   workspaceHomeStatesSignature,
@@ -706,28 +705,22 @@ describe('removeUrisAction', () => {
 });
 
 describe('workspaceStateForIncomingHubSwitch', () => {
-  it('matches projectWorkspaceRuntimeToModel active-hub slice for a tab surface', () => {
+  it('builds the target hub state with live tabs and the live active surface', () => {
     const tabs = [runtimeTab('tab-a', [NOTE_A])];
-    const hubNorm = normalizeWorkspaceUri(HUB_A);
-    const fromSwitch = workspaceStateForIncomingHubSwitch({
+    const state = workspaceStateForIncomingHubSwitch({
       hubUri: HUB_A,
       nextTabs: tabs,
       nextActive: 'tab-a',
       snapshot: undefined,
       homeStatesByHub: {},
     });
-    const projected = projectWorkspaceRuntimeToModel({
-      activeTodayHubUri: HUB_A,
-      editorWorkspaceTabs: tabs,
-      activeEditorTabId: 'tab-a',
-      legacyHubWorkspaceSnapshots: {},
-      homeStatesByHub: {},
-      hubUris: [HUB_A],
-    });
-    expect(fromSwitch).toEqual(projected.workspaces[hubNorm]);
+    const hubNorm = normalizeWorkspaceUri(HUB_A);
+    expect(state.tabs).toEqual([{id: 'tab-a', history: {entries: [NOTE_A], index: 0}}]);
+    expect(state.active).toEqual({kind: 'tab', id: 'tab-a'});
+    expect(state.homeHistory).toEqual({entries: [hubNorm], index: 0});
   });
 
-  it('matches active-hub slice for Home surface with runtime home stack override', () => {
+  it('uses the runtime home stack when valid and falls back to the snapshot homeHistory', () => {
     const snapshotA: TodayHubWorkspaceSnapshot = {
       editorWorkspaceTabs: [],
       activeEditorTabId: null,
@@ -736,116 +729,15 @@ describe('workspaceStateForIncomingHubSwitch', () => {
     const homeStatesByHub: Record<string, WorkspaceHomeState> = {
       [HUB_A]: {history: {entries: [HUB_A, NOTE_HOME], index: 1}},
     };
-    const hubNorm = normalizeWorkspaceUri(HUB_A);
-    const fromSwitch = workspaceStateForIncomingHubSwitch({
+    const state = workspaceStateForIncomingHubSwitch({
       hubUri: HUB_A,
       nextTabs: [],
       nextActive: null,
       snapshot: snapshotA,
       homeStatesByHub,
     });
-    const projected = projectWorkspaceRuntimeToModel({
-      activeTodayHubUri: HUB_A,
-      editorWorkspaceTabs: [],
-      activeEditorTabId: null,
-      legacyHubWorkspaceSnapshots: {[HUB_A]: snapshotA},
-      homeStatesByHub,
-      hubUris: [HUB_A],
-    });
-    expect(fromSwitch).toEqual(projected.workspaces[hubNorm]);
-  });
-});
-
-describe('projectWorkspaceRuntimeToModel', () => {
-  it('projects active hub with tabs while Home remains active', () => {
-    const model = projectWorkspaceRuntimeToModel({
-      activeTodayHubUri: HUB_A,
-      editorWorkspaceTabs: [runtimeTab('tab-a', [NOTE_A])],
-      activeEditorTabId: null,
-      legacyHubWorkspaceSnapshots: {},
-      homeStatesByHub: {},
-      hubUris: [HUB_A],
-    });
-
-    expect(model.activeHub).toBe(HUB_A);
-    expect(model.workspaces[HUB_A]?.tabs.map(t => t.id)).toEqual(['tab-a']);
-    expect(model.workspaces[HUB_A]?.active).toEqual({kind: 'home'});
-  });
-
-  it('projects active hub with an active tab', () => {
-    const model = projectWorkspaceRuntimeToModel({
-      activeTodayHubUri: HUB_A,
-      editorWorkspaceTabs: [runtimeTab('tab-a', [NOTE_A])],
-      activeEditorTabId: 'tab-a',
-      legacyHubWorkspaceSnapshots: {},
-      homeStatesByHub: {},
-      hubUris: [HUB_A],
-    });
-
-    expect(model.workspaces[HUB_A]?.active).toEqual({kind: 'tab', id: 'tab-a'});
-  });
-
-  it('preserves inactive hub snapshots', () => {
-    const snapshotB: TodayHubWorkspaceSnapshot = {
-      editorWorkspaceTabs: [{id: 'tab-b', entries: [NOTE_B], index: 0}],
-      activeEditorTabId: 'tab-b',
-    };
-
-    const model = projectWorkspaceRuntimeToModel({
-      activeTodayHubUri: HUB_A,
-      editorWorkspaceTabs: [runtimeTab('tab-a', [NOTE_A])],
-      activeEditorTabId: 'tab-a',
-      legacyHubWorkspaceSnapshots: {[HUB_B]: snapshotB},
-      homeStatesByHub: {},
-      hubUris: [HUB_A, HUB_B],
-    });
-
-    expect(model.workspaces[HUB_B]?.tabs).toEqual([
-      {id: 'tab-b', history: {entries: [NOTE_B], index: 0}},
-    ]);
-    expect(model.workspaces[HUB_B]?.active).toEqual({kind: 'tab', id: 'tab-b'});
-  });
-
-  it('lets runtime homeStatesByHub override snapshot homeHistory', () => {
-    const snapshotA: TodayHubWorkspaceSnapshot = {
-      editorWorkspaceTabs: [],
-      activeEditorTabId: null,
-      homeHistory: {entries: [HUB_A, NOTE_A], index: 1},
-    };
-    const homeStatesByHub: Record<string, WorkspaceHomeState> = {
-      [HUB_A]: {history: {entries: [HUB_A, NOTE_HOME], index: 1}},
-    };
-
-    const model = projectWorkspaceRuntimeToModel({
-      activeTodayHubUri: HUB_A,
-      editorWorkspaceTabs: [],
-      activeEditorTabId: null,
-      legacyHubWorkspaceSnapshots: {[HUB_A]: snapshotA},
-      homeStatesByHub,
-      hubUris: [HUB_A],
-    });
-
-    expect(model.workspaces[HUB_A]?.homeHistory).toEqual({
-      entries: [HUB_A, NOTE_HOME],
-      index: 1,
-    });
-  });
-
-  it('creates a default workspace state for missing hubs', () => {
-    const model = projectWorkspaceRuntimeToModel({
-      activeTodayHubUri: HUB_A,
-      editorWorkspaceTabs: [],
-      activeEditorTabId: null,
-      legacyHubWorkspaceSnapshots: {},
-      homeStatesByHub: {},
-      hubUris: [HUB_A, HUB_B],
-    });
-
-    expect(model.workspaces[HUB_B]).toEqual({
-      tabs: [],
-      active: {kind: 'home'},
-      homeHistory: {entries: [HUB_B], index: 0},
-    });
+    expect(state.active).toEqual({kind: 'home'});
+    expect(state.homeHistory).toEqual({entries: [HUB_A, NOTE_HOME], index: 1});
   });
 });
 

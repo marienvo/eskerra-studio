@@ -6,7 +6,7 @@ import {
   removeUrisAction,
   type WorkspaceModel,
 } from '../lib/workspaceModel';
-import {computePrunedHomeStatesAfterUriRemoval} from './workspaceHomeHistoryShadowSync';
+import {workspaceHomeStatesFromWorkspaceModel} from './workspaceRuntimeProjection';
 import {
   applyExternalOpenNoteDeletedForFsWatch,
   type ReconcileFsOpenMarkdownEnv,
@@ -67,9 +67,10 @@ function minimalEnv(
 
 describe('applyExternalOpenNoteDeletedForFsWatch', () => {
   /**
-   * Production `syncWorkspaceModelRemoveOpenTabUri` mirrors `removeHomeHistoryUris`: it calls
-   * `removeHomeHistoryUrisBridge` then `removeUrisAction` on the shadow model. Mocks below only
-   * implement the shadow side unless a test explicitly simulates both.
+   * Production `syncWorkspaceModelRemoveOpenTabUri` dispatches `removeUrisAction` on the shadow
+   * model; the layout effect in `useMainWindowWorkspace` mirrors per-hub home history back to
+   * legacy state via `workspaceHomeStatesFromWorkspaceModel`. The "mirrors production sync" test
+   * below derives `homeStates` from the post-action model to match that flow.
    */
   it('calls syncWorkspaceModelRemoveOpenTabUri after legacy tab strip updates', async () => {
     const sync = vi.fn();
@@ -122,29 +123,22 @@ describe('applyExternalOpenNoteDeletedForFsWatch', () => {
 
   it('mirrors production sync: prune runtime home stacks and shadow tabs for the deleted URI', async () => {
     const hubNorm = normalizeWorkspaceUri(HUB);
-    let homeStates: Record<string, {history: {entries: string[]; index: number}}> = {
-      [hubNorm]: {
-        history: {entries: [hubNorm, NOTE, OTHER], index: 2},
-      },
-    };
     let model: WorkspaceModel = {
       activeHub: hubNorm,
       workspaces: {
         [hubNorm]: {
           ...createDefaultWorkspaceState(HUB),
+          homeHistory: {entries: [hubNorm, NOTE, OTHER], index: 2},
           tabs: [{id: 't1', history: {entries: [NOTE, OTHER], index: 0}}],
           active: {kind: 'tab', id: 't1'},
         },
       },
     };
+    let homeStates = workspaceHomeStatesFromWorkspaceModel(model);
     const sync = (uri: string) => {
       const target = normalizeWorkspaceUri(uri);
-      const {next} = computePrunedHomeStatesAfterUriRemoval({
-        current: homeStates,
-        shouldRemove: u => u === target,
-      });
-      homeStates = next;
       model = removeUrisAction(model, u => u === target);
+      homeStates = workspaceHomeStatesFromWorkspaceModel(model);
     };
 
     const tab = {id: 't1', history: {entries: [NOTE, OTHER], index: 0}};

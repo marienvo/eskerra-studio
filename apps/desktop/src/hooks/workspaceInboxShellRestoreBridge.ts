@@ -86,11 +86,18 @@ export function migrateLegacyOpenTabsIfNeededBridge(
     .filter((u): u is string => u != null);
 }
 
-/** Payload for {@link syncShadowWorkspaceFromShellRestore}; aligns with {@link projectWorkspaceRuntimeToModel}. */
+/**
+ * Payload for {@link syncShadowWorkspaceFromShellRestore}.
+ *
+ * `todayHubWorkspaces` is the persisted per-hub snapshot map after restore-time tab URI
+ * filtering (`sanitizeTodayHubWorkspacesWithStoredTabFilter`); the JSON→model parser
+ * (`parseWorkspaceModelFromPersistence`) handles URI key normalization, hub-echo row dropping,
+ * and per-hub `homeHistory` parsing in one place.
+ */
 export type ShellRestoreProjectionSyncArgs = {
   activeTodayHubUri: string | null;
   hubUris: readonly string[];
-  legacyHubWorkspaceSnapshots: Record<string, TodayHubWorkspaceSnapshot>;
+  todayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot> | null | undefined;
   homeStatesByHub: Record<string, WorkspaceHomeState>;
 };
 

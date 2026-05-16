@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Desktop Vitest test isolation
 
-Authoritative detail: `specs/adrs/adr-vitest-desktop-test-isolation.md`. PR checklist: `.github/pull_request_template.md`.
+Authoritative detail: `specs/adrs/001-adr-vitest-desktop-test-isolation.md`. PR checklist: `.github/pull_request_template.md`.
 
 ## Global harness (`apps/desktop/vitest.setup.ts` + `vitest.config.ts`)
 
