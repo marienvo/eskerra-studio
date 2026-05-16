@@ -3,23 +3,12 @@ import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {
   createDefaultWorkspaceState,
   normalizeWorkspaceUri,
-  sortedNormalizedHubs,
   type HistoryStack,
   type TabEntry,
   type WorkspaceModel,
   type WorkspaceState,
 } from '../lib/workspaceModel';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
-
-export type ProjectWorkspaceRuntimeToModelArgs = {
-  activeTodayHubUri: string | null;
-  editorWorkspaceTabs: readonly EditorWorkspaceTab[];
-  activeEditorTabId: string | null;
-  /** Inactive-hub tab snapshots; active hub uses live `editorWorkspaceTabs`. */
-  legacyHubWorkspaceSnapshots: Record<string, TodayHubWorkspaceSnapshot>;
-  homeStatesByHub: Record<string, WorkspaceHomeState>;
-  hubUris: readonly string[];
-};
 
 function stackFromEditorHistory(history: {
   entries: readonly string[];
@@ -118,15 +107,6 @@ export function workspaceHomeStatesSignature(
   );
 }
 
-function tabEntriesFromStoredSnapshot(snap: TodayHubWorkspaceSnapshot | undefined): TabEntry[] {
-  return (snap?.editorWorkspaceTabs ?? [])
-    .map(t => ({
-      id: t.id,
-      history: stackFromEditorHistory({entries: t.entries, index: t.index}),
-    }))
-    .filter(t => t.id.trim() !== '' && t.history.entries.length > 0);
-}
-
 function homeHistoryForHub(
   hub: string,
   snap: TodayHubWorkspaceSnapshot | undefined,
@@ -206,8 +186,7 @@ export type WorkspaceStateForIncomingHubSwitchArgs = {
 
 /**
  * Builds the target hub's {@link WorkspaceState} from the same inputs used during a Today hub
- * workspace switch (restored tab strip + snapshot + live Home stacks). Matches the active-hub
- * branch inside {@link projectWorkspaceRuntimeToModel} without rebuilding other workspaces.
+ * workspace switch (restored tab strip + snapshot + live Home stacks).
  */
 export function workspaceStateForIncomingHubSwitch(
   args: WorkspaceStateForIncomingHubSwitchArgs,
@@ -220,74 +199,6 @@ export function workspaceStateForIncomingHubSwitch(
     active,
     homeHistory: homeHistoryForHub(hub, args.snapshot, args.homeStatesByHub),
   };
-}
-
-export function projectWorkspaceRuntimeToModel(
-  args: ProjectWorkspaceRuntimeToModelArgs,
-): WorkspaceModel {
-  const hubs = sortedNormalizedHubs(args.hubUris);
-  const workspaces: Record<string, WorkspaceState> = {};
-  const activeNorm = args.activeTodayHubUri
-    ? normalizeWorkspaceUri(args.activeTodayHubUri)
-    : null;
-  const activeHub = activeNorm && hubs.includes(activeNorm)
-    ? activeNorm
-    : hubs[0] ?? null;
-
-  for (const hub of hubs) {
-    const snap = args.legacyHubWorkspaceSnapshots[hub];
-    const isActiveHub = activeHub === hub;
-    const tabs = isActiveHub
-      ? tabEntriesFromRuntimeTabs(args.editorWorkspaceTabs)
-      : tabEntriesFromStoredSnapshot(snap);
-    const active = isActiveHub
-      ? activeSurfaceForTabs(tabs, args.activeEditorTabId)
-      : activeSurfaceForTabs(tabs, snap?.activeEditorTabId);
-    workspaces[hub] = {
-      tabs,
-      active,
-      homeHistory: homeHistoryForHub(hub, snap, args.homeStatesByHub),
-    };
-  }
-
-  return {activeHub, workspaces};
-}
-
-function currentUriFromTab(t: TabEntry): string | null {
-  const {entries, index} = t.history;
-  if (index < 0 || index >= entries.length) {
-    return null;
-  }
-  return entries[index] ?? null;
-}
-
-function formatActive(active: WorkspaceState['active']): string {
-  return active.kind === 'home' ? 'home' : `tab:${active.id}`;
-}
-
-function describeWorkspaceStateDivergence(
-  hub: string,
-  expected: WorkspaceState,
-  actual: WorkspaceState,
-): string[] {
-  const out: string[] = [];
-  if (formatActive(expected.active) !== formatActive(actual.active)) {
-    out.push(`workspace ${hub} active expected=${formatActive(expected.active)} actual=${formatActive(actual.active)}`);
-  }
-  const expectedTabs = expected.tabs.map(t => `${t.id}:${currentUriFromTab(t) ?? ''}`);
-  const actualTabs = actual.tabs.map(t => `${t.id}:${currentUriFromTab(t) ?? ''}`);
-  if (expectedTabs.join('|') !== actualTabs.join('|')) {
-    out.push(`workspace ${hub} tabs expected=[${expectedTabs.join(',')}] actual=[${actualTabs.join(',')}]`);
-  }
-  if (
-    expected.homeHistory.index !== actual.homeHistory.index
-    || expected.homeHistory.entries.join('|') !== actual.homeHistory.entries.join('|')
-  ) {
-    out.push(
-      `workspace ${hub} homeHistory expected=${JSON.stringify(expected.homeHistory)} actual=${JSON.stringify(actual.homeHistory)}`,
-    );
-  }
-  return out;
 }
 
 export type ResolveModelBackedLegacyTabStripResult = {
@@ -347,28 +258,4 @@ export function resolveModelBackedLegacyTabStrip(
     matched,
     mismatch: matched ? null : {kind: 'ids', legacyIds, derivedIds},
   };
-}
-
-export function describeWorkspaceModelDivergence(
-  expected: WorkspaceModel,
-  actual: WorkspaceModel,
-): string[] {
-  const out: string[] = [];
-  if (expected.activeHub !== actual.activeHub) {
-    out.push(`activeHub expected=${expected.activeHub ?? 'null'} actual=${actual.activeHub ?? 'null'}`);
-  }
-  const hubs = sortedNormalizedHubs([
-    ...Object.keys(expected.workspaces),
-    ...Object.keys(actual.workspaces),
-  ]);
-  for (const hub of hubs) {
-    const e = expected.workspaces[hub];
-    const a = actual.workspaces[hub];
-    if (!e || !a) {
-      out.push(`workspace ${hub} presence expected=${e ? 'yes' : 'no'} actual=${a ? 'yes' : 'no'}`);
-      continue;
-    }
-    out.push(...describeWorkspaceStateDivergence(hub, e, a));
-  }
-  return out;
 }
