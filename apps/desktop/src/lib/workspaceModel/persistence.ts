@@ -276,7 +276,7 @@ function normalizeTodayHubWorkspacesMapKeys(
     if (prev !== undefined) {
       const prevScore = persistedSnapshotTabCount(prev);
       const nextScore = persistedSnapshotTabCount(rawVal);
-      if (prevScore > nextScore || prevScore === nextScore) {
+      if (prevScore >= nextScore) {
         continue;
       }
     }

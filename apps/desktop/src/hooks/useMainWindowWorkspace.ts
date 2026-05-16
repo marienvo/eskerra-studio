@@ -3,8 +3,7 @@
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
  * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceEditorHistoryNavigation`, `workspaceVaultTreeMutations`, `workspaceTreeCommands`, `inboxShellRestoreHelpers`,
- * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`,
- * `workspaceHomeHistoryShadowSync`).
+ * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`).
  *
  * Remaining split candidates: wiki-link routing, rename-with-maintenance, and vault bootstrap
  * side-effects → `hooks/workspace*.ts` helpers with tests for pure branches.
