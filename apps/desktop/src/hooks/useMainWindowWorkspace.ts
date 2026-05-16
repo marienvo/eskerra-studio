@@ -2,11 +2,12 @@
  * Main-window vault workspace: orchestration hook (Tauri FS, editor tabs, Today hub, wiki rename).
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
- * (`useTodayHubsState`, `workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceEditorHistoryNavigation`, `workspaceVaultTreeMutations`, `workspaceTreeCommands`, `inboxShellRestoreHelpers`,
- * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`,
- * `workspaceHomeHistoryShadowSync`).
+ * (`useTodayHubsState`, `useInboxShellRestore`, `workspaceComposeCommands`,
+ * `workspaceOpenMarkdownCommand`, `workspaceTreeCommands`, `workspaceEditorHistoryNavigation`,
+ * `workspaceFsWatchReconcile`, `useVaultBootstrap`, `useDiskConflictState`,
+ * `useMergeViewState`, `useWorkspacePersistence`, `useInboxBodyCache`, `useNotesListing`).
  *
- * Remaining split candidates: editor history and final orchestration cleanup.
+ * Remaining split candidate: final orchestration cleanup.
  */
 import {
   useCallback,
@@ -1530,13 +1531,6 @@ export function useMainWindowWorkspace(options: {
       setInboxContentByUri,
       openMarkdownInEditor,
     ],
-  );
-
-  const addNote = useCallback(
-    async (title: string, body: string) => {
-      await runAddNote(composeCommandsContext, title, body);
-    },
-    [composeCommandsContext],
   );
 
   const startNewEntry = useCallback(() => {

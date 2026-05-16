@@ -192,15 +192,20 @@ Applies to: `apps/desktop/**`.
 
 - **`inboxContentByUri`** must stay aligned with the latest in-memory editor text before awaiting work that can change `selectedUri` (snapshot in `openMarkdownInEditor`), and after every successful `saveNoteMarkdown` in `enqueueInboxPersist` (including when `persistTransientMarkdownImages` rewrites markdown).
 - **`lastPersistedRef`** must describe content that was written successfully (or read from disk for the current selection). Do not set it from a stale `inboxContentByUri` entry without reconciling with disk-known state.
-- The `useLayoutEffect` on `selectedUri` restores CodeMirror from cache when present; if cache and `lastPersistedRef` disagree for the same URI, disk-known (`lastPersistedRef`) wins and the cache is healed (`resolveInboxCachedBodyForEditor` in `apps/desktop/src/hooks/inboxNoteBodyCache.ts`).
+- The `useLayoutEffect` on `selectedUri` in `apps/desktop/src/hooks/useMainWindowWorkspace.ts` restores CodeMirror from cache when present; if cache and `lastPersistedRef` disagree for the same URI, disk-known (`lastPersistedRef`) wins and the cache is healed (`resolveInboxCachedBodyForEditor` in `apps/desktop/src/hooks/inboxNoteBodyCache.ts`).
 - Any new mutation path (bulk rewrite, external sync, etc.) must update or invalidate the cache entry for affected URIs.
+- Primary ownership now lives in:
+  - `apps/desktop/src/hooks/useInboxBodyCache.ts` (state + refs)
+  - `apps/desktop/src/hooks/workspaceOpenMarkdownCommand.ts` (open/snapshot/prefetch mutations)
+  - `apps/desktop/src/hooks/useDiskConflictState.ts` (disk-reload conflict path)
+  - `apps/desktop/src/hooks/useMainWindowWorkspace.ts` (selectedUri restore + cache-heal effect)
 - Prefer small pure helpers in `inboxNoteBodyCache.ts` for merge/heal logic; add Vitest coverage there when behavior changes.
 
 Full detail: `specs/architecture/desktop-editor.md` § "lazy note bodies + cache consistency invariant".
 
 ## Desktop: Vault disk sync invariants
 
-Applies to: `apps/desktop/src-tauri/src/vault_watch.rs`, `apps/desktop/src/hooks/useMainWindowWorkspace.ts`, `apps/desktop/src/hooks/inboxNoteBodyCache.ts`, `apps/desktop/src/lib/vaultFilesChanged*`.
+Applies to: `apps/desktop/src-tauri/src/vault_watch.rs`, `apps/desktop/src/hooks/useWorkspaceVaultWatchEffects.ts`, `apps/desktop/src/hooks/useDiskConflictState.ts`, `apps/desktop/src/hooks/useMergeViewState.ts`, `apps/desktop/src/hooks/useTodayHubsState.ts`, `apps/desktop/src/hooks/useMainWindowWorkspace.ts`, `apps/desktop/src/hooks/inboxNoteBodyCache.ts`, `apps/desktop/src/lib/vaultFilesChanged*`.
 
 - Treat file/app sync as a **critical correctness surface**. Any change touching watcher events, reconcile routing, cache invalidation, `lastPersistedRef`, or conflict classification must include tests in the same change.
 - `coarse` watcher events are fail-safe full-vault invalidation. They must never be treated as path-limited updates, even when payload `paths` is non-empty.
