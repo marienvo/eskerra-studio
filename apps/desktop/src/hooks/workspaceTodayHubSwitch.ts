@@ -10,12 +10,7 @@ import {
 import {sortedTodayHubNoteUrisFromRefs, type VaultMarkdownRef} from '@eskerra/core';
 
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-import {
-  ensureActiveTabId,
-  tabsFromStored,
-  tabsToStored,
-  type EditorWorkspaceTab,
-} from '../lib/editorWorkspaceTabs';
+import {tabsFromStored, tabsToStored, type EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
@@ -56,18 +51,15 @@ function snapshotTodayHubWorkspace(
   };
 }
 
-function restoreTabsFromSnapshot(
+/** Tab list from persisted hub snapshot; active tab id is discarded — home gets focus after a switch. */
+function cloneEditorTabsFromHubSnapshot(
   snap: TodayHubWorkspaceSnapshot | undefined,
-): {nextTabs: EditorWorkspaceTab[]; nextActive: string | null} {
+): EditorWorkspaceTab[] {
   const snapTabs = snap?.editorWorkspaceTabs;
   if (snapTabs == null || snapTabs.length === 0) {
-    return {nextTabs: [], nextActive: null};
+    return [];
   }
-  const nextTabs = cloneEditorWorkspaceTabs(tabsFromStored(snapTabs));
-  return {
-    nextTabs,
-    nextActive: ensureActiveTabId(nextTabs, snap?.activeEditorTabId ?? null),
-  };
+  return cloneEditorWorkspaceTabs(tabsFromStored(snapTabs));
 }
 
 export type UseWorkspaceTodayHubSwitchArgs = {
@@ -217,7 +209,7 @@ export function useWorkspaceTodayHubSwitch(
       }
       const snapForTarget = legacyTodayHubWorkspacesForSwitchRef.current[norm];
 
-      const {nextTabs} = restoreTabsFromSnapshot(snapForTarget);
+      const nextTabs = cloneEditorTabsFromHubSnapshot(snapForTarget);
 
       if (syncWorkspaceModelForIncomingHub) {
         syncWorkspaceModelForIncomingHub({
