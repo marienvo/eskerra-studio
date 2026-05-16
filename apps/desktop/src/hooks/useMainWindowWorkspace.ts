@@ -119,7 +119,6 @@ import {
   type OpenMarkdownInEditorOptions,
 } from './workspaceOpenMarkdownCommand';
 import {
-  runAddNote,
   runCancelNewEntry,
   runCleanNoteInbox,
   runStartNewEntry,
