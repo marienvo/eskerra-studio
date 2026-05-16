@@ -8,6 +8,10 @@ describe('useDiskConflictState', () => {
     const selectedUriRef = {current: '/note.md'};
     const lastPersistedRef = {current: null as {uri: string; markdown: string} | null};
     const lastPersistedExternalMutationSeqRef = {current: 0};
+    const setLastPersistedSnapshot = vi.fn((next: {uri: string; markdown: string}) => {
+      lastPersistedRef.current = next;
+      lastPersistedExternalMutationSeqRef.current += 1;
+    });
     const inboxContentByUriRef = {current: {} as Record<string, string>};
     const skipRecencyDeferForUriRef = {current: new Set<string>()};
     let inboxCacheState: Record<string, string> = {};
@@ -31,8 +35,7 @@ describe('useDiskConflictState', () => {
         scheduleBacklinksDeferOneFrameAfterLoad,
         cancelAutosave,
         selectedUriRef,
-        lastPersistedRef,
-        lastPersistedExternalMutationSeqRef,
+        setLastPersistedSnapshot,
         inboxContentByUriRef,
         skipRecencyDeferForUriRef,
         setInboxContentByUri,
@@ -53,6 +56,7 @@ describe('useDiskConflictState', () => {
       'start',
     );
     expect(scheduleBacklinksDeferOneFrameAfterLoad).toHaveBeenCalledTimes(1);
+    expect(setLastPersistedSnapshot).toHaveBeenCalledWith({uri: '/note.md', markdown: '# disk'});
     expect(lastPersistedRef.current).toEqual({uri: '/note.md', markdown: '# disk'});
     expect(lastPersistedExternalMutationSeqRef.current).toBe(1);
     expect(result.current.diskConflict).toBeNull();
@@ -64,8 +68,7 @@ describe('useDiskConflictState', () => {
 
   it('elevates a soft conflict to blocking and clears recency skip on dismiss', () => {
     const selectedUriRef = {current: '/note.md'};
-    const lastPersistedRef = {current: null as {uri: string; markdown: string} | null};
-    const lastPersistedExternalMutationSeqRef = {current: 0};
+    const setLastPersistedSnapshot = vi.fn();
     const inboxContentByUriRef = {current: {} as Record<string, string>};
     const skipRecencyDeferForUriRef = {current: new Set<string>(['/note.md'])};
     const cancelAutosave = vi.fn();
@@ -76,8 +79,7 @@ describe('useDiskConflictState', () => {
         scheduleBacklinksDeferOneFrameAfterLoad: vi.fn(),
         cancelAutosave,
         selectedUriRef,
-        lastPersistedRef,
-        lastPersistedExternalMutationSeqRef,
+        setLastPersistedSnapshot,
         inboxContentByUriRef,
         skipRecencyDeferForUriRef,
         setInboxContentByUri: vi.fn(),
@@ -109,6 +111,10 @@ describe('useDiskConflictState', () => {
     const selectedUriRef = {current: '/note.md'};
     const lastPersistedRef = {current: {uri: '/other.md', markdown: 'x'} as {uri: string; markdown: string}};
     const lastPersistedExternalMutationSeqRef = {current: 2};
+    const setLastPersistedSnapshot = vi.fn((next: {uri: string; markdown: string}) => {
+      lastPersistedRef.current = next;
+      lastPersistedExternalMutationSeqRef.current += 1;
+    });
     const inboxContentByUriRef = {current: {} as Record<string, string>};
     const skipRecencyDeferForUriRef = {current: new Set<string>()};
     const cancelAutosave = vi.fn();
@@ -119,8 +125,7 @@ describe('useDiskConflictState', () => {
         scheduleBacklinksDeferOneFrameAfterLoad: vi.fn(),
         cancelAutosave,
         selectedUriRef,
-        lastPersistedRef,
-        lastPersistedExternalMutationSeqRef,
+        setLastPersistedSnapshot,
         inboxContentByUriRef,
         skipRecencyDeferForUriRef,
         setInboxContentByUri: vi.fn(),
@@ -136,6 +141,7 @@ describe('useDiskConflictState', () => {
     });
 
     expect(cancelAutosave).toHaveBeenCalledTimes(1);
+    expect(setLastPersistedSnapshot).toHaveBeenCalledWith({uri: '/note.md', markdown: '# from disk'});
     expect(lastPersistedRef.current).toEqual({uri: '/note.md', markdown: '# from disk'});
     expect(lastPersistedExternalMutationSeqRef.current).toBe(3);
     expect(result.current.diskConflict).toBeNull();

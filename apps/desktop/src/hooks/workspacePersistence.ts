@@ -83,7 +83,7 @@ export function useWorkspacePersistence(args: {
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   editorBodyRef: MutableRefObject<string>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
-  lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
+  setLastPersistedSnapshot: (next: LastPersisted) => void;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
@@ -128,7 +128,7 @@ export function useWorkspacePersistence(args: {
     inboxContentByUriRef,
     editorBodyRef,
     lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
+    setLastPersistedSnapshot,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     inboxEditorRef,
@@ -209,8 +209,7 @@ export function useWorkspacePersistence(args: {
 
         const activeSel = selectedUriRef.current;
         if (activeSel && normalizeEditorDocUri(activeSel) === norm) {
-          lastPersistedRef.current = {uri: norm, markdown: md};
-          lastPersistedExternalMutationSeqRef.current += 1;
+          setLastPersistedSnapshot({uri: norm, markdown: md});
         }
         const memAfter = inboxContentByUriRef.current[norm];
         if (shouldMergeCacheAfterOutgoingPersist(memAfter, md, leaveSnapshotMarkdown)) {
@@ -242,10 +241,9 @@ export function useWorkspacePersistence(args: {
       diskConflictRef,
       inboxContentByUriRef,
       selectedUriRef,
-      lastPersistedRef,
-      lastPersistedExternalMutationSeqRef,
       setErr,
       onVaultWriteSettled,
+      setLastPersistedSnapshot,
     ],
   );
 
@@ -290,8 +288,7 @@ export function useWorkspacePersistence(args: {
         if (selectedUriRef.current !== uri || composingNewEntryRef.current) {
           return;
         }
-        lastPersistedRef.current = {uri, markdown: md};
-        lastPersistedExternalMutationSeqRef.current += 1;
+        setLastPersistedSnapshot({uri, markdown: md});
         const nextCache = mergeInboxNoteBodyIntoCache(
           inboxContentByUriRef.current,
           uri,
@@ -328,11 +325,11 @@ export function useWorkspacePersistence(args: {
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
     inboxContentByUriRef,
     setErr,
     setInboxContentByUri,
     onVaultWriteSettled,
+    setLastPersistedSnapshot,
   ]);
 
   const flushInboxSave = useCallback(async () => {

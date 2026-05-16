@@ -46,7 +46,8 @@ function minimalEnv(
     autosaveSchedulerRef: {
       current: {schedule: vi.fn(), cancel: vi.fn()},
     },
-    markLastPersistedMutation: vi.fn(),
+    writeLastPersistedSnapshotWithoutSeqBump: vi.fn(),
+    bumpLastPersistedExternalMutationSeq: vi.fn(),
     setEditorWorkspaceTabs: vi.fn(),
     setActiveEditorTabId: vi.fn(),
     setDiskConflict: vi.fn(),

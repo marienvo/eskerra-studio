@@ -25,8 +25,7 @@ type UseDiskConflictStateOptions = {
   scheduleBacklinksDeferOneFrameAfterLoad: () => void;
   cancelAutosave: () => void;
   selectedUriRef: MutableRefObject<string | null>;
-  lastPersistedRef: MutableRefObject<LastPersisted | null>;
-  lastPersistedExternalMutationSeqRef: MutableRefObject<number>;
+  setLastPersistedSnapshot: (next: LastPersisted) => void;
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   skipRecencyDeferForUriRef: MutableRefObject<Set<string>>;
   setInboxContentByUri: Dispatch<SetStateAction<Record<string, string>>>;
@@ -59,8 +58,7 @@ export function useDiskConflictState(
     scheduleBacklinksDeferOneFrameAfterLoad,
     cancelAutosave,
     selectedUriRef,
-    lastPersistedRef,
-    lastPersistedExternalMutationSeqRef,
+    setLastPersistedSnapshot,
     inboxContentByUriRef,
     skipRecencyDeferForUriRef,
     setInboxContentByUri,
@@ -97,8 +95,7 @@ export function useDiskConflictState(
     const md = c.diskMarkdown;
     loadFullMarkdownIntoInboxEditor(md, uri, 'start');
     scheduleBacklinksDeferOneFrameAfterLoad();
-    lastPersistedRef.current = {uri: c.uri, markdown: md};
-    lastPersistedExternalMutationSeqRef.current += 1;
+    setLastPersistedSnapshot({uri: c.uri, markdown: md});
     const nextCache = mergeInboxNoteBodyIntoCache(
       inboxContentByUriRef.current,
       c.uri,
@@ -117,13 +114,12 @@ export function useDiskConflictState(
     setErr(null);
   }, [
     inboxContentByUriRef,
-    lastPersistedExternalMutationSeqRef,
-    lastPersistedRef,
     loadFullMarkdownIntoInboxEditor,
     scheduleBacklinksDeferOneFrameAfterLoad,
     selectedUriRef,
     setErr,
     setInboxContentByUri,
+    setLastPersistedSnapshot,
   ]);
 
   const resolveDiskConflictKeepLocal = useCallback(() => {
@@ -133,20 +129,13 @@ export function useDiskConflictState(
       return;
     }
     cancelAutosave();
-    lastPersistedRef.current = {uri: c.uri, markdown: c.diskMarkdown};
-    lastPersistedExternalMutationSeqRef.current += 1;
+    setLastPersistedSnapshot({uri: c.uri, markdown: c.diskMarkdown});
     setDiskConflict(null);
     diskConflictRef.current = null;
     setDiskConflictSoft(null);
     diskConflictSoftRef.current = null;
     setErr(null);
-  }, [
-    cancelAutosave,
-    lastPersistedExternalMutationSeqRef,
-    lastPersistedRef,
-    selectedUriRef,
-    setErr,
-  ]);
+  }, [cancelAutosave, selectedUriRef, setErr, setLastPersistedSnapshot]);
 
   const elevateDiskConflictSoftToBlocking = useCallback(() => {
     const s = diskConflictSoftRef.current;
@@ -166,14 +155,13 @@ export function useDiskConflictState(
     cancelAutosave();
     const c = diskConflictRef.current;
     if (c) {
-      lastPersistedRef.current = {uri: c.uri, markdown: c.diskMarkdown};
-      lastPersistedExternalMutationSeqRef.current += 1;
+      setLastPersistedSnapshot({uri: c.uri, markdown: c.diskMarkdown});
     }
     setDiskConflict(null);
     diskConflictRef.current = null;
     setDiskConflictSoft(null);
     diskConflictSoftRef.current = null;
-  }, [cancelAutosave, lastPersistedExternalMutationSeqRef, lastPersistedRef]);
+  }, [cancelAutosave, setLastPersistedSnapshot]);
 
   const dismissDiskConflictSoft = useCallback(() => {
     setDiskConflictSoft(null);

@@ -2,13 +2,13 @@
 
 ## Status
 
-Proposed — baseline capture for the phased extraction plan in `.claude/plans/useMainWindowWorkspace-decompositie.md`, **updated after Phase 4** (vault tree commands extracted to `workspaceTreeCommands.ts`, 2026-05-16).
+Accepted — phased extraction through **Phase 10** is merged (2026-05-16). This ADR keeps the **Phase 0 baseline** as a historical anchor and records the **post–Phase 10** orchestration snapshot plus **Phase 11+** forward work. The original plan file (`.claude/plans/useMainWindowWorkspace-decompositie.md`) may be archived once this ADR and any tracking issue reflect the same forward items.
 
 ## Context
 
-`apps/desktop/src/hooks/useMainWindowWorkspace.ts` is the desktop workspace orchestrator hook. It still owns a large amount of UI state, effect wiring, and command coordination even though a number of helper modules and bridge tests already exist.
+`apps/desktop/src/hooks/useMainWindowWorkspace.ts` is the desktop workspace orchestrator hook. Much of the former inline command and store logic now lives in the modules listed under **Post–Phase 10 snapshot**; the hook remains the wiring layer for effects, refs, and cross-feature callbacks.
 
-This ADR records the starting point for the phased decomposition so later PRs can compare against a fixed snapshot instead of ad hoc recollection.
+This ADR records the Phase 0 baseline and the post–Phase 10 decomposition snapshot so later PRs can compare against fixed numbers instead of ad hoc recollection.
 
 ## Baseline snapshot
 
@@ -16,43 +16,67 @@ This ADR records the starting point for the phased decomposition so later PRs ca
 - Direct dependency surface: `19` `import` statements, of which `10` are local relative imports and `9` are package imports.
 - Related test surface: `19` desktop hook test files in `apps/desktop/src/hooks/` currently cover this orchestration area, including `2` direct `useMainWindowWorkspace.*` tests and `17` adjacent bridge/helper tests.
 
-## Post–Phase 4 snapshot (2026-05-16)
+## Post–Phase 10 snapshot (2026-05-16)
 
-Phase 4 moved vault tree mutations out of the orchestrator into command modules with explicit `TreeCommandContext`. This section records the **current** module boundaries and line counts so later phases compare against an up-to-date snapshot (the baseline block above stays the historical anchor).
+Phases **7–10** landed additional stores and command modules (`useNotesListing`, `useInboxBodyCache`, `useTodayHubsState`, `useInboxShellRestore`, `workspaceComposeCommands`); **Phase 11** added `workspaceTabCommands` for editor tab strip commands. This section records **current** module boundaries and line counts so later work compares against an up-to-date snapshot (the baseline block above stays the historical anchor).
 
 ### Line counts (measured with `wc -l`)
 
 | Artifact | LOC |
 |---|---:|
-| `apps/desktop/src/hooks/useMainWindowWorkspace.ts` | 2866 |
-| `apps/desktop/src/hooks/workspaceTreeCommands.ts` | 656 |
-| `apps/desktop/src/hooks/workspaceTreeCommands.test.ts` | 393 |
+| `apps/desktop/src/hooks/useMainWindowWorkspace.ts` | 1750 |
+| `apps/desktop/src/hooks/useNotesListing.ts` | 67 |
+| `apps/desktop/src/hooks/useNotesListing.test.ts` | 71 |
+| `apps/desktop/src/hooks/useInboxBodyCache.ts` | 96 |
+| `apps/desktop/src/hooks/useInboxBodyCache.test.ts` | 106 |
+| `apps/desktop/src/hooks/useTodayHubsState.ts` | 913 |
+| `apps/desktop/src/hooks/useTodayHubsState.test.ts` | 375 |
+| `apps/desktop/src/hooks/useInboxShellRestore.ts` | 322 |
+| `apps/desktop/src/hooks/useInboxShellRestore.test.ts` | 219 |
+| `apps/desktop/src/hooks/workspaceComposeCommands.ts` | 204 |
+| `apps/desktop/src/hooks/workspaceComposeCommands.test.ts` | 203 |
+| `apps/desktop/src/hooks/workspaceTabCommands.ts` | 444 |
+| `apps/desktop/src/hooks/workspaceTabCommands.test.ts` | 84 |
+| `apps/desktop/src/hooks/workspaceTreeCommands.ts` | 650 |
+| `apps/desktop/src/hooks/workspaceTreeCommands.test.ts` | 417 |
 | `apps/desktop/src/hooks/workspaceVaultTreeMutations.ts` | 66 |
 
-Net change for `useMainWindowWorkspace.ts` versus the Phase 0 baseline in this ADR: **4062 → 2866** (−1196 LOC).
+Net change for `useMainWindowWorkspace.ts` versus the Phase 0 baseline in this ADR: **4062 → 1750** (−2312 LOC).
 
 ### Orchestration module map (extracted stores and commands)
 
-These modules are composed by `useMainWindowWorkspace` today (Phase 4 complete). They are **not** the full import graph; they are the decomposition targets called out in `.claude/plans/reviewpunten-fase0-6-aanpak.md` step 5.
+These modules are composed by `useMainWindowWorkspace` today through **Phase 11**. They are **not** the full import graph; they are the main decomposition surfaces for workspace orchestration.
 
 | Module | Responsibility |
 |---|---|
 | `useVaultBootstrap.ts` | Vault root, shared/local settings, device id, `hydrateVault` and first-launch wiring |
 | `useDiskConflictState.ts` | Hard/soft disk conflict state, defer timer, resolver callbacks |
 | `useMergeViewState.ts` | Merge view state and merge/discard callbacks |
-| `useInboxEditorState.ts` | Inbox editor surface state (selection, body, frontmatter, compose guards, scroll directives); **not** the note-body cache (`inboxContentByUri` / `lastPersistedRef` — planned Phase 7) |
+| `useInboxEditorState.ts` | Inbox editor surface state (selection, body, frontmatter, compose guards, scroll directives); not the note-body cache ownership |
 | `useEditorTabsState.ts` | Editor tab strip + active tab id (facade over shadow model where applicable), closed-tab stack bump API |
+| `useNotesListing.ts` | Inbox listing + refresh nonces tied to vault listing / podcast FS bumps |
+| `useInboxBodyCache.ts` | `inboxContentByUri` + `lastPersistedRef` / `lastPersistedExternalMutationSeqRef` state and the **only** supported mutation API for disk-known snapshots (see checklist) |
+| `useTodayHubsState.ts` | Today hub shell state, hub switch, row prehydrate/persist, home history mirrors, vault Today ref sync helpers |
+| `useInboxShellRestore.ts` | Persisted inbox shell restore effect + bridge callbacks into workspace / shadow model |
+| `workspaceComposeCommands.ts` | Compose flows: `runStartNewEntry`, `runCancelNewEntry`, `runSubmitNewEntry`, `runCleanNoteInbox`, `runAddNote` |
+| `workspaceTabCommands.ts` | Editor tab strip: activate/reorder/close/reopen/select/refocus + `replaceRuntimeActiveSurfaceTab` / `replaceRuntimeActiveHub` helpers used by hydrate reset |
 | `workspaceOpenMarkdownCommand.ts` | `runOpenMarkdownInEditorCommand` and the open pipeline sub-steps |
-| `workspaceTreeCommands.ts` | `runDeleteNote`, `runDeleteFolder`, `runRenameFolder`, `runMoveVaultTreeItem`, `runBulkDeleteVaultTreeItems`, `runBulkMoveVaultTreeItems` (+ internal commit helpers) |
+| `workspaceTreeCommands.ts` | Vault tree mutations: delete/rename/move/bulk (+ internal commit helpers) via `TreeCommandContext` |
 | `workspaceVaultTreeMutations.ts` | Pure helpers: bulk-delete tab/scroll pruning predicates and path collection |
+| `workspacePersistence.ts` | Autosave chain, flush, enqueue persist, merge cache helpers after successful writes |
+| `workspaceVaultWatchEffects.ts` | Tauri `vault-files-changed` subscription, reconcile queueing, indexing touches, open-tab probe telemetry |
+| `workspaceFsWatchReconcile.ts` | Open-tab inbox reconcile after vault FS events (tabs, cache, editor, disk conflicts) |
 
 ### Phase 0 invariants checklist
 
-The **Per-phase invariants checklist** in this ADR was added under Phase 0 and remains the authoritative gate for every decomposition PR. Step 5 does not duplicate it.
+The **Per-phase invariants checklist** in this ADR was added under Phase 0 and remains the authoritative gate for every decomposition PR.
 
-### Forward work (Phases 7–10)
+### Forward work (Phase 11+)
 
-Later planned extractions (`useNotesListing` + inbox body cache, Today hubs consolidation, compose commands + shell restore cleanup, final mirror cleanup per `.claude/plans/useMainWindowWorkspace-decompositie.md`) can proceed **without** re-disentangling inline vault tree command bodies from the orchestrator. Legacy workspace bridge modules and Phase 1 substeps 4–5 (runtime tab / shadow sync cleanup) stay on their **own** track and are unchanged by Phase 4 completion.
+1. **Tab command extraction** — **Done (2026-05-16):** `workspaceTabCommands.ts` + `TabCommandContext` mirror the tree/open-markdown command pattern; the orchestrator wires a memoized context into thin `useCallback` delegates.
+2. **Risk-path tests** — Expand Vitest coverage for tab-command edge cases (model strip mismatch logging, close-all empty vault shell) and keep `useTodayHubsState` / `useInboxShellRestore` suites current as those surfaces change.
+3. **Optional structural splits** — Split `useTodayHubsState` into a smaller state-store vs orchestration module; optionally extract a thin `useEditorHistory` (~130 LOC) from the main hook.
+4. **Legacy bridge / Phase 1 follow-ups** — Runtime tab / shadow sync cleanup and other bridge-only items stay on their **own** track; they are not blocked by Phase 10 completion.
 
 ## Decision
 
@@ -86,9 +110,10 @@ The old runtime-projection layout effect and DEV persistence divergence check ar
 Each PR in this decomposition must explicitly verify the following (see also the PR checklist in `.claude/plans/reviewpunten-fase0-6-aanpak.md`).
 
 1. **Note-body cache** (`CLAUDE.md`, Desktop: Note body cache): keep `inboxContentByUri`, `lastPersistedRef`, and `lastPersistedExternalMutationSeqRef` **in sync together** for every change that touches editor or on-disk note body state.
-2. **Vault disk sync** (`CLAUDE.md`, Desktop: Vault disk sync invariants): do not weaken watcher routing, cache invalidation, or conflict classification without concurrent tests and spec updates where needed.
-3. **Vitest isolation** ([ADR 001](./001-adr-vitest-desktop-test-isolation.md), `CLAUDE.md`): `restoreMocks: false`, `isolate: true`, and **no** `@tauri-apps/*` imports in `vitest.setup.ts` at module scope.
-4. **CodeMirror layout** (`CLAUDE.md`, Desktop: CodeMirror layout): use `padding`, not `margin`, for vertical spacing on `.cm-line`, line decorations, and block-widget roots whose height CodeMirror measures.
+2. **`lastPersisted*` mutation discipline**: do not assign to `lastPersistedRef.current` or bump `lastPersistedExternalMutationSeqRef` outside `useInboxBodyCache.ts`. Use `setLastPersistedSnapshot`, `clearLastPersistedSnapshot`, and (for vault FS reconcile / open-tab probe) `writeLastPersistedSnapshotWithoutSeqBump` + `bumpLastPersistedExternalMutationSeq` as documented in `CLAUDE.md`. Desktop ESLint (`apps/desktop/eslint.config.js`, `no-restricted-syntax` on `src/hooks/**/*.ts`) enforces this outside tests and the hook module.
+3. **Vault disk sync** (`CLAUDE.md`, Desktop: Vault disk sync invariants): do not weaken watcher routing, cache invalidation, or conflict classification without concurrent tests and spec updates where needed.
+4. **Vitest isolation** ([ADR 001](./001-adr-vitest-desktop-test-isolation.md), `CLAUDE.md`): `restoreMocks: false`, `isolate: true`, and **no** `@tauri-apps/*` imports in `vitest.setup.ts` at module scope.
+5. **CodeMirror layout** (`CLAUDE.md`, Desktop: CodeMirror layout): use `padding`, not `margin`, for vertical spacing on `.cm-line`, line decorations, and block-widget roots whose height CodeMirror measures.
 
 ## Test execution
 

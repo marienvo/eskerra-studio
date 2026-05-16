@@ -9,17 +9,17 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
-const BASELINE_PATH = path.join(__dirname, 'module-budget-baseline.json');
+export const REPO_ROOT = path.resolve(__dirname, '..');
+export const BASELINE_PATH = path.join(__dirname, 'module-budget-baseline.json');
 
-const NEW_FILE_MAX_LINES = 400;
-const GROWTH_TRACK_MIN_LINES = 800;
+export const NEW_FILE_MAX_LINES = 400;
+export const GROWTH_TRACK_MIN_LINES = 800;
 
-function readJson(filePath) {
+export function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-function countLines(absPath) {
+export function countLines(absPath) {
   const raw = fs.readFileSync(absPath, 'utf8');
   if (raw.length === 0) {
     return 0;
@@ -40,7 +40,7 @@ function gitOut(args, cwd) {
   return execFileSync('git', args, {cwd, encoding: 'utf8'}).trim();
 }
 
-function resolveMergeBase(cwd) {
+export function resolveMergeBase(cwd) {
   const prefer = process.env.MODULE_BUDGET_MERGE_BASE?.trim();
   if (prefer) {
     return prefer;
@@ -57,7 +57,7 @@ function resolveMergeBase(cwd) {
   return null;
 }
 
-function isScopedSource(rel) {
+export function isScopedSource(rel) {
   if (!rel || rel.endsWith('.d.ts')) {
     return false;
   }
@@ -71,7 +71,7 @@ function isScopedSource(rel) {
   );
 }
 
-function existsAtRevision(cwd, rev, relPath) {
+export function existsAtRevision(cwd, rev, relPath) {
   try {
     execFileSync('git', ['cat-file', '-e', `${rev}:${relPath}`], {
       cwd,
@@ -83,7 +83,7 @@ function existsAtRevision(cwd, rev, relPath) {
   }
 }
 
-function countLinesAtRevision(cwd, rev, relPath) {
+export function countLinesAtRevision(cwd, rev, relPath) {
   const raw = execFileSync('git', ['show', `${rev}:${relPath}`], {
     cwd,
     encoding: 'utf8',
@@ -94,54 +94,30 @@ function countLinesAtRevision(cwd, rev, relPath) {
   return raw.split(/\r?\n/).length;
 }
 
-function main() {
-  const baseline = readJson(BASELINE_PATH);
-  const maxByPath = baseline.maxLinesByPath ?? {};
-  const errors = [];
-
-  for (const [rel, cap] of Object.entries(maxByPath)) {
-    const abs = path.join(REPO_ROOT, rel);
-    if (!fs.existsSync(abs)) {
-      errors.push(`Baseline path missing on disk: ${rel}`);
-      continue;
-    }
-    const n = countLines(abs);
-    if (n > cap) {
-      errors.push(
-        `${rel}: ${n} lines exceeds baseline cap ${cap}. Shrink the module or raise the baseline deliberately.`,
-      );
-    }
-  }
-
-  const mergeBase = resolveMergeBase(REPO_ROOT);
+/**
+ * Paths that fail the git-based budget rules but are not yet in `maxByPath`.
+ * Values are the current on-disk line counts to store as the new cap when bumping baseline.
+ */
+export function collectAutoBaselineAdditions(repoRoot, maxByPath) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  const mergeBase = resolveMergeBase(repoRoot);
   if (!mergeBase) {
-    console.warn(
-      '[check-module-budgets] No merge base (no origin/main or main). Skipping git-based new/growth checks.',
-    );
-    if (errors.length) {
-      console.error(errors.join('\n'));
-      process.exit(1);
-    }
-    return;
+    return out;
   }
 
   let branchChangedRaw = '';
   try {
-    branchChangedRaw = gitOut(['diff', '--name-only', `${mergeBase}...HEAD`], REPO_ROOT);
+    branchChangedRaw = gitOut(['diff', '--name-only', `${mergeBase}...HEAD`], repoRoot);
   } catch {
-    console.warn('[check-module-budgets] git diff ...HEAD failed; skipping branch change checks.');
-    if (errors.length) {
-      console.error(errors.join('\n'));
-      process.exit(1);
-    }
-    return;
+    return out;
   }
 
   let dirtyRaw = '';
   try {
     dirtyRaw = [
-      gitOut(['diff', '--name-only', 'HEAD'], REPO_ROOT),
-      gitOut(['diff', '--name-only', '--cached', 'HEAD'], REPO_ROOT),
+      gitOut(['diff', '--name-only', 'HEAD'], repoRoot),
+      gitOut(['diff', '--name-only', '--cached', 'HEAD'], repoRoot),
     ]
       .filter(Boolean)
       .join('\n');
@@ -161,7 +137,97 @@ function main() {
     if (!isScopedSource(rel)) {
       continue;
     }
-    const abs = path.join(REPO_ROOT, rel);
+    const abs = path.join(repoRoot, rel);
+    if (!fs.existsSync(abs)) {
+      continue;
+    }
+    if (Object.hasOwn(maxByPath, rel)) {
+      continue;
+    }
+    const current = countLines(abs);
+    const wasNew = !existsAtRevision(repoRoot, mergeBase, rel);
+    if (wasNew && current > NEW_FILE_MAX_LINES) {
+      out[rel] = current;
+      continue;
+    }
+    if (wasNew) {
+      continue;
+    }
+    const prev = countLinesAtRevision(repoRoot, mergeBase, rel);
+    if (prev >= GROWTH_TRACK_MIN_LINES && current > prev) {
+      out[rel] = current;
+    }
+  }
+  return out;
+}
+
+/**
+ * @returns {string[]}
+ */
+export function collectBaselineCapViolations(repoRoot, maxByPath) {
+  const errors = [];
+  for (const [rel, cap] of Object.entries(maxByPath)) {
+    const abs = path.join(repoRoot, rel);
+    if (!fs.existsSync(abs)) {
+      errors.push(`Baseline path missing on disk: ${rel}`);
+      continue;
+    }
+    const n = countLines(abs);
+    if (n > cap) {
+      errors.push(
+        `${rel}: ${n} lines exceeds baseline cap ${cap}. Shrink the module or raise the baseline deliberately.`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * @returns {string[]}
+ */
+export function collectGitBudgetViolations(repoRoot, maxByPath) {
+  const errors = [];
+  const mergeBase = resolveMergeBase(repoRoot);
+  if (!mergeBase) {
+    console.warn(
+      '[check-module-budgets] No merge base (no origin/main or main). Skipping git-based new/growth checks.',
+    );
+    return errors;
+  }
+
+  let branchChangedRaw = '';
+  try {
+    branchChangedRaw = gitOut(['diff', '--name-only', `${mergeBase}...HEAD`], repoRoot);
+  } catch {
+    console.warn('[check-module-budgets] git diff ...HEAD failed; skipping branch change checks.');
+    return errors;
+  }
+
+  let dirtyRaw = '';
+  try {
+    dirtyRaw = [
+      gitOut(['diff', '--name-only', 'HEAD'], repoRoot),
+      gitOut(['diff', '--name-only', '--cached', 'HEAD'], repoRoot),
+    ]
+      .filter(Boolean)
+      .join('\n');
+  } catch {
+    dirtyRaw = '';
+  }
+
+  const changed = new Set(
+    [branchChangedRaw, dirtyRaw]
+      .join('\n')
+      .split(/\n/)
+      .map(s => s.trim())
+      .filter(Boolean),
+  );
+
+  for (const rel of changed) {
+    if (!isScopedSource(rel)) {
+      continue;
+    }
+    const abs = path.join(repoRoot, rel);
     if (!fs.existsSync(abs)) {
       continue;
     }
@@ -169,7 +235,7 @@ function main() {
     if (Object.hasOwn(maxByPath, rel)) {
       continue;
     }
-    const wasNew = !existsAtRevision(REPO_ROOT, mergeBase, rel);
+    const wasNew = !existsAtRevision(repoRoot, mergeBase, rel);
     if (wasNew && current > NEW_FILE_MAX_LINES) {
       errors.push(
         `${rel}: new file has ${current} lines (max ${NEW_FILE_MAX_LINES} without baseline entry). Split or add an explicit baseline bump.`,
@@ -179,18 +245,40 @@ function main() {
     if (wasNew) {
       continue;
     }
-    const prev = countLinesAtRevision(REPO_ROOT, mergeBase, rel);
+    const prev = countLinesAtRevision(repoRoot, mergeBase, rel);
     if (prev >= GROWTH_TRACK_MIN_LINES && current > prev) {
       errors.push(
         `${rel}: grew from ${prev} to ${current} lines (files ≥${GROWTH_TRACK_MIN_LINES} lines may not grow without intentional refactor/split).`,
       );
     }
   }
+  return errors;
+}
 
+export function runModuleBudgetCheck(repoRoot = REPO_ROOT) {
+  const baseline = readJson(BASELINE_PATH);
+  const maxByPath = baseline.maxLinesByPath ?? {};
+  const capErrors = collectBaselineCapViolations(repoRoot, maxByPath);
+  const gitErrors = collectGitBudgetViolations(repoRoot, maxByPath);
+  return [...capErrors, ...gitErrors];
+}
+
+function isDirectCliRun() {
+  const argv1 = process.argv[1];
+  if (!argv1) {
+    return false;
+  }
+  return path.resolve(argv1) === path.resolve(fileURLToPath(import.meta.url));
+}
+
+function main() {
+  const errors = runModuleBudgetCheck(REPO_ROOT);
   if (errors.length) {
     console.error('[check-module-budgets] Failed:\n' + errors.join('\n'));
     process.exit(1);
   }
 }
 
-main();
+if (isDirectCliRun()) {
+  main();
+}

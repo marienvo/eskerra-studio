@@ -87,6 +87,27 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/hooks/**/*.ts'],
+    ignores: ['src/hooks/useInboxBodyCache.ts', 'src/hooks/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'AssignmentExpression[left.type="MemberExpression"][left.property.name="current"][left.object.property.name="lastPersistedRef"]',
+          message:
+            'Mutate lastPersisted only via useInboxBodyCache (setLastPersistedSnapshot, clearLastPersistedSnapshot, writeLastPersistedSnapshotWithoutSeqBump + bumpLastPersistedExternalMutationSeq).',
+        },
+        {
+          selector:
+            'AssignmentExpression[left.type="MemberExpression"][left.property.name="current"][left.object.property.name="lastPersistedExternalMutationSeqRef"]',
+          message:
+            'Bump lastPersistedExternalMutationSeqRef only via useInboxBodyCache (bumpLastPersistedExternalMutationSeq or setLastPersistedSnapshot / clearLastPersistedSnapshot).',
+        },
+      ],
+    },
+  },
+  {
     files: ['src/hooks/useMainWindowWorkspace.ts'],
     rules: {
       // Orchestration hub: callbacks read latest workspace/editor state via refs to avoid
