@@ -8,7 +8,7 @@
 <h1 align="center">Eskerra</h1>
 
 <p align="center">
-  Eskerra is a <strong>notes + podcast</strong> companion with two apps in one repo:
+  Eskerra is a <strong>local-first Markdown notes</strong> app — a desktop editor for focused, keyboard-driven work and a mobile companion for quick capture:
 </p>
 
 | App | Location | Stack |
@@ -38,7 +38,7 @@ Both apps use the same **vault layout** on disk: user-chosen root folder, then `
 | `npm run desktop:build` | **Desktop:** release semver bump (same rules as APK) + production web build + `tauri build` |
 | `npm test` | **Phase 1 (parallel):** `npm run lint`, desktop `validate-metainfo`, Vitest/Jest across workspaces. **Phase 2 (parallel):** desktop DS + mobile RN-Web Storybook **static builds**. **Phase 3:** release helper `node --test` scripts + `assert-app-versions-align.mjs`. Requires `appstream` (`appstreamcli`) on PATH for metainfo validation. |
 | `npm run ci:all` | `npm test` then `npm run desktop:build` (full local gate) |
-| `npm run storybook:desktop -w @eskerra/ds-desktop` | Desktop design system Storybook (web, Vite) |
+| `npm run storybook:desktop` | Desktop design system Storybook (web, Vite) |
 | `npm run storybook:android -w @eskerra/mobile` | Mobile design system Storybook **on-device** (separate Metro entry) |
 | `npm run storybook:web -w @eskerra/ds-mobile` | Mobile DS Storybook **RN-Web** (docs / fast review, port 6007) |
 | `npm run test:storybook-web` | Playwright + test-runner against static RN-Web Storybook (downloads Chromium on first run) |
@@ -57,10 +57,14 @@ npm run desktop:dev -w @eskerra/desktop
 
 ### What the mobile app does
 
-- Select a Notes directory with the Android folder picker (SAF).
-- Persist the selected tree URI in AsyncStorage.
-- Create/update `/.eskerra/settings-shared.json` (optional R2 fields only on the shared file) and `/.eskerra/settings-local.json` for per-device `deviceName` and `displayName` (both default to empty strings).
-- Debug APK build/install scripts live under [`scripts/`](scripts/) and call Gradle in [`apps/mobile/android/`](apps/mobile/android/).
+- **Inbox / quick capture** — compose and browse short Markdown notes in `Inbox/`.
+- **Vault browsing** — navigate, search (SQLite FTS5), and read any `.md` note in the vault.
+- **Note editing** — create and update Markdown notes with callout block support.
+- **Today Hub** — visual weekly workspace, mirrored from the desktop.
+- **Podcast playback** — stream MP3 episodes from `General/` podcast markdown, with lock-screen controls.
+- **Settings** — display name, vault selection (Android SAF), optional Cloudflare R2 for playlist sync.
+
+On first launch the app asks for a vault folder via the Android folder picker (SAF); the selected tree URI is persisted in AsyncStorage. Init writes `/.eskerra/settings-shared.json` and `/.eskerra/settings-local.json`.
 
 ### Extra prerequisites (Android only)
 
@@ -166,7 +170,7 @@ Production-style build:
 npm run desktop:build
 ```
 
-Vault selection, `.eskerra` settings, inbox notes, MP3 streaming, and Linux **MPRIS** (play/pause from GNOME) are described in [`specs/architecture/desktop-mobile-parity.md`](specs/architecture/desktop-mobile-parity.md).
+The vault contract, settings, editor features, and podcast playback (including Linux **MPRIS** / GNOME media keys) are described in [`specs/architecture/desktop-mobile-parity.md`](specs/architecture/desktop-mobile-parity.md).
 
 ---
 
