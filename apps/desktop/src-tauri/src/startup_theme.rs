@@ -130,9 +130,18 @@ pub fn load_startup_theme<R: tauri::Runtime>(app: &tauri::App<R>) -> StartupThem
             .join(SETTINGS_SHARED_FILE),
     )
     .ok();
-    if let Some(preference) = settings
-        .as_ref()
-        .and_then(|value| parse_theme_preference(value.get("themePreference")))
+    resolve_startup_theme_from_vault_inputs(vault_root, settings.as_ref(), cached)
+}
+
+/// Chooses startup theme for an open vault using shared settings and optional app-store cache.
+/// Extracted from `load_startup_theme` so the `themePreference`-missing fallback is unit-tested.
+fn resolve_startup_theme_from_vault_inputs(
+    vault_root: &str,
+    settings: Option<&Value>,
+    cached: Option<StartupTheme>,
+) -> StartupTheme {
+    if let Some(preference) =
+        settings.and_then(|value| parse_theme_preference(value.get("themePreference")))
     {
         return resolve_theme_for_preference(vault_root, preference, cached);
     }
@@ -227,10 +236,7 @@ fn parse_cached_theme_definition(value: &Value) -> Result<ThemeDefinition, ()> {
             }
             format!("{id}.json")
         };
-        if !file_name.to_lowercase().ends_with(".json") {
-            return Err(());
-        }
-        let stem = file_name.strip_suffix(".json").ok_or(())?;
+        let stem = vault_json_theme_stem(&file_name).ok_or(())?;
         if !is_safe_theme_id(stem) {
             return Err(());
         }
@@ -290,7 +296,7 @@ fn parse_theme_definition(
     let light = parse_palette(o.get("light")).ok_or(())?;
     let dark = parse_palette(o.get("dark")).ok_or(())?;
     if let Some(file_name) = vault_file_name {
-        let id = file_name.strip_suffix(".json").ok_or(())?.to_string();
+        let id = vault_json_theme_stem(&file_name).ok_or(())?.to_string();
         if let Some(json_id) = o
             .get("id")
             .and_then(Value::as_str)
@@ -341,6 +347,16 @@ fn parse_palette(value: Option<&Value>) -> Option<ThemePaletteWrapper> {
         colors.push(color.to_string());
     }
     Some(ThemePaletteWrapper { palette: colors })
+}
+
+/// Theme files use a `.json` suffix; treat the extension as ASCII case-insensitive so stems are
+/// not dropped when cached `fileName` uses mixed-case extensions (some directory listings do).
+fn vault_json_theme_stem(file_name: &str) -> Option<&str> {
+    let (stem, ext) = file_name.rsplit_once('.')?;
+    if !ext.eq_ignore_ascii_case("json") {
+        return None;
+    }
+    (!stem.is_empty()).then_some(stem)
 }
 
 fn is_safe_theme_id(theme_id: &str) -> bool {
@@ -498,5 +514,60 @@ mod tests {
         assert_eq!(out.theme.id, "custom-v");
         assert_eq!(out.theme.source, "vault");
         assert_eq!(out.theme.name, "Custom");
+    }
+
+    #[test]
+    fn parses_cached_vault_startup_theme_uppercase_json_extension() {
+        let raw = serde_json::json!({
+            "preference": {"themeId": "ocean-breeze", "mode": "dark"},
+            "resolvedMode": "dark",
+            "theme": {
+                "id": "ocean-breeze",
+                "name": "Ocean",
+                "source": "vault",
+                "fileName": "ocean-breeze.JSON",
+                "light": {"palette": ["#F5F5F5"]},
+                "dark": {"palette": ["#111111"]}
+            }
+        });
+        let parsed = parse_cached_startup_theme(Some(&raw)).expect("valid cached vault startup theme");
+        assert_eq!(parsed.theme.file_name.as_deref(), Some("ocean-breeze.JSON"));
+        assert_eq!(parsed.theme.id, "ocean-breeze");
+    }
+
+    #[test]
+    fn resolve_startup_theme_from_vault_inputs_uses_cached_when_theme_preference_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        let theme_dir = vault.join(ESKERRA_DIR).join(THEMES_DIR);
+        fs::create_dir_all(&theme_dir).unwrap();
+        let body = serde_json::json!({
+            "name": "Migrated",
+            "light": {"palette": ["#AABBCC"]},
+            "dark": {"palette": ["#112233"]}
+        })
+        .to_string();
+        fs::write(theme_dir.join("migrated-v.json"), body).unwrap();
+
+        let settings = serde_json::json!({});
+        let pref = ThemePreference {
+            theme_id: "migrated-v".into(),
+            mode: "dark".into(),
+        };
+        let corrupt_cached = StartupTheme {
+            preference: pref.clone(),
+            resolved_mode: "dark".into(),
+            theme: default_theme(),
+        };
+        let vault_str = vault.to_str().expect("utf8 temp path");
+        let out = resolve_startup_theme_from_vault_inputs(
+            vault_str,
+            Some(&settings),
+            Some(corrupt_cached),
+        );
+        assert_eq!(out.preference.theme_id, "migrated-v");
+        assert_eq!(out.theme.id, "migrated-v");
+        assert_eq!(out.theme.source, "vault");
+        assert_eq!(out.theme.name, "Migrated");
     }
 }

@@ -13,7 +13,7 @@
 
 ## Cache format
 
-The `startupTheme` object in `eskerra-desktop.json` uses camelCase for nested fields (`themeId`, `resolvedMode`, `fileName`, `source`, …), matching the TypeScript `persistStartupThemeBootstrap` writer. Rust must parse cached vault themes with `source: "vault"` and `fileName` intact so the webview can seed vault theme definitions before `vaultRoot` is hydrated in React.
+The `startupTheme` object in `eskerra-desktop.json` uses camelCase for nested fields (`themeId`, `resolvedMode`, `fileName`, `source`, …), matching the TypeScript `persistStartupThemeBootstrap` writer. Rust must parse cached vault themes with `source: "vault"` and `fileName` intact so the webview can seed vault theme definitions before `vaultRoot` is hydrated in React. For vault JSON files, Rust treats the `json` extension as ASCII case-insensitive when validating `fileName` and deriving the theme id stem (so mixed-case extensions still resolve).
 
 ## R2 theme preference
 
