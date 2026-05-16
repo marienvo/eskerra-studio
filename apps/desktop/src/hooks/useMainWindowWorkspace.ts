@@ -2,7 +2,7 @@
  * Main-window vault workspace: orchestration hook (Tauri FS, editor tabs, Today hub, wiki rename).
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
- * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceEditorHistoryNavigation`, `workspaceVaultTreeMutations`, `inboxShellRestoreHelpers`,
+ * (`workspaceFsWatchReconcile`, `workspaceEditorTabs`, `workspaceEditorHistoryNavigation`, `workspaceVaultTreeMutations`, `workspaceTreeCommands`, `inboxShellRestoreHelpers`,
  * `workspaceShadowBridge`, `workspacePersistenceBridge`, `workspaceInboxShellRestoreBridge`,
  * `workspaceHomeHistoryShadowSync`).
  *
@@ -69,7 +69,6 @@ import {
 } from '../lib/editorDocumentHistory';
 import {popNextReopenableClosedTabRecord} from '../lib/editorClosedTabStack';
 import {
-  ensureActiveTabId,
   findTabById,
   findTabIdWithCurrentUri,
   firstSurvivorUriFromTabs,
@@ -77,7 +76,6 @@ import {
   pushClosedWorkspaceTabsFromCloseAll,
   pushClosedWorkspaceTabsFromCloseOther,
   remapAllTabsUriPrefix,
-  removeUriFromAllTabs,
   reorderEditorWorkspaceTabsInArray,
   tabCurrentUri,
   tabsToStored,
@@ -155,6 +153,11 @@ import {
   runEditorHistoryGoForward,
 } from './workspaceEditorHistoryNavigation';
 import {bulkDeleteUriRemovalPredicate, pruneEditorTabsAfterBulkTreeDelete} from './workspaceVaultTreeMutations';
+import {
+  runDeleteFolder,
+  runDeleteNote,
+  type TreeCommandContext,
+} from './workspaceTreeCommands';
 import {useWorkspaceBacklinks} from './workspaceBacklinks';
 import {useWorkspaceLinkRouting} from './workspaceLinkRouting';
 import {useWorkspacePersistence} from './workspacePersistence';
@@ -1968,6 +1971,71 @@ export function useMainWindowWorkspace(options: {
     [openMarkdownInEditor, clearInboxSelection, selectHomeCurrentNote],
   );
 
+  const treeCommandContext = useMemo((): TreeCommandContext => {
+    return {
+      vaultRoot,
+      fs,
+      subtreeMarkdownCache,
+      refs: {
+        autosaveSchedulerRef,
+        saveChainRef,
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef,
+        selectedUriRef,
+        composingNewEntryRef,
+        editorShellScrollByUriRef,
+        inboxYamlFrontmatterInnerRef,
+        inboxEditorYamlLeadingBeforeFrontmatterRef,
+        lastPersistedRef,
+        lastPersistedExternalMutationSeqRef,
+      },
+      setters: {
+        setEditorWorkspaceTabs,
+        setActiveEditorTabId,
+        setInboxContentByUri,
+        setBusy,
+        setErr,
+        setFsRefreshNonce,
+        setSelectedUri,
+        setComposingNewEntry,
+        setEditorBody,
+        setInboxYamlFrontmatterInner,
+        setInboxEditorYamlLeadingBeforeFrontmatter,
+        setInboxEditorResetNonce,
+      },
+      mirrorShadowHomeSurface,
+      mirrorShadowActiveTab,
+      removeHomeHistoryUris,
+      markVaultWriteSettled,
+      refreshNotes,
+      refocusAfterActiveTabRemoved,
+      openMarkdownInEditor,
+    };
+  }, [
+    vaultRoot,
+    fs,
+    subtreeMarkdownCache,
+    setEditorWorkspaceTabs,
+    setActiveEditorTabId,
+    setInboxContentByUri,
+    setBusy,
+    setErr,
+    setFsRefreshNonce,
+    setSelectedUri,
+    setComposingNewEntry,
+    setEditorBody,
+    setInboxYamlFrontmatterInner,
+    setInboxEditorYamlLeadingBeforeFrontmatter,
+    setInboxEditorResetNonce,
+    mirrorShadowHomeSurface,
+    mirrorShadowActiveTab,
+    removeHomeHistoryUris,
+    markVaultWriteSettled,
+    refreshNotes,
+    refocusAfterActiveTabRemoved,
+    openMarkdownInEditor,
+  ]);
+
   const selectNote = useCallback(
     (uri: string) => {
       const existingId = findTabIdWithCurrentUri(editorWorkspaceTabsRef.current, uri);
@@ -2235,71 +2303,8 @@ export function useMainWindowWorkspace(options: {
   ]);
 
   const deleteNote = useCallback(
-    async (uri: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      await saveChainRef.current.catch(() => undefined);
-
-      const norm = normalizeEditorDocUri(uri);
-      const wasOpen = selectedUriRef.current === norm;
-      const nextTabs = removeUriFromAllTabs(
-        editorWorkspaceTabsRef.current,
-        u => u === norm,
-      );
-      const nextActive = ensureActiveTabId(
-        nextTabs,
-        activeEditorTabIdRef.current,
-      );
-      editorWorkspaceTabsRef.current = nextTabs;
-      setEditorWorkspaceTabs(nextTabs);
-      activeEditorTabIdRef.current = nextActive;
-      setActiveEditorTabId(nextActive);
-      if (nextActive == null) {
-        mirrorShadowHomeSurface('delete note home surface');
-      } else {
-        mirrorShadowActiveTab(nextActive, 'delete note active tab');
-      }
-      removeHomeHistoryUris(u => u === norm);
-      editorShellScrollByUriRef.current.delete(norm);
-
-      if (wasOpen) {
-        await refocusAfterActiveTabRemoved(norm, nextTabs, nextActive);
-      }
-
-      setBusy(true);
-      setErr(null);
-      try {
-        await deleteVaultMarkdownNote(vaultRoot, uri, fs);
-        subtreeMarkdownCache.invalidateForMutation(vaultRoot, uri, 'file');
-        setInboxContentByUri(prev => {
-          const next = {...prev};
-          delete next[uri];
-          return next;
-        });
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      subtreeMarkdownCache,
-      autosaveSchedulerRef,
-      refocusAfterActiveTabRemoved,
-      removeHomeHistoryUris,
-      mirrorShadowActiveTab,
-      mirrorShadowHomeSurface,
-      saveChainRef,
-      markVaultWriteSettled,
-    ],
+    (uri: string) => runDeleteNote(treeCommandContext, uri),
+    [treeCommandContext],
   );
 
   const linkController = useWorkspaceLinkRouting({
@@ -2326,108 +2331,8 @@ export function useMainWindowWorkspace(options: {
   });
 
   const deleteFolder = useCallback(
-    async (directoryUri: string) => {
-      if (!vaultRoot) {
-        return;
-      }
-      autosaveSchedulerRef.current.cancel();
-      const normDir = trimTrailingSlashes(directoryUri.replace(/\\/g, '/'));
-      const selected = selectedUriRef.current?.replace(/\\/g, '/');
-      const clearsSelection =
-        selected != null
-        && (selected === normDir || selected.startsWith(`${normDir}/`));
-      if (clearsSelection) {
-        selectedUriRef.current = null;
-        composingNewEntryRef.current = false;
-        lastPersistedRef.current = null;
-        lastPersistedExternalMutationSeqRef.current += 1;
-        setSelectedUri(null);
-        setComposingNewEntry(false);
-        clearInboxYamlFrontmatterEditorRefs({
-          inner: inboxYamlFrontmatterInnerRef,
-          leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-          setInner: setInboxYamlFrontmatterInner,
-          setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-        });
-        setEditorBody('');
-        setInboxEditorResetNonce(n => n + 1);
-      }
-      await saveChainRef.current.catch(() => undefined);
-      setBusy(true);
-      setErr(null);
-      try {
-        await deleteVaultTreeDirectory(vaultRoot, directoryUri, fs);
-        subtreeMarkdownCache.invalidateForMutation(
-          vaultRoot,
-          directoryUri,
-          'directory',
-        );
-        setInboxContentByUri(prev => {
-          const norm = normDir;
-          const next = {...prev};
-          for (const k of Object.keys(next)) {
-            const kn = k.replace(/\\/g, '/');
-            if (kn === norm || kn.startsWith(`${norm}/`)) {
-              delete next[k];
-            }
-          }
-          return next;
-        });
-        const tabPred = (u: string) => {
-          const f = normDir;
-          return u === f || u.startsWith(`${f}/`);
-        };
-        const newTabs = removeUriFromAllTabs(
-          editorWorkspaceTabsRef.current,
-          tabPred,
-        );
-        const nextActive = ensureActiveTabId(
-          newTabs,
-          activeEditorTabIdRef.current,
-        );
-        editorWorkspaceTabsRef.current = newTabs;
-        setEditorWorkspaceTabs(newTabs);
-        activeEditorTabIdRef.current = nextActive;
-        setActiveEditorTabId(nextActive);
-        if (nextActive == null) {
-          mirrorShadowHomeSurface('delete folder home surface');
-        } else {
-          mirrorShadowActiveTab(nextActive, 'delete folder active tab');
-        }
-        removeHomeHistoryUris(tabPred);
-        if (clearsSelection) {
-          const activeTab = nextActive
-            ? findTabById(newTabs, nextActive)
-            : undefined;
-          const nextUri =
-            (activeTab ? tabCurrentUri(activeTab) : null)
-            ?? firstSurvivorUriFromTabs(newTabs);
-          if (nextUri) {
-            await openMarkdownInEditor(nextUri, {skipHistory: true});
-          }
-        }
-        markVaultWriteSettled();
-        await refreshNotes(vaultRoot);
-        setFsRefreshNonce(n => n + 1);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      vaultRoot,
-      fs,
-      refreshNotes,
-      openMarkdownInEditor,
-      subtreeMarkdownCache,
-      autosaveSchedulerRef,
-      removeHomeHistoryUris,
-      mirrorShadowActiveTab,
-      mirrorShadowHomeSurface,
-      saveChainRef,
-      markVaultWriteSettled,
-    ],
+    (directoryUri: string) => runDeleteFolder(treeCommandContext, directoryUri),
+    [treeCommandContext],
   );
 
   const renameFolder = useCallback(
