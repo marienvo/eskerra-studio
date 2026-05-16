@@ -297,6 +297,35 @@ describe('handleOsCloseRequest', () => {
     expect(closeSyncInProgressRef.current).toBe(false);
   });
 
+  it('times out when in-flight sync promise never resolves', async () => {
+    vi.useFakeTimers();
+    const close = vi.fn();
+    const notify = vi.fn();
+    const closeSyncInProgressRef = {current: false};
+    const inflight = new Promise<boolean>(() => {});
+
+    const p = handleOsCloseRequest({
+      manualSyncDisabledReason: null,
+      manualSyncRunning: true,
+      runManualSync: vi.fn(),
+      notify,
+      close,
+      closeSyncInProgressRef,
+      timeoutMs: 5_000,
+      waitForCurrentRun: () => inflight,
+    });
+
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(close).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(
+      'error',
+      'Sync before close timed out. Eskerra stayed open so you can retry or close instantly.',
+    );
+    expect(closeSyncInProgressRef.current).toBe(false);
+  });
+
   it('clears closeSyncInProgressRef after sync completes', async () => {
     const closeSyncInProgressRef = {current: false};
 
