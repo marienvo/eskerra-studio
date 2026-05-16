@@ -130,7 +130,6 @@ export function useWorkspaceTodayHubSwitch(
     activateWorkspaceHomeSelector,
     mirrorShadowActiveHub,
     mirrorShadowHomeSurface,
-    mirrorShadowActiveTab,
     mirrorShadowActiveWorkspaceTabs,
     syncWorkspaceModelForIncomingHub,
   } = args.callbacks;
@@ -262,7 +261,6 @@ export function useWorkspaceTodayHubSwitch(
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       inboxYamlFrontmatterInnerRef,
       mirrorShadowActiveHub,
-      mirrorShadowActiveTab,
       mirrorShadowActiveWorkspaceTabs,
       mirrorShadowHomeSurface,
       syncWorkspaceModelForIncomingHub,
