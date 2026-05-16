@@ -28,10 +28,36 @@ jobs:
             build-mode: none
           - language: rust
             build-mode: none
+          - language: java-kotlin
+            build-mode: manual
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
+
+      - name: Setup Node (React Native Android / CodeQL)
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install npm dependencies
+        if: matrix.language == 'java-kotlin'
+        run: npm ci
+
+      - name: Setup Java
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        if: matrix.language == 'java-kotlin'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006'
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -39,6 +65,15 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           # queries: security-extended,security-and-quality
+
+      - name: Build Android (CodeQL trace)
+        if: matrix.language == 'java-kotlin'
+        working-directory: apps/mobile/android
+        env:
+          SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+        run: |
+          ./gradlew --no-daemon -Dorg.gradle.java.home="${JAVA_HOME}" \
+            assembleDebug -PreactNativeArchitectures=arm64-v8a
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
