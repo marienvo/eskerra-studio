@@ -120,8 +120,14 @@ export function sanitizeTodayHubWorkspacesWithStoredTabFilter(
     const tabRows = rows ?? [];
     const droppedEcho = dropHubTodayEchoRows(hubKey, tabRows);
     const builtTabs = tabsFromStored(droppedEcho);
-    let activeId = readActiveTabId(snap.activeEditorTabId);
-    activeId = ensureActiveTabId(builtTabs, activeId);
+    let activeId: string | null;
+    if (!Object.prototype.hasOwnProperty.call(snap, 'activeEditorTabId')) {
+      activeId = ensureActiveTabId(builtTabs, null);
+    } else if (snap.activeEditorTabId === null) {
+      activeId = null;
+    } else {
+      activeId = ensureActiveTabId(builtTabs, readActiveTabId(snap.activeEditorTabId));
+    }
     out[hubKey] = {
       ...snap,
       editorWorkspaceTabs: droppedEcho,

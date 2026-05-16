@@ -98,6 +98,48 @@ describe('sanitizeTodayHubWorkspacesWithStoredTabFilter', () => {
     expect(out![hubB]!.editorWorkspaceTabs).toEqual([]);
     expect(out![hubB]!.activeEditorTabId).toBeNull();
   });
+
+  it('keeps explicit Home (activeEditorTabId null) when tabs remain after filtering', () => {
+    const root = '/vault';
+    const filter = makeStoredTabFilter({
+      root,
+      knownNoteUris: new Set(['/vault/Inbox/keep.md']),
+    });
+    const hub = '/vault/A/Today.md';
+    const out = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: [
+            {id: 't1', entries: ['/vault/Inbox/keep.md'], index: 0},
+            {id: 't2', entries: ['/vault/Inbox/keep.md'], index: 0},
+          ],
+          activeEditorTabId: null,
+        },
+      },
+      filter,
+    );
+
+    expect(out![hub]!.editorWorkspaceTabs).toHaveLength(2);
+    expect(out![hub]!.activeEditorTabId).toBeNull();
+  });
+
+  it('defaults to first tab when activeEditorTabId is absent (legacy snapshots)', () => {
+    const filter = () => true;
+    const hub = '/vault/A/Today.md';
+    const out = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hub]: {
+          editorWorkspaceTabs: [
+            {id: 'a', entries: ['/vault/x.md'], index: 0},
+            {id: 'b', entries: ['/vault/y.md'], index: 0},
+          ],
+        },
+      },
+      filter,
+    );
+
+    expect(out![hub]!.activeEditorTabId).toBe('a');
+  });
 });
 
 describe('buildRestoredEditorWorkspace', () => {
