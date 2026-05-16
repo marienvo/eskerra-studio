@@ -15,7 +15,7 @@
     "apps/desktop/src/hooks/useMainWindowWorkspace.ts": 1751,
     "apps/desktop/src/hooks/useTodayHubsState.ts": 914,
     "apps/desktop/src/hooks/workspaceFsWatchReconcile.ts": 597,
-    "apps/desktop/src/hooks/workspaceLinkRouting.ts": 509,
+    "apps/desktop/src/hooks/workspaceLinkRouting.ts": 513,
     "apps/desktop/src/hooks/workspacePersistence.ts": 431,
     "apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts": 840,
     "apps/desktop/src/hooks/workspaceTabCommands.ts": 445,

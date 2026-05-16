@@ -174,6 +174,22 @@ function buildCanonicalInnerForOpen(options: {
   return `${targetText}|${parsed.displayText}`;
 }
 
+/**
+ * Given the original wiki link `inner` and the stem of the file that was just created (i.e. the
+ * sanitized disk stem without `.md`), returns the canonical inner to write back into the editor.
+ * Preserves display text after `|` and optional Inbox prefix.
+ * Returns `null` when the inner already matches the canonical form (no rewrite needed).
+ */
+export function buildWikiLinkInnerForCreatedStem(
+  inner: string,
+  createdStem: string,
+): string | null {
+  const parsed = splitWikiLinkInner(inner);
+  const hadInboxPrefix = hasInboxPrefixCaseInsensitive(parsed.targetText.trim());
+  const canonical = buildCanonicalInnerForOpen({parsed, canonicalStem: createdStem, hadInboxPrefix});
+  return canonical === inner.trim() ? null : canonical;
+}
+
 function buildSanitizedStemKey(rawStem: string): string | null {
   const sanitized = sanitizeInboxNoteStem(rawStem);
   if (!sanitized) {

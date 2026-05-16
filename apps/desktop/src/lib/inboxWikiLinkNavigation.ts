@@ -2,6 +2,7 @@ import {
   assertVaultMarkdownNoteUriForCrud,
   assertVaultTreeDirectoryUriForCrud,
   buildInboxMarkdownFromCompose,
+  buildWikiLinkInnerForCreatedStem,
   getInboxDirectoryUri,
   normalizeVaultBaseUri,
   resolveInboxWikiLinkTarget,
@@ -21,7 +22,7 @@ import {createVaultMarkdownNoteInDirectory} from './vaultBootstrap';
 
 export type InboxWikiLinkNavigationResult =
   | {kind: 'open'; uri: string; canonicalInner?: string}
-  | {kind: 'created'; uri: string}
+  | {kind: 'created'; uri: string; canonicalInner?: string}
   | {
       kind: 'ambiguous';
       targetStem: string;
@@ -91,7 +92,11 @@ export async function openOrCreateInboxWikiLinkTarget(options: {
     resolved.title,
     markdown,
   );
-  return {kind: 'created', uri: created.uri};
+  const createdStem = stemFromMarkdownFileName(created.name);
+  const canonicalInner = buildWikiLinkInnerForCreatedStem(inner, createdStem) ?? undefined;
+  return canonicalInner != null
+    ? {kind: 'created', uri: created.uri, canonicalInner}
+    : {kind: 'created', uri: created.uri};
 }
 
 /**
@@ -143,7 +148,7 @@ export function inboxWikiLinkTargetIsResolved(
 
 export type InboxRelativeMarkdownLinkNavigationResult =
   | {kind: 'open'; uri: string; canonicalHref?: string}
-  | {kind: 'created'; uri: string}
+  | {kind: 'created'; uri: string; canonicalHref?: string}
   | {kind: 'unsupported'}
   /** Resolved path is not on disk and parent uses tree-ignored segments (e.g. `_autosync-backup`). */
   | {kind: 'cannot_create_parent'; resolvedUri: string};
@@ -425,7 +430,15 @@ export async function openOrCreateVaultRelativeMarkdownLink(options: {
     stem,
     markdown,
   );
-  return {kind: 'created', uri: created.uri};
+  const createdFileName = created.name;
+  const hrefDir = href.includes('/')
+    ? href.slice(0, href.lastIndexOf('/') + 1)
+    : '';
+  const canonicalHref =
+    createdFileName !== fileName ? `${hrefDir}${createdFileName}` : undefined;
+  return canonicalHref != null
+    ? {kind: 'created', uri: created.uri, canonicalHref}
+    : {kind: 'created', uri: created.uri};
 }
 
 export function inboxRelativeMarkdownLinkHrefIsResolved(

@@ -293,6 +293,9 @@ export function useWorkspaceLinkRouting(args: {
           subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.uri, 'file');
           await refreshNotes(vaultRoot);
           setFsRefreshNonce(n => n + 1);
+          if (result.canonicalInner) {
+            replaceWikiLinkInnerAtTargetEditor(at, inner, result.canonicalInner);
+          }
         } else if (result.canonicalInner) {
           replaceWikiLinkInnerAtTargetEditor(at, inner, result.canonicalInner);
         }
@@ -423,11 +426,7 @@ export function useWorkspaceLinkRouting(args: {
           sourceMarkdownUriOrDir,
         });
         if (result.kind === 'open' || result.kind === 'created') {
-          if (result.kind === 'created') {
-            subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.uri, 'file');
-            await refreshNotes(vaultRoot);
-            setFsRefreshNonce(n => n + 1);
-          } else if (result.canonicalHref) {
+          if (result.canonicalHref) {
             const hubEd = todayHubCellEditorRef.current;
             const replacement = {
               at,
@@ -443,6 +442,11 @@ export function useWorkspaceLinkRouting(args: {
             } else {
               inboxEditorRef.current?.replaceMarkdownLinkHrefAt(replacement);
             }
+          }
+          if (result.kind === 'created') {
+            subtreeMarkdownCache.invalidateForMutation(vaultRoot, result.uri, 'file');
+            await refreshNotes(vaultRoot);
+            setFsRefreshNonce(n => n + 1);
           }
           await routeOpenedVaultLink(result.uri, {
             openInBackgroundTab,

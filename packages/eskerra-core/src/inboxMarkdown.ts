@@ -23,7 +23,7 @@ export function sanitizeInboxNoteStem(rawName: string): string | null {
     .filter(ch => ch >= ' ' && ch !== '\u007f')
     .join('');
   const normalized = withoutControlChars
-    .replace(/[/\\:*?"<>|]/g, '')
+    .replace(/[/\\:*?"<>|'`‘’“”]/g, '')
     .replace(/\s+/g, ' ')
     .replace(/^[. ]+|[. ]+$/g, '');
   return normalized === '' ? null : normalized;
