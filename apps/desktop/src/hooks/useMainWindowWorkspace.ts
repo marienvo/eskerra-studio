@@ -42,7 +42,6 @@ import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownIma
 import {
   createInboxMarkdownNote,
   deleteVaultMarkdownNote,
-  listInboxNotes,
   saveNoteMarkdown,
 } from '../lib/vaultBootstrap';
 import {
@@ -131,9 +130,6 @@ import {
   type ShellRestoreProjectionSyncArgs,
 } from './workspaceInboxShellRestoreBridge';
 import {
-  type LastPersisted,
-} from './workspaceFsWatchReconcile';
-import {
   computeEditorHistoryCanGoBack,
   computeEditorHistoryCanGoForward,
   deriveActiveTabHistorySnapshot,
@@ -163,6 +159,8 @@ import {useDiskConflictState} from './useDiskConflictState';
 import {useMergeViewState} from './useMergeViewState';
 import {useInboxEditorState} from './useInboxEditorState';
 import {useEditorTabsState} from './useEditorTabsState';
+import {useNotesListing} from './useNotesListing';
+import {useInboxBodyCache} from './useInboxBodyCache';
 import {
   runOpenMarkdownInEditorCommand,
   type OpenMarkdownInEditorOptions,
@@ -211,8 +209,6 @@ function normalizedVaultRootPath(vaultRoot: string): string {
 
 /** Debounce scan of the active note body for backlinks (full vault scan is too heavy per keystroke). */
 const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
-
-type NoteRow = {lastModified: number | null; name: string; uri: string};
 
 function assignLegacyHomeStatesByHub(
   ref: {current: Record<string, WorkspaceHomeState>},
@@ -318,7 +314,17 @@ export function useMainWindowWorkspace(options: {
     restoredInboxState,
     inboxRestoreEnabled,
   } = options;
-  const [notes, setNotes] = useState<NoteRow[]>([]);
+  const {
+    notes,
+    notesRef,
+    refreshNotes,
+    fsRefreshNonce,
+    setFsRefreshNonce,
+    podcastFsNonce,
+    setPodcastFsNonce,
+    vaultTreeSelectionClearNonce,
+    setVaultTreeSelectionClearNonce,
+  } = useNotesListing({fs});
   const {
     selectedUri,
     setSelectedUri,
@@ -353,7 +359,13 @@ export function useMainWindowWorkspace(options: {
     inboxEditorRef,
   });
   // showTodayHubCanvas derives from selection; see useMemo below.
-  const [inboxContentByUri, setInboxContentByUri] = useState<Record<string, string>>({});
+  const {
+    inboxContentByUri,
+    setInboxContentByUri,
+    inboxContentByUriRef,
+    lastPersistedRef,
+    lastPersistedExternalMutationSeqRef,
+  } = useInboxBodyCache();
   const [vaultMarkdownRefs, setVaultMarkdownRefs] = useState<VaultMarkdownRef[]>([]);
   /**
    * False while `vaultMarkdownRefs` for the current `{vaultRoot, fsRefreshNonce}` fetch has not
@@ -362,9 +374,6 @@ export function useMainWindowWorkspace(options: {
    * list during startup.
    */
   const [vaultMarkdownRefsReady, setVaultMarkdownRefsReady] = useState(false);
-  const [fsRefreshNonce, setFsRefreshNonce] = useState(0);
-  const [podcastFsNonce, setPodcastFsNonce] = useState(0);
-  const [vaultTreeSelectionClearNonce, setVaultTreeSelectionClearNonce] = useState(0);
   const [inboxShellRestored, setInboxShellRestored] = useState(!inboxRestoreEnabled);
   const [activeTodayHubUri, setActiveTodayHubUri] = useState<string | null>(
     null,
@@ -396,7 +405,6 @@ export function useMainWindowWorkspace(options: {
   );
 
   const subtreeMarkdownCache = useMemo(() => new SubtreeMarkdownPresenceCache(), []);
-  const inboxBodyPrefetchGenRef = useRef(0);
   const vaultRefsBuildGenRef = useRef(0);
   const vaultMarkdownRefsFetchKeyRef = useRef<{
     root: string | null;
@@ -405,8 +413,6 @@ export function useMainWindowWorkspace(options: {
   const vaultMarkdownRefsRef = useRef<VaultMarkdownRef[]>([]);
   const vaultRootRef = useRef<string | null>(null);
   const showTodayHubCanvasRef = useRef(false);
-  const lastPersistedRef = useRef<LastPersisted | null>(null);
-  const lastPersistedExternalMutationSeqRef = useRef(0);
   const todayHubBridgeRef = useRef<TodayHubWorkspaceBridge>(
     createIdleTodayHubWorkspaceBridge(),
   );
@@ -415,10 +421,8 @@ export function useMainWindowWorkspace(options: {
   const todayHubRowLastPersistedRef = useRef<Map<string, string>>(new Map());
   const todayHubSettingsRef = useRef<TodayHubSettings | null>(null);
   const submitNewEntryRef = useRef<() => Promise<void>>(async () => {});
-  const inboxContentByUriRef = useRef<Record<string, string>>({});
   const activeTodayHubUriRef = useRef<string | null>(null);
   const homeStatesByHubRef = useRef<Record<string, WorkspaceHomeState>>({});
-  const notesRef = useRef<NoteRow[]>([]);
   /** Invalidates in-flight `openMarkdownInEditor` work when a newer open supersedes it. */
   const openMarkdownGenerationRef = useRef(0);
   const flushInboxSaveForHydrateRef = useRef<() => Promise<void>>(async () => {});
@@ -427,18 +431,6 @@ export function useMainWindowWorkspace(options: {
   const clearBacklinkDiskBodyCacheForHydrateRef = useRef<() => void>(() => {});
   const clearDiskConflictUiForHydrateRef = useRef<() => void>(() => {});
   const clearMergeViewForOpenRef = useRef<() => void>(() => {});
-
-  const refreshNotes = useCallback(
-    async (root: string) => {
-      const gen = ++inboxBodyPrefetchGenRef.current;
-      const list = await listInboxNotes(root, fs);
-      if (gen !== inboxBodyPrefetchGenRef.current) {
-        return;
-      }
-      setNotes(list);
-    },
-    [fs],
-  );
 
   const {
     vaultRoot,
@@ -491,11 +483,6 @@ export function useMainWindowWorkspace(options: {
   useLayoutEffect(() => {
     vaultRootRef.current = vaultRoot;
   }, [vaultRoot]);
-
-  useLayoutEffect(() => {
-    inboxContentByUriRef.current = inboxContentByUri;
-  }, [inboxContentByUri]);
-
 
   useLayoutEffect(() => {
     activeTodayHubUriRef.current = activeTodayHubUri;
@@ -584,10 +571,6 @@ export function useMainWindowWorkspace(options: {
   useLayoutEffect(() => {
     clearBacklinkDiskBodyCacheForHydrateRef.current = clearBacklinkDiskBodyCache;
   }, [clearBacklinkDiskBodyCache]);
-
-  useLayoutEffect(() => {
-    notesRef.current = notes;
-  }, [notes]);
 
   const todayHubSelectorItems = useMemo(
     () => deriveTodayHubSelectorItems(vaultMarkdownRefs, notes),
