@@ -111,12 +111,10 @@ export function useThemePreference({
           return;
         }
         if (!cancelled) {
-          setR2Preference(fromR2 ?? DEFAULT_THEME_PREFERENCE);
+          setR2Preference(prev => (fromR2 != null ? fromR2 : prev));
         }
       } catch {
-        if (!cancelled) {
-          setR2Preference(DEFAULT_THEME_PREFERENCE);
-        }
+        // Keep last-known preference (including startup bootstrap) when remote read fails.
       }
       if (!cancelled) {
         setR2Loaded(true);

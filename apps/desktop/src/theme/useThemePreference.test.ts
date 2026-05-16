@@ -1,6 +1,6 @@
 import {act, renderHook, waitFor} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
-import type {EskerraSettings, VaultFilesystem} from '@eskerra/core';
+import type {EskerraSettings, ThemePreference, VaultFilesystem} from '@eskerra/core';
 import * as core from '@eskerra/core';
 
 import {writeVaultSettings} from '../lib/vaultBootstrap';
@@ -114,5 +114,47 @@ describe('useThemePreference', () => {
     expect(core.getR2ThemePreferenceObject).toHaveBeenCalled();
     expect(result.current.preference.themeId).toBe('eskerra-default');
     expect(result.current.preference.mode).toBe('dark');
+  });
+
+  it('R2 keeps initialPreference when remote preference is null', async () => {
+    vi.spyOn(core, 'getR2ThemePreferenceObject').mockResolvedValue(null);
+    const initial: ThemePreference = {themeId: 'ember', mode: 'light'};
+
+    const {result} = renderHook(() =>
+      useThemePreference({
+        vaultRoot: '/vault',
+        vaultSettings: r2Settings,
+        setVaultSettings: vi.fn(),
+        fs,
+        initialPreference: initial,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.preferenceLoaded).toBe(true);
+    });
+
+    expect(result.current.preference).toEqual(initial);
+  });
+
+  it('R2 keeps initialPreference when remote fetch fails', async () => {
+    vi.spyOn(core, 'getR2ThemePreferenceObject').mockRejectedValue(new Error('network'));
+    const initial: ThemePreference = {themeId: 'blossom', mode: 'auto'};
+
+    const {result} = renderHook(() =>
+      useThemePreference({
+        vaultRoot: '/vault',
+        vaultSettings: r2Settings,
+        setVaultSettings: vi.fn(),
+        fs,
+        initialPreference: initial,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.preferenceLoaded).toBe(true);
+    });
+
+    expect(result.current.preference).toEqual(initial);
   });
 });

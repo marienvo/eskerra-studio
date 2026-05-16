@@ -137,7 +137,17 @@ pub fn load_startup_theme<R: tauri::Runtime>(app: &tauri::App<R>) -> StartupThem
         return resolve_theme_for_preference(vault_root, preference, cached);
     }
 
-    cached.unwrap_or_else(default_startup_theme)
+    // R2 / migrated vaults may omit `themePreference` from shared settings; use last-known
+    // `startupTheme` from app storage so Rust can still resolve vault themes before the webview.
+    if let Some(cached_startup) = cached {
+        return resolve_theme_for_preference(
+            vault_root,
+            cached_startup.preference.clone(),
+            Some(cached_startup),
+        );
+    }
+
+    default_startup_theme()
 }
 
 fn resolve_theme_for_preference(
@@ -177,12 +187,57 @@ fn parse_cached_startup_theme(value: Option<&Value>) -> Option<StartupTheme> {
     let o = value?.as_object()?;
     let preference = parse_theme_preference(o.get("preference"))?;
     let resolved_mode = parse_resolved_mode(o.get("resolvedMode")?.as_str()?)?;
-    let theme = parse_theme_definition(o.get("theme")?, None).ok()?;
+    let theme = parse_cached_theme_definition(o.get("theme")?).ok()?;
     Some(StartupTheme {
         preference,
         resolved_mode,
         theme,
     })
+}
+
+/// Parses `startupTheme.theme` from app storage. Respects `source` / `fileName` (camelCase from TS)
+/// so vault themes are not mis-read as bundled (which would drop `fileName` and break React seeding).
+fn parse_cached_theme_definition(value: &Value) -> Result<ThemeDefinition, ()> {
+    let o = value.as_object().ok_or(())?;
+    let source = o
+        .get("source")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    let file_name_field = o
+        .get("fileName")
+        .or_else(|| o.get("file_name"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    let treat_as_vault = source == "vault" || (source.is_empty() && file_name_field.is_some());
+    if treat_as_vault {
+        let file_name = if let Some(f) = file_name_field {
+            f.to_string()
+        } else {
+            let id = o
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or(())?;
+            if !is_safe_theme_id(id) {
+                return Err(());
+            }
+            format!("{id}.json")
+        };
+        if !file_name.to_lowercase().ends_with(".json") {
+            return Err(());
+        }
+        let stem = file_name.strip_suffix(".json").ok_or(())?;
+        if !is_safe_theme_id(stem) {
+            return Err(());
+        }
+        return parse_theme_definition(value, Some(file_name));
+    }
+
+    parse_theme_definition(value, None)
 }
 
 fn parse_theme_preference(value: Option<&Value>) -> Option<ThemePreference> {
@@ -359,6 +414,8 @@ pub fn initialization_script(theme: &StartupTheme) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     #[test]
@@ -391,5 +448,55 @@ mod tests {
         let script = initialization_script(&default_startup_theme());
         assert!(script.contains("__ESKERRA_STARTUP_THEME__"));
         assert!(script.contains("startupThemeLock"));
+    }
+
+    #[test]
+    fn parses_cached_vault_startup_theme_retains_source_and_file_name() {
+        let raw = serde_json::json!({
+            "preference": {"themeId": "ocean-breeze", "mode": "dark"},
+            "resolvedMode": "dark",
+            "theme": {
+                "id": "ocean-breeze",
+                "name": "Ocean",
+                "source": "vault",
+                "fileName": "ocean-breeze.json",
+                "light": {"palette": ["#F5F5F5"]},
+                "dark": {"palette": ["#111111"]}
+            }
+        });
+        let parsed = parse_cached_startup_theme(Some(&raw)).expect("valid cached vault startup theme");
+        assert_eq!(parsed.theme.source, "vault");
+        assert_eq!(parsed.theme.file_name.as_deref(), Some("ocean-breeze.json"));
+        assert_eq!(parsed.theme.id, "ocean-breeze");
+    }
+
+    #[test]
+    fn resolve_theme_prefers_vault_file_when_cached_theme_payload_is_wrong() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        let theme_dir = vault.join(ESKERRA_DIR).join(THEMES_DIR);
+        fs::create_dir_all(&theme_dir).unwrap();
+        let body = serde_json::json!({
+            "name": "Custom",
+            "light": {"palette": ["#AABBCC"]},
+            "dark": {"palette": ["#112233"]}
+        })
+        .to_string();
+        fs::write(theme_dir.join("custom-v.json"), body).unwrap();
+
+        let pref = ThemePreference {
+            theme_id: "custom-v".into(),
+            mode: "dark".into(),
+        };
+        let corrupt_cached = StartupTheme {
+            preference: pref.clone(),
+            resolved_mode: "dark".into(),
+            theme: default_theme(),
+        };
+        let vault_str = vault.to_str().expect("utf8 temp path");
+        let out = resolve_theme_for_preference(vault_str, pref, Some(corrupt_cached));
+        assert_eq!(out.theme.id, "custom-v");
+        assert_eq!(out.theme.source, "vault");
+        assert_eq!(out.theme.name, "Custom");
     }
 }

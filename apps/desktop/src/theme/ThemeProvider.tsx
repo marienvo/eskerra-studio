@@ -62,7 +62,7 @@ export function ThemeProvider({
     fs,
     initialItems: startupVaultThemeItems,
   });
-  const {preference, setPreferenceLocal, persistPreference} = useThemePreference({
+  const {preference, preferenceLoaded, setPreferenceLocal, persistPreference} = useThemePreference({
     vaultRoot,
     vaultSettings,
     setVaultSettings,
@@ -118,12 +118,25 @@ export function ThemeProvider({
   }, [chromePalette, resolvedMode]);
 
   useEffect(() => {
+    if (activeTheme.id !== preference.themeId) {
+      return;
+    }
+    if (vaultRoot !== null && vaultSettings !== null && !preferenceLoaded) {
+      return;
+    }
     persistStartupThemeBootstrap({
       preference,
       resolvedMode,
       theme: activeTheme,
     }).catch(() => undefined);
-  }, [preference, resolvedMode, activeTheme]);
+  }, [
+    preference,
+    resolvedMode,
+    activeTheme,
+    vaultRoot,
+    vaultSettings,
+    preferenceLoaded,
+  ]);
 
   const value = useMemo((): ThemeShellContextValue => {
     return {

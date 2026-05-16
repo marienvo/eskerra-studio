@@ -71,5 +71,40 @@ describe('ThemeProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('active-theme-id').textContent).toBe('my-vault-theme');
     });
+
+    await waitFor(() => {
+      expect(startupMocks.persistStartupThemeBootstrap).toHaveBeenCalled();
+    });
+    const persistArg = startupMocks.persistStartupThemeBootstrap.mock.calls.at(-1)?.[0] as {
+      preference: {themeId: string};
+      theme: {id: string};
+    };
+    expect(persistArg.preference.themeId).toBe('my-vault-theme');
+    expect(persistArg.theme.id).toBe('my-vault-theme');
+  });
+
+  it('does not persist startup cache when active theme id mismatches preference', async () => {
+    startupMocks.readStartupThemeBootstrap.mockReturnValue({
+      preference: {themeId: 'unknown-other', mode: 'dark'},
+      resolvedMode: 'dark',
+      theme: vaultStartup.theme,
+    });
+    const setVaultSettings = vi.fn();
+
+    render(
+      <ThemeProvider
+        vaultRoot={null}
+        vaultSettings={null}
+        setVaultSettings={setVaultSettings}
+        fs={fs}>
+        <ActiveThemeIdProbe />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-theme-id').textContent).toBe('eskerra-default');
+    });
+
+    expect(startupMocks.persistStartupThemeBootstrap).not.toHaveBeenCalled();
   });
 });
