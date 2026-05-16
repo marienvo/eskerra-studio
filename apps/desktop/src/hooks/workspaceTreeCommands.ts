@@ -78,7 +78,7 @@ export type TreeCommandContext = {
   refs: TreeCommandRefs;
   setters: TreeCommandSetters;
   mirrorShadowHomeSurface: (reason: string) => void;
-  mirrorShadowActiveTab: (tabId: string | null, reason: string) => void;
+  mirrorShadowActiveTab: (tabId: string, reason: string) => void;
   removeHomeHistoryUris: (shouldRemove: (normalizedUri: string) => boolean) => void;
   markVaultWriteSettled: () => void;
   refreshNotes: (root: string) => Promise<void>;
