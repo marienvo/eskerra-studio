@@ -264,9 +264,12 @@ describe('workspaceTreeCommands', () => {
     expect(ctx.setters.setSelectedUri).toHaveBeenCalledWith(null);
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
     expect(ctx.refs.lastPersistedRef.current).toBe(null);
-    expect(ctx.openMarkdownInEditor).toHaveBeenCalledWith('/vault/Inbox/keep.md', {
-      skipHistory: true,
-    });
+    expect(ctx.refocusAfterActiveTabRemoved).toHaveBeenCalledWith(
+      '/vault/Inbox/Sub',
+      ctx.refs.editorWorkspaceTabsRef.current,
+      tabKeep.id,
+      {wasOnHomeNoActiveTab: false},
+    );
   });
 
   it('runRenameFolder returns early when vaultRoot is null', async () => {
