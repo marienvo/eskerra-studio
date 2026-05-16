@@ -115,8 +115,8 @@ android {
         applicationId "com.eskerra"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 220
-        versionName "0.45.0"
+        versionCode 221
+        versionName "0.45.1"
     }
     signingConfigs {
         debug {
