@@ -143,10 +143,6 @@ import {
   type ShellRestoreProjectionSyncArgs,
 } from './workspaceInboxShellRestoreBridge';
 import {
-  remapHomeStatesPrefixBridge,
-  removeHomeHistoryUrisBridge,
-} from './workspaceHomeHistoryShadowSync';
-import {
   type LastPersisted,
 } from './workspaceFsWatchReconcile';
 import {
@@ -486,42 +482,38 @@ export function useMainWindowWorkspace(options: {
     homeStatesByHubRef.current = homeStatesByHub;
   }, [homeStatesByHub]);
 
+  const projectHomeStatesFromModel = useCallback(
+    (nextModel: WorkspaceModel) => {
+      const next = workspaceHomeStatesFromWorkspaceModel(nextModel);
+      homeStatesByHubRef.current = next;
+      setHomeStatesByHub(next);
+    },
+    [],
+  );
+
   const remapHomeStatesPrefix = useCallback(
     (oldPrefix: string, newPrefix: string) => {
       if (oldPrefix === newPrefix) {
         return;
       }
-      remapHomeStatesPrefixBridge(
-        {
-          homeStatesByHubRef,
-          setHomeStatesByHub,
-        },
-        oldPrefix,
-        newPrefix,
-      );
-      dispatchWorkspaceActionSync(
+      const nextModel = dispatchWorkspaceActionSync(
         'remap vault uri prefix',
         m => remapPrefixAction(m, oldPrefix, newPrefix),
       );
+      projectHomeStatesFromModel(nextModel);
     },
-    [dispatchWorkspaceActionSync],
+    [dispatchWorkspaceActionSync, projectHomeStatesFromModel],
   );
 
   const removeHomeHistoryUris = useCallback(
     (shouldRemove: (normalizedUri: string) => boolean) => {
-      removeHomeHistoryUrisBridge(
-        {
-          homeStatesByHubRef,
-          setHomeStatesByHub,
-        },
-        shouldRemove,
-      );
-      dispatchWorkspaceActionSync(
+      const nextModel = dispatchWorkspaceActionSync(
         'remove uris',
         m => removeUrisAction(m, shouldRemove),
       );
+      projectHomeStatesFromModel(nextModel);
     },
-    [dispatchWorkspaceActionSync],
+    [dispatchWorkspaceActionSync, projectHomeStatesFromModel],
   );
 
   const setHomeStateForHub = useCallback(
@@ -1628,19 +1620,13 @@ export function useMainWindowWorkspace(options: {
   const syncWorkspaceModelRemoveOpenTabUri = useCallback(
     (markdownUri: string) => {
       const target = normalizeWorkspaceUri(markdownUri);
-      removeHomeHistoryUrisBridge(
-        {homeStatesByHubRef, setHomeStatesByHub},
-        u => u === target,
+      const nextModel = dispatchWorkspaceActionSync(
+        'vault watch removed open note',
+        m => removeUrisAction(m, u => u === target),
       );
-      dispatchWorkspaceActionSync('vault watch removed open note', m =>
-        removeUrisAction(m, u => u === target),
-      );
+      projectHomeStatesFromModel(nextModel);
     },
-    [
-      dispatchWorkspaceActionSync,
-      homeStatesByHubRef,
-      setHomeStatesByHub,
-    ],
+    [dispatchWorkspaceActionSync, projectHomeStatesFromModel],
   );
 
   useWorkspaceVaultWatchEffects({
