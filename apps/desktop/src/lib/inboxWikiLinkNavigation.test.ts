@@ -523,6 +523,30 @@ describe('openOrCreateVaultRelativeMarkdownLink', () => {
     expect(writes.some(w => w.uri === `${subdir}/Johns notes.md`)).toBe(true);
   });
 
+  it('returns canonicalHref preserving fragment and query when create sanitizes basename', async () => {
+    const subdir = `${vaultRoot}/Inbox/subdir`;
+    const {fs, writes} = createMemoryVaultFs([
+      [vaultRoot, 'dir'],
+      [`${vaultRoot}/Inbox`, 'dir'],
+      [subdir, 'dir'],
+      [`${vaultRoot}/Inbox/a.md`, '# A'],
+    ]);
+    const notes = [{name: 'a.md', uri: `${vaultRoot}/Inbox/a.md`}];
+    const result = await openOrCreateVaultRelativeMarkdownLink({
+      href: "subdir/John's notes.md?v=1#section",
+      notes,
+      vaultRoot,
+      fs,
+      sourceMarkdownUriOrDir: `${vaultRoot}/Inbox/a.md`,
+    });
+    expect(result).toEqual({
+      kind: 'created',
+      uri: `${subdir}/Johns notes.md`,
+      canonicalHref: 'subdir/Johns notes.md?v=1#section',
+    });
+    expect(writes.some(w => w.uri === `${subdir}/Johns notes.md`)).toBe(true);
+  });
+
   it('returns unsupported for https links', async () => {
     const {fs} = createMemoryVaultFs([
       [vaultRoot, 'dir'],

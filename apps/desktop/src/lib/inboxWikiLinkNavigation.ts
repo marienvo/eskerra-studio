@@ -8,6 +8,7 @@ import {
   resolveInboxWikiLinkTarget,
   resolveVaultRelativeMarkdownHref,
   stemFromMarkdownFileName,
+  stripMarkdownLinkHrefToPathPart,
   trimTrailingSlashes,
   vaultPathDirname,
   wikiLinkInnerBrowserOpenableHref,
@@ -431,11 +432,18 @@ export async function openOrCreateVaultRelativeMarkdownLink(options: {
     markdown,
   );
   const createdFileName = created.name;
-  const hrefDir = href.includes('/')
-    ? href.slice(0, href.lastIndexOf('/') + 1)
+  const trimmedHref = href.trim();
+  const pathPart = stripMarkdownLinkHrefToPathPart(href);
+  const hrefSuffix = trimmedHref.startsWith(pathPart)
+    ? trimmedHref.slice(pathPart.length)
+    : '';
+  const hrefDir = pathPart.includes('/')
+    ? pathPart.slice(0, pathPart.lastIndexOf('/') + 1)
     : '';
   const canonicalHref =
-    createdFileName !== fileName ? `${hrefDir}${createdFileName}` : undefined;
+    createdFileName !== fileName
+      ? `${hrefDir}${createdFileName}${hrefSuffix}`
+      : undefined;
   return canonicalHref != null
     ? {kind: 'created', uri: created.uri, canonicalHref}
     : {kind: 'created', uri: created.uri};
