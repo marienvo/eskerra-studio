@@ -2,10 +2,10 @@
  * Main-window vault workspace: orchestration hook (Tauri FS, editor tabs, Today hub, wiki rename).
  *
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
- * (`useTodayHubsState`, `useInboxShellRestore`, `workspaceComposeCommands`, `workspaceTabCommands`,
- * `workspaceOpenMarkdownCommand`, `workspaceTreeCommands`, `workspaceEditorHistoryNavigation`,
- * `workspaceFsWatchReconcile`, `useVaultBootstrap`, `useDiskConflictState`,
- * `useMergeViewState`, `useWorkspacePersistence`, `useInboxBodyCache`, `useNotesListing`).
+ * (`useTodayHubsState`, `workspaceComposeCommands`, `workspaceTabCommands`, `workspaceOpenMarkdownCommand`,
+ * `workspaceTreeCommands`, `workspaceEditorHistoryNavigation`, `workspaceFsWatchReconcile`, `useVaultBootstrap`,
+ * `useDiskConflictState`, `useMergeViewState`, `useWorkspacePersistence`, `useInboxBodyCache`, `useNotesListing`,
+ * `useInboxShellRestore`, `workspaceInboxShellRestoreBridge`, `workspaceShadowBridge`).
  *
  * Remaining split candidate: final orchestration cleanup.
  */
@@ -100,6 +100,7 @@ import {useInboxEditorState} from './useInboxEditorState';
 import {useEditorTabsState} from './useEditorTabsState';
 import {useNotesListing} from './useNotesListing';
 import {useInboxBodyCache} from './useInboxBodyCache';
+import {useInboxShellRestore} from './useInboxShellRestore';
 import {
   runOpenMarkdownInEditorCommand,
   type OpenMarkdownInEditorOptions,
@@ -111,7 +112,6 @@ import {
   runSubmitNewEntry,
 } from './workspaceComposeCommands';
 import {useTodayHubsState, type TodayHubOpenMarkdown} from './useTodayHubsState';
-import {useInboxShellRestore} from './useInboxShellRestore';
 import {
   createWorkspaceShadowMirrorCallbacks,
 } from './workspaceShadowBridge';

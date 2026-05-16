@@ -15,6 +15,7 @@ import {
   pickFinalActiveHub,
   resolveActiveHubAndTabsSource,
   restoredTodayHubWorkspaceUrisForRestore,
+  sanitizeTodayHubWorkspacesWithStoredTabFilter,
   type RestoredInboxState,
 } from './inboxShellRestoreHelpers';
 import {
@@ -24,25 +25,10 @@ import {
   runDeferredShellRestoreTabStateAndShadowSync,
   type ShellRestoreProjectionSyncArgs,
 } from './workspaceInboxShellRestoreBridge';
+import {replaceRuntimeActiveHub} from './workspaceTabCommands';
 
 function normalizedVaultRootPath(vaultRoot: string): string {
   return trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
-}
-
-function assignInboxShellRestored(
-  setInboxShellRestored: (next: boolean) => void,
-  next: boolean,
-): void {
-  setInboxShellRestored(next);
-}
-
-function replaceRuntimeActiveHub(
-  hubUri: string | null,
-  ref: MutableRefObject<string | null>,
-  setActiveTodayHubUri: Dispatch<SetStateAction<string | null>>,
-): void {
-  ref.current = hubUri;
-  setActiveTodayHubUri(hubUri);
 }
 
 export type UseInboxShellRestoreArgs = {
@@ -109,7 +95,7 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
   useEffect(() => {
     if (!inboxRestoreEnabled) {
       queueMicrotask(() => {
-        assignInboxShellRestored(setInboxShellRestored, true);
+        setInboxShellRestored(true);
       });
       inboxRestoreEnabledPrevRef.current = inboxRestoreEnabled;
       return;
@@ -222,6 +208,11 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
       });
       const knownNoteUris = new Set(notes.map(n => n.uri));
       const filter = makeStoredTabFilter({root, knownNoteUris});
+      const todayHubWorkspacesForPersistenceParse =
+        sanitizeTodayHubWorkspacesWithStoredTabFilter(
+          restoredInboxState.todayHubWorkspaces,
+          filter,
+        ) ?? null;
 
       const {resolvedActiveHub, chosenTabsSource, chosenActiveEditorTabId} =
         resolveActiveHubAndTabsSource({hubUris, restored: restoredInboxState, filter});
@@ -249,7 +240,7 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
         const homeHydrated = hydrateWorkspaceHomeStatesFromPersisted({
           hubUris,
           activeTodayHubUri: activeHubFinal,
-          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces as
+          todayHubWorkspaces: todayHubWorkspacesForPersistenceParse as
             | Record<string, unknown>
             | null
             | undefined,
@@ -260,19 +251,19 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
           setActiveTodayHubUri,
         );
         replaceHomeStatesByHub(homeHydrated);
-        assignInboxShellRestored(setInboxShellRestored, true);
+        setInboxShellRestored(true);
         shellRestoreProjection = {
           activeTodayHubUri: activeHubFinal,
           hubUris,
-          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces ?? null,
+          todayHubWorkspaces: todayHubWorkspacesForPersistenceParse,
           homeStatesByHub: homeHydrated,
         };
       } else if (vaultMarkdownRefs.length > 0) {
         replaceRuntimeActiveHub(null, activeTodayHubUriRef, setActiveTodayHubUri);
         mirrorShadowActiveHub(null, 'restore active hub');
-        assignInboxShellRestored(setInboxShellRestored, true);
+        setInboxShellRestored(true);
       } else {
-        assignInboxShellRestored(setInboxShellRestored, true);
+        setInboxShellRestored(true);
       }
 
       runDeferredShellRestoreTabStateAndShadowSync(
@@ -293,7 +284,7 @@ export function useInboxShellRestore(args: UseInboxShellRestoreArgs): void {
       return;
     }
     queueMicrotask(() => {
-      assignInboxShellRestored(setInboxShellRestored, true);
+      setInboxShellRestored(true);
     });
   }, [
     activeEditorTabIdRef,
