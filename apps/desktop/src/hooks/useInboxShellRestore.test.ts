@@ -184,7 +184,9 @@ describe('useInboxShellRestore', () => {
       expect.objectContaining({
         activeTodayHubUri: HUB,
         hubUris: expect.arrayContaining([HUB]),
-        todayHubWorkspaces: restoredInboxState.todayHubWorkspaces,
+        todayHubWorkspaces: {
+          [HUB]: {...snap, activeEditorTabId: null},
+        },
       }),
     );
     expect(selectHomeCurrentNote).toHaveBeenCalledWith(HUB);
