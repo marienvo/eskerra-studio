@@ -1300,8 +1300,9 @@ export function useMainWindowWorkspace(options: {
       closedNorm: string,
       nextTabs: readonly EditorWorkspaceTab[],
       nextActive: string | null,
+      options?: {wasOnHomeNoActiveTab?: boolean},
     ) => {
-      await runRefocusAfterActiveTabRemoved(tabCommandContext, closedNorm, nextTabs, nextActive);
+      await runRefocusAfterActiveTabRemoved(tabCommandContext, closedNorm, nextTabs, nextActive, options);
     },
     [tabCommandContext],
   );

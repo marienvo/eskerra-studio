@@ -155,9 +155,60 @@ describe('workspaceTreeCommands', () => {
       norm,
       ctx.refs.editorWorkspaceTabsRef.current,
       ctx.refs.activeEditorTabIdRef.current,
+      {wasOnHomeNoActiveTab: false},
     );
     expect(ctx.markVaultWriteSettled).toHaveBeenCalled();
     expect(ctx.refreshNotes).toHaveBeenCalledWith('/vault');
+  });
+
+  it('runDeleteNote from workspace home passes wasOnHomeNoActiveTab=true and preserves null active tab', async () => {
+    const tab = createEditorWorkspaceTab('/vault/Inbox/other.md');
+    const editorWorkspaceTabsRef = {current: [tab]};
+    const activeEditorTabIdRef = {current: null as string | null};
+    const selectedUriRef = {current: normalizeEditorDocUri('/vault/Inbox/a.md')};
+
+    const ctx = buildCtx({
+      refs: {
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef,
+        selectedUriRef,
+      },
+    });
+
+    await runDeleteNote(ctx, '/vault/Inbox/a.md');
+
+    expect(ctx.refs.activeEditorTabIdRef.current).toBeNull();
+    expect(ctx.refocusAfterActiveTabRemoved).toHaveBeenCalledWith(
+      normalizeEditorDocUri('/vault/Inbox/a.md'),
+      expect.any(Array),
+      null,
+      {wasOnHomeNoActiveTab: true},
+    );
+  });
+
+  it('runDeleteFolder from workspace home passes wasOnHomeNoActiveTab=true when clearsSelection', async () => {
+    const tabOther = createEditorWorkspaceTab('/vault/Inbox/other.md');
+    const editorWorkspaceTabsRef = {current: [tabOther]};
+    const activeEditorTabIdRef = {current: null as string | null};
+    const selectedUriRef = {current: normalizeEditorDocUri('/vault/Inbox/Sub/note.md')};
+
+    const ctx = buildCtx({
+      refs: {
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef,
+        selectedUriRef,
+      },
+    });
+
+    await runDeleteFolder(ctx, '/vault/Inbox/Sub');
+
+    expect(ctx.refs.activeEditorTabIdRef.current).toBeNull();
+    expect(ctx.refocusAfterActiveTabRemoved).toHaveBeenCalledWith(
+      '/vault/Inbox/Sub',
+      expect.any(Array),
+      null,
+      {wasOnHomeNoActiveTab: true},
+    );
   });
 
   it('runDeleteFolder clears inbox selection under the folder and opens next survivor', async () => {

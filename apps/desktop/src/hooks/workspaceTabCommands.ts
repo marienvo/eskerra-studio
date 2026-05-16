@@ -376,8 +376,18 @@ export async function runRefocusAfterActiveTabRemoved(
   closedNorm: string,
   nextTabs: readonly EditorWorkspaceTab[],
   nextActive: string | null,
+  options?: {wasOnHomeNoActiveTab?: boolean},
 ): Promise<void> {
   const {refs, callbacks} = ctx;
+  if (options?.wasOnHomeNoActiveTab) {
+    const shellHub = refs.activeTodayHubUriRef.current;
+    if (shellHub && shellHub !== closedNorm) {
+      await callbacks.selectHomeCurrentNote(shellHub);
+      return;
+    }
+    callbacks.clearInboxSelection();
+    return;
+  }
   const activeTab = nextActive ? findTabById(nextTabs, nextActive) : undefined;
   const nextAfterRemove =
     (activeTab ? tabCurrentUri(activeTab) : null) ?? firstSurvivorUriFromTabs(nextTabs);
