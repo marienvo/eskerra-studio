@@ -121,6 +121,7 @@ import {
   pickFinalActiveHub,
   resolveActiveHubAndTabsSource,
   restoredTodayHubWorkspaceUrisForRestore,
+  sanitizeTodayHubWorkspacesWithStoredTabFilter,
 } from './inboxShellRestoreHelpers';
 import {restoreShadowWorkspaceModelFromInboxState} from './workspaceShellRestoreModel';
 import {
@@ -2603,6 +2604,11 @@ export function useMainWindowWorkspace(options: {
       });
       const knownNoteUris = new Set(notes.map(n => n.uri));
       const filter = makeStoredTabFilter({root, knownNoteUris});
+      const todayHubWorkspacesForPersistenceParse =
+        sanitizeTodayHubWorkspacesWithStoredTabFilter(
+          restoredInboxState.todayHubWorkspaces,
+          filter,
+        ) ?? null;
 
       const {resolvedActiveHub, chosenTabsSource, chosenActiveEditorTabId} =
         resolveActiveHubAndTabsSource({hubUris, restored: restoredInboxState, filter});
@@ -2630,7 +2636,7 @@ export function useMainWindowWorkspace(options: {
         const homeHydrated = hydrateWorkspaceHomeStatesFromPersisted({
           hubUris,
           activeTodayHubUri: activeHubFinal,
-          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces as
+          todayHubWorkspaces: todayHubWorkspacesForPersistenceParse as
             | Record<string, unknown>
             | null
             | undefined,
@@ -2649,7 +2655,7 @@ export function useMainWindowWorkspace(options: {
         shellRestoreProjection = {
           activeTodayHubUri: activeHubFinal,
           hubUris,
-          todayHubWorkspaces: restoredInboxState.todayHubWorkspaces ?? null,
+          todayHubWorkspaces: todayHubWorkspacesForPersistenceParse,
           homeStatesByHub: homeHydrated,
         };
       } else if (vaultMarkdownRefs.length > 0) {

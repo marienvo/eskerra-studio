@@ -3,8 +3,10 @@ import {describe, expect, it} from 'vitest';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {
   buildRestoredEditorWorkspace,
+  makeStoredTabFilter,
   restoredTodayHubWorkspaceKeysForVault,
   restoredTodayHubWorkspaceUrisForRestore,
+  sanitizeTodayHubWorkspacesWithStoredTabFilter,
 } from './inboxShellRestoreHelpers';
 
 const emptySnap = {} as TodayHubWorkspaceSnapshot;
@@ -62,6 +64,39 @@ describe('restoredTodayHubWorkspaceUrisForRestore', () => {
         root,
       }),
     ).toEqual(['/vault/A/Today.md']);
+  });
+});
+
+describe('sanitizeTodayHubWorkspacesWithStoredTabFilter', () => {
+  it('strips invalid tab URIs from every hub snapshot and reclamps active tab id', () => {
+    const root = '/vault';
+    const filter = makeStoredTabFilter({
+      root,
+      knownNoteUris: new Set(['/vault/Inbox/keep.md']),
+    });
+    const hubA = '/vault/A/Today.md';
+    const hubB = '/vault/B/Today.md';
+    const out = sanitizeTodayHubWorkspacesWithStoredTabFilter(
+      {
+        [hubA]: {
+          editorWorkspaceTabs: [
+            {id: 'ok', entries: ['/vault/Inbox/keep.md'], index: 0},
+            {id: 'outside', entries: ['/other-vault/Inbox/x.md'], index: 0},
+          ],
+          activeEditorTabId: 'outside',
+        },
+        [hubB]: {
+          editorWorkspaceTabs: [{id: 'non-md', entries: ['/vault/Inbox/readme.txt'], index: 0}],
+          activeEditorTabId: 'non-md',
+        },
+      },
+      filter,
+    );
+
+    expect(out![hubA]!.editorWorkspaceTabs.map(t => t.id)).toEqual(['ok']);
+    expect(out![hubA]!.activeEditorTabId).toBe('ok');
+    expect(out![hubB]!.editorWorkspaceTabs).toEqual([]);
+    expect(out![hubB]!.activeEditorTabId).toBeNull();
   });
 });
 

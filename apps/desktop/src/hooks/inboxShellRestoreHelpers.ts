@@ -99,6 +99,38 @@ export function sanitizeStoredWorkspaceRows(
   return out;
 }
 
+/**
+ * Applies the same {@link makeStoredTabFilter} rules as the live editor restore path to every
+ * `todayHubWorkspaces` snapshot so inactive hubs cannot retain out-of-vault or invalid tab URIs
+ * when the shadow workspace model is parsed (later serialized on hub switch).
+ */
+export function sanitizeTodayHubWorkspacesWithStoredTabFilter(
+  workspaces: Record<string, TodayHubWorkspaceSnapshot> | null | undefined,
+  filter: (raw: string) => boolean,
+): Record<string, TodayHubWorkspaceSnapshot> | null | undefined {
+  if (workspaces == null) {
+    return workspaces;
+  }
+  const out: Record<string, TodayHubWorkspaceSnapshot> = {};
+  for (const [hubKey, snap] of Object.entries(workspaces)) {
+    if (snap == null || typeof snap !== 'object' || Array.isArray(snap)) {
+      continue;
+    }
+    const rows = sanitizeStoredWorkspaceRows(snap.editorWorkspaceTabs, filter);
+    const tabRows = rows ?? [];
+    const droppedEcho = dropHubTodayEchoRows(hubKey, tabRows);
+    const builtTabs = tabsFromStored(droppedEcho);
+    let activeId = readActiveTabId(snap.activeEditorTabId);
+    activeId = ensureActiveTabId(builtTabs, activeId);
+    out[hubKey] = {
+      ...snap,
+      editorWorkspaceTabs: droppedEcho,
+      activeEditorTabId: builtTabs.length === 0 ? null : activeId,
+    };
+  }
+  return out;
+}
+
 function dropHubTodayEchoRows(
   hubUri: string,
   rows: readonly StoredWorkspaceRow[],

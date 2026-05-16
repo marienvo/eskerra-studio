@@ -3,9 +3,11 @@
  *
  * Replaces the legacy `mergeStoredHubWorkspaces` + `projectWorkspaceRuntimeToModel` route:
  * `parseWorkspaceModelFromPersistence` is the single canonical parser for persisted
- * `todayHubWorkspaces` (handles URI normalization, hub-echo row dropping, and per-hub
- * `homeHistory` parsing). The active hub's tabs/active surface are then overridden from the
- * live editor tab strip, because that strip is the source of truth at restore time.
+ * `todayHubWorkspaces` (handles URI key normalization, hub-echo row dropping, and per-hub
+ * `homeHistory` parsing). The shell-restore effect applies `sanitizeTodayHubWorkspacesWithStoredTabFilter`
+ * before this path so inactive hubs match the same vault markdown tab rules as the live strip.
+ * The active hub's tabs/active surface are then overridden from the live editor tab strip, because
+ * that strip is the source of truth at restore time.
  */
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
