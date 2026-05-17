@@ -406,9 +406,19 @@ function localDateKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function markdownLink(label: string, url: string): string {
-  const safeLabel = label.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-  return `[${safeLabel}](<${url}>)`;
+function escapeMarkdownAngleBracketUrl(url: string): string {
+  // `[label](<url>)` treats `>` as the destination terminator; encode `<`/`>` so
+  // odd RSS values cannot break the link or the rest of the line.
+  return url.replace(/</g, '%3C').replace(/>/g, '%3E');
+}
+
+export function markdownLink(label: string, url: string): string {
+  const safeLabel = label
+    .replace(/\\/g, '\\\\')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]');
+  const safeUrl = escapeMarkdownAngleBracketUrl(url);
+  return `[${safeLabel}](<${safeUrl}>)`;
 }
 
 function renderEpisodeBullet(ep: PodcastRssSyncEpisode): string {
