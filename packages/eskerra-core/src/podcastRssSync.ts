@@ -407,7 +407,10 @@ function localDateKey(d: Date): string {
 }
 
 function markdownLink(label: string, url: string): string {
-  const safeLabel = label.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+  const safeLabel = label
+    .replace(/\\/g, '\\\\')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]');
   return `[${safeLabel}](<${url}>)`;
 }
 
