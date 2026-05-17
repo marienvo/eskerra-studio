@@ -49,6 +49,13 @@
   "overrides": {
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "vite": "^8.0.5",
+    "@babel/plugin-transform-modules-systemjs": "^7.29.4",
+    "lodash": "^4.18.0",
+    "minimatch": "^10.2.4",
+    "eslint-plugin-sonarjs": {
+      "minimatch": "^10.2.4"
+    },
     "fast-xml-builder": "^1.2.0",
     "patch-package": {
       "find-yarn-workspace-root": {
