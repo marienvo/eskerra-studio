@@ -11,7 +11,7 @@ import {
 } from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
-import {cleanNoteMarkdownBody} from '../lib/cleanNoteMarkdown';
+import {cleanNoteMarkdownBody} from '../lib/markdown/cleanNote';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownImages';
 import {createInboxMarkdownNote} from '../lib/vaultBootstrap';

@@ -8,7 +8,7 @@ import {
   cleanNoteMarkdownBody,
   cleanPastedMarkdownFragment,
   resolveCleanNoteDefaults,
-} from '../cleanNoteMarkdown';
+} from '..';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

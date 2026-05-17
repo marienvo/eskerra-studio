@@ -26,7 +26,7 @@ import {
 import {MIDDLE_CLICK_BLOCK_PASTE_WINDOW_MS} from '../../hooks/middleClickPasteBlock';
 import {clipboardDataProbablyHasVaultImage} from '../../lib/clipboard/clipboardImageFiles';
 import {formatVaultImageMarkdownForInsert} from '../../lib/clipboard/formatVaultImageMarkdown';
-import {cleanPastedMarkdownFragment} from '../../lib/cleanNoteMarkdown';
+import {cleanPastedMarkdownFragment} from '../../lib/markdown/cleanNote';
 import {tryClipboardHtmlToMarkdownInsert} from '../../lib/clipboard/htmlClipboardToMarkdown';
 import type {NoteInboxAttachmentHost} from '../../lib/noteInboxAttachmentHost';
 import {isActivatableRelativeMarkdownHref} from './markdownActivatableRelativeHref';
