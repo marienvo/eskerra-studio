@@ -47,8 +47,7 @@ function assignLegacyEditorTabsFromTabHistoryModel(args: {
 
   const nextTabs = derivedMatchesLegacy ? derived : args.nextTabsLegacy;
   if (!derivedMatchesLegacy && derived != null) {
-    const warn =
-      typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+    const warn = import.meta.env.DEV;
     if (warn) {
       console.warn(args.mismatchWarnMessage, {legacySig, derivedSig});
     }

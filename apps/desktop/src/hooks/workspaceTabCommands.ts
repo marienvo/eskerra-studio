@@ -235,7 +235,7 @@ export function runCloseEditorTab(ctx: TabCommandContext, tabId: string): void {
       'ids',
     );
     if (tabStripMismatch?.kind === 'ids') {
-      const warn = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+      const warn = import.meta.env.DEV;
       if (warn) {
         const {legacyIds, derivedIds} = tabStripMismatch;
         console.warn(
