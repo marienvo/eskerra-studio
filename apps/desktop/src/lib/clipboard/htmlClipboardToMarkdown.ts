@@ -1,4 +1,5 @@
 import TurndownService from 'turndown';
+import DOMPurify from 'dompurify';
 import {
   highlightedCodeBlock,
   tables,
@@ -116,6 +117,10 @@ function plainIsSinglePasteAsLinkUrl(plain: string): boolean {
   return /^(https?:\/\/|mailto:)\S+$/i.test(t);
 }
 
+function sanitizeClipboardHtml(html: string): string {
+  return DOMPurify.sanitize(html, {USE_PROFILES: {html: true}});
+}
+
 /**
  * Let CodeMirror `pasteURLAsLink` handle a lone URL when HTML is only a wrapper
  * around the same href (common browser / Office fragments).
@@ -127,10 +132,11 @@ export function isHtmlWrapperForPasteUrlAsLink(
   if (!plainIsSinglePasteAsLinkUrl(plain)) {
     return false;
   }
+  const safeHtml = sanitizeClipboardHtml(html);
   const t = plain.trim();
   let doc: Document;
   try {
-    doc = new DOMParser().parseFromString(html, 'text/html');
+    doc = new DOMParser().parseFromString(safeHtml, 'text/html');
   } catch {
     return false;
   }
@@ -216,16 +222,17 @@ export function tryClipboardHtmlToMarkdownInsert(
   if (h === '' || h.length > CLIPBOARD_HTML_MAX_CHARS) {
     return null;
   }
-  if (isHtmlWrapperForPasteUrlAsLink(html, plain)) {
+  const safeHtml = sanitizeClipboardHtml(html);
+  if (isHtmlWrapperForPasteUrlAsLink(safeHtml, plain)) {
     return null;
   }
-  if (!clipboardHtmlLooksStructured(html)) {
+  if (!clipboardHtmlLooksStructured(safeHtml)) {
     return null;
   }
 
   let md: string;
   try {
-    md = clipboardHtmlToMarkdown(html);
+    md = clipboardHtmlToMarkdown(safeHtml);
   } catch {
     return null;
   }
