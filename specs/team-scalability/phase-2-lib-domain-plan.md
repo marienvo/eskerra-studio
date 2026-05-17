@@ -268,8 +268,8 @@ Likely files:
 - `buildMarkdownLineDiff.test.ts`
 - `lineLcs.ts`
 - `lineLcs.test.ts`
-- `cleanNoteMarkdown.ts`
-- `__tests__/cleanNoteMarkdown.test.ts`
+- `markdown/cleanNote/index.ts`
+- `markdown/cleanNote/__tests__/*.test.ts`
 - `parseLoneLinkLine.ts`
 - `parseLoneLinkLine.test.ts`
 - `linkRichPreviewCache.ts`
@@ -287,7 +287,7 @@ Likely public boundary exports:
 - Document history helpers.
 - Markdown normalization/diff helpers.
 
-Tests that move with files: all listed tests, including the current `__tests__/cleanNoteMarkdown.test.ts` if `cleanNoteMarkdown.ts` moves.
+Tests that move with files: all listed tests, including the `markdown/cleanNote/__tests__` suite.
 
 Import-risk level: high for tab/history files because `editorWorkspaceTabs` and `editorDocumentHistory` have high fan-in; medium for pure Markdown diff/clean helpers.
 
