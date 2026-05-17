@@ -3,7 +3,7 @@ import {cleanup} from '@testing-library/react';
 import {afterEach, beforeEach, vi} from 'vitest';
 
 import {__resetForTests as resetArtworkCacheDesktop} from './src/lib/podcasts/artworkCacheDesktop';
-import {__resetForTests as resetCleanNoteMarkdown} from './src/lib/cleanNoteMarkdown';
+import {__resetForTests as resetCleanNoteMarkdown} from './src/lib/markdown/cleanNote';
 import {__resetForTests as resetEditorWorkspaceTabs} from './src/lib/editorWorkspaceTabs';
 import {__resetForTests as resetHtmlClipboardToMarkdown} from './src/lib/clipboard/htmlClipboardToMarkdown';
 import {__resetForTests as resetTableShellStaticPreviewStore} from './src/editor/noteEditor/eskerraTableV1/tableShellStaticPreviewStore';

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The desktop **Clean this note** action normalizes the **body** of the open vault markdown note (YAML frontmatter is unchanged). It ports the markdown phase from the legacy processors script (`processMarkDownContent`), exposed as `cleanNoteMarkdownBody` in `apps/desktop/src/lib/cleanNoteMarkdown.ts`.
+The desktop **Clean this note** action normalizes the **body** of the open vault markdown note (YAML frontmatter is unchanged). It ports the markdown phase from the legacy processors script (`processMarkDownContent`), exposed as `cleanNoteMarkdownBody` in `apps/desktop/src/lib/markdown/cleanNote`.
 
 ## User entrypoints
 
@@ -69,6 +69,6 @@ Writes `apps/desktop/src/lib/emojiVariationBases.generated.ts`.
 
 ## Tests
 
-- `apps/desktop/src/lib/__tests__/cleanNoteMarkdown.test.ts` — ported unit and golden coverage.
+- `apps/desktop/src/lib/markdown/cleanNote/__tests__/*.test.ts` — unit and golden coverage.
 - `apps/desktop/src/lib/desktopShortcutLabels.test.ts` — shortcut label for the menu.
 - `apps/desktop/src/lib/todayHub/__tests__/cleanTodayHubRowColumns.test.ts` — merge helper for per-column hub clean (delimiter integrity, identity clean).

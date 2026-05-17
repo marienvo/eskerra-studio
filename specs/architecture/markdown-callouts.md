@@ -29,7 +29,7 @@ Parity with other cross-platform markdown behavior is summarized in [`desktop-mo
 
 ## Clean / normalize pipeline
 
-**“Clean this note”** already preserves `> … [![…]` markers through remark via token substitution — see [`apps/desktop/src/lib/cleanNoteMarkdown.ts`](../../apps/desktop/src/lib/cleanNoteMarkdown.ts) and [`clean-note-markdown.md`](clean-note-markdown.md). Callout rendering does **not** change source text.
+**“Clean this note”** already preserves `> … [![…]` markers through remark via token substitution — see [`apps/desktop/src/lib/markdown/cleanNote`](../../apps/desktop/src/lib/markdown/cleanNote/index.ts) and [`clean-note-markdown.md`](clean-note-markdown.md). Callout rendering does **not** change source text.
 
 ## Out of scope (v1)
 
