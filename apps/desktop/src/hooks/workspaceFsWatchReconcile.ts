@@ -4,6 +4,10 @@
  * Ownership: pure-ish side-effect helpers driven by refs/setters from
  * `useMainWindowWorkspace`; keep vault-watch disk/cache/tab logic here so the hook
  * stays an orchestration shell.
+ *
+ * Sub-modules:
+ *  - {@link workspaceFsWatchDiskConflict} — reload/merge/conflict resolution for the active tab.
+ *  - {@link workspaceFsWatchReconcileTodayHub} — Today Hub week-row disk/cache alignment.
  */
 
 import type {
@@ -26,15 +30,7 @@ import {
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-import {
-  enumerateTodayHubWeekStarts,
-  todayHubRowUri,
-  type TodayHubSettings,
-  type TodayHubWorkspaceBridge,
-} from '../lib/todayHub';
-import {vaultUriParentDirectory} from '../lib/vaultUriPaths';
 import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
-import {tryMergeThreeWayVaultMarkdown} from '../lib/vaultMarkdownThreeWayMerge';
 import {
   clearInboxYamlFrontmatterEditorRefs,
   inboxEditorSliceToFullMarkdown,
@@ -42,11 +38,22 @@ import {
 import {
   classifyNoteDiskReconcile,
   fsChangePathsMayAffectUri,
-  mergeInboxNoteBodyIntoCache,
   normalizeVaultMarkdownDiskRead,
   removeInboxNoteBodyFromCache,
 } from './inboxNoteBodyCache';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
+import {
+  applyReloadFromDiskForFsWatch,
+  clearDiskConflictRefsForMatchingUri,
+  clearSoftDiskConflictRefIfUriMatches,
+  mergeBackgroundTabCacheIfDiskChanged,
+  reconcileDiskConflictKindForSelectedTab,
+} from './workspaceFsWatchDiskConflict';
+import {reconcileTodayHubWeekRowsAfterVaultFsChange} from './workspaceFsWatchReconcileTodayHub';
+
+// Re-exported for callers that import these names from this module.
+export {fingerprintUtf16ForDebug} from './workspaceFsWatchDiskConflict';
+export type {ReconcileFsTodayHubEnv} from './workspaceFsWatchReconcileTodayHub';
 
 export type LastPersisted = {uri: string; markdown: string};
 
@@ -54,20 +61,6 @@ export type DiskConflictState = {uri: string; diskMarkdown: string};
 
 /** Non-blocking: disk diverged while editing; autosave may continue until user opens full resolve. */
 export type DiskConflictSoftState = {uri: string; diskMarkdown: string};
-
-/** Skip showing an immediate blocking disk conflict if the user just edited; one deferred re-check follows. */
-const DISK_CONFLICT_RECENCY_MS = 2000;
-const DISK_CONFLICT_DEFER_MS = 600;
-
-/** Small stable fingerprint for debug logs (not crypto). */
-export function fingerprintUtf16ForDebug(text: string): string {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i += 1) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(16);
-}
 
 /**
  * Open-tab inbox reconcile after vault FS events: tabs, cache, editor, autosave, disk conflicts.
@@ -125,13 +118,6 @@ export type ReconcileFsOpenMarkdownEnv = {
   syncWorkspaceModelRemoveOpenTabUri?: (normalizedMarkdownUri: string) => void;
 };
 
-/** Today hub row disk/cache alignment; only used after open-tab reconcile in the same FS batch. */
-export type ReconcileFsTodayHubEnv = {
-  todayHubRowLastPersistedRef: MutableRefObject<Map<string, string>>;
-  todayHubSettingsRef: MutableRefObject<TodayHubSettings | null>;
-  todayHubBridgeRef: MutableRefObject<TodayHubWorkspaceBridge>;
-};
-
 function normalizeVaultFsWatchRawPaths(rawPaths: string[]): string[] {
   return rawPaths.map(p => p.trim().replace(/\\/g, '/')).filter(Boolean);
 }
@@ -159,49 +145,6 @@ async function readVaultMarkdownUtf8Normalized(
   }
 }
 
-function mergeInboxCacheWithDiskBodyForUri(
-  open: ReconcileFsOpenMarkdownEnv,
-  normTab: string,
-  diskBody: string,
-): void {
-  const nextCache = mergeInboxNoteBodyIntoCache(
-    open.inboxContentByUriRef.current,
-    normTab,
-    diskBody,
-  );
-  if (!nextCache) {
-    return;
-  }
-  open.inboxContentByUriRef.current = nextCache;
-  open.setInboxContentByUri(prev =>
-    mergeInboxNoteBodyIntoCache(prev, normTab, diskBody) ?? prev,
-  );
-}
-
-function clearDiskConflictRefsForMatchingUri(
-  open: ReconcileFsOpenMarkdownEnv,
-  normTab: string,
-): void {
-  if (open.diskConflictRef.current?.uri === normTab) {
-    open.setDiskConflict(null);
-    open.diskConflictRef.current = null;
-  }
-  if (open.diskConflictSoftRef.current?.uri === normTab) {
-    open.setDiskConflictSoft(null);
-    open.diskConflictSoftRef.current = null;
-  }
-}
-
-function clearSoftDiskConflictRefIfUriMatches(
-  open: ReconcileFsOpenMarkdownEnv,
-  normTab: string,
-): void {
-  if (open.diskConflictSoftRef.current?.uri === normTab) {
-    open.setDiskConflictSoft(null);
-    open.diskConflictSoftRef.current = null;
-  }
-}
-
 export async function applyExternalOpenNoteDeletedForFsWatch(
   open: ReconcileFsOpenMarkdownEnv,
   normTab: string,
@@ -211,10 +154,7 @@ export async function applyExternalOpenNoteDeletedForFsWatch(
     open.editorWorkspaceTabsRef.current,
     u => u === normTab,
   );
-  const nextActive = ensureActiveTabId(
-    nextTabs,
-    open.activeEditorTabIdRef.current,
-  );
+  const nextActive = ensureActiveTabId(nextTabs, open.activeEditorTabIdRef.current);
   open.editorWorkspaceTabsRef.current = nextTabs;
   open.setEditorWorkspaceTabs(nextTabs);
   open.activeEditorTabIdRef.current = nextActive;
@@ -223,13 +163,9 @@ export async function applyExternalOpenNoteDeletedForFsWatch(
   open.syncWorkspaceModelRemoveOpenTabUri?.(normTab);
 
   clearDiskConflictRefsForMatchingUri(open, normTab);
-
   open.editorShellScrollByUriRef.current.delete(normTab);
 
-  const cacheNext = removeInboxNoteBodyFromCache(
-    open.inboxContentByUriRef.current,
-    normTab,
-  );
+  const cacheNext = removeInboxNoteBodyFromCache(open.inboxContentByUriRef.current, normTab);
   if (cacheNext) {
     open.inboxContentByUriRef.current = cacheNext;
     open.setInboxContentByUri(cacheNext);
@@ -239,12 +175,9 @@ export async function applyExternalOpenNoteDeletedForFsWatch(
     return;
   }
 
-  const activeTab = nextActive
-    ? findTabById(nextTabs, nextActive)
-    : undefined;
+  const activeTab = nextActive ? findTabById(nextTabs, nextActive) : undefined;
   const nextAfterRemove =
-    (activeTab ? tabCurrentUri(activeTab) : null)
-    ?? firstSurvivorUriFromTabs(nextTabs);
+    (activeTab ? tabCurrentUri(activeTab) : null) ?? firstSurvivorUriFromTabs(nextTabs);
 
   if (nextAfterRemove) {
     await open.openMarkdownInEditor(nextAfterRemove, {skipHistory: true});
@@ -264,137 +197,6 @@ export async function applyExternalOpenNoteDeletedForFsWatch(
     open.setEditorBody('');
     open.setInboxEditorResetNonce(n => n + 1);
   }
-}
-
-async function mergeBackgroundTabCacheIfDiskChanged(
-  open: ReconcileFsOpenMarkdownEnv,
-  normTab: string,
-  diskBody: string,
-): Promise<void> {
-  const cached = open.inboxContentByUriRef.current[normTab];
-  if (cached === diskBody) {
-    return;
-  }
-  mergeInboxCacheWithDiskBodyForUri(open, normTab, diskBody);
-}
-
-async function applyReloadFromDiskForFsWatch(
-  open: ReconcileFsOpenMarkdownEnv,
-  normTab: string,
-  diskBody: string,
-): Promise<void> {
-  open.autosaveSchedulerRef.current.cancel();
-  open.loadFullMarkdownIntoInboxEditor(diskBody, normTab, 'preserve');
-  open.scheduleBacklinksDeferOneFrameAfterLoad();
-  open.writeLastPersistedSnapshotWithoutSeqBump({uri: normTab, markdown: diskBody});
-  open.bumpLastPersistedExternalMutationSeq();
-  mergeInboxCacheWithDiskBodyForUri(open, normTab, diskBody);
-  clearDiskConflictRefsForMatchingUri(open, normTab);
-}
-
-function tryScheduleDiskConflictRecencyDefer(
-  open: ReconcileFsOpenMarkdownEnv,
-  normTab: string,
-  rerunForTab: (tab: string) => void,
-): boolean {
-  const skipRecency = open.skipRecencyDeferForUriRef.current.has(normTab);
-  if (skipRecency) {
-    open.skipRecencyDeferForUriRef.current.delete(normTab);
-    return false;
-  }
-  if (Date.now() - open.lastInboxEditorActivityAtRef.current >= DISK_CONFLICT_RECENCY_MS) {
-    return false;
-  }
-  if (open.diskConflictDeferTimerRef.current != null) {
-    window.clearTimeout(open.diskConflictDeferTimerRef.current);
-  }
-  open.diskConflictDeferTimerRef.current = window.setTimeout(() => {
-    open.diskConflictDeferTimerRef.current = null;
-    open.skipRecencyDeferForUriRef.current.add(normTab);
-    if (
-      open.cancelled()
-      || open.selectedUriRef.current !== normTab
-      || open.composingNewEntryRef.current
-    ) {
-      open.skipRecencyDeferForUriRef.current.delete(normTab);
-      return;
-    }
-    rerunForTab(normTab);
-  }, DISK_CONFLICT_DEFER_MS);
-  return true;
-}
-
-async function reconcileDiskConflictAfterMergeFailed(
-  open: ReconcileFsOpenMarkdownEnv,
-  normTab: string,
-  diskBody: string,
-  local: string,
-  lp: LastPersisted | null,
-  rerunForTab: (tab: string) => void,
-): Promise<void> {
-  if (tryScheduleDiskConflictRecencyDefer(open, normTab, rerunForTab)) {
-    return;
-  }
-
-  const soft: DiskConflictSoftState = {uri: normTab, diskMarkdown: diskBody};
-  console.debug('[disk-conflict-soft]', {
-    uri: normTab,
-    diskLen: diskBody.length,
-    localLen: local.length,
-    lastPersistedLen: lp?.markdown.length ?? 0,
-    diskFp: fingerprintUtf16ForDebug(diskBody),
-    localFp: fingerprintUtf16ForDebug(local),
-    persistedFp: lp ? fingerprintUtf16ForDebug(lp.markdown) : null,
-  });
-  open.setDiskConflict(null);
-  open.diskConflictRef.current = null;
-  open.setDiskConflictSoft(soft);
-  open.diskConflictSoftRef.current = soft;
-}
-
-async function reconcileDiskConflictKindForSelectedTab(
-  open: ReconcileFsOpenMarkdownEnv,
-  args: {
-    normTab: string;
-    diskBody: string;
-    local: string;
-    lp: LastPersisted | null;
-  },
-  rerunForTab: (tab: string) => void,
-): Promise<void> {
-  const {normTab, diskBody, local, lp} = args;
-  open.autosaveSchedulerRef.current.cancel();
-
-  if (lp != null && normalizeEditorDocUri(lp.uri) === normTab) {
-    const merged = tryMergeThreeWayVaultMarkdown(
-      lp.markdown,
-      local,
-      diskBody,
-    );
-    if (merged.ok) {
-      const mergedCanon = normalizeVaultMarkdownDiskRead(merged.merged);
-      open.loadFullMarkdownIntoInboxEditor(mergedCanon, normTab, 'preserve');
-      open.scheduleBacklinksDeferOneFrameAfterLoad();
-      open.writeLastPersistedSnapshotWithoutSeqBump({uri: normTab, markdown: mergedCanon});
-      open.bumpLastPersistedExternalMutationSeq();
-      mergeInboxCacheWithDiskBodyForUri(open, normTab, mergedCanon);
-      clearDiskConflictRefsForMatchingUri(open, normTab);
-      console.debug('[disk-merge]', {
-        uri: normTab,
-        mergedLen: mergedCanon.length,
-      });
-      return;
-    }
-  }
-
-  await reconcileDiskConflictAfterMergeFailed(
-    open,
-    normTab,
-    diskBody,
-    local,
-    lp,
-    rerunForTab,
-  );
 }
 
 async function reconcileOneOpenMarkdownTabAfterDiskRead(
@@ -434,85 +236,7 @@ async function reconcileOneOpenMarkdownTabAfterDiskRead(
     return;
   }
 
-  await reconcileDiskConflictKindForSelectedTab(
-    open,
-    {normTab, diskBody, local, lp},
-    rerunForTab,
-  );
-}
-
-async function syncTodayHubWeekRowFromDiskIfNeeded(
-  open: ReconcileFsOpenMarkdownEnv,
-  today: ReconcileFsTodayHubEnv,
-  rowUri: string,
-): Promise<void> {
-  const rowExists = await pathExistsForVaultWatch(open.fs, rowUri);
-  if (rowExists === null) {
-    return;
-  }
-  if (!rowExists) {
-    today.todayHubRowLastPersistedRef.current.delete(rowUri);
-    const rm = removeInboxNoteBodyFromCache(
-      open.inboxContentByUriRef.current,
-      rowUri,
-    );
-    if (rm) {
-      open.inboxContentByUriRef.current = rm;
-      open.setInboxContentByUri(rm);
-    }
-    return;
-  }
-  const hubDiskBody = await readVaultMarkdownUtf8Normalized(open.fs, rowUri);
-  if (hubDiskBody === undefined) {
-    return;
-  }
-  const liveUri = today.todayHubBridgeRef.current.getLiveRowUri();
-  if (liveUri === rowUri) {
-    return;
-  }
-  const cached = open.inboxContentByUriRef.current[rowUri];
-  if (cached === hubDiskBody) {
-    today.todayHubRowLastPersistedRef.current.set(rowUri, hubDiskBody);
-    return;
-  }
-  today.todayHubRowLastPersistedRef.current.set(rowUri, hubDiskBody);
-  const nextHubCache = mergeInboxNoteBodyIntoCache(
-    open.inboxContentByUriRef.current,
-    rowUri,
-    hubDiskBody,
-  );
-  if (nextHubCache) {
-    open.inboxContentByUriRef.current = nextHubCache;
-    open.setInboxContentByUri(prev =>
-      mergeInboxNoteBodyIntoCache(prev, rowUri, hubDiskBody) ?? prev,
-    );
-  }
-}
-
-async function reconcileTodayHubWeekRowsAfterVaultFsChange(
-  open: ReconcileFsOpenMarkdownEnv,
-  today: ReconcileFsTodayHubEnv,
-  args: {fullRefresh: boolean; normPaths: string[]; root: string},
-): Promise<void> {
-  const {fullRefresh, normPaths, root} = args;
-  const todaySel = open.selectedUriRef.current;
-  const normToday = todaySel?.replace(/\\/g, '/');
-  if (
-    !normToday
-    || !vaultUriIsTodayMarkdownFile(normToday)
-    || open.composingNewEntryRef.current
-  ) {
-    return;
-  }
-  const hubDir = vaultUriParentDirectory(normToday);
-  const hubStart = today.todayHubSettingsRef.current?.start ?? 'monday';
-  for (const m of enumerateTodayHubWeekStarts(new Date(), hubStart)) {
-    const rowUri = normalizeEditorDocUri(todayHubRowUri(hubDir, m));
-    if (!fullRefresh && !fsChangePathsMayAffectUri(normPaths, rowUri, root)) {
-      continue;
-    }
-    await syncTodayHubWeekRowFromDiskIfNeeded(open, today, rowUri);
-  }
+  await reconcileDiskConflictKindForSelectedTab(open, {normTab, diskBody, local, lp}, rerunForTab);
 }
 
 async function reconcileOpenWorkspaceTabUriForVaultWatch(
@@ -553,16 +277,12 @@ async function reconcileOpenWorkspaceTabUriForVaultWatch(
     return;
   }
 
-  await reconcileOneOpenMarkdownTabAfterDiskRead(
-    open,
-    {normTab, diskBody},
-    rerunForTab,
-  );
+  await reconcileOneOpenMarkdownTabAfterDiskRead(open, {normTab, diskBody}, rerunForTab);
 }
 
 export async function reconcileOpenNotesAfterFsChangeFromVaultWatch(
   open: ReconcileFsOpenMarkdownEnv,
-  today: ReconcileFsTodayHubEnv,
+  today: import('./workspaceFsWatchReconcileTodayHub').ReconcileFsTodayHubEnv,
   rawPaths: string[],
   rerunForTab: (tab: string) => void,
 ): Promise<void> {
