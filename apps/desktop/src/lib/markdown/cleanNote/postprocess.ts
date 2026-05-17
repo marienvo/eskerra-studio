@@ -77,7 +77,7 @@ function tableEndIndex(lines: string[], idx: number): number {
   if (!header.includes('|')) {
     return -1;
   }
-  if (!/^\s*\|?[\s:-|]+\|?\s*$/.test(divider) || !divider.includes('-')) {
+  if (!/^\s*\|?[\s:|-]+\|?\s*$/.test(divider) || !divider.includes('-')) {
     return -1;
   }
 
