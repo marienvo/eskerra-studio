@@ -16,6 +16,7 @@ import {
   MarkdownFenceBlockBackgroundMarker,
   collectMarkdownCodeBackgroundMarkers,
   markdownCodeBackgroundLayer,
+  markdownFenceBlockBackgroundClass,
 } from './markdownCodeBackgroundLayer';
 import {
   markdownEditorBlockLineClasses,
@@ -336,7 +337,9 @@ describe('markdownCodeBackgroundLayer markers', () => {
       expect(view.dom.querySelector('.cm-md-codeBackgroundLayer')).not.toBeNull();
       await vi.waitFor(
         () =>
-          (view.dom.querySelector('.cm-md-codeBackgroundLayer')?.querySelectorAll('.cm-md-fence-bg').length
+          (view.dom
+            .querySelector('.cm-md-codeBackgroundLayer')
+            ?.querySelectorAll(`.${markdownFenceBlockBackgroundClass}`).length
             ?? 0)
           >= 1,
         {interval: 5, timeout: 3000},
@@ -382,7 +385,7 @@ describe('markdownCodeBackgroundLayer markers', () => {
 
   it('fence marker reuses another fence marker DOM element and updates all 4 dimensions', () => {
     const elt = document.createElement('div');
-    elt.className = 'cm-md-fence-bg';
+    elt.className = markdownFenceBlockBackgroundClass;
     elt.style.top = '10px';
     elt.style.height = '400px';
     elt.style.left = '30px';
@@ -391,10 +394,25 @@ describe('markdownCodeBackgroundLayer markers', () => {
     const nextFence = new MarkdownFenceBlockBackgroundMarker(120, 80, 35, 700);
 
     expect(nextFence.update(elt, prevFence)).toBe(true);
+    expect(elt.className).toBe(markdownFenceBlockBackgroundClass);
     expect(elt.style.top).toBe('120px');
     expect(elt.style.height).toBe('80px');
     expect(elt.style.left).toBe('35px');
     expect(elt.style.width).toBe('700px');
+  });
+
+  it('fence marker update restores class when reusing a fence element', () => {
+    const elt = document.createElement('div');
+    elt.className = 'stale-wrong-class';
+    elt.style.top = '10px';
+    elt.style.height = '400px';
+    elt.style.left = '30px';
+    elt.style.width = '720px';
+    const prevFence = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
+    const nextFence = new MarkdownFenceBlockBackgroundMarker(120, 80, 35, 700);
+
+    expect(nextFence.update(elt, prevFence)).toBe(true);
+    expect(elt.className).toBe(markdownFenceBlockBackgroundClass);
   });
 
   /* Regression: `.cm-md-codeBackgroundLayer` (`.cm-layer`) has `contain: size` and no explicit width,
@@ -403,7 +421,7 @@ describe('markdownCodeBackgroundLayer markers', () => {
   it('fence marker draws with explicit left and width inline styles', () => {
     const marker = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
     const el = marker.draw();
-    expect(el.className).toBe('cm-md-fence-bg');
+    expect(el.className).toBe(markdownFenceBlockBackgroundClass);
     expect(el.style.top).toBe('10px');
     expect(el.style.height).toBe('400px');
     expect(el.style.left).toBe('30px');

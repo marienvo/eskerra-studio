@@ -22,6 +22,9 @@ export const markdownInlineCodeBackgroundClass = 'cm-md-inline-code-bg';
 /** Class on {@link RectangleMarker}s for `==highlight==` backgrounds (styled in App.css). */
 export const markdownEqualHighlightBackgroundClass = 'cm-md-equal-highlight-bg';
 
+/** Class on fence / indented code block fills in {@link MarkdownFenceBlockBackgroundMarker} (styled in App.css). */
+export const markdownFenceBlockBackgroundClass = 'cm-md-fence-bg';
+
 /**
  * `RectangleMarker.forRange` returns [] when the range does not overlap `view.viewport` (including
  * a degenerate `viewport.to <= viewport.from` before the first layout) or when coords are missing.
@@ -113,7 +116,7 @@ export class MarkdownFenceBlockBackgroundMarker implements LayerMarker {
 
   draw(): HTMLElement {
     const el = document.createElement('div');
-    el.className = 'cm-md-fence-bg';
+    el.className = markdownFenceBlockBackgroundClass;
     el.style.top = `${this.top}px`;
     el.style.height = `${this.height}px`;
     el.style.left = `${this.left}px`;
@@ -130,6 +133,7 @@ export class MarkdownFenceBlockBackgroundMarker implements LayerMarker {
     if (!(prev instanceof MarkdownFenceBlockBackgroundMarker)) {
       return false;
     }
+    elt.className = markdownFenceBlockBackgroundClass;
     elt.style.top = `${this.top}px`;
     elt.style.height = `${this.height}px`;
     elt.style.left = `${this.left}px`;
