@@ -7,11 +7,13 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   node-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -39,6 +41,9 @@ jobs:
 
   node-desktop-build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -54,6 +59,9 @@ jobs:
 
   desktop-rust:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v5
       - name: Install Linux dependencies
