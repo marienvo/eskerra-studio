@@ -273,6 +273,14 @@ describe('cleanNoteMarkdownBody', () => {
     expect(output).not.toContain('\\==');
   });
 
+  it('preserves inline code before ==highlight== markup in checklist items', () => {
+    const input = ['# T', '', '- ⬜️ `== of **` ==text=='].join('\n');
+    const output = cleanNoteMarkdownBody(input, '/tmp/InlineCodeHighlight.md');
+
+    expect(output).toContain('- ⬜️ `== of **` ==text==');
+    expect(output).not.toContain('\\`== of **`');
+  });
+
   it('preserves issue number hash tokens in checklist items', () => {
     const input = ['# T', '', '- [ ] 2026-03-13; \\#1037', '- [ ] 2026-03-14; #1038'].join(
       '\n',

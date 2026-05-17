@@ -901,15 +901,98 @@ function protectHighlights(text: string): {text: string; tokens: Map<string, str
       continue;
     }
 
-    const replaced = line.replace(/==([^\n=][^\n]*?)==/g, (_m, inner: string) => {
-      const token = `HIGHLIGHTTOKEN${String(index++).padStart(8, '0')}END`;
-      tokens.set(token, `==${inner}==`);
-      return token;
-    });
+    const {line: replaced, nextIndex} = protectHighlightsInLine(line, tokens, index);
+    index = nextIndex;
     out.push(replaced);
   }
 
   return {text: out.join('\n'), tokens};
+}
+
+function protectHighlightsInLine(
+  line: string,
+  tokens: Map<string, string>,
+  startIndex: number,
+): {line: string; nextIndex: number} {
+  const codeRanges = collectInlineCodeRanges(line);
+  if (codeRanges.length === 0) {
+    return protectHighlightsInPlainText(line, tokens, startIndex);
+  }
+
+  let index = startIndex;
+  let cursor = 0;
+  let out = '';
+  for (const range of codeRanges) {
+    const plain = protectHighlightsInPlainText(line.slice(cursor, range.from), tokens, index);
+    out += plain.line;
+    index = plain.nextIndex;
+    out += line.slice(range.from, range.to);
+    cursor = range.to;
+  }
+
+  const trailing = protectHighlightsInPlainText(line.slice(cursor), tokens, index);
+  out += trailing.line;
+  return {line: out, nextIndex: trailing.nextIndex};
+}
+
+function protectHighlightsInPlainText(
+  text: string,
+  tokens: Map<string, string>,
+  startIndex: number,
+): {line: string; nextIndex: number} {
+  let index = startIndex;
+  const line = text.replace(/==([^\n=][^\n]*?)==/g, (_m, inner: string) => {
+    const token = `HIGHLIGHTTOKEN${String(index++).padStart(8, '0')}END`;
+    tokens.set(token, `==${inner}==`);
+    return token;
+  });
+  return {line, nextIndex: index};
+}
+
+function collectInlineCodeRanges(line: string): Array<{from: number; to: number}> {
+  const ranges: Array<{from: number; to: number}> = [];
+  for (let i = 0; i < line.length; ) {
+    if (line[i] !== '`') {
+      i++;
+      continue;
+    }
+
+    const openLen = countRun(line, i, '`');
+    const close = findMatchingBacktickRun(line, i + openLen, openLen);
+    if (close < 0) {
+      i += openLen;
+      continue;
+    }
+
+    const to = close + openLen;
+    ranges.push({from: i, to});
+    i = to;
+  }
+  return ranges;
+}
+
+function countRun(text: string, from: number, ch: string): number {
+  let i = from;
+  while (i < text.length && text[i] === ch) {
+    i++;
+  }
+  return i - from;
+}
+
+function findMatchingBacktickRun(line: string, from: number, len: number): number {
+  for (let i = from; i < line.length; ) {
+    if (line[i] !== '`') {
+      i++;
+      continue;
+    }
+
+    const runLen = countRun(line, i, '`');
+    if (runLen === len) {
+      return i;
+    }
+    i += runLen;
+  }
+  return -1;
 }
 
 function restoreTokenPlaceholders(
