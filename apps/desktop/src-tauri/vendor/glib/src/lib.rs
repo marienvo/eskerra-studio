@@ -2,7 +2,12 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::missing_safety_doc)]
+#![allow(unknown_lints)]
 #![allow(renamed_and_removed_lints)]
+// This crate is vendored only to backport RUSTSEC-2024-0429 while the GTK3 stack
+// remains pinned to glib 0.18.x. Keep local changes narrow and suppress
+// compiler style lints that are noisy for path dependencies on newer toolchains.
+#![allow(mismatched_lifetime_syntaxes, unused_parens)]
 #![doc = include_str!("../README.md")]
 
 pub use bitflags;
