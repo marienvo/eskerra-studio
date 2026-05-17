@@ -1,0 +1,6 @@
+name: CodeQL configuration
+
+paths-ignore:
+  # Third-party Rust crate vendored only to backport RUSTSEC-2024-0429 while
+  # the GTK3 / webkit2gtk stack is pinned to glib 0.18.x.
+  - apps/desktop/src-tauri/vendor/glib/**
