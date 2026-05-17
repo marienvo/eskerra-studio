@@ -72,6 +72,31 @@ describe('filterInboxWikiLinkCompletionCandidates', () => {
     expect(got.map(c => c.detail)).toEqual(['beta']);
   });
 
+  it('matches mid-string in emoji-prefixed note', () => {
+    const emojiNotes = buildInboxWikiLinkCompletionCandidates([
+      {name: '🪲 Editor bugs.md', uri: '/Inbox/🪲 Editor bugs.md'},
+    ]);
+    const got = filterInboxWikiLinkCompletionCandidates(emojiNotes, 'editor');
+    expect(got.map(c => c.label)).toEqual(['🪲 Editor bugs']);
+  });
+
+  it('matches by emoji prefix', () => {
+    const emojiNotes = buildInboxWikiLinkCompletionCandidates([
+      {name: '🪲 Editor bugs.md', uri: '/Inbox/🪲 Editor bugs.md'},
+    ]);
+    const got = filterInboxWikiLinkCompletionCandidates(emojiNotes, '🪲');
+    expect(got.map(c => c.label)).toEqual(['🪲 Editor bugs']);
+  });
+
+  it('ranks prefix matches before mid-string matches', () => {
+    const mixed = buildInboxWikiLinkCompletionCandidates([
+      {name: '🪲 Editor bugs.md', uri: '/Inbox/🪲 Editor bugs.md'},
+      {name: 'editor-notes.md', uri: '/Inbox/editor-notes.md'},
+    ]);
+    const got = filterInboxWikiLinkCompletionCandidates(mixed, 'editor');
+    expect(got.map(c => c.label)).toEqual(['editor-notes', '🪲 Editor bugs']);
+  });
+
   it('respects max options constant default', () => {
     const many = buildInboxWikiLinkCompletionCandidates(
       Array.from({length: WIKI_LINK_COMPLETION_MAX_OPTIONS + 20}, (_, i) => ({
