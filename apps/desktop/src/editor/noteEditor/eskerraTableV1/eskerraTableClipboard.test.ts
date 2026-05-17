@@ -26,6 +26,14 @@ describe('matrixFromHtmlTable', () => {
       ['1', '2'],
     ]);
   });
+
+  it('parses table cells after sanitizing untrusted HTML (no script execution path)', () => {
+    const html =
+      '<script>document.body.dataset.x="bad"</script>' +
+      '<table><tr><td>safe</td></tr></table>';
+    expect(matrixFromHtmlTable(html)).toEqual([['safe']]);
+    expect(document.body.dataset.x).toBeUndefined();
+  });
 });
 
 describe('clipboardMatrixFromDataTransfer', () => {
