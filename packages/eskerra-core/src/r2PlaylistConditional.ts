@@ -1,6 +1,7 @@
 import {normalizePlaylistEntryForSync, type PlaylistEntry} from './playlist';
 import {r2SignedObjectRequest, type R2SignedRequestTransport} from './r2PlaylistObject';
 import type {EskerraR2Config} from './eskerraSettings';
+import {extractXmlSimpleTagText} from './stringScanners';
 import {PLAYLIST_FILE_NAME} from './vaultLayout';
 
 export type FetchR2PlaylistConditionalOptions = {
@@ -15,7 +16,7 @@ export type R2PlaylistConditionalResult =
   | {kind: 'missing'};
 
 function parseR2XmlErrorCode(errText: string): string {
-  return errText.match(/<Code>([^<]+)<\/Code>/)?.[1] ?? '';
+  return extractXmlSimpleTagText(errText, 'Code');
 }
 
 function r2ReadDeniedHint(errCode: string): string {

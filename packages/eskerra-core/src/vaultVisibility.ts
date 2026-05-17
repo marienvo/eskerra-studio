@@ -1,5 +1,6 @@
 import type {VaultDirEntry} from './vaultFilesystem';
 import {isSyncConflictFileName, MARKDOWN_EXTENSION} from './vaultLayout';
+import {stripTrailingSlashes, trimAndUnixSlashes} from './stringScanners';
 
 /** Directory names excluded from the vault tree (product layout; Linux: case-sensitive). */
 export const VAULT_TREE_HARD_EXCLUDED_DIRECTORY_NAMES = [
@@ -66,12 +67,12 @@ export function shouldPruneVaultTreeSubdirectory(options: {
 export type VaultPathKindForInvalidation = 'file' | 'directory';
 
 function normalizeVaultPathSlashes(uri: string): string {
-  return uri.trim().replace(/\\/g, '/');
+  return trimAndUnixSlashes(uri);
 }
 
 /** Parent path using forward slashes (sufficient for vault URI strings on desktop and SAF). */
 export function vaultPathDirname(uri: string): string {
-  const norm = normalizeVaultPathSlashes(uri).replace(/\/+$/, '');
+  const norm = stripTrailingSlashes(normalizeVaultPathSlashes(uri));
   const i = norm.lastIndexOf('/');
   if (i < 0) {
     return norm;
@@ -91,13 +92,13 @@ export function vaultAncestorDirectoryUrisForSubtreeCacheInvalidation(
   pathUri: string,
   kind: VaultPathKindForInvalidation,
 ): string[] {
-  const root = normalizeVaultPathSlashes(vaultRootUri).replace(/\/+$/, '');
+  const root = stripTrailingSlashes(normalizeVaultPathSlashes(vaultRootUri));
   const full = normalizeVaultPathSlashes(pathUri);
   if (full !== root && !full.startsWith(`${root}/`)) {
     return [];
   }
   let startDir =
-    kind === 'file' ? vaultPathDirname(full) : full.replace(/\/+$/, '');
+    kind === 'file' ? vaultPathDirname(full) : stripTrailingSlashes(full);
   if (startDir.length < root.length) {
     return [];
   }
@@ -122,17 +123,17 @@ export class SubtreeMarkdownPresenceCache {
   private readonly cache = new Map<string, boolean>();
 
   get(dirUri: string): boolean | undefined {
-    return this.cache.get(normalizeVaultPathSlashes(dirUri).replace(/\/+$/, ''));
+    return this.cache.get(stripTrailingSlashes(normalizeVaultPathSlashes(dirUri)));
   }
 
   set(dirUri: string, value: boolean): void {
-    const key = normalizeVaultPathSlashes(dirUri).replace(/\/+$/, '');
+    const key = stripTrailingSlashes(normalizeVaultPathSlashes(dirUri));
     this.cache.set(key, value);
   }
 
   invalidatePaths(dirUris: readonly string[]): void {
     for (const raw of dirUris) {
-      const key = normalizeVaultPathSlashes(raw).replace(/\/+$/, '');
+      const key = stripTrailingSlashes(normalizeVaultPathSlashes(raw));
       this.cache.delete(key);
     }
   }

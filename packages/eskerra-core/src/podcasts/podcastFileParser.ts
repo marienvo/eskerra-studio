@@ -1,7 +1,14 @@
-const EPISODE_PREFIX_PATTERN = /^-\s*\[([ xX])\]\s+/;
-const PLAY_LINK_PATTERN = /\[▶️?\]\(([^)]+)\)/g;
-const ARTICLE_LINK_PATTERN = /^\[🌐\]\(([^)]+)\)\s*/;
-const SERIES_PATTERN = /\(([^()]+)\)\s*$/;
+import {
+  isAsciiWhitespaceCode,
+  isFourDigitYearString,
+  isIso8601DateOnlyString,
+  parseTaskCheckboxMarkAfterOpenBracket,
+  trimAsciiWhitespace,
+  trimEndAsciiWhitespace,
+} from '../stringScanners';
+import {scanPlayTriangleMarkdownLinks} from './playMarkdownLinkScan';
+
+const ARTICLE_LINK_OPEN = '[🌐](';
 
 const PODCASTS_MD_SUFFIX = 'podcasts.md';
 
@@ -39,37 +46,37 @@ function stemBeforePodcastsMd(trimmed: string): string | null {
   if (!lower.endsWith(PODCASTS_MD_SUFFIX)) {
     return null;
   }
-  const withoutExt = trimmed.slice(0, -PODCASTS_MD_SUFFIX.length).trimEnd();
+  const withoutExt = trimEndAsciiWhitespace(trimmed.slice(0, -PODCASTS_MD_SUFFIX.length));
   let i = withoutExt.length - 1;
-  while (i >= 0 && /\s/.test(withoutExt.charAt(i))) {
+  while (i >= 0 && isAsciiWhitespaceCode(withoutExt.charCodeAt(i))) {
     i -= 1;
   }
   if (i < 0 || withoutExt.charAt(i) !== '-') {
     return null;
   }
   i -= 1;
-  while (i >= 0 && /\s/.test(withoutExt.charAt(i))) {
+  while (i >= 0 && isAsciiWhitespaceCode(withoutExt.charCodeAt(i))) {
     i -= 1;
   }
   if (i < 0) {
     return null;
   }
-  return withoutExt.slice(0, i + 1).trimEnd();
+  return trimEndAsciiWhitespace(withoutExt.slice(0, i + 1));
 }
 
 /** Parses `YYYY Section title` from stem without nested quantifiers. */
 function parseYearAndSectionTitle(stem: string): {sectionTitle: string; year: number} | null {
-  if (stem.length < 6 || !/^\d{4}$/.test(stem.slice(0, 4))) {
+  if (stem.length < 6 || !isFourDigitYearString(stem.slice(0, 4))) {
     return null;
   }
   let pos = 4;
-  while (pos < stem.length && /\s/.test(stem.charAt(pos))) {
+  while (pos < stem.length && isAsciiWhitespaceCode(stem.charCodeAt(pos))) {
     pos += 1;
   }
   if (pos === 4) {
     return null;
   }
-  const sectionTitle = stem.slice(pos).trim();
+  const sectionTitle = trimAsciiWhitespace(stem.slice(pos));
   const year = Number(stem.slice(0, 4));
 
   if (!sectionTitle) {
@@ -80,7 +87,7 @@ function parseYearAndSectionTitle(stem: string): {sectionTitle: string; year: nu
 }
 
 export function parsePodcastFileDetails(fileName: string): PodcastMarkdownFileDetails | null {
-  const trimmed = fileName.trim();
+  const trimmed = trimAsciiWhitespace(fileName);
   const stem = stemBeforePodcastsMd(trimmed);
   if (!stem) {
     return null;
@@ -119,15 +126,91 @@ function splitDatePrefix(value: string): {date: string; remainder: string} | nul
   if (separatorIdx < 0) {
     return null;
   }
-  const date = value.slice(0, separatorIdx).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  const date = trimAsciiWhitespace(value.slice(0, separatorIdx));
+  if (!isIso8601DateOnlyString(date)) {
     return null;
   }
-  const remainder = value.slice(separatorIdx + 1).trim();
+  const remainder = trimAsciiWhitespace(value.slice(separatorIdx + 1));
   if (!remainder) {
     return null;
   }
   return {date, remainder};
+}
+
+function parseSeriesTail(remainder: string): {seriesName: string; openParenIndex: number} | null {
+  const endTrim = trimEndAsciiWhitespace(remainder);
+  if (endTrim.length < 3 || endTrim.charCodeAt(endTrim.length - 1) !== 41) {
+    return null;
+  }
+  const lastOpen = endTrim.lastIndexOf('(', endTrim.length - 2);
+  if (lastOpen < 0) {
+    return null;
+  }
+  const inner = endTrim.slice(lastOpen + 1, -1);
+  if (inner.includes('(') || inner.includes(')')) {
+    return null;
+  }
+  const seriesName = trimAsciiWhitespace(inner);
+  if (!seriesName) {
+    return null;
+  }
+  return {seriesName, openParenIndex: lastOpen};
+}
+
+function tryParseLeadingArticleLink(
+  beforePlayLink: string,
+): {articleUrl: string; consumedLen: number} | null {
+  if (!beforePlayLink.startsWith(ARTICLE_LINK_OPEN)) {
+    return null;
+  }
+  let q = ARTICLE_LINK_OPEN.length;
+  while (q < beforePlayLink.length) {
+    const c = beforePlayLink[q]!;
+    if (c === '\\' && q + 1 < beforePlayLink.length) {
+      q += 2;
+      continue;
+    }
+    if (c === ')') {
+      const articleUrl = trimAsciiWhitespace(beforePlayLink.slice(ARTICLE_LINK_OPEN.length, q));
+      let end = q + 1;
+      while (end < beforePlayLink.length && isAsciiWhitespaceCode(beforePlayLink.charCodeAt(end))) {
+        end++;
+      }
+      return {articleUrl, consumedLen: end};
+    }
+    q++;
+  }
+  return null;
+}
+
+function parseEpisodePrefix(trimmed: string): {played: boolean; rest: string} | null {
+  if (trimmed.length < 2 || trimmed[0] !== '-') {
+    return null;
+  }
+  let i = 1;
+  while (i < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(i))) {
+    i++;
+  }
+  if (i >= trimmed.length || trimmed[i] !== '[') {
+    return null;
+  }
+  i++;
+  const cb = parseTaskCheckboxMarkAfterOpenBracket(trimmed, i);
+  if (cb == null) {
+    return null;
+  }
+  i = cb.indexAfterCheckboxBody;
+  while (i < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(i))) {
+    i++;
+  }
+  if (i >= trimmed.length || trimmed[i] !== ']') {
+    return null;
+  }
+  i++;
+  while (i < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(i))) {
+    i++;
+  }
+  return {played: cb.checked, rest: trimmed.slice(i)};
 }
 
 export function parsePodcastEpisodeLine({
@@ -135,15 +218,15 @@ export function parsePodcastEpisodeLine({
   sectionTitle,
   sourceFile,
 }: ParsePodcastEpisodeLineInput): PodcastMarkdownEpisode | null {
-  const trimmedLine = line.trim();
-  const prefixMatch = EPISODE_PREFIX_PATTERN.exec(trimmedLine);
+  const trimmedLine = trimAsciiWhitespace(line);
+  const prefixMatch = parseEpisodePrefix(trimmedLine);
 
   if (!prefixMatch) {
     return null;
   }
 
-  const isListened = prefixMatch[1].toLowerCase() === 'x';
-  const withoutPrefix = trimmedLine.slice(prefixMatch[0].length).trim();
+  const isListened = prefixMatch.played;
+  const withoutPrefix = trimAsciiWhitespace(prefixMatch.rest);
   const parsedPrefix = splitDatePrefix(withoutPrefix);
   if (!parsedPrefix) {
     return null;
@@ -151,34 +234,34 @@ export function parsePodcastEpisodeLine({
 
   const {date, remainder} = parsedPrefix;
 
-  const playMatches = Array.from(remainder.matchAll(PLAY_LINK_PATTERN));
+  const playMatches = scanPlayTriangleMarkdownLinks(remainder);
   const lastPlayMatch = playMatches.at(-1);
-  if (!lastPlayMatch || typeof lastPlayMatch.index !== 'number') {
+  if (!lastPlayMatch) {
     return null;
   }
 
-  const mp3Url = lastPlayMatch[1].trim();
+  const mp3Url = trimAsciiWhitespace(lastPlayMatch.url);
   if (!mp3Url) {
     return null;
   }
 
-  const beforePlayLink = remainder.slice(0, lastPlayMatch.index).trim();
-  const seriesMatch = SERIES_PATTERN.exec(remainder);
+  const beforePlayLink = trimAsciiWhitespace(remainder.slice(0, lastPlayMatch.start));
+  const seriesMatch = parseSeriesTail(remainder);
   if (!seriesMatch) {
     return null;
   }
 
-  const seriesName = seriesMatch[1].trim();
+  const seriesName = seriesMatch.seriesName;
   if (!seriesName) {
     return null;
   }
 
   let articleUrl: string | undefined;
   let title = beforePlayLink;
-  const articleMatch = ARTICLE_LINK_PATTERN.exec(beforePlayLink);
+  const articleMatch = tryParseLeadingArticleLink(beforePlayLink);
   if (articleMatch) {
-    articleUrl = articleMatch[1].trim();
-    title = beforePlayLink.slice(articleMatch[0].length).trim();
+    articleUrl = articleMatch.articleUrl;
+    title = trimAsciiWhitespace(beforePlayLink.slice(articleMatch.consumedLen));
   }
 
   if (!title) {

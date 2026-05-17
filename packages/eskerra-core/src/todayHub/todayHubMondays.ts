@@ -1,3 +1,4 @@
+import {unixSlashesStripTrailingNoTrim} from '../stringScanners';
 import {type TodayHubStartDay, todayHubStartJsDay} from './parseTodayHubFrontmatter';
 
 /**
@@ -237,6 +238,6 @@ export function formatTodayHubMondayStem(weekStart: Date): string {
 }
 
 export function todayHubRowUri(hubDirectoryUri: string, weekStart: Date): string {
-  const base = hubDirectoryUri.replace(/\\/g, '/').replace(/\/+$/, '');
+  const base = unixSlashesStripTrailingNoTrim(hubDirectoryUri);
   return `${base}/${formatTodayHubMondayStem(weekStart)}.md`;
 }

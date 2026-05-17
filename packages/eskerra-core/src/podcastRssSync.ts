@@ -1,6 +1,25 @@
 import {XMLParser} from 'fast-xml-parser';
 
 import {splitYamlFrontmatter} from './markdown/splitYamlFrontmatter';
+import {
+  findFirstYamlScalarLineRaw,
+  parseYamlListItemsForKey,
+  parseYamlScalarValue,
+  setYamlInnerScalarKey,
+  stripYamlFrontmatterOuterFences,
+} from './podcastRssSyncYaml';
+import {
+  isAsciiWhitespaceCode,
+  isFourDigitYearString,
+  isIso8601DateOnlyString,
+  mergeAmpEntitiesToAmpersand,
+  collapseAsciiWhitespaceRunsToSpace,
+  parseTaskCheckboxMarkAfterOpenBracket,
+  toAsciiLowercase,
+  trimAsciiWhitespace,
+  trimEndAsciiWhitespace,
+} from './stringScanners';
+import {scanPlayTriangleMarkdownLinks} from './podcasts/playMarkdownLinkScan';
 
 export type PodcastRssSettings = {
   /** First feed URL, kept for existing callers that only handle one feed. */
@@ -28,73 +47,14 @@ const RSS_FETCHED_AT_KEY = 'rssFetchedAt';
 // --- Frontmatter parsing ---
 
 function parseFrontmatterStringValue(frontmatter: string, key: string): unknown {
-  if (frontmatter.trim().length === 0) return undefined;
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = frontmatter.match(
-    new RegExp(`^[ \\t]*${escapedKey}[ \\t]*:[ \\t]*([^\\r\\n]+)[ \\t]*$`, 'm'),
-  );
-  if (match == null) return undefined;
-  const rawValue = match[1].trim();
-  if (rawValue.length === 0) return '';
-  const singleQuoted =
-    rawValue.startsWith('\'') && rawValue.endsWith('\'') && rawValue.length >= 2
-      ? rawValue.slice(1, -1).trim()
-      : null;
-  if (singleQuoted != null) return singleQuoted;
-  const shouldTryJson = /^("|-?\d|true$|false$|null$|\{|\[)/i.test(rawValue);
-  if (!shouldTryJson) return rawValue;
-  try {
-    return JSON.parse(rawValue);
-  } catch {
-    return rawValue;
+  if (trimAsciiWhitespace(frontmatter).length === 0) {
+    return undefined;
   }
-}
-
-function parseYamlListItems(frontmatter: string, key: string): string[] {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const keyLineRegex = new RegExp(`^([ \\t]*)${escapedKey}[ \\t]*:[ \\t]*$`);
-  const lines = frontmatter.split(/\r?\n/);
-  let keyIndent = -1;
-  const result: string[] = [];
-  for (const line of lines) {
-    if (keyIndent < 0) {
-      const m = line.match(keyLineRegex);
-      if (m != null) keyIndent = m[1]?.length ?? 0;
-      continue;
-    }
-    if (line.trim().length === 0) continue;
-    const currentIndent = line.match(/^([ \t]*)/)?.[1]?.length ?? 0;
-    if (
-      currentIndent <= keyIndent &&
-      (/^[ \t]*[A-Za-z0-9_-]+\s*:/.test(line) || line.trim() === '---')
-    ) {
-      break;
-    }
-    const listItemMatch = line.match(/^[ \t]*-[ \t]*(.+?)\s*$/);
-    if (listItemMatch == null) continue;
-    const raw = listItemMatch[1]?.trim() ?? '';
-    if (raw.length === 0) continue;
-    if (raw.startsWith('\'') && raw.endsWith('\'') && raw.length >= 2) {
-      const singleQuoted = raw.slice(1, -1).trim();
-      if (singleQuoted.length > 0) {
-        result.push(singleQuoted);
-        continue;
-      }
-    }
-    if (raw.startsWith('"')) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed === 'string' && parsed.trim().length > 0) {
-          result.push(parsed.trim());
-          continue;
-        }
-      } catch {
-        // Keep raw fallback.
-      }
-    }
-    result.push(raw);
+  const rawLine = findFirstYamlScalarLineRaw(frontmatter, key);
+  if (rawLine == null) {
+    return undefined;
   }
-  return result;
+  return parseYamlScalarValue(rawLine);
 }
 
 function parseRssFeedUrlsFromFrontmatter(frontmatter: string): string[] {
@@ -102,49 +62,61 @@ function parseRssFeedUrlsFromFrontmatter(frontmatter: string): string[] {
   const urls: string[] = [];
   if (typeof rawValue === 'string') {
     const value = rawValue.trim();
-    if (value.length > 0) urls.push(value);
+    if (value.length > 0) {
+      urls.push(value);
+    }
   }
   if (Array.isArray(rawValue)) {
     for (const candidate of rawValue) {
-      if (typeof candidate !== 'string') continue;
+      if (typeof candidate !== 'string') {
+        continue;
+      }
       const value = candidate.trim();
-      if (value.length > 0) urls.push(value);
+      if (value.length > 0) {
+        urls.push(value);
+      }
     }
   }
-  urls.push(...parseYamlListItems(frontmatter, 'rssFeedUrl'));
+  urls.push(...parseYamlListItemsForKey(frontmatter, 'rssFeedUrl'));
   return [...new Set(urls)];
 }
 
 function parseLastFetchedAt(frontmatter: string): Date | null {
-  const match = frontmatter.match(
-    /^[ \t]*rssFetchedAt[ \t]*:[ \t]*([^\r\n]+)[ \t]*$/m,
-  );
-  if (match == null) return null;
-  const rawValue = match[1].trim();
-  if (rawValue.length === 0) return null;
+  const rawValue = findFirstYamlScalarLineRaw(frontmatter, 'rssFetchedAt');
+  if (rawValue == null || rawValue.length === 0) {
+    return null;
+  }
   let candidate = rawValue;
   try {
     if (rawValue.startsWith('"')) {
       const parsed = JSON.parse(rawValue);
-      if (typeof parsed === 'string') candidate = parsed;
+      if (typeof parsed === 'string') {
+        candidate = parsed;
+      }
     }
   } catch {
     // Keep raw fallback.
   }
   const ts = Date.parse(candidate);
-  if (!Number.isFinite(ts)) return null;
+  if (!Number.isFinite(ts)) {
+    return null;
+  }
   return new Date(ts);
 }
 
 function parsePositiveIntOrDefault(value: unknown, fallback: number, min: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
   return Math.max(min, Math.floor(value));
 }
 
 function extractFrontmatterInner(content: string): string {
   const {frontmatter} = splitYamlFrontmatter(content);
-  if (frontmatter == null) return '';
-  return frontmatter.replace(/^---[ \t]*\n?/, '').replace(/\n?---[ \t]*$/, '');
+  if (frontmatter == null) {
+    return '';
+  }
+  return stripYamlFrontmatterOuterFences(frontmatter);
 }
 
 // --- Public: settings and cooldown ---
@@ -226,12 +198,23 @@ function toValidUrl(candidate: string | null): string | null {
   }
 }
 
+const AUDIO_FILE_EXTENSIONS = ['.mp3', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.flac'];
+
+function pathnameEndsWithAudioExtension(pathnameLower: string): boolean {
+  for (const ext of AUDIO_FILE_EXTENSIONS) {
+    if (pathnameLower.endsWith(ext)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isLikelyAudioUrl(url: string | null): boolean {
-  if (url == null) return false;
+  if (url == null) {
+    return false;
+  }
   try {
-    return /\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:$)/.test(
-      new URL(url).pathname.toLowerCase(),
-    );
+    return pathnameEndsWithAudioExtension(new URL(url).pathname.toLowerCase());
   } catch {
     return false;
   }
@@ -260,8 +243,10 @@ function parseDateOrNull(candidate: string | null): Date | null {
 }
 
 function normalizeTitle(title: string | null): string {
-  if (title == null) return DEFAULT_TITLE_FALLBACK;
-  const clean = title.replace(/\s+/g, ' ').trim();
+  if (title == null) {
+    return DEFAULT_TITLE_FALLBACK;
+  }
+  const clean = trimAsciiWhitespace(collapseAsciiWhitespaceRunsToSpace(title));
   return clean.length > 0 ? clean : DEFAULT_TITLE_FALLBACK;
 }
 
@@ -487,11 +472,7 @@ export function buildPodcastMarkdownFromRss(
 // --- File content assembly ---
 
 function setFrontmatterKeyInInner(inner: string, key: string, value: string): string {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const lines = inner.split(/\r?\n/);
-  const kept = lines.filter(l => !new RegExp(`^[ \\t]*${escapedKey}[ \\t]*:`).test(l));
-  const newLine = `${key}: ${JSON.stringify(value)}`;
-  return [newLine, ...kept].filter(l => l.trim().length > 0).join('\n');
+  return setYamlInnerScalarKey(inner, key, value);
 }
 
 export function buildUpdatedPodcastFileContent(
@@ -503,7 +484,7 @@ export function buildUpdatedPodcastFileContent(
   const inner =
     frontmatter == null
       ? ''
-      : frontmatter.replace(/^---[ \t]*\n?/, '').replace(/\n?---[ \t]*$/, '');
+      : stripYamlFrontmatterOuterFences(frontmatter);
   const updatedInner = setFrontmatterKeyInInner(inner, RSS_FETCHED_AT_KEY, now.toISOString());
   const updatedFm = updatedInner.length > 0 ? `---\n${updatedInner}\n---` : '---\n---';
   return `${updatedFm}\n\n${newBodyMarkdown}`;
@@ -511,27 +492,112 @@ export function buildUpdatedPodcastFileContent(
 
 // --- Hub file utilities ---
 
-const PODCAST_STUB_FILE_PATTERN = /^(\d{4})\s+(.+?)\s+-\s+podcasts\.md$/i;
-const HUB_TASK_LINE_PATTERN = /^-\s*\[\s*([xX ])\s*\]\s*\[\[([^\]]+)\]\]/;
-
 export function companionHubFileName(podcastsMdName: string): string | null {
-  const m = PODCAST_STUB_FILE_PATTERN.exec(podcastsMdName.trim());
-  if (!m) return null;
-  const section = m[2]?.trim();
-  if (!section) return null;
-  return `${m[1]} ${section}.md`;
+  const trimmed = trimAsciiWhitespace(podcastsMdName);
+  const lower = trimmed.toLowerCase();
+  const suf = 'podcasts.md';
+  if (!lower.endsWith(suf)) {
+    return null;
+  }
+  const head = trimEndAsciiWhitespace(trimmed.slice(0, trimmed.length - suf.length));
+  let i = head.length - 1;
+  while (i >= 0 && isAsciiWhitespaceCode(head.charCodeAt(i))) {
+    i--;
+  }
+  if (i < 0 || head.charAt(i) !== '-') {
+    return null;
+  }
+  i--;
+  while (i >= 0 && isAsciiWhitespaceCode(head.charCodeAt(i))) {
+    i--;
+  }
+  if (i < 3) {
+    return null;
+  }
+  const yearStr = head.slice(0, 4);
+  if (!isFourDigitYearString(yearStr)) {
+    return null;
+  }
+  if (head.charCodeAt(4) !== 32 && head.charCodeAt(4) !== 9) {
+    return null;
+  }
+  const section = trimAsciiWhitespace(head.slice(5, i + 1));
+  if (!section) {
+    return null;
+  }
+  return `${yearStr} ${section}.md`;
+}
+
+function parseUncheckedHubTaskLine(trimmed: string): {checked: boolean; wikiInner: string} | null {
+  if (trimmed.length < 7 || trimmed[0] !== '-') {
+    return null;
+  }
+  let p = 1;
+  while (p < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(p))) {
+    p++;
+  }
+  if (p >= trimmed.length || trimmed[p] !== '[') {
+    return null;
+  }
+  p++;
+  const cb = parseTaskCheckboxMarkAfterOpenBracket(trimmed, p);
+  if (cb == null) {
+    return null;
+  }
+  p = cb.indexAfterCheckboxBody;
+  while (p < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(p))) {
+    p++;
+  }
+  if (p >= trimmed.length || trimmed[p] !== ']') {
+    return null;
+  }
+  p++;
+  while (p < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(p))) {
+    p++;
+  }
+  if (p + 2 >= trimmed.length || trimmed[p] !== '[' || trimmed[p + 1] !== '[') {
+    return null;
+  }
+  const innerStart = p + 2;
+  let q = innerStart;
+  while (q < trimmed.length) {
+    const ch = trimmed.charCodeAt(q);
+    if (ch === 93) {
+      // `]` — only valid as the first half of closing `]]`.
+      if (q + 1 < trimmed.length && trimmed.charCodeAt(q + 1) === 93) {
+        break;
+      }
+      return null;
+    }
+    if (ch === 91) {
+      return null;
+    }
+    q++;
+  }
+  if (q >= trimmed.length || trimmed.charCodeAt(q) !== 93) {
+    return null;
+  }
+  const close = q;
+  if (close === innerStart) {
+    return null;
+  }
+  return {checked: cb.checked, wikiInner: trimmed.slice(innerStart, close)};
 }
 
 export function parseUncheckedHubLinks(hubContent: string): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const raw of hubContent.split(/\r?\n/)) {
-    const m = HUB_TASK_LINE_PATTERN.exec(raw.trim());
-    if (!m) continue;
-    if (m[1]?.toLowerCase() === 'x') continue;
-    const rawTarget = m[2]?.trim() ?? '';
+    const m = parseUncheckedHubTaskLine(trimAsciiWhitespace(raw));
+    if (!m) {
+      continue;
+    }
+    if (m.checked) {
+      continue;
+    }
+    const rawTarget = trimAsciiWhitespace(m.wikiInner);
     const pipe = rawTarget.indexOf('|');
-    const stem = pipe >= 0 ? rawTarget.slice(0, pipe).trim() : rawTarget;
+    const stem = pipe >= 0 ? trimAsciiWhitespace(rawTarget.slice(0, pipe)) : rawTarget;
     const fileName = stem.toLowerCase().endsWith('.md') ? stem : `${stem}.md`;
     if (!seen.has(fileName)) {
       seen.add(fileName);
@@ -553,27 +619,29 @@ type MergeParts = {
   mp3SourceHadAmpEntity: boolean;
 };
 
-const MERGE_EP_PREFIX = /^-\s*\[([ xX])\]\s+/;
-const MERGE_DATE_PREFIX = /^(\d{4}-\d{2}-\d{2})\s*;\s*(.+)$/;
-const MERGE_PLAY_LINK = /\[▶️?\]\(([^)]+)\)/g;
-const MERGE_SERIES_TAIL = /\(([^()]+)\)\s*$/;
-const MERGE_ARTICLE_LEAD = /^\[🌐\]\(([^)]+)\)\s*/;
-const MERGE_PIE_DATE_HEADING = /^##\s+\w+,\s+(\w+)\s+(\d+)(?:st|nd|rd|th)?,\s+(\d{4})$/;
 const MERGE_PIE_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-const MERGE_PIE_PLAY = /\[▶️?\]\(<?(https?:\/\/[^)>]+)>?\)/g;
-const MERGE_PIE_WEB = /^\[🌐\]\(<?(https?:\/\/[^)>]+)>?\)\s*/;
+
+const MERGE_ARTICLE_OPEN = '[🌐](';
 
 function mergeSanitizeUrl(raw: string): string {
-  const t = raw.trim();
+  const t = trimAsciiWhitespace(raw);
   const stripped = t.startsWith('<') && t.endsWith('>') ? t.slice(1, -1) : t;
-  return stripped.replace(/&amp;/g, '&');
+  return mergeAmpEntitiesToAmpersand(trimAsciiWhitespace(stripped));
 }
 
 function mergeNormTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const t = toAsciiLowercase(title);
+  let out = '';
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i);
+    if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122)) {
+      out += t[i]!;
+    }
+  }
+  return out;
 }
 
 function mergeLineKey(parts: MergeParts): string {
@@ -581,32 +649,135 @@ function mergeLineKey(parts: MergeParts): string {
   return `${parts.date}|${norm.length > 0 ? norm : `_:${parts.title.length}`}`;
 }
 
+function parseMergeEpisodePrefix(trimmed: string): {played: boolean; rest: string} | null {
+  if (trimmed.length < 2 || trimmed[0] !== '-') {
+    return null;
+  }
+  let i = 1;
+  while (i < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(i))) {
+    i++;
+  }
+  if (i >= trimmed.length || trimmed[i] !== '[') {
+    return null;
+  }
+  i++;
+  const cb = parseTaskCheckboxMarkAfterOpenBracket(trimmed, i);
+  if (cb == null) {
+    return null;
+  }
+  i = cb.indexAfterCheckboxBody;
+  while (i < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(i))) {
+    i++;
+  }
+  if (i >= trimmed.length || trimmed[i] !== ']') {
+    return null;
+  }
+  i++;
+  while (i < trimmed.length && isAsciiWhitespaceCode(trimmed.charCodeAt(i))) {
+    i++;
+  }
+  return {played: cb.checked, rest: trimmed.slice(i)};
+}
+
+function parseMergeDatePrefix(rest: string): {date: string; remainder: string} | null {
+  const sep = rest.indexOf(';');
+  if (sep < 0) {
+    return null;
+  }
+  const date = trimAsciiWhitespace(rest.slice(0, sep));
+  if (!isIso8601DateOnlyString(date)) {
+    return null;
+  }
+  const remainder = trimAsciiWhitespace(rest.slice(sep + 1));
+  if (!remainder) {
+    return null;
+  }
+  return {date, remainder};
+}
+
+function parseMergeSeriesTail(rem: string): {series: string; openIdx: number} | null {
+  const endTrim = trimEndAsciiWhitespace(rem);
+  if (endTrim.length < 3 || endTrim.charCodeAt(endTrim.length - 1) !== 41) {
+    return null;
+  }
+  const lastOpen = endTrim.lastIndexOf('(', endTrim.length - 2);
+  if (lastOpen < 0) {
+    return null;
+  }
+  const inner = endTrim.slice(lastOpen + 1, -1);
+  if (inner.includes('(') || inner.includes(')')) {
+    return null;
+  }
+  const series = trimAsciiWhitespace(inner);
+  if (!series) {
+    return null;
+  }
+  return {series, openIdx: lastOpen};
+}
+
+function tryParseMergeArticleLead(titlePart: string): {url: string; len: number} | null {
+  if (!titlePart.startsWith(MERGE_ARTICLE_OPEN)) {
+    return null;
+  }
+  let q = MERGE_ARTICLE_OPEN.length;
+  while (q < titlePart.length) {
+    const c = titlePart[q]!;
+    if (c === '\\' && q + 1 < titlePart.length) {
+      q += 2;
+      continue;
+    }
+    if (c === ')') {
+      let u = trimAsciiWhitespace(titlePart.slice(MERGE_ARTICLE_OPEN.length, q));
+      if (u.startsWith('<') && u.endsWith('>')) {
+        u = trimAsciiWhitespace(u.slice(1, -1));
+      }
+      let tail = q + 1;
+      while (tail < titlePart.length && isAsciiWhitespaceCode(titlePart.charCodeAt(tail))) {
+        tail++;
+      }
+      return {url: u, len: tail};
+    }
+    q++;
+  }
+  return null;
+}
+
 function parseMergeEpisodeLine(line: string): MergeParts | null {
-  const t = line.trim();
-  const pm = MERGE_EP_PREFIX.exec(t);
-  if (!pm) return null;
-  const played = pm[1]?.toLowerCase() === 'x';
-  const rest = t.slice(pm[0].length).trim();
-  const dm = MERGE_DATE_PREFIX.exec(rest);
-  if (!dm) return null;
-  const date = dm[1]!;
-  const rem = dm[2]!;
-  const seriesM = MERGE_SERIES_TAIL.exec(rem);
-  if (!seriesM) return null;
-  const series = seriesM[1]?.trim();
-  if (!series) return null;
-  const beforeSeries = rem.slice(0, seriesM.index).trim();
-  const plays = Array.from(beforeSeries.matchAll(MERGE_PLAY_LINK));
+  const t = trimAsciiWhitespace(line);
+  const pm = parseMergeEpisodePrefix(t);
+  if (!pm) {
+    return null;
+  }
+  const played = pm.played;
+  const rest = trimAsciiWhitespace(pm.rest);
+  const dm = parseMergeDatePrefix(rest);
+  if (!dm) {
+    return null;
+  }
+  const {date, remainder: rem} = dm;
+  const seriesM = parseMergeSeriesTail(rem);
+  if (!seriesM) {
+    return null;
+  }
+  const {series, openIdx} = seriesM;
+  const beforeSeries = trimAsciiWhitespace(trimEndAsciiWhitespace(rem.slice(0, openIdx)));
+  const plays = scanPlayTriangleMarkdownLinks(beforeSeries);
   const lastPlay = plays.at(-1);
-  if (!lastPlay || typeof lastPlay.index !== 'number') return null;
-  const rawMp3Url = lastPlay[1] ?? '';
+  if (!lastPlay) {
+    return null;
+  }
+  const rawMp3Url = lastPlay.url;
   const mp3Url = mergeSanitizeUrl(rawMp3Url);
-  if (!mp3Url) return null;
-  const titlePart = beforeSeries.slice(0, lastPlay.index).trim();
-  const artM = MERGE_ARTICLE_LEAD.exec(titlePart);
-  const articleUrl = artM ? mergeSanitizeUrl(artM[1] ?? '') : null;
-  const title = artM ? titlePart.slice(artM[0].length).trim() : titlePart;
-  if (!title) return null;
+  if (!mp3Url) {
+    return null;
+  }
+  const titlePart = trimAsciiWhitespace(beforeSeries.slice(0, lastPlay.start));
+  const art = tryParseMergeArticleLead(titlePart);
+  const articleUrl = art ? mergeSanitizeUrl(art.url) : null;
+  const title = art ? trimAsciiWhitespace(titlePart.slice(art.len)) : titlePart;
+  if (!title) {
+    return null;
+  }
   return {
     date,
     played,
@@ -624,39 +795,136 @@ function formatMergeLine(parts: MergeParts): string {
   return `- [${mark}] ${parts.date}; ${artPart}${parts.title} [▶️](${parts.mp3Url}) (${parts.series})`;
 }
 
+function parseOrdinalDayToken(tok: string): number | null {
+  const lower = tok.toLowerCase();
+  const suf = ['st', 'nd', 'rd', 'th'];
+  for (const s of suf) {
+    if (lower.endsWith(s)) {
+      const n = Number(lower.slice(0, -s.length));
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  const n = Number(tok);
+  return Number.isFinite(n) ? n : null;
+}
+
 function parsePieBodyDate(line: string): string | null {
-  const m = MERGE_PIE_DATE_HEADING.exec(line.trim());
-  if (!m) return null;
-  const monthIdx = MERGE_PIE_MONTHS.indexOf(m[1]!);
-  if (monthIdx === -1) return null;
-  return `${m[3]}-${String(monthIdx + 1).padStart(2, '0')}-${m[2]!.padStart(2, '0')}`;
+  const t = trimAsciiWhitespace(line);
+  if (!/^##\s+/.test(t)) {
+    return null;
+  }
+  const rest = trimAsciiWhitespace(t.replace(/^##\s+/, ''));
+  const commaAfterWeekday = rest.indexOf(',');
+  if (commaAfterWeekday < 0) {
+    return null;
+  }
+  const afterWeekday = trimAsciiWhitespace(rest.slice(commaAfterWeekday + 1));
+  const lastComma = afterWeekday.lastIndexOf(',');
+  if (lastComma < 0) {
+    return null;
+  }
+  const yearStr = trimAsciiWhitespace(afterWeekday.slice(lastComma + 1));
+  const monthAndDay = trimEndAsciiWhitespace(afterWeekday.slice(0, lastComma));
+  const sp = monthAndDay.lastIndexOf(' ');
+  if (sp < 0) {
+    return null;
+  }
+  const monthName = trimAsciiWhitespace(monthAndDay.slice(0, sp));
+  const dayTok = trimAsciiWhitespace(monthAndDay.slice(sp + 1));
+  const monthIdx = MERGE_PIE_MONTHS.indexOf(monthName);
+  if (monthIdx === -1) {
+    return null;
+  }
+  const dayNum = parseOrdinalDayToken(dayTok);
+  if (dayNum == null || !isFourDigitYearString(yearStr)) {
+    return null;
+  }
+  return `${yearStr}-${String(monthIdx + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
 }
 
 type PieBodyEpisode = {date: string; title: string; mp3Url: string; articleUrl?: string};
+
+function isHttpsUrl(u: string): boolean {
+  const x = u.toLowerCase();
+  return x.startsWith('https://') || x.startsWith('http://');
+}
+
+function scanPieHttpsPlayLinks(body: string): Array<{url: string; start: number}> {
+  const all = scanPlayTriangleMarkdownLinks(body);
+  const out: Array<{url: string; start: number}> = [];
+  for (const m of all) {
+    let u = trimAsciiWhitespace(m.url);
+    if (u.startsWith('<') && u.endsWith('>')) {
+      u = trimAsciiWhitespace(u.slice(1, -1));
+    }
+    if (isHttpsUrl(u)) {
+      out.push(m);
+    }
+  }
+  return out;
+}
+
+function tryParsePieArticleLead(before: string): {url: string; len: number} | null {
+  if (!before.startsWith(MERGE_ARTICLE_OPEN)) {
+    return null;
+  }
+  let q = MERGE_ARTICLE_OPEN.length;
+  while (q < before.length) {
+    const c = before[q]!;
+    if (c === '\\' && q + 1 < before.length) {
+      q += 2;
+      continue;
+    }
+    if (c === ')') {
+      let u = trimAsciiWhitespace(before.slice(MERGE_ARTICLE_OPEN.length, q));
+      if (u.startsWith('<') && u.endsWith('>')) {
+        u = trimAsciiWhitespace(u.slice(1, -1));
+      }
+      if (!isHttpsUrl(u)) {
+        return null;
+      }
+      let tail = q + 1;
+      while (tail < before.length && isAsciiWhitespaceCode(before.charCodeAt(tail))) {
+        tail++;
+      }
+      return {url: u, len: tail};
+    }
+    q++;
+  }
+  return null;
+}
 
 function parsePieBodyEpisodes(content: string): PieBodyEpisode[] {
   const out: PieBodyEpisode[] = [];
   let currentDate: string | null = null;
   for (const line of content.split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t) continue;
+    const t = trimAsciiWhitespace(line);
+    if (!t) {
+      continue;
+    }
     const d = parsePieBodyDate(t);
     if (d != null) {
       currentDate = d;
       continue;
     }
     if (currentDate != null && t.startsWith('- ')) {
-      const body = t.slice(2).trim();
-      const plays = Array.from(body.matchAll(MERGE_PIE_PLAY));
+      const body = trimAsciiWhitespace(t.slice(2));
+      const plays = scanPieHttpsPlayLinks(body);
       const last = plays.at(-1);
-      if (!last || typeof last.index !== 'number') continue;
-      const mp3Url = mergeSanitizeUrl(last[1] ?? '');
-      if (!mp3Url) continue;
-      const before = body.slice(0, last.index).trim();
-      const artM = MERGE_PIE_WEB.exec(before);
-      const articleUrl = artM ? mergeSanitizeUrl(artM[1] ?? '') : undefined;
-      const title = artM ? before.slice(artM[0].length).trim() : before;
-      if (!title) continue;
+      if (!last) {
+        continue;
+      }
+      const mp3Url = mergeSanitizeUrl(last.url);
+      if (!mp3Url) {
+        continue;
+      }
+      const before = trimAsciiWhitespace(body.slice(0, last.start));
+      const artM = tryParsePieArticleLead(before);
+      const articleUrl = artM ? mergeSanitizeUrl(artM.url) : undefined;
+      const title = artM ? trimAsciiWhitespace(before.slice(artM.len)) : before;
+      if (!title) {
+        continue;
+      }
       out.push({date: currentDate, title, mp3Url, articleUrl});
     }
   }
@@ -687,6 +955,34 @@ function mergePartsPreferringBetterMp3(a: MergeParts, b: MergeParts): MergeParts
   };
 }
 
+/** First ATX `# ` heading (not `##`), matching prior `/^#(?!#)\\s+...$/m` behavior. */
+function extractFirstMarkdownAtxH1Title(content: string): string | null {
+  for (const raw of content.split(/\r?\n/)) {
+    if (raw.length < 3) {
+      continue;
+    }
+    if (raw.charCodeAt(0) !== 35) {
+      continue;
+    }
+    if (raw.charCodeAt(1) === 35) {
+      continue;
+    }
+    let i = 1;
+    if (i >= raw.length || !isAsciiWhitespaceCode(raw.charCodeAt(i))) {
+      continue;
+    }
+    while (i < raw.length && isAsciiWhitespaceCode(raw.charCodeAt(i))) {
+      i++;
+    }
+    const title = trimAsciiWhitespace(raw.slice(i));
+    if (!title) {
+      continue;
+    }
+    return title;
+  }
+  return null;
+}
+
 export function mergePodcastsFeedContent(
   existing: string,
   pieFiles: Array<{series: string; content: string}>,
@@ -706,7 +1002,7 @@ export function mergePodcastsFeedContent(
   // Collect new episodes from pie bodies (today/yesterday only).
   const pieCandidates: MergeParts[] = [];
   for (const {series, content} of pieFiles) {
-    const h1 = content.match(/^#(?!#)\s+(.+?)\s*$/m)?.[1]?.trim();
+    const h1 = extractFirstMarkdownAtxH1Title(content);
     const resolvedSeries = h1?.length ? h1 : series;
     for (const ep of parsePieBodyEpisodes(content)) {
       if (ep.date !== todayKey && ep.date !== yesterdayKey) continue;

@@ -6,33 +6,44 @@ import {
 import {
   tryAssertVaultMarkdownNoteUriForRelativeMarkdownLink,
 } from './vaultMarkdownPaths';
+import {
+  isAsciiWhitespaceCode,
+  isExternalMarkdownHrefTrimmed,
+  readHrefScheme,
+  readUriSchemeWithDoubleSlashLength,
+  stripLeadingSlashes,
+  stripTrailingSlashes,
+  trimAndUnixSlashes,
+  trimAsciiWhitespace,
+  trimEndAsciiWhitespace,
+} from './stringScanners';
 import {vaultPathDirname} from './vaultVisibility';
 
 function normSlashes(s: string): string {
-  return s.trim().replace(/\\/g, '/');
+  return trimAndUnixSlashes(s);
 }
 
 /** Strips query and fragment; trims. */
 export function stripMarkdownLinkHrefToPathPart(raw: string): string {
-  let s = raw.trim();
+  let s = trimAsciiWhitespace(raw);
   const q = s.indexOf('?');
   if (q >= 0) {
-    s = s.slice(0, q).trimEnd();
+    s = trimEndAsciiWhitespace(s.slice(0, q));
   }
   const h = s.indexOf('#');
   if (h >= 0) {
-    s = s.slice(0, h).trimEnd();
+    s = trimEndAsciiWhitespace(s.slice(0, h));
   }
-  return s.trim();
+  return trimAsciiWhitespace(s);
 }
 
 /** True when `href` uses a URL scheme (`http:`, `mailto:`, `//example`, …). */
 export function isExternalMarkdownHref(href: string): boolean {
-  const h = href.trim();
+  const h = trimAsciiWhitespace(href);
   if (h === '' || h.startsWith('//')) {
     return true;
   }
-  return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(h);
+  return isExternalMarkdownHrefTrimmed(h);
 }
 
 const BROWSER_OPENABLE_MARKDOWN_SCHEMES = new Set([
@@ -46,15 +57,15 @@ const BROWSER_OPENABLE_MARKDOWN_SCHEMES = new Set([
  * Allowlist: `http`, `https`, `mailto` (scheme must be present; protocol-relative URLs are excluded).
  */
 export function isBrowserOpenableMarkdownHref(href: string): boolean {
-  const h = href.trim();
+  const h = trimAsciiWhitespace(href);
   if (h === '') {
     return false;
   }
-  const m = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(h);
-  if (!m) {
+  const sch = readHrefScheme(h);
+  if (sch == null) {
     return false;
   }
-  return BROWSER_OPENABLE_MARKDOWN_SCHEMES.has(m[1]!.toLowerCase());
+  return BROWSER_OPENABLE_MARKDOWN_SCHEMES.has(sch.schemeLower);
 }
 
 function tryDecodeUriComponent(segment: string): string {
@@ -74,12 +85,12 @@ export function posixResolveRelativeToDirectory(
   baseDirUri: string,
   rel: string,
 ): string {
-  const relDecoded = tryDecodeUriComponent(rel.trim());
-  const normalized = normSlashes(baseDirUri).replace(/\/+$/, '');
+  const relDecoded = tryDecodeUriComponent(trimAsciiWhitespace(rel));
+  const normalized = stripTrailingSlashes(normSlashes(baseDirUri));
 
-  const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)/.exec(normalized);
-  const scheme = schemeMatch?.[1] ?? '';
-  const pathAfterScheme = scheme ? normalized.slice(scheme.length) : normalized;
+  const schemeLen = readUriSchemeWithDoubleSlashLength(normalized);
+  const scheme = schemeLen != null ? normalized.slice(0, schemeLen) : '';
+  const pathAfterScheme = schemeLen != null ? normalized.slice(schemeLen) : normalized;
 
   const baseParts = pathAfterScheme.split('/').filter(Boolean);
   const relParts = relDecoded.split('/').filter(p => p !== '' && p !== '.');
@@ -100,7 +111,7 @@ export function posixResolveRelativeToDirectory(
  * Same-directory targets use `./file.md`.
  */
 export function posixRelativeVaultPath(fromDirUri: string, toFileUri: string): string {
-  const fromParts = normSlashes(fromDirUri).replace(/\/+$/, '').split('/').filter(Boolean);
+  const fromParts = stripTrailingSlashes(normSlashes(fromDirUri)).split('/').filter(Boolean);
   const toParts = normSlashes(toFileUri).split('/').filter(Boolean);
   let i = 0;
   const max = Math.min(fromParts.length, toParts.length);
@@ -150,7 +161,7 @@ function sourceDirectoryForRelativeLink(
   if (n.toLowerCase().endsWith(MARKDOWN_EXTENSION.toLowerCase())) {
     return vaultPathDirname(n);
   }
-  return n.replace(/\/+$/, '');
+  return stripTrailingSlashes(n);
 }
 
 type SafDocumentUriParts = {
@@ -181,7 +192,7 @@ function splitSafDocumentUri(uri: string): SafDocumentUriParts | null {
 }
 
 function safTreeDocumentIdFromRootUri(vaultRoot: string): string | null {
-  const root = normSlashes(vaultRoot).replace(/\/+$/, '');
+  const root = stripTrailingSlashes(normSlashes(vaultRoot));
   if (!root.startsWith('content://')) {
     return null;
   }
@@ -224,13 +235,15 @@ function resolveSafDocumentRelativeMarkdownHref(
     .endsWith(MARKDOWN_EXTENSION.toLowerCase());
   const sourceDirDocumentId = sourceIsMarkdownFile
     ? vaultPathDirname(sourceDocumentId)
-    : sourceDocumentId.replace(/\/+$/, '');
+    : stripTrailingSlashes(sourceDocumentId);
   const targetDocumentId = pathPart.startsWith('/')
-    ? posixResolveRelativeToDirectory(
-      rootDocumentId,
-      normSlashes(tryDecodeUriComponent(pathPart)).replace(/^\/+/, ''),
-    ).replace(/^\/+/, '')
-    : posixResolveRelativeToDirectory(sourceDirDocumentId, pathPart).replace(/^\/+/, '');
+    ? stripLeadingSlashes(
+      posixResolveRelativeToDirectory(
+        rootDocumentId,
+        normSlashes(stripLeadingSlashes(tryDecodeUriComponent(pathPart))),
+      ),
+    )
+    : stripLeadingSlashes(posixResolveRelativeToDirectory(sourceDirDocumentId, pathPart));
   if (
     targetDocumentId !== rootDocumentId
     && !targetDocumentId.startsWith(`${rootDocumentId}/`)
@@ -238,7 +251,7 @@ function resolveSafDocumentRelativeMarkdownHref(
     return null;
   }
 
-  const decodedRoot = tryDecodeUriComponent(normSlashes(vaultRoot).replace(/\/+$/, ''));
+  const decodedRoot = tryDecodeUriComponent(stripTrailingSlashes(normSlashes(vaultRoot)));
   const targetRelativeToRoot = targetDocumentId === rootDocumentId
     ? ''
     : targetDocumentId.slice(rootDocumentId.length + 1);
@@ -269,7 +282,7 @@ export function resolveVaultRelativeMarkdownHref(
   if (!pathPart.toLowerCase().endsWith(MARKDOWN_EXTENSION.toLowerCase())) {
     return null;
   }
-  const baseRaw = normSlashes(normalizeVaultBaseUri(vaultRoot)).replace(/\/+$/, '');
+  const baseRaw = stripTrailingSlashes(normSlashes(normalizeVaultBaseUri(vaultRoot)));
   const base = tryDecodeUriComponent(baseRaw);
   const sourceRaw = normSlashes(sourceMarkdownUriOrDir);
   const sourceDecoded = tryDecodeUriComponent(sourceRaw);
@@ -361,7 +374,7 @@ function scanInlineLink(
   }
   const afterLabel = j + 1;
   let k = afterLabel;
-  while (k < s.length && /\s/.test(s[k]!)) {
+  while (k < s.length && isAsciiWhitespaceCode(s.charCodeAt(k))) {
     k++;
   }
   if (k >= s.length || s[k] !== '(') {

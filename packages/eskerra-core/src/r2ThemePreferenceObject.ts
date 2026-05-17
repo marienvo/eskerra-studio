@@ -1,10 +1,11 @@
 import type {EskerraR2Config} from './eskerraSettings';
 import {r2SignedObjectRequest, type R2PlaylistObjectOptions} from './r2PlaylistObject';
+import {extractXmlSimpleTagText} from './stringScanners';
 import {parseThemePreferenceOrThrow, serializeThemePreference, type ThemePreference} from './themePreference';
 import {THEME_PREFERENCE_FILE_NAME} from './vaultLayout';
 
 function parseR2XmlErrorCode(errText: string): string {
-  return errText.match(/<Code>([^<]+)<\/Code>/)?.[1] ?? '';
+  return extractXmlSimpleTagText(errText, 'Code');
 }
 
 function r2DeniedHint(errCode: string, verb: 'read' | 'write' | 'delete'): string {

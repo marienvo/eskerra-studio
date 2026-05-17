@@ -1,6 +1,7 @@
 import type {FrontmatterPropertyType} from './markdown/frontmatterTypes';
 import {parseThemePreference} from './themePreference';
 import type {ThemePreference} from './themePreference';
+import {stripSuffixCaseInsensitive, stripTrailingSlashes, trimAsciiWhitespace} from './stringScanners';
 
 const FM_PROPERTY_TYPES: ReadonlySet<FrontmatterPropertyType> = new Set([
   'text',
@@ -81,7 +82,7 @@ function parseR2Block(value: unknown): EskerraR2Config {
  * `jurisdiction` is `eu` or `fedramp` (required by Cloudflare for jurisdictional buckets).
  */
 export function effectiveR2Endpoint(config: EskerraR2Config): string {
-  const trimmed = config.endpoint.trim().replace(/\/+$/, '');
+  const trimmed = stripTrailingSlashes(trimAsciiWhitespace(config.endpoint));
   const jur = config.jurisdiction ?? 'default';
   if (jur === 'default') {
     return trimmed;
@@ -104,10 +105,10 @@ export function effectiveR2Endpoint(config: EskerraR2Config): string {
       !host.includes('.fedramp.') &&
       !host.includes('.eu.')
     ) {
-      const account = host.replace(/\.r2\.cloudflarestorage\.com$/i, '');
-      if (!account.includes('.')) {
+      const account = stripSuffixCaseInsensitive(host, '.r2.cloudflarestorage.com');
+      if (account != null && !account.includes('.')) {
         url.hostname = `${account}.eu.r2.cloudflarestorage.com`;
-        return url.href.replace(/\/$/, '');
+        return stripTrailingSlashes(url.href);
       }
     }
     return trimmed;
@@ -122,10 +123,10 @@ export function effectiveR2Endpoint(config: EskerraR2Config): string {
       !host.includes('.fedramp.') &&
       !host.includes('.eu.')
     ) {
-      const account = host.replace(/\.r2\.cloudflarestorage\.com$/i, '');
-      if (!account.includes('.')) {
+      const account = stripSuffixCaseInsensitive(host, '.r2.cloudflarestorage.com');
+      if (account != null && !account.includes('.')) {
         url.hostname = `${account}.fedramp.r2.cloudflarestorage.com`;
-        return url.href.replace(/\/$/, '');
+        return stripTrailingSlashes(url.href);
       }
     }
     return trimmed;
@@ -140,14 +141,14 @@ export function effectiveR2Endpoint(config: EskerraR2Config): string {
  * object URLs.
  */
 export function r2S3AccountBaseUrl(config: EskerraR2Config): string {
-  const merged = effectiveR2Endpoint(config).trim().replace(/\/+$/, '');
+  const merged = stripTrailingSlashes(trimAsciiWhitespace(effectiveR2Endpoint(config)));
   let url: URL;
   try {
     url = new URL(merged);
   } catch {
     return merged;
   }
-  const path = url.pathname.replace(/\/$/, '') || '';
+  const path = stripTrailingSlashes(url.pathname) || '';
   const bucket = config.bucket.trim();
   if (path === '' || path === `/${bucket}`) {
     return url.origin;
