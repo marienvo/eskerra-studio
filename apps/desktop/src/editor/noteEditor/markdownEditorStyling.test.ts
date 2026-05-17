@@ -8,7 +8,7 @@ import {
 } from '@codemirror/language';
 import {languages} from '@codemirror/language-data';
 import {EditorState} from '@codemirror/state';
-import {EditorView, drawSelection} from '@codemirror/view';
+import {EditorView, RectangleMarker, drawSelection} from '@codemirror/view';
 import {highlightTree} from '@lezer/highlight';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
@@ -352,6 +352,45 @@ describe('markdownCodeBackgroundLayer markers', () => {
       view.destroy();
       parent.remove();
     }
+  });
+
+  /* Regression: after switching notes, `LayerView.draw` reused an inline-code-pill DOM element for a
+   * fence marker because `MarkdownFenceBlockBackgroundMarker.update` returned `true` regardless of
+   * `prev` type. Result was a pill at the previous note's left/width but stretched to fence height. */
+  it('fence marker refuses to reuse a non-fence marker DOM element', () => {
+    const elt = document.createElement('div');
+    elt.className = 'cm-md-inline-code-bg';
+    elt.style.left = '200px';
+    elt.style.top = '50px';
+    elt.style.width = '80px';
+    elt.style.height = '20px';
+    const prevInlinePill = new RectangleMarker(
+      'cm-md-inline-code-bg',
+      200,
+      50,
+      80,
+      20,
+    );
+    const nextFence = new MarkdownFenceBlockBackgroundMarker(10, 400);
+
+    expect(nextFence.update(elt, prevInlinePill)).toBe(false);
+    expect(elt.style.left).toBe('200px');
+    expect(elt.style.width).toBe('80px');
+    expect(elt.style.top).toBe('50px');
+    expect(elt.style.height).toBe('20px');
+  });
+
+  it('fence marker reuses another fence marker DOM element and updates top/height', () => {
+    const elt = document.createElement('div');
+    elt.className = 'cm-md-fence-bg';
+    elt.style.top = '10px';
+    elt.style.height = '400px';
+    const prevFence = new MarkdownFenceBlockBackgroundMarker(10, 400);
+    const nextFence = new MarkdownFenceBlockBackgroundMarker(120, 80);
+
+    expect(nextFence.update(elt, prevFence)).toBe(true);
+    expect(elt.style.top).toBe('120px');
+    expect(elt.style.height).toBe('80px');
   });
 });
 

@@ -112,7 +112,15 @@ export class MarkdownFenceBlockBackgroundMarker implements LayerMarker {
     return el;
   }
 
-  update(elt: HTMLElement, _prev: LayerMarker): boolean {
+  update(elt: HTMLElement, prev: LayerMarker): boolean {
+    /* CodeMirror's `LayerView.draw` reuses an old DOM element when `update()` returns true, but it
+     * does not check that `prev` is the same marker class. Returning true here for a `RectangleMarker`
+     * (inline-code / equal-highlight pill) left the old className and inline `left`/`width` in place
+     * while overwriting `top`/`height` — producing a pill at the previous note's horizontal position
+     * stretched to fence-block height after switching tabs. Force a fresh draw when types differ. */
+    if (!(prev instanceof MarkdownFenceBlockBackgroundMarker)) {
+      return false;
+    }
     elt.style.top = `${this.top}px`;
     elt.style.height = `${this.height}px`;
     return true;
