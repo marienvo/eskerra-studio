@@ -10,7 +10,8 @@
   },
   "devDependencies": {
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vite": "^8.0.5",
+    "vitest": "^4.1.6"
   },
   "dependencies": {
     "aws4fetch": "^1.0.20",

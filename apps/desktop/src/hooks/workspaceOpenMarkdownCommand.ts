@@ -232,7 +232,7 @@ function applyBackgroundNewTabOpen(
     'signature',
   );
   if (tabStripMismatch?.kind === 'signature') {
-    const warn = typeof process !== 'undefined' && process.env.NODE_ENV !== 'production';
+    const warn = import.meta.env.DEV;
     if (warn) {
       const {legacySig, derivedSig} = tabStripMismatch;
       console.warn(
