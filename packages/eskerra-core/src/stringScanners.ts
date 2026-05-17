@@ -8,6 +8,41 @@ export function isAsciiWhitespaceCode(c: number): boolean {
   return WS_CODES.has(c);
 }
 
+/** True when `s` is exactly four ASCII digit code units (`0`–`9`). */
+export function isFourDigitYearString(s: string): boolean {
+  if (s.length !== 4) {
+    return false;
+  }
+  for (let i = 0; i < 4; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 48 || c > 57) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * True when `s` matches `YYYY-MM-DD` with ASCII digits and `-` separators only
+ * (does not validate calendar ranges).
+ */
+export function isIso8601DateOnlyString(s: string): boolean {
+  if (s.length !== 10) {
+    return false;
+  }
+  for (let i = 0; i < 10; i++) {
+    const c = s.charCodeAt(i);
+    if (i === 4 || i === 7) {
+      if (c !== 45) {
+        return false;
+      }
+    } else if (c < 48 || c > 57) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Tab / LF / CR only: may appear inside `[`…`]` before the mark without consuming the unchecked space. */
 function isCheckboxLeadingWhitespaceCode(c: number): boolean {
   return c === 9 || c === 10 || c === 13;

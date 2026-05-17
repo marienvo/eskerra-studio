@@ -1,5 +1,7 @@
 import {
   isAsciiWhitespaceCode,
+  isFourDigitYearString,
+  isIso8601DateOnlyString,
   parseTaskCheckboxMarkAfterOpenBracket,
   trimAsciiWhitespace,
   trimEndAsciiWhitespace,
@@ -62,22 +64,9 @@ function stemBeforePodcastsMd(trimmed: string): string | null {
   return trimEndAsciiWhitespace(withoutExt.slice(0, i + 1));
 }
 
-function isFourDigitYear(s: string): boolean {
-  if (s.length !== 4) {
-    return false;
-  }
-  for (let k = 0; k < 4; k++) {
-    const c = s.charCodeAt(k);
-    if (c < 48 || c > 57) {
-      return false;
-    }
-  }
-  return true;
-}
-
 /** Parses `YYYY Section title` from stem without nested quantifiers. */
 function parseYearAndSectionTitle(stem: string): {sectionTitle: string; year: number} | null {
-  if (stem.length < 6 || !isFourDigitYear(stem.slice(0, 4))) {
+  if (stem.length < 6 || !isFourDigitYearString(stem.slice(0, 4))) {
     return null;
   }
   let pos = 4;
@@ -132,30 +121,13 @@ export function extractPodcastSectionTitle(fileName: string): string | null {
   return details?.sectionTitle ?? null;
 }
 
-function isIsoDateOnly(s: string): boolean {
-  if (s.length !== 10) {
-    return false;
-  }
-  for (let i = 0; i < 10; i++) {
-    const c = s.charCodeAt(i);
-    if (i === 4 || i === 7) {
-      if (c !== 45) {
-        return false;
-      }
-    } else if (c < 48 || c > 57) {
-      return false;
-    }
-  }
-  return true;
-}
-
 function splitDatePrefix(value: string): {date: string; remainder: string} | null {
   const separatorIdx = value.indexOf(';');
   if (separatorIdx < 0) {
     return null;
   }
   const date = trimAsciiWhitespace(value.slice(0, separatorIdx));
-  if (!isIsoDateOnly(date)) {
+  if (!isIso8601DateOnlyString(date)) {
     return null;
   }
   const remainder = trimAsciiWhitespace(value.slice(separatorIdx + 1));

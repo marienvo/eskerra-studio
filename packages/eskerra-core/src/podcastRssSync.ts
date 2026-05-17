@@ -10,6 +10,8 @@ import {
 } from './podcastRssSyncYaml';
 import {
   isAsciiWhitespaceCode,
+  isFourDigitYearString,
+  isIso8601DateOnlyString,
   mergeAmpEntitiesToAmpersand,
   collapseAsciiWhitespaceRunsToSpace,
   parseTaskCheckboxMarkAfterOpenBracket,
@@ -490,19 +492,6 @@ export function buildUpdatedPodcastFileContent(
 
 // --- Hub file utilities ---
 
-function isFourDigitYearStr(s: string): boolean {
-  if (s.length !== 4) {
-    return false;
-  }
-  for (let i = 0; i < 4; i++) {
-    const c = s.charCodeAt(i);
-    if (c < 48 || c > 57) {
-      return false;
-    }
-  }
-  return true;
-}
-
 export function companionHubFileName(podcastsMdName: string): string | null {
   const trimmed = trimAsciiWhitespace(podcastsMdName);
   const lower = trimmed.toLowerCase();
@@ -526,7 +515,7 @@ export function companionHubFileName(podcastsMdName: string): string | null {
     return null;
   }
   const yearStr = head.slice(0, 4);
-  if (!isFourDigitYearStr(yearStr)) {
+  if (!isFourDigitYearString(yearStr)) {
     return null;
   }
   if (head.charCodeAt(4) !== 32 && head.charCodeAt(4) !== 9) {
@@ -570,8 +559,26 @@ function parseUncheckedHubTaskLine(trimmed: string): {checked: boolean; wikiInne
     return null;
   }
   const innerStart = p + 2;
-  const close = trimmed.indexOf(']]', innerStart);
-  if (close < 0) {
+  let q = innerStart;
+  while (q < trimmed.length) {
+    const ch = trimmed.charCodeAt(q);
+    if (ch === 93) {
+      // `]` — only valid as the first half of closing `]]`.
+      if (q + 1 < trimmed.length && trimmed.charCodeAt(q + 1) === 93) {
+        break;
+      }
+      return null;
+    }
+    if (ch === 91) {
+      return null;
+    }
+    q++;
+  }
+  if (q >= trimmed.length || trimmed.charCodeAt(q) !== 93) {
+    return null;
+  }
+  const close = q;
+  if (close === innerStart) {
     return null;
   }
   return {checked: cb.checked, wikiInner: trimmed.slice(innerStart, close)};
@@ -678,7 +685,7 @@ function parseMergeDatePrefix(rest: string): {date: string; remainder: string} |
     return null;
   }
   const date = trimAsciiWhitespace(rest.slice(0, sep));
-  if (!isIsoDateString(date)) {
+  if (!isIso8601DateOnlyString(date)) {
     return null;
   }
   const remainder = trimAsciiWhitespace(rest.slice(sep + 1));
@@ -686,23 +693,6 @@ function parseMergeDatePrefix(rest: string): {date: string; remainder: string} |
     return null;
   }
   return {date, remainder};
-}
-
-function isIsoDateString(s: string): boolean {
-  if (s.length !== 10) {
-    return false;
-  }
-  for (let i = 0; i < 10; i++) {
-    const c = s.charCodeAt(i);
-    if (i === 4 || i === 7) {
-      if (c !== 45) {
-        return false;
-      }
-    } else if (c < 48 || c > 57) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function parseMergeSeriesTail(rem: string): {series: string; openIdx: number} | null {
@@ -846,7 +836,7 @@ function parsePieBodyDate(line: string): string | null {
     return null;
   }
   const dayNum = parseOrdinalDayToken(dayTok);
-  if (dayNum == null || !isFourDigitYearStr(yearStr)) {
+  if (dayNum == null || !isFourDigitYearString(yearStr)) {
     return null;
   }
   return `${yearStr}-${String(monthIdx + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;

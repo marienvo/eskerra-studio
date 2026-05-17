@@ -1,6 +1,34 @@
 import {describe, expect, it} from 'vitest';
 
-import {parseTaskCheckboxMarkAfterOpenBracket} from './stringScanners';
+import {
+  isFourDigitYearString,
+  isIso8601DateOnlyString,
+  parseTaskCheckboxMarkAfterOpenBracket,
+} from './stringScanners';
+
+describe('isFourDigitYearString', () => {
+  it('accepts four ASCII digits', () => {
+    expect(isFourDigitYearString('2025')).toBe(true);
+  });
+
+  it('rejects wrong lengths and non-digits', () => {
+    expect(isFourDigitYearString('202')).toBe(false);
+    expect(isFourDigitYearString('20256')).toBe(false);
+    expect(isFourDigitYearString('20x5')).toBe(false);
+  });
+});
+
+describe('isIso8601DateOnlyString', () => {
+  it('accepts YYYY-MM-DD with hyphens', () => {
+    expect(isIso8601DateOnlyString('2025-04-25')).toBe(true);
+  });
+
+  it('rejects bad separators or length', () => {
+    expect(isIso8601DateOnlyString('2025/04/25')).toBe(false);
+    expect(isIso8601DateOnlyString('2025-4-25')).toBe(false);
+    expect(isIso8601DateOnlyString('2025-04-2')).toBe(false);
+  });
+});
 
 describe('parseTaskCheckboxMarkAfterOpenBracket', () => {
   it('treats a lone space as unchecked', () => {

@@ -426,6 +426,14 @@ describe('parseUncheckedHubLinks', () => {
   it('returns empty array for content with no task lines', () => {
     expect(parseUncheckedHubLinks('# Hub\n\nSome text\n')).toEqual([]);
   });
+
+  it('rejects wiki inners that contain a lone ] (must match wikiLinkExtract bracket rules)', () => {
+    expect(parseUncheckedHubLinks('- [ ] [[real]path]]')).toEqual([]);
+  });
+
+  it('rejects wiki inners that contain [', () => {
+    expect(parseUncheckedHubLinks('- [ ] [[a[b]]')).toEqual([]);
+  });
 });
 
 // --- mergePodcastsFeedContent ---
