@@ -47,20 +47,32 @@ export function buildInboxWikiLinkCompletionCandidates(
   return out;
 }
 
-/** Case-insensitive prefix filter; caps result length. */
+/**
+ * Case-insensitive substring filter with ranking:
+ * 1. Exact match, 2. prefix match, 3. substring match.
+ * Within each tier, preserves alphabetical order from the input.
+ */
 export function filterInboxWikiLinkCompletionCandidates(
   candidates: ReadonlyArray<InboxWikiLinkCompletionCandidate>,
   prefix: string,
   maxOptions: number = WIKI_LINK_COMPLETION_MAX_OPTIONS,
 ): InboxWikiLinkCompletionCandidate[] {
   const p = prefix.trim().toLowerCase();
-  const filtered =
-    p === ''
-      ? [...candidates]
-      : candidates.filter(
-          c =>
-            c.label.toLowerCase().startsWith(p) ||
-            c.detail.toLowerCase().startsWith(p),
-        );
-  return filtered.slice(0, maxOptions);
+  if (p === '') {
+    return candidates.slice(0, maxOptions);
+  }
+  const exact: InboxWikiLinkCompletionCandidate[] = [];
+  const starts: InboxWikiLinkCompletionCandidate[] = [];
+  const contains: InboxWikiLinkCompletionCandidate[] = [];
+  for (const c of candidates) {
+    const label = c.label.toLowerCase();
+    if (label === p) {
+      exact.push(c);
+    } else if (label.startsWith(p)) {
+      starts.push(c);
+    } else if (label.includes(p)) {
+      contains.push(c);
+    }
+  }
+  return [...exact, ...starts, ...contains].slice(0, maxOptions);
 }
