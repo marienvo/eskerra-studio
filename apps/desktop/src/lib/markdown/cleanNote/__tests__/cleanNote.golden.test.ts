@@ -1,7 +1,6 @@
 import {describe, expect, it} from 'vitest';
 
-import {clean} from './testUtils';
-import {readFixture} from './testUtils';
+import {clean, readFixture} from './testUtils';
 
 const GOLDEN_FIXTURES = [
   '001-basic-normalization',

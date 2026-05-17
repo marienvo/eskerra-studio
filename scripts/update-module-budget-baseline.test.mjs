@@ -39,4 +39,20 @@ describe('buildUpdatedMaxLinesByPath', () => {
       'apps/desktop/src/lib/large-new.ts': NEW_FILE_MAX_LINES + 1,
     });
   });
+
+  it('removes baseline entries when the file no longer exists on disk', () => {
+    const next = buildUpdatedMaxLinesByPath(
+      {
+        'apps/desktop/src/lib/removed-from-repo.ts': 1006,
+      },
+      {
+        pathExists: () => false,
+        countLinesForPath: () => {
+          assert.fail('countLinesForPath should not run after pathExists is false');
+        },
+      },
+    );
+
+    assert.deepEqual(next, {});
+  });
 });
