@@ -85,6 +85,31 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md).toContain('[[Note A]]');
     expect(md).toContain('[[Note B]]');
   });
+
+  it('strips script tags before conversion', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><script>document.cookie</script>Hello</p>',
+    );
+    expect(md.toLowerCase()).not.toContain('<script');
+    expect(md).not.toContain('document.cookie');
+    expect(md).toContain('Hello');
+  });
+
+  it('strips event handler attributes from pasted HTML', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img src="https://example.com/x.png" onerror="alert(1)" alt="x"></p>',
+    );
+    expect(md).not.toContain('onerror');
+    expect(md).not.toContain('alert(');
+  });
+
+  it('does not emit Markdown links for javascript: URLs', () => {
+    const jsScheme = ['java', 'script', ':'].join('');
+    const md = clipboardHtmlToMarkdown(
+      `<p><a href="${jsScheme}alert(1)">click</a></p>`,
+    );
+    expect(md).not.toContain(jsScheme);
+  });
 });
 
 describe('tryClipboardHtmlToMarkdownInsert', () => {
@@ -127,6 +152,17 @@ describe('tryClipboardHtmlToMarkdownInsert', () => {
       'x',
     );
     expect(out).toContain('**x**');
+  });
+
+  it('sanitizes hostile HTML in structured paste before Markdown insert', () => {
+    const out = tryClipboardHtmlToMarkdownInsert(
+      '<p><strong>Safe</strong><script>document.cookie</script></p>',
+      'Safe',
+    );
+    expect(out).toBeTruthy();
+    expect(out!.toLowerCase()).not.toContain('<script');
+    expect(out).not.toContain('document.cookie');
+    expect(out).toContain('**Safe**');
   });
 
   it('returns Markdown when plain is empty but HTML is structured (WebKit empty text/plain)', () => {
