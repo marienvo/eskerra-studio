@@ -8,9 +8,16 @@ export function isAsciiWhitespaceCode(c: number): boolean {
   return WS_CODES.has(c);
 }
 
+/** Tab / LF / CR only: may appear inside `[`…`]` before the mark without consuming the unchecked space. */
+function isCheckboxLeadingWhitespaceCode(c: number): boolean {
+  return c === 9 || c === 10 || c === 13;
+}
+
 /**
  * Parses GitHub-style task checkbox content immediately after `[`.
  * Mirrors `/\[\s*([xX ])\s*\]/` on a single line: ` ` is a valid unchecked marker.
+ * Leading tab / LF / CR before `x`, `X`, or the unchecked space is skipped; a leading
+ * literal space stays the first body code unit so `[ x]` still resolves to checked.
  */
 export function parseTaskCheckboxMarkAfterOpenBracket(
   s: string,
@@ -20,12 +27,19 @@ export function parseTaskCheckboxMarkAfterOpenBracket(
   if (p >= s.length) {
     return null;
   }
-  const c0 = s.charCodeAt(p);
+  let r = p;
+  while (r < s.length && isCheckboxLeadingWhitespaceCode(s.charCodeAt(r))) {
+    r++;
+  }
+  if (r >= s.length) {
+    return null;
+  }
+  const c0 = s.charCodeAt(r);
   if (c0 === 120 || c0 === 88) {
-    return {checked: true, indexAfterCheckboxBody: p + 1};
+    return {checked: true, indexAfterCheckboxBody: r + 1};
   }
   if (c0 === 32) {
-    let q = p + 1;
+    let q = r + 1;
     while (q < s.length && isAsciiWhitespaceCode(s.charCodeAt(q))) {
       q++;
     }
@@ -35,7 +49,7 @@ export function parseTaskCheckboxMarkAfterOpenBracket(
         return {checked: true, indexAfterCheckboxBody: q + 1};
       }
     }
-    return {checked: false, indexAfterCheckboxBody: p + 1};
+    return {checked: false, indexAfterCheckboxBody: r + 1};
   }
   return null;
 }
