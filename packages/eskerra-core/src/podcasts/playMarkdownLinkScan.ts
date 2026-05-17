@@ -36,7 +36,9 @@ export function scanPlayTriangleMarkdownLinks(line: string): Array<{url: string;
         continue;
       }
       if (c === ')') {
-        out.push({url: line.slice(hrefStart, q), start: openBracket});
+        if (q > hrefStart) {
+          out.push({url: line.slice(hrefStart, q), start: openBracket});
+        }
         i = q + 1;
         break;
       }
