@@ -48,6 +48,7 @@
   "overrides": {
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "fast-xml-builder": "^1.2.0",
     "patch-package": {
       "find-yarn-workspace-root": {
         "micromatch": {
