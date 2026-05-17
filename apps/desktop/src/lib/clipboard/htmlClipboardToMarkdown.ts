@@ -213,14 +213,26 @@ function looselySameMarkdownAsPlain(md: string, plain: string): boolean {
   return aOne === bOne;
 }
 
-export function clipboardHtmlToMarkdown(html: string): string {
-  const cleaned = preprocessClipboardHtmlFragment(html);
+/**
+ * Converts clipboard HTML that was already passed through {@link sanitizeClipboardHtml}.
+ * All module-owned `DOMParser` use for Turndown preprocessing must go through this path.
+ */
+function clipboardSanitizedHtmlToMarkdown(safeHtml: string): string {
+  const cleaned = preprocessClipboardHtmlFragment(safeHtml);
   // Turndown escapes [ and ] individually, turning [[wiki link]] into \[\[wiki link\]\].
   // Undo that for double-bracket sequences so wiki links survive paste.
   return getTurndown()
     .turndown(cleaned)
     .replace(/\\\[\\\[/g, '[[')
     .replace(/\\\]\\\]/g, ']]');
+}
+
+/**
+ * Converts HTML from the clipboard to Markdown. Untrusted HTML is sanitized before any
+ * module-owned DOM parsing (see {@link clipboardSanitizedHtmlToMarkdown}).
+ */
+export function clipboardHtmlToMarkdown(html: string): string {
+  return clipboardSanitizedHtmlToMarkdown(sanitizeClipboardHtml(html));
 }
 
 /**
@@ -245,7 +257,7 @@ export function tryClipboardHtmlToMarkdownInsert(
 
   let md: string;
   try {
-    md = clipboardHtmlToMarkdown(safeHtml);
+    md = clipboardSanitizedHtmlToMarkdown(safeHtml);
   } catch {
     return null;
   }
