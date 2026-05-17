@@ -48,7 +48,7 @@ import {
   todayHubPerfLog,
 } from '../../lib/todayHub/todayHubPerf';
 import {formatVaultImageMarkdownForInsert} from '../../lib/clipboard/formatVaultImageMarkdown';
-import {cleanPastedMarkdownFragment} from '../../lib/cleanNoteMarkdown';
+import {cleanPastedMarkdownFragment} from '../../lib/markdown/cleanNote';
 import {tryClipboardHtmlToMarkdownInsert} from '../../lib/clipboard/htmlClipboardToMarkdown';
 import {
   isNoteAttachmentImageFilePath,

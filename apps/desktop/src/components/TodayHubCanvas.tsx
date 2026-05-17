@@ -31,7 +31,7 @@ import {resolveVaultImagePreviewUrl} from '../lib/resolveVaultImagePreviewUrl';
 import {
   cleanNoteMarkdownBody,
   CLEAN_PASTE_FRAGMENT_PLACEHOLDER_PATH,
-} from '../lib/cleanNoteMarkdown';
+} from '../lib/markdown/cleanNote';
 import {
   enumerateTodayHubWeekStarts,
   hubCellStableSessionKey,
