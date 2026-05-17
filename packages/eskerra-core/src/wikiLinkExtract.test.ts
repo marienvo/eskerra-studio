@@ -36,4 +36,13 @@ describe('extractWikiLinkInnersFromMarkdown', () => {
       {inner: 'Two|Shown', fullMatchStart: 12, fullMatchEnd: 25},
     ]);
   });
+
+  it('does not treat brackets inside a pseudo-inner as a wiki link', () => {
+    expect(extractWikiLinkInnersFromMarkdown('[[a[b]]')).toEqual([]);
+  });
+
+  it('handles long prefixes without catastrophic backtracking', () => {
+    const pad = '['.repeat(5000);
+    expect(extractWikiLinkInnersFromMarkdown(`${pad}[[End]]`)).toEqual(['End']);
+  });
 });

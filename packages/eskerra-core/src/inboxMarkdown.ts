@@ -1,4 +1,11 @@
 import {MARKDOWN_EXTENSION} from './vaultLayout';
+import {
+  collapseAsciiWhitespaceRunsToSpace,
+  replaceDashUnderscoreRunsWithSpace,
+  stripInboxIllegalFilenameChars,
+  trimLeadingDotsAndSpaces,
+  trimTrailingDotsAndSpaces,
+} from './stringScanners';
 
 export function stemFromMarkdownFileName(fileName: string): string {
   return fileName.endsWith(MARKDOWN_EXTENSION)
@@ -9,7 +16,7 @@ export function stemFromMarkdownFileName(fileName: string): string {
 function titleFromNoteName(fileName: string): string {
   const baseName = stemFromMarkdownFileName(fileName);
 
-  return baseName.replace(/[-_]+/g, ' ').trim() || 'Untitled entry';
+  return replaceDashUnderscoreRunsWithSpace(baseName).trim() || 'Untitled entry';
 }
 
 /** Human-readable title from an inbox markdown filename. */
@@ -22,10 +29,11 @@ export function sanitizeInboxNoteStem(rawName: string): string | null {
   const withoutControlChars = Array.from(rawName.trim())
     .filter(ch => ch >= ' ' && ch !== '\u007f')
     .join('');
-  const normalized = withoutControlChars
-    .replace(/[/\\:*?"<>|'`‘’“”]/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/^[. ]+|[. ]+$/g, '');
+  const normalized = trimTrailingDotsAndSpaces(
+    trimLeadingDotsAndSpaces(
+      collapseAsciiWhitespaceRunsToSpace(stripInboxIllegalFilenameChars(withoutControlChars)),
+    ),
+  );
   return normalized === '' ? null : normalized;
 }
 

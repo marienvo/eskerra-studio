@@ -2,6 +2,7 @@ import {AwsClient} from 'aws4fetch';
 
 import {r2S3AccountBaseUrl, type EskerraR2Config} from './eskerraSettings';
 import {normalizePlaylistEntryForSync, serializePlaylistEntry, type PlaylistEntry} from './playlist';
+import {extractXmlSimpleTagText, stripTrailingSlashes} from './stringScanners';
 import {PLAYLIST_FILE_NAME} from './vaultLayout';
 
 /** Cloudflare R2 S3 API uses the `auto` region for SigV4. */
@@ -16,7 +17,7 @@ export type R2PlaylistObjectOptions = {
 };
 
 export function buildR2ObjectUrl(config: EskerraR2Config, objectKey: string): string {
-  const base = r2S3AccountBaseUrl(config).replace(/\/+$/, '');
+  const base = stripTrailingSlashes(r2S3AccountBaseUrl(config));
   const encodedKey = encodeURIComponent(objectKey).replace(/%2F/g, '/');
   return `${base}/${config.bucket}/${encodedKey}`;
 }
@@ -31,7 +32,7 @@ function createR2Client(config: EskerraR2Config): AwsClient {
 }
 
 function parseR2XmlErrorCode(errText: string): string {
-  return errText.match(/<Code>([^<]+)<\/Code>/)?.[1] ?? '';
+  return extractXmlSimpleTagText(errText, 'Code');
 }
 
 function r2DeniedHint(errCode: string, verb: 'read' | 'write' | 'delete'): string {

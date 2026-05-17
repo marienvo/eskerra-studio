@@ -4,6 +4,7 @@ import {
   MARKDOWN_EXTENSION,
   normalizeVaultBaseUri,
 } from './vaultLayout';
+import {stripTrailingSlashes, trimAndUnixSlashes} from './stringScanners';
 import {
   isBrowserOpenableMarkdownHref,
   stripMarkdownLinkHrefToPathPart,
@@ -115,10 +116,10 @@ export function wikiLinkInnerPathResolutionSourceDirectoryUri(
   const parsed = splitWikiLinkInner(inner);
   const trimmedTarget = parsed.targetText.trim();
   if (hasInboxPrefixCaseInsensitive(trimmedTarget)) {
-    const base = normalizeVaultBaseUri(vaultRoot).replace(/\/+$/, '');
+    const base = stripTrailingSlashes(trimAndUnixSlashes(normalizeVaultBaseUri(vaultRoot)));
     return getInboxDirectoryUri(base);
   }
-  return normalizeVaultBaseUri(vaultRoot).replace(/\/+$/, '');
+  return stripTrailingSlashes(trimAndUnixSlashes(normalizeVaultBaseUri(vaultRoot)));
 }
 
 function stripInboxPrefixCaseInsensitive(target: string): string {

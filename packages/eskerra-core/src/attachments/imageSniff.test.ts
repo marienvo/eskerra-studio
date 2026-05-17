@@ -68,4 +68,9 @@ describe('markdownContainsTransientImageUrls', () => {
   it('ignores https images', () => {
     expect(markdownContainsTransientImageUrls('![](https://x/y.png)')).toBe(false);
   });
+
+  it('handles long markdown without false positives', () => {
+    const pad = '![](https://x/y.png)'.repeat(2000);
+    expect(markdownContainsTransientImageUrls(pad)).toBe(false);
+  });
 });

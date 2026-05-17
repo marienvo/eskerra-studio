@@ -481,6 +481,16 @@ describe('mergePodcastsFeedContent', () => {
     expect(result).not.toContain('(fallback)');
   });
 
+  it('uses the first ATX H1 line and ignores ## headings for series naming', () => {
+    const pie =
+      '## Friday, April 25th, 2025\n\n' +
+      '# From H1\n\n' +
+      '- Ep [▶️](<https://cdn.example.com/e.mp3>)\n';
+    const result = mergePodcastsFeedContent('', [{series: 'fallback', content: pie}], today);
+    expect(result).toContain('(From H1)');
+    expect(result).not.toContain('(fallback)');
+  });
+
   it('drops existing episodes older than 7 days', () => {
     const old = '- [ ] 2025-04-17; Old Ep [▶️](https://cdn.example.com/old.mp3) (OVT)\n';
     const result = mergePodcastsFeedContent(old, [], today);

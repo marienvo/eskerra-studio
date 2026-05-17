@@ -1,3 +1,5 @@
+import {trimAsciiWhitespace} from '../stringScanners';
+
 /**
  * Magic-byte sniff for common image formats. Mirrors desktop vault validation
  * so clipboard files with missing MIME types still classify as images.
@@ -68,15 +70,43 @@ export function sniffImageFormatFromBytes(buf: Uint8Array): ImageSniffFormat | n
   return null;
 }
 
+function isTransientPasteImageUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return lower.startsWith('blob:') || lower.startsWith('data:image/');
+}
+
 /** Markdown image syntax that points at ephemeral or non-vault URIs (paste artifacts). */
 export function markdownContainsTransientImageUrls(markdown: string): boolean {
-  const re = /!\[[^\]]*]\(([^)]+)\)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(markdown)) !== null) {
-    const url = m[1].trim();
-    if (/^blob:/i.test(url) || /^data:image\//i.test(url)) {
+  let i = 0;
+  while (i + 1 < markdown.length) {
+    if (markdown.charCodeAt(i) !== 33 || markdown.charCodeAt(i + 1) !== 91) {
+      i++;
+      continue;
+    }
+    i += 2;
+    while (i < markdown.length && markdown.charCodeAt(i) !== 93) {
+      i++;
+    }
+    if (i >= markdown.length || markdown.charCodeAt(i) !== 93) {
+      continue;
+    }
+    if (i + 1 >= markdown.length || markdown.charCodeAt(i + 1) !== 40) {
+      i++;
+      continue;
+    }
+    i += 2;
+    const urlStart = i;
+    while (i < markdown.length && markdown.charCodeAt(i) !== 41) {
+      i++;
+    }
+    if (i >= markdown.length) {
+      break;
+    }
+    const url = trimAsciiWhitespace(markdown.slice(urlStart, i));
+    if (isTransientPasteImageUrl(url)) {
       return true;
     }
+    i++;
   }
   return false;
 }

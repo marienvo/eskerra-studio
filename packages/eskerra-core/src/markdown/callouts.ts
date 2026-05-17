@@ -100,8 +100,28 @@ export function resolveCallout(rawType: string): ResolvedCallout {
 }
 
 /** First-line callout header: `> [!type]` … optional `+`/`-` (fold markers, ignored for display). */
-const CALLOUT_HEADER_RE =
-  /^(\s*((?:>\s*)+))(\[!([A-Za-z][A-Za-z0-9-]*)\])([+-])?(\s*(.*))?$/;
+function isCalloutLineWhitespace(ch: string): boolean {
+  const c = ch.charCodeAt(0);
+  return c === 9 || c === 10 || c === 11 || c === 12 || c === 13 || c === 32;
+}
+
+function countGtMarkersInQuoteOnly(s: string): number {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '>') {
+      n++;
+    }
+  }
+  return n;
+}
+
+function isAsciiLetterCode(c: number): boolean {
+  return (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+}
+
+function isCalloutTypeTailCode(c: number): boolean {
+  return isAsciiLetterCode(c) || (c >= 48 && c <= 57) || c === 45;
+}
 
 export type MatchedCalloutHeader = {
   /** Canonical resolved type. */
@@ -116,11 +136,7 @@ export type MatchedCalloutHeader = {
 };
 
 function countQuoteMarkers(prefix: string): number {
-  let n = 0;
-  for (let i = 0; i < prefix.length; i++) {
-    if (prefix[i] === '>') n++;
-  }
-  return n;
+  return countGtMarkersInQuoteOnly(prefix);
 }
 
 /**
@@ -128,25 +144,53 @@ function countQuoteMarkers(prefix: string): number {
  * Returns null if the line is not a top-level callout header (e.g. `> > [!tip]` is treated as nested, not a header).
  */
 export function matchCalloutHeader(lineText: string): MatchedCalloutHeader | null {
-  const m = CALLOUT_HEADER_RE.exec(lineText);
-  if (!m) {
+  const n = lineText.length;
+  let i = 0;
+  while (i < n && isCalloutLineWhitespace(lineText[i]!)) {
+    i++;
+  }
+  const quoteBlockStart = i;
+  while (i < n && lineText[i] === '>') {
+    i++;
+    while (i < n && isCalloutLineWhitespace(lineText[i]!)) {
+      i++;
+    }
+  }
+  if (i === quoteBlockStart) {
     return null;
   }
-  const prefixWithWs = m[1];
-  const quoteOnly = m[2];
-  const bracketToken = m[3];
-  const rawType = m[4];
-  const foldMarker = m[5] ?? '';
-  const titlePart = (m[7] ?? '').trim();
-
+  const prefixWithWs = lineText.slice(0, i);
+  const quoteOnly = lineText.slice(quoteBlockStart, i);
   if (countQuoteMarkers(quoteOnly) !== 1) {
     return null;
   }
-
+  if (i + 3 > n || lineText[i] !== '[' || lineText[i + 1] !== '!') {
+    return null;
+  }
+  let j = i + 2;
+  const typeStart = j;
+  if (j >= n || !isAsciiLetterCode(lineText.charCodeAt(j))) {
+    return null;
+  }
+  j++;
+  while (j < n && isCalloutTypeTailCode(lineText.charCodeAt(j))) {
+    j++;
+  }
+  if (j >= n || lineText[j] !== ']') {
+    return null;
+  }
+  const rawType = lineText.slice(typeStart, j);
+  const bracketToken = lineText.slice(i, j + 1);
+  j++;
+  let foldMarker = '';
+  if (j < n && (lineText[j] === '+' || lineText[j] === '-')) {
+    foldMarker = lineText[j]!;
+    j++;
+  }
+  const titlePart = lineText.slice(j).trim();
   const resolved = resolveCallout(rawType);
   const tokenStart = prefixWithWs.length;
   const tokenEnd = tokenStart + bracketToken.length + foldMarker.length;
-
   return {
     type: resolved.type,
     rawType,

@@ -1,4 +1,5 @@
 import {stemFromMarkdownFileName} from '../inboxMarkdown';
+import {replaceBackslashesWithSlashes, unixSlashesStripTrailingNoTrim} from '../stringScanners';
 import {vaultPathDirname} from '../vaultVisibility';
 
 import {formatTodayHubMondayStem} from './todayHubMondays';
@@ -41,15 +42,15 @@ export function vaultTodayHubMarkdownRefUriMatchesExpectedRowUri(
 }
 
 function vaultUriComparableEquals(a: string, b: string): boolean {
-  const na = a.replace(/\\/g, '/');
-  const nb = b.replace(/\\/g, '/');
+  const na = replaceBackslashesWithSlashes(a);
+  const nb = replaceBackslashesWithSlashes(b);
   if (na === nb) {
     return true;
   }
   const da = tryDecodeSafDocumentId(na);
   const db = tryDecodeSafDocumentId(nb);
   if (da != null && db != null) {
-    return da.replace(/\\/g, '/').toLowerCase() === db.replace(/\\/g, '/').toLowerCase();
+    return replaceBackslashesWithSlashes(da).toLowerCase() === replaceBackslashesWithSlashes(db).toLowerCase();
   }
   return na.toLowerCase() === nb.toLowerCase();
 }
@@ -87,7 +88,7 @@ export const VAULT_TREE_TODAY_HUB_NOTE_NAME = 'Today.md';
 
 /** Last path segment is exactly {@link VAULT_TREE_TODAY_HUB_NOTE_NAME} (vault URI; normalizes `\\`). */
 export function vaultUriIsTodayMarkdownFile(uri: string): boolean {
-  const norm = uri.replace(/\\/g, '/').replace(/\/+$/, '');
+  const norm = unixSlashesStripTrailingNoTrim(uri);
   const seg = norm.split('/').pop() ?? '';
   return seg === VAULT_TREE_TODAY_HUB_NOTE_NAME;
 }
@@ -124,7 +125,7 @@ export function sortedTodayHubNoteUrisFromRefs(
  * Tab-style label for a Today hub: parent folder name (same rule as desktop editor tab pill).
  */
 export function todayHubFolderLabelFromUri(todayNoteUri: string): string {
-  const norm = todayNoteUri.replace(/\\/g, '/').replace(/\/+$/, '');
+  const norm = unixSlashesStripTrailingNoTrim(todayNoteUri);
   if (vaultUriIsTodayMarkdownFile(norm)) {
     const parent = vaultPathDirname(norm);
     const folderSeg = parent.split('/').filter(Boolean).pop();
@@ -141,7 +142,7 @@ export function todayHubFolderLabelFromUri(todayNoteUri: string): string {
  * `content://…/document/…` IDs where the logical path is URL-encoded in one segment).
  */
 export function todayHubFolderLabelFromTodayNoteUri(todayNoteUri: string): string {
-  const norm = todayNoteUri.replace(/\\/g, '/').replace(/\/+$/, '');
+  const norm = unixSlashesStripTrailingNoTrim(todayNoteUri);
   const saf = tryDecodeSafDocumentId(norm);
   if (saf) {
     const parts = saf.split('/').filter(Boolean);
@@ -166,7 +167,7 @@ export function todayHubFolderLabelFromVaultMarkdownRef(ref: {uri: string; name:
 
 /** Directory containing `Today.md` (hub row files live beside it). */
 export function todayHubDirectoryUriFromTodayNoteUri(todayNoteUri: string): string {
-  const norm = todayNoteUri.replace(/\\/g, '/').replace(/\/+$/, '');
+  const norm = unixSlashesStripTrailingNoTrim(todayNoteUri);
   return vaultPathDirname(norm);
 }
 
@@ -191,7 +192,7 @@ function tryDecodeSafDocumentId(uri: string): string | null {
  * where the filesystem path lives inside a single URL-encoded document id.
  */
 export function todayHubRowUriFromTodayNoteUri(todayNoteUri: string, weekStart: Date): string {
-  const norm = todayNoteUri.replace(/\\/g, '/').replace(/\/+$/, '');
+  const norm = unixSlashesStripTrailingNoTrim(todayNoteUri);
   const stem = `${formatTodayHubMondayStem(weekStart)}.md`;
   const i = norm.indexOf(SAF_DOCUMENT_MARKER);
   if (i >= 0) {

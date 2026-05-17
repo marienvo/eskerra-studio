@@ -1,4 +1,12 @@
 import {ATTACHMENTS_DIRECTORY_NAME, ASSETS_DIRECTORY_NAME} from '../vaultLayout';
+import {
+  collapseAsciiWhitespaceRunsToSpace,
+  collapseRunsOfChar,
+  toAsciiLowercase,
+  trimAsciiWhitespace,
+  trimLeadingChars,
+  trimTrailingChars,
+} from '../stringScanners';
 
 /** Lowercase image extensions we accept for inbox attachments (leading dot). */
 
@@ -56,15 +64,32 @@ export function imageMimeToExtension(mime: string): string | null {
  * Removes directory separators and problematic characters; falls back if empty.
  */
 
+const ATTACHMENT_EDGE_TRIM = new Set(['-', '_']);
+
 export function sanitizeAttachmentBaseName(rawName: string): string {
-  const base = rawName.replace(/[/\\]/g, '').trim();
-  const withoutExt = base.includes('.') ? base.slice(0, base.lastIndexOf('.')) : base;
-  const normalized = withoutExt
-    .toLowerCase()
-    .replace(/[^a-z0-9-_ ]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^[-_]+|[-_]+$/g, '');
+  let cleaned = '';
+  for (let i = 0; i < rawName.length; i++) {
+    const c = rawName[i]!;
+    if (c !== '/' && c !== '\\') {
+      cleaned += c;
+    }
+  }
+  const base = trimAsciiWhitespace(cleaned);
+  const dot = base.lastIndexOf('.');
+  const withoutExt = dot >= 0 ? base.slice(0, dot) : base;
+  const lower = toAsciiLowercase(withoutExt);
+  let kept = '';
+  for (let i = 0; i < lower.length; i++) {
+    const c = lower.charCodeAt(i);
+    const ch = lower[i]!;
+    if ((c >= 48 && c <= 57) || (c >= 97 && c <= 122) || c === 45 || c === 95 || c === 32) {
+      kept += ch;
+    }
+  }
+  const spaced = trimAsciiWhitespace(collapseAsciiWhitespaceRunsToSpace(kept));
+  const hyphenated = spaced.includes(' ') ? spaced.split(' ').join('-') : spaced;
+  const collapsed = collapseRunsOfChar(hyphenated, '-');
+  const normalized = trimLeadingChars(trimTrailingChars(collapsed, ATTACHMENT_EDGE_TRIM), ATTACHMENT_EDGE_TRIM);
   return normalized || 'image';
 }
 

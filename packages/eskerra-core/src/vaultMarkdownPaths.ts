@@ -7,9 +7,10 @@ import {
   MARKDOWN_EXTENSION,
   normalizeVaultBaseUri,
 } from './vaultLayout';
+import {stripTrailingSlashes, trimAndUnixSlashes} from './stringScanners';
 
 function normalizeSlashes(uri: string): string {
-  return uri.trim().replace(/\\/g, '/');
+  return trimAndUnixSlashes(uri);
 }
 
 /**
@@ -20,7 +21,7 @@ export function assertVaultMarkdownNoteUriForCrud(
   vaultRootUri: string,
   noteUri: string,
 ): string {
-  const base = normalizeSlashes(normalizeVaultBaseUri(vaultRootUri)).replace(/\/+$/, '');
+  const base = stripTrailingSlashes(normalizeSlashes(normalizeVaultBaseUri(vaultRootUri)));
   const uri = normalizeSlashes(noteUri);
   if (uri !== base && !uri.startsWith(`${base}/`)) {
     throw new Error('Note is outside the vault.');
@@ -79,7 +80,7 @@ export function tryAssertVaultMarkdownNoteUriForRelativeMarkdownLink(
   vaultRootUri: string,
   noteUri: string,
 ): string | null {
-  const base = normalizeSlashes(normalizeVaultBaseUri(vaultRootUri)).replace(/\/+$/, '');
+  const base = stripTrailingSlashes(normalizeSlashes(normalizeVaultBaseUri(vaultRootUri)));
   const uri = normalizeSlashes(noteUri);
   if (uri !== base && !uri.startsWith(`${base}/`)) {
     return null;
@@ -113,8 +114,8 @@ export function assertVaultTreeDirectoryUriForCrud(
   vaultRootUri: string,
   dirUri: string,
 ): string {
-  const base = normalizeSlashes(normalizeVaultBaseUri(vaultRootUri)).replace(/\/+$/, '');
-  const uri = normalizeSlashes(dirUri).replace(/\/+$/, '');
+  const base = stripTrailingSlashes(normalizeSlashes(normalizeVaultBaseUri(vaultRootUri)));
+  const uri = stripTrailingSlashes(normalizeSlashes(dirUri));
   if (uri !== base && !uri.startsWith(`${base}/`)) {
     throw new Error('Path is outside the vault.');
   }
@@ -131,5 +132,5 @@ export function assertVaultTreeDirectoryUriForCrud(
       throw new Error('Path is in an excluded folder.');
     }
   }
-  return dirUri.replace(/\\/g, '/');
+  return trimAndUnixSlashes(dirUri);
 }

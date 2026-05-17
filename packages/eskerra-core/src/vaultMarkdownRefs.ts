@@ -1,6 +1,7 @@
 import {stemFromMarkdownFileName} from './inboxMarkdown';
 import type {VaultFilesystem} from './vaultFilesystem';
 import {normalizeVaultBaseUri} from './vaultLayout';
+import {normalizeVaultSlashesUri} from './stringScanners';
 import {filterVaultTreeDirEntries, isEligibleVaultMarkdownFileName} from './vaultVisibility';
 
 export type VaultMarkdownRef = {
@@ -23,7 +24,7 @@ export async function collectVaultMarkdownRefs(
   options?: CollectVaultMarkdownRefsOptions,
 ): Promise<VaultMarkdownRef[]> {
   const signal = options?.signal;
-  const base = normalizeVaultBaseUri(vaultRootUri).replace(/\\/g, '/').replace(/\/+$/, '');
+  const base = normalizeVaultSlashesUri(normalizeVaultBaseUri(vaultRootUri));
   const out: VaultMarkdownRef[] = [];
   const stack: string[] = [base];
 

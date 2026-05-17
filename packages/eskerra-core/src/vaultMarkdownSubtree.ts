@@ -1,4 +1,5 @@
 import type {VaultDirEntry, VaultFilesystem} from './vaultFilesystem';
+import {normalizeVaultSlashesUri} from './stringScanners';
 import {filterVaultTreeDirEntries, isEligibleVaultMarkdownFileName, SubtreeMarkdownPresenceCache} from './vaultVisibility';
 
 export type VaultSubtreeMarkdownOptions = {
@@ -21,7 +22,7 @@ export async function vaultSubtreeHasEligibleMarkdown(
   options?: VaultSubtreeMarkdownOptions,
 ): Promise<boolean> {
   const cache = options?.subtreeCache;
-  const normRoot = directoryUri.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normRoot = normalizeVaultSlashesUri(directoryUri);
   const rootPrefiltered = options?.knownFilteredEntries;
 
   async function compute(
@@ -37,7 +38,7 @@ export async function vaultSubtreeHasEligibleMarkdown(
       prefiltered ?? filterVaultTreeDirEntries(await fs.listFiles(dir));
     for (const entry of filtered) {
       if (entry.type === 'directory') {
-        const sub = await compute(entry.uri.replace(/\\/g, '/').replace(/\/+$/, ''), undefined);
+        const sub = await compute(normalizeVaultSlashesUri(entry.uri), undefined);
         if (sub) {
           cache?.set(dir, true);
           return true;
