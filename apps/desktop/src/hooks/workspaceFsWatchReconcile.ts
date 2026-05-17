@@ -527,9 +527,11 @@ async function reconcileOpenWorkspaceTabUriForVaultWatch(
   if (!normTab.toLowerCase().endsWith('.md')) {
     return;
   }
-  const stillOpen = collectDistinctUrisFromTabs(
+  const inTab = collectDistinctUrisFromTabs(
     open.editorWorkspaceTabsRef.current,
   ).some(u => normalizeEditorDocUri(u) === normTab);
+  // Also "still open" when it's the active home-navigated page (no active editor tab).
+  const stillOpen = inTab || open.selectedUriRef.current === normTab;
   if (!stillOpen) {
     return;
   }
@@ -576,8 +578,22 @@ export async function reconcileOpenNotesAfterFsChangeFromVaultWatch(
   }
   const fullRefresh = normPaths.length === 0;
   const tabs = collectDistinctUrisFromTabs(open.editorWorkspaceTabsRef.current);
+  const tabNorms = new Set(tabs.map(u => normalizeEditorDocUri(u)));
 
-  for (const tabUri of tabs) {
+  // Include the home-navigated page URI when no editor tab is active: a note open via workspace
+  // home navigation is not in the tab strip but is still displayed in the editor and must be
+  // reconciled like any open tab (e.g. wiki-link rename rewrites its file on disk).
+  const homePageUri =
+    !open.composingNewEntryRef.current &&
+    open.activeEditorTabIdRef.current === null &&
+    open.selectedUriRef.current &&
+    !vaultUriIsTodayMarkdownFile(open.selectedUriRef.current) &&
+    !tabNorms.has(normalizeEditorDocUri(open.selectedUriRef.current))
+      ? open.selectedUriRef.current
+      : null;
+
+  const urisToReconcile = homePageUri ? [...tabs, homePageUri] : tabs;
+  for (const tabUri of urisToReconcile) {
     await reconcileOpenWorkspaceTabUriForVaultWatch(
       open,
       tabUri,
