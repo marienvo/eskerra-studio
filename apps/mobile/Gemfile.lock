@@ -125,7 +125,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
-  activesupport (>= 7.2.3.1, < 8, != 7.1.0)
+  activesupport (>= 7.2.3.1, < 8)
   benchmark
   bigdecimal
   cocoapods (>= 1.13, != 1.15.1, != 1.15.0)
