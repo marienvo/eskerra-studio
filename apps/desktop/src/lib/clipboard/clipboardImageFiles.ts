@@ -3,6 +3,8 @@ import {
   sniffImageFormatFromBytes,
 } from '@eskerra/core';
 
+import {sanitizeClipboardHtmlForImgSrcExtraction} from './sanitizeClipboardHtml';
+
 /** Sync hint before `preventDefault` (MIME, extension, or ambiguous types worth sniffing). */
 export function fileMightBeClipboardImageByMeta(file: File): boolean {
   const t = file.type.trim().toLowerCase();
@@ -291,7 +293,8 @@ export function extractClipboardImageUrlsFromHtml(html: string): {
     return { blobUrls: [], dataImageUrls: [] };
   }
   try {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const safeHtml = sanitizeClipboardHtmlForImgSrcExtraction(html);
+    const doc = new DOMParser().parseFromString(safeHtml, 'text/html');
     const imgs = doc.querySelectorAll('img[src]');
     const blobSeen = new Set<string>();
     const dataSeen = new Set<string>();

@@ -60,6 +60,30 @@ describe('extractClipboardImageUrlsFromHtml', () => {
       dataImageUrls: [],
     });
   });
+
+  it('does not treat javascript: img src as a transient image URL', () => {
+    const html = '<img src="javascript:alert(1)">';
+    expect(extractClipboardImageUrlsFromHtml(html)).toEqual({
+      blobUrls: [],
+      dataImageUrls: [],
+    });
+  });
+
+  it('strips event handlers but still extracts blob src from pasted img HTML', () => {
+    const html =
+      '<img src="blob:http://localhost/x" onerror="alert(1)" onclick="alert(2)">';
+    expect(extractClipboardImageUrlsFromHtml(html).blobUrls).toEqual([
+      'blob:http://localhost/x',
+    ]);
+  });
+
+  it('extracts blob after script tags are removed from clipboard fragment', () => {
+    const html =
+      '<script>void(0)</script><img src="blob:http://localhost/y">';
+    expect(extractClipboardImageUrlsFromHtml(html).blobUrls).toEqual([
+      'blob:http://localhost/y',
+    ]);
+  });
 });
 
 describe('extractBlobImageSrcsFromHtml', () => {

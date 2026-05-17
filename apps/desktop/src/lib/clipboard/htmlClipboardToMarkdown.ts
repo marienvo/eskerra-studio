@@ -5,6 +5,8 @@ import {
   taskListItems,
 } from 'turndown-plugin-gfm';
 
+import {sanitizeClipboardHtml} from './sanitizeClipboardHtml';
+
 /** Reject huge clipboard HTML to avoid blocking the editor thread. */
 export const CLIPBOARD_HTML_MAX_CHARS = 512_000;
 
@@ -117,11 +119,11 @@ function plainIsSinglePasteAsLinkUrl(plain: string): boolean {
 }
 
 /**
- * Let CodeMirror `pasteURLAsLink` handle a lone URL when HTML is only a wrapper
- * around the same href (common browser / Office fragments).
+ * Same as {@link isHtmlWrapperForPasteUrlAsLink} but assumes `safeHtml` was
+ * produced by {@link sanitizeClipboardHtml} (avoids double DOMPurify on hot paths).
  */
-export function isHtmlWrapperForPasteUrlAsLink(
-  html: string,
+function isHtmlWrapperForPasteUrlAsLinkFromSanitized(
+  safeHtml: string,
   plain: string,
 ): boolean {
   if (!plainIsSinglePasteAsLinkUrl(plain)) {
@@ -130,7 +132,7 @@ export function isHtmlWrapperForPasteUrlAsLink(
   const t = plain.trim();
   let doc: Document;
   try {
-    doc = new DOMParser().parseFromString(html, 'text/html');
+    doc = new DOMParser().parseFromString(safeHtml, 'text/html');
   } catch {
     return false;
   }
@@ -169,6 +171,20 @@ export function isHtmlWrapperForPasteUrlAsLink(
   return false;
 }
 
+/**
+ * Let CodeMirror `pasteURLAsLink` handle a lone URL when HTML is only a wrapper
+ * around the same href (common browser / Office fragments).
+ */
+export function isHtmlWrapperForPasteUrlAsLink(
+  html: string,
+  plain: string,
+): boolean {
+  return isHtmlWrapperForPasteUrlAsLinkFromSanitized(
+    sanitizeClipboardHtml(html),
+    plain,
+  );
+}
+
 function clipboardHtmlLooksStructured(html: string): boolean {
   const lower = html.toLowerCase();
   return STRUCTURAL_HTML_MARKERS.some(marker =>
@@ -194,14 +210,26 @@ function looselySameMarkdownAsPlain(md: string, plain: string): boolean {
   return aOne === bOne;
 }
 
-export function clipboardHtmlToMarkdown(html: string): string {
-  const cleaned = preprocessClipboardHtmlFragment(html);
+/**
+ * Converts clipboard HTML that was already passed through {@link sanitizeClipboardHtml}.
+ * All module-owned `DOMParser` use for Turndown preprocessing must go through this path.
+ */
+function clipboardSanitizedHtmlToMarkdown(safeHtml: string): string {
+  const cleaned = preprocessClipboardHtmlFragment(safeHtml);
   // Turndown escapes [ and ] individually, turning [[wiki link]] into \[\[wiki link\]\].
   // Undo that for double-bracket sequences so wiki links survive paste.
   return getTurndown()
     .turndown(cleaned)
     .replace(/\\\[\\\[/g, '[[')
     .replace(/\\\]\\\]/g, ']]');
+}
+
+/**
+ * Converts HTML from the clipboard to Markdown. Untrusted HTML is sanitized before any
+ * module-owned DOM parsing (see {@link clipboardSanitizedHtmlToMarkdown}).
+ */
+export function clipboardHtmlToMarkdown(html: string): string {
+  return clipboardSanitizedHtmlToMarkdown(sanitizeClipboardHtml(html));
 }
 
 /**
@@ -216,16 +244,17 @@ export function tryClipboardHtmlToMarkdownInsert(
   if (h === '' || h.length > CLIPBOARD_HTML_MAX_CHARS) {
     return null;
   }
-  if (isHtmlWrapperForPasteUrlAsLink(html, plain)) {
+  const safeHtml = sanitizeClipboardHtml(html);
+  if (isHtmlWrapperForPasteUrlAsLinkFromSanitized(safeHtml, plain)) {
     return null;
   }
-  if (!clipboardHtmlLooksStructured(html)) {
+  if (!clipboardHtmlLooksStructured(safeHtml)) {
     return null;
   }
 
   let md: string;
   try {
-    md = clipboardHtmlToMarkdown(html);
+    md = clipboardSanitizedHtmlToMarkdown(safeHtml);
   } catch {
     return null;
   }
