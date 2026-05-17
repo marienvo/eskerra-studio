@@ -13,8 +13,8 @@ use serde::Serialize;
 use tantivy::collector::TopDocs;
 use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, Query, QueryParser};
-use tantivy::schema::{IndexRecordOption, Schema, Term, TextFieldIndexing, TextOptions};
-use tantivy::{doc, Index, IndexReader};
+use tantivy::schema::{IndexRecordOption, Schema, Term, TextFieldIndexing, TextOptions, Value};
+use tantivy::{doc, Index, IndexReader, TantivyDocument};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::vault::VaultRootState;
@@ -790,7 +790,7 @@ pub fn run_indexed_search(
 
     let searcher = reader.searcher();
     let top_docs = searcher
-        .search(&q, &TopDocs::with_limit(limit))
+        .search(&q, &TopDocs::with_limit(limit).order_by_score())
         .map_err(|e| e.to_string())?;
 
     let tokens = query_tokens(query_trim);
@@ -798,30 +798,30 @@ pub fn run_indexed_search(
     let mut out = Vec::new();
 
     for (tantivy_score, doc_addr) in top_docs {
-        let doc = searcher.doc(doc_addr).map_err(|e| e.to_string())?;
+        let doc: TantivyDocument = searcher.doc(doc_addr).map_err(|e| e.to_string())?;
         let uri = doc
             .get_first(f_uri)
-            .and_then(|v| v.as_text())
+            .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
         let title = doc
             .get_first(f_title)
-            .and_then(|v| v.as_text())
+            .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
         let filename = doc
             .get_first(f_filename)
-            .and_then(|v| v.as_text())
+            .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
         let rel_path = doc
             .get_first(f_rel_path)
-            .and_then(|v| v.as_text())
+            .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
         let body = doc
             .get_first(f_body)
-            .and_then(|v| v.as_text())
+            .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
 

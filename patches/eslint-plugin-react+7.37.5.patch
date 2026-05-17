@@ -1,0 +1,15 @@
+diff --git a/node_modules/eslint-plugin-react/lib/rules/no-unstable-nested-components.js b/node_modules/eslint-plugin-react/lib/rules/no-unstable-nested-components.js
+index c330795..eb62f9d 100644
+--- a/node_modules/eslint-plugin-react/lib/rules/no-unstable-nested-components.js
++++ b/node_modules/eslint-plugin-react/lib/rules/no-unstable-nested-components.js
+@@ -5,7 +5,9 @@
+ 
+ 'use strict';
+ 
+-const minimatch = require('minimatch');
++const minimatchModule = require('minimatch');
++const minimatch =
++  typeof minimatchModule === 'function' ? minimatchModule : minimatchModule.minimatch;
+ const Components = require('../util/Components');
+ const docsUrl = require('../util/docsUrl');
+ const astUtil = require('../util/ast');
