@@ -22,6 +22,9 @@ export const markdownInlineCodeBackgroundClass = 'cm-md-inline-code-bg';
 /** Class on {@link RectangleMarker}s for `==highlight==` backgrounds (styled in App.css). */
 export const markdownEqualHighlightBackgroundClass = 'cm-md-equal-highlight-bg';
 
+/** Class on fence / indented code block fills in {@link MarkdownFenceBlockBackgroundMarker} (styled in App.css). */
+export const markdownFenceBlockBackgroundClass = 'cm-md-fence-bg';
+
 /**
  * `RectangleMarker.forRange` returns [] when the range does not overlap `view.viewport` (including
  * a degenerate `viewport.to <= viewport.from` before the first layout) or when coords are missing.
@@ -94,27 +97,47 @@ function inlineRangeBackgroundMarkers(
 /**
  * One rectangle covering an entire fenced / indented code block, drawn in a {@link layer} below
  * `drawSelection()`'s `.cm-selectionLayer` so opaque fills never hide selection.
+ *
+ * `left` / `width` are explicit (not CSS `left: 0; right: 0`) because `.cm-layer` has
+ * `contain: size` and no explicit width, giving descendants a 0-width containing block.
  */
 export class MarkdownFenceBlockBackgroundMarker implements LayerMarker {
   readonly top: number;
   readonly height: number;
+  readonly left: number;
+  readonly width: number;
 
-  constructor(top: number, height: number) {
+  constructor(top: number, height: number, left: number, width: number) {
     this.top = top;
     this.height = height;
+    this.left = left;
+    this.width = width;
   }
 
   draw(): HTMLElement {
     const el = document.createElement('div');
-    el.className = 'cm-md-fence-bg';
+    el.className = markdownFenceBlockBackgroundClass;
     el.style.top = `${this.top}px`;
     el.style.height = `${this.height}px`;
+    el.style.left = `${this.left}px`;
+    el.style.width = `${this.width}px`;
     return el;
   }
 
-  update(elt: HTMLElement, _prev: LayerMarker): boolean {
+  update(elt: HTMLElement, prev: LayerMarker): boolean {
+    /* CodeMirror's `LayerView.draw` reuses an old DOM element when `update()` returns true, but it
+     * does not check that `prev` is the same marker class. Returning true here for a `RectangleMarker`
+     * (inline-code / equal-highlight pill) left the old className and inline `left`/`width` in place
+     * while overwriting `top`/`height` — producing a pill at the previous note's horizontal position
+     * stretched to fence-block height after switching tabs. Force a fresh draw when types differ. */
+    if (!(prev instanceof MarkdownFenceBlockBackgroundMarker)) {
+      return false;
+    }
+    elt.className = markdownFenceBlockBackgroundClass;
     elt.style.top = `${this.top}px`;
     elt.style.height = `${this.height}px`;
+    elt.style.left = `${this.left}px`;
+    elt.style.width = `${this.width}px`;
     return true;
   }
 
@@ -123,8 +146,36 @@ export class MarkdownFenceBlockBackgroundMarker implements LayerMarker {
       other instanceof MarkdownFenceBlockBackgroundMarker
       && other.top === this.top
       && other.height === this.height
+      && other.left === this.left
+      && other.width === this.width
     );
   }
+}
+
+/**
+ * `.cm-md-fence-bg` geometry helpers:
+ * - `left` / `width`: match `.cm-line` (cm-content content-box, excluding the editor's gutter
+ *   padding) so the fill sits under fenced lines without spilling into the fold rail.
+ * - `docTopInLayer`: `BlockInfo.top` is measured from `view.documentTop` (top of the first text
+ *   line, i.e. after `cm-content`'s `paddingTop`). The layer's coordinate origin is at the scroller
+ *   padding box, so converting needs `documentTop - base.top`. Without this the rect sits one
+ *   `paddingTop` above the fenced text.
+ */
+function fenceBackgroundGeometry(view: EditorView): {
+  left: number;
+  width: number;
+  docTopInLayer: number;
+} {
+  const contentRect = view.contentDOM.getBoundingClientRect();
+  const cs = window.getComputedStyle(view.contentDOM);
+  const padL = parseFloat(cs.paddingLeft) || 0;
+  const padR = parseFloat(cs.paddingRight) || 0;
+  const base = layerBaseOffset(view);
+  return {
+    left: contentRect.left + padL - base.left,
+    width: Math.max(0, contentRect.width - padL - padR),
+    docTopInLayer: view.documentTop - base.top,
+  };
 }
 
 /**
@@ -142,6 +193,7 @@ function buildMarkdownCodeBackgroundMarkers(view: EditorView): LayerMarker[] {
   ensureSyntaxTree(view.state, docLen, SYNTAX_TREE_BUDGET_MS);
   const tree = syntaxTree(view.state);
   const out: LayerMarker[] = [];
+  let fenceGeom: {left: number; width: number; docTopInLayer: number} | null = null;
 
   /* Full-doc walk: `view.viewport` can omit the first lines (or be degenerate) before layout; inline
    * `` `…` `` near the top must still get markers once coords exist. */
@@ -158,10 +210,15 @@ function buildMarkdownCodeBackgroundMarkers(view: EditorView): LayerMarker[] {
         const endLine = doc.lineAt(Math.min(lastChar, docLen - 1));
         const first = view.lineBlockAt(startLine.from);
         const last = view.lineBlockAt(endLine.from);
+        if (fenceGeom === null) {
+          fenceGeom = fenceBackgroundGeometry(view);
+        }
         out.push(
           new MarkdownFenceBlockBackgroundMarker(
-            first.top,
+            fenceGeom.docTopInLayer + first.top,
             last.bottom - first.top,
+            fenceGeom.left,
+            fenceGeom.width,
           ),
         );
         return false;

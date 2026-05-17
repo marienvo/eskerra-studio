@@ -8,7 +8,7 @@ import {
 } from '@codemirror/language';
 import {languages} from '@codemirror/language-data';
 import {EditorState} from '@codemirror/state';
-import {EditorView, drawSelection} from '@codemirror/view';
+import {EditorView, RectangleMarker, drawSelection} from '@codemirror/view';
 import {highlightTree} from '@lezer/highlight';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
@@ -16,6 +16,7 @@ import {
   MarkdownFenceBlockBackgroundMarker,
   collectMarkdownCodeBackgroundMarkers,
   markdownCodeBackgroundLayer,
+  markdownFenceBlockBackgroundClass,
 } from './markdownCodeBackgroundLayer';
 import {
   markdownEditorBlockLineClasses,
@@ -336,7 +337,9 @@ describe('markdownCodeBackgroundLayer markers', () => {
       expect(view.dom.querySelector('.cm-md-codeBackgroundLayer')).not.toBeNull();
       await vi.waitFor(
         () =>
-          (view.dom.querySelector('.cm-md-codeBackgroundLayer')?.querySelectorAll('.cm-md-fence-bg').length
+          (view.dom
+            .querySelector('.cm-md-codeBackgroundLayer')
+            ?.querySelectorAll(`.${markdownFenceBlockBackgroundClass}`).length
             ?? 0)
           >= 1,
         {interval: 5, timeout: 3000},
@@ -352,6 +355,77 @@ describe('markdownCodeBackgroundLayer markers', () => {
       view.destroy();
       parent.remove();
     }
+  });
+
+  /* Regression: after switching notes, `LayerView.draw` reused an inline-code-pill DOM element for a
+   * fence marker because `MarkdownFenceBlockBackgroundMarker.update` returned `true` regardless of
+   * `prev` type. Result was a pill at the previous note's left/width but stretched to fence height. */
+  it('fence marker refuses to reuse a non-fence marker DOM element', () => {
+    const elt = document.createElement('div');
+    elt.className = 'cm-md-inline-code-bg';
+    elt.style.left = '200px';
+    elt.style.top = '50px';
+    elt.style.width = '80px';
+    elt.style.height = '20px';
+    const prevInlinePill = new RectangleMarker(
+      'cm-md-inline-code-bg',
+      200,
+      50,
+      80,
+      20,
+    );
+    const nextFence = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
+
+    expect(nextFence.update(elt, prevInlinePill)).toBe(false);
+    expect(elt.style.left).toBe('200px');
+    expect(elt.style.width).toBe('80px');
+    expect(elt.style.top).toBe('50px');
+    expect(elt.style.height).toBe('20px');
+  });
+
+  it('fence marker reuses another fence marker DOM element and updates all 4 dimensions', () => {
+    const elt = document.createElement('div');
+    elt.className = markdownFenceBlockBackgroundClass;
+    elt.style.top = '10px';
+    elt.style.height = '400px';
+    elt.style.left = '30px';
+    elt.style.width = '720px';
+    const prevFence = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
+    const nextFence = new MarkdownFenceBlockBackgroundMarker(120, 80, 35, 700);
+
+    expect(nextFence.update(elt, prevFence)).toBe(true);
+    expect(elt.className).toBe(markdownFenceBlockBackgroundClass);
+    expect(elt.style.top).toBe('120px');
+    expect(elt.style.height).toBe('80px');
+    expect(elt.style.left).toBe('35px');
+    expect(elt.style.width).toBe('700px');
+  });
+
+  it('fence marker update restores class when reusing a fence element', () => {
+    const elt = document.createElement('div');
+    elt.className = 'stale-wrong-class';
+    elt.style.top = '10px';
+    elt.style.height = '400px';
+    elt.style.left = '30px';
+    elt.style.width = '720px';
+    const prevFence = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
+    const nextFence = new MarkdownFenceBlockBackgroundMarker(120, 80, 35, 700);
+
+    expect(nextFence.update(elt, prevFence)).toBe(true);
+    expect(elt.className).toBe(markdownFenceBlockBackgroundClass);
+  });
+
+  /* Regression: `.cm-md-codeBackgroundLayer` (`.cm-layer`) has `contain: size` and no explicit width,
+   * so the descendant containing block is 0-wide. The previous CSS `left: 0; right: 0;` rendered
+   * fence-bg as a 1-2px vertical stripe on the left. The marker must set explicit `left`/`width`. */
+  it('fence marker draws with explicit left and width inline styles', () => {
+    const marker = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
+    const el = marker.draw();
+    expect(el.className).toBe(markdownFenceBlockBackgroundClass);
+    expect(el.style.top).toBe('10px');
+    expect(el.style.height).toBe('400px');
+    expect(el.style.left).toBe('30px');
+    expect(el.style.width).toBe('720px');
   });
 });
 
