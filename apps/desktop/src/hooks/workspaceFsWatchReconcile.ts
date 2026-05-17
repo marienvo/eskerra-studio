@@ -49,11 +49,14 @@ import {
   mergeBackgroundTabCacheIfDiskChanged,
   reconcileDiskConflictKindForSelectedTab,
 } from './workspaceFsWatchDiskConflict';
-import {reconcileTodayHubWeekRowsAfterVaultFsChange} from './workspaceFsWatchReconcileTodayHub';
+import {
+  reconcileTodayHubWeekRowsAfterVaultFsChange,
+  type ReconcileFsTodayHubEnv,
+} from './workspaceFsWatchReconcileTodayHub';
 
 // Re-exported for callers that import these names from this module.
 export {fingerprintUtf16ForDebug} from './workspaceFsWatchDiskConflict';
-export type {ReconcileFsTodayHubEnv} from './workspaceFsWatchReconcileTodayHub';
+export type {ReconcileFsTodayHubEnv};
 
 export type LastPersisted = {uri: string; markdown: string};
 
@@ -255,7 +258,10 @@ async function reconcileOpenWorkspaceTabUriForVaultWatch(
     open.editorWorkspaceTabsRef.current,
   ).some(u => normalizeEditorDocUri(u) === normTab);
   // Also "still open" when it's the active home-navigated page (no active editor tab).
-  const stillOpen = inTab || open.selectedUriRef.current === normTab;
+  const stillOpen =
+    inTab ||
+    (open.activeEditorTabIdRef.current === null &&
+      open.selectedUriRef.current === normTab);
   if (!stillOpen) {
     return;
   }
@@ -282,7 +288,7 @@ async function reconcileOpenWorkspaceTabUriForVaultWatch(
 
 export async function reconcileOpenNotesAfterFsChangeFromVaultWatch(
   open: ReconcileFsOpenMarkdownEnv,
-  today: import('./workspaceFsWatchReconcileTodayHub').ReconcileFsTodayHubEnv,
+  today: ReconcileFsTodayHubEnv,
   rawPaths: string[],
   rerunForTab: (tab: string) => void,
 ): Promise<void> {
