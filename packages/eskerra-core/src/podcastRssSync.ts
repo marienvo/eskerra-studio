@@ -820,10 +820,10 @@ function parseOrdinalDayToken(tok: string): number | null {
 
 function parsePieBodyDate(line: string): string | null {
   const t = trimAsciiWhitespace(line);
-  if (!t.startsWith('## ')) {
+  if (!/^##\s+/.test(t)) {
     return null;
   }
-  const rest = trimAsciiWhitespace(t.slice(3));
+  const rest = trimAsciiWhitespace(t.replace(/^##\s+/, ''));
   const commaAfterWeekday = rest.indexOf(',');
   if (commaAfterWeekday < 0) {
     return null;

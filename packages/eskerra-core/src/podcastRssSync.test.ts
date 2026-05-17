@@ -461,6 +461,16 @@ describe('mergePodcastsFeedContent', () => {
     expect(result).toContain('(OVT)');
   });
 
+  it('accepts tab or other ASCII whitespace after ## in pie date headings', () => {
+    const pie =
+      '# OVT\n\n' +
+      '##\tFriday, April 25th, 2025\n\n' +
+      '- Tab After Heading [▶️](<https://cdn.example.com/tab.mp3>)\n';
+    const result = mergePodcastsFeedContent('', [{series: 'OVT', content: pie}], today);
+    expect(result).toContain('Tab After Heading');
+    expect(result).toContain('2025-04-25');
+  });
+
   it('adds yesterday episodes from a pie body', () => {
     const pie = pieBody('2025-04-24', 'Yesterday Ep', 'https://cdn.example.com/y.mp3');
     const result = mergePodcastsFeedContent('', [{series: 'OVT', content: pie}], today);
