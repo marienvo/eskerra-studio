@@ -52,7 +52,8 @@
     "vite": "^8.0.5",
     "@babel/plugin-transform-modules-systemjs": "^7.29.4",
     "lodash": "^4.18.0",
-    "minimatch": "^10.2.4",
+    "markdown-it": "^12.3.2",
+    "fast-xml-parser": "^5.8.0",
     "eslint-plugin-sonarjs": {
       "minimatch": "^10.2.4"
     },
