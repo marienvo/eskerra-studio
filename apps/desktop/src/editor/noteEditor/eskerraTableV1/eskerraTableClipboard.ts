@@ -1,5 +1,7 @@
 /** Clipboard / paste helpers for Eskerra table edit mode (TSV + HTML tables). */
 
+import {sanitizeClipboardHtml} from '../../../lib/clipboard/sanitizeClipboardHtml';
+
 export function matrixFromTsv(plain: string): string[][] {
   const normalized = plain.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const rows = normalized.split('\n');
@@ -13,7 +15,8 @@ export function matrixFromTsv(plain: string): string[][] {
 
 export function matrixFromHtmlTable(html: string): string[][] {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const safeHtml = sanitizeClipboardHtml(html);
+  const doc = parser.parseFromString(safeHtml, 'text/html');
   const table = doc.querySelector('table');
   if (!table) {
     return [];

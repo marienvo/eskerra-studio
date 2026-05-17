@@ -1,10 +1,11 @@
 import TurndownService from 'turndown';
-import DOMPurify from 'dompurify';
 import {
   highlightedCodeBlock,
   tables,
   taskListItems,
 } from 'turndown-plugin-gfm';
+
+import {sanitizeClipboardHtml} from './sanitizeClipboardHtml';
 
 /** Reject huge clipboard HTML to avoid blocking the editor thread. */
 export const CLIPBOARD_HTML_MAX_CHARS = 512_000;
@@ -115,10 +116,6 @@ function plainIsSinglePasteAsLinkUrl(plain: string): boolean {
     return false;
   }
   return /^(https?:\/\/|mailto:)\S+$/i.test(t);
-}
-
-function sanitizeClipboardHtml(html: string): string {
-  return DOMPurify.sanitize(html, {USE_PROFILES: {html: true}});
 }
 
 /**
