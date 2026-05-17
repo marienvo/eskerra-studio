@@ -50,14 +50,14 @@ export function buildInboxWikiLinkCompletionCandidates(
 /**
  * Case-insensitive substring filter with ranking:
  * 1. Exact match, 2. prefix match, 3. substring match.
- * Within each tier, preserves alphabetical order from the input.
+ * Within each tier, preserves the iteration order of the input array.
  */
 export function filterInboxWikiLinkCompletionCandidates(
   candidates: ReadonlyArray<InboxWikiLinkCompletionCandidate>,
-  prefix: string,
+  query: string,
   maxOptions: number = WIKI_LINK_COMPLETION_MAX_OPTIONS,
 ): InboxWikiLinkCompletionCandidate[] {
-  const p = prefix.trim().toLowerCase();
+  const p = query.trim().toLowerCase();
   if (p === '') {
     return candidates.slice(0, maxOptions);
   }
