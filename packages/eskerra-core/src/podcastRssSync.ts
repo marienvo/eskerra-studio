@@ -406,7 +406,7 @@ function localDateKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function markdownLink(label: string, url: string): string {
+export function markdownLink(label: string, url: string): string {
   const safeLabel = label
     .replace(/\\/g, '\\\\')
     .replace(/\[/g, '\\[')
