@@ -6,9 +6,9 @@ import type {EskerraR2Config} from './eskerraSettings';
 const {r2FetchMock} = vi.hoisted(() => ({r2FetchMock: vi.fn()}));
 
 vi.mock('aws4fetch', () => ({
-  AwsClient: vi.fn().mockImplementation(() => ({
-    sign: vi.fn(async (input: string | URL, init?: RequestInit) => new Request(String(input), init ?? {})),
-  })),
+  AwsClient: class {
+    sign = vi.fn(async (input: string | URL, init?: RequestInit) => new Request(String(input), init ?? {}));
+  },
 }));
 
 const config: EskerraR2Config = {
