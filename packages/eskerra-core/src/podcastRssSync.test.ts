@@ -32,6 +32,13 @@ describe('markdownLink', () => {
   it('handles a label that mixes backslashes and closing brackets', () => {
     expect(markdownLink(String.raw`\]`, 'u')).toBe('[\\\\\\]](<u>)');
   });
+
+  it('percent-encodes angle brackets in the URL so they do not break the bracket destination', () => {
+    expect(markdownLink('x', 'https://example.com/path?a=b>c')).toBe(
+      '[x](<https://example.com/path?a=b%3Ec>)',
+    );
+    expect(markdownLink('x', 'https://example.com/a<b')).toBe('[x](<https://example.com/a%3Cb>)');
+  });
 });
 
 // --- parsePodcastRssSettingsFromContent ---
