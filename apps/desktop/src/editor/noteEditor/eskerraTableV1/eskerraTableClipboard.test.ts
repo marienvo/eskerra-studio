@@ -1,4 +1,5 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
+import * as sanitizeClipboardHtml from '../../../lib/clipboard/sanitizeClipboardHtml';
 import {
   matrixFromHtmlTable,
   matrixFromTsv,
@@ -27,12 +28,16 @@ describe('matrixFromHtmlTable', () => {
     ]);
   });
 
-  it('parses table cells after sanitizing untrusted HTML (no script execution path)', () => {
+  it('parses table cells after sanitizing untrusted HTML', () => {
     const html =
       '<script>document.body.dataset.x="bad"</script>' +
       '<table><tr><td>safe</td></tr></table>';
+    const sanitizeSpy = vi.spyOn(sanitizeClipboardHtml, 'sanitizeClipboardHtml');
     expect(matrixFromHtmlTable(html)).toEqual([['safe']]);
-    expect(document.body.dataset.x).toBeUndefined();
+    expect(sanitizeSpy).toHaveBeenCalledOnce();
+    expect(sanitizeSpy.mock.calls[0]?.[0]).toBe(html);
+    expect(String(sanitizeSpy.mock.results[0]?.value).toLowerCase()).not.toContain('<script');
+    sanitizeSpy.mockRestore();
   });
 });
 

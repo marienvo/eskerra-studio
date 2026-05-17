@@ -17,6 +17,6 @@ export function sanitizeClipboardHtmlForImgSrcExtraction(html: string): string {
   return DOMPurify.sanitize(html, {
     USE_PROFILES: {html: true},
     ALLOWED_URI_REGEXP:
-      /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+      /^(?:(?:https?|mailto|ftp|tel|blob|data):|[^a-z]|[a-z+.\u002d]+(?:[^a-z+.\u002d:]|$))/i,
   });
 }
