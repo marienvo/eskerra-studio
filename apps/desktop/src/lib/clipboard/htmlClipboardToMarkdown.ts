@@ -122,17 +122,16 @@ function sanitizeClipboardHtml(html: string): string {
 }
 
 /**
- * Let CodeMirror `pasteURLAsLink` handle a lone URL when HTML is only a wrapper
- * around the same href (common browser / Office fragments).
+ * Same as {@link isHtmlWrapperForPasteUrlAsLink} but assumes `safeHtml` was
+ * produced by {@link sanitizeClipboardHtml} (avoids double DOMPurify on hot paths).
  */
-export function isHtmlWrapperForPasteUrlAsLink(
-  html: string,
+function isHtmlWrapperForPasteUrlAsLinkFromSanitized(
+  safeHtml: string,
   plain: string,
 ): boolean {
   if (!plainIsSinglePasteAsLinkUrl(plain)) {
     return false;
   }
-  const safeHtml = sanitizeClipboardHtml(html);
   const t = plain.trim();
   let doc: Document;
   try {
@@ -173,6 +172,20 @@ export function isHtmlWrapperForPasteUrlAsLink(
   }
 
   return false;
+}
+
+/**
+ * Let CodeMirror `pasteURLAsLink` handle a lone URL when HTML is only a wrapper
+ * around the same href (common browser / Office fragments).
+ */
+export function isHtmlWrapperForPasteUrlAsLink(
+  html: string,
+  plain: string,
+): boolean {
+  return isHtmlWrapperForPasteUrlAsLinkFromSanitized(
+    sanitizeClipboardHtml(html),
+    plain,
+  );
 }
 
 function clipboardHtmlLooksStructured(html: string): boolean {
@@ -223,7 +236,7 @@ export function tryClipboardHtmlToMarkdownInsert(
     return null;
   }
   const safeHtml = sanitizeClipboardHtml(html);
-  if (isHtmlWrapperForPasteUrlAsLink(safeHtml, plain)) {
+  if (isHtmlWrapperForPasteUrlAsLinkFromSanitized(safeHtml, plain)) {
     return null;
   }
   if (!clipboardHtmlLooksStructured(safeHtml)) {
