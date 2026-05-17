@@ -371,7 +371,7 @@ describe('markdownCodeBackgroundLayer markers', () => {
       80,
       20,
     );
-    const nextFence = new MarkdownFenceBlockBackgroundMarker(10, 400);
+    const nextFence = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
 
     expect(nextFence.update(elt, prevInlinePill)).toBe(false);
     expect(elt.style.left).toBe('200px');
@@ -380,17 +380,34 @@ describe('markdownCodeBackgroundLayer markers', () => {
     expect(elt.style.height).toBe('20px');
   });
 
-  it('fence marker reuses another fence marker DOM element and updates top/height', () => {
+  it('fence marker reuses another fence marker DOM element and updates all 4 dimensions', () => {
     const elt = document.createElement('div');
     elt.className = 'cm-md-fence-bg';
     elt.style.top = '10px';
     elt.style.height = '400px';
-    const prevFence = new MarkdownFenceBlockBackgroundMarker(10, 400);
-    const nextFence = new MarkdownFenceBlockBackgroundMarker(120, 80);
+    elt.style.left = '30px';
+    elt.style.width = '720px';
+    const prevFence = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
+    const nextFence = new MarkdownFenceBlockBackgroundMarker(120, 80, 35, 700);
 
     expect(nextFence.update(elt, prevFence)).toBe(true);
     expect(elt.style.top).toBe('120px');
     expect(elt.style.height).toBe('80px');
+    expect(elt.style.left).toBe('35px');
+    expect(elt.style.width).toBe('700px');
+  });
+
+  /* Regression: `.cm-md-codeBackgroundLayer` (`.cm-layer`) has `contain: size` and no explicit width,
+   * so the descendant containing block is 0-wide. The previous CSS `left: 0; right: 0;` rendered
+   * fence-bg as a 1-2px vertical stripe on the left. The marker must set explicit `left`/`width`. */
+  it('fence marker draws with explicit left and width inline styles', () => {
+    const marker = new MarkdownFenceBlockBackgroundMarker(10, 400, 30, 720);
+    const el = marker.draw();
+    expect(el.className).toBe('cm-md-fence-bg');
+    expect(el.style.top).toBe('10px');
+    expect(el.style.height).toBe('400px');
+    expect(el.style.left).toBe('30px');
+    expect(el.style.width).toBe('720px');
   });
 });
 

@@ -5446,9 +5446,9 @@ button.primary.destructive {
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-md-fence-bg {
+  /* `left` and `width` come from the marker (cm-content content-box); the layer has `contain: size`
+     and no width, so CSS `left: 0; right: 0` would give a 0-wide containing block. */
   position: absolute;
-  left: 0;
-  right: 0;
   box-sizing: border-box;
   background: var(--nb-editor-code-block-bg);
   border: 1px solid var(--nb-editor-code-block-border);
