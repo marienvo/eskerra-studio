@@ -121,7 +121,7 @@ export function ThemesTab({vaultRoot, fs}: ThemesTabProps) {
         return;
       }
       const dir = getThemesDirectoryUri(normalizeVaultBaseUri(vaultRoot));
-      const path = `${dir}/${theme.fileName}`.replace(/\//g, '/');
+      const path = `${dir}/${theme.fileName}`;
       try {
         await revealPathInSystemExplorer(path);
       } catch {
