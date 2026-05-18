@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  canOpenDeleteNoteShortcut,
   isEditableFocusOutsideCodeMirror,
   matchesDeleteNoteGlobalShortcutModifiers,
   shouldHandleDeleteNoteGlobalShortcut,
@@ -155,6 +156,32 @@ describe('shouldHandleDeleteNoteGlobalShortcut', () => {
         modKeyEvent({key: 'd', ctrlKey: true, shiftKey: false}),
         {activeElement: document.body, eventTarget: document.body},
       ),
+    ).toBe(false);
+  });
+});
+
+describe('canOpenDeleteNoteShortcut', () => {
+  it('requires an idle selected note outside compose', () => {
+    expect(
+      canOpenDeleteNoteShortcut({
+        busy: false,
+        selectedUri: '/vault/Inbox/Note.md',
+        composingNewEntry: false,
+      }),
+    ).toBe(true);
+    expect(
+      canOpenDeleteNoteShortcut({
+        busy: false,
+        selectedUri: '/vault/Inbox/Note.md',
+        composingNewEntry: true,
+      }),
+    ).toBe(false);
+    expect(
+      canOpenDeleteNoteShortcut({
+        busy: false,
+        selectedUri: null,
+        composingNewEntry: false,
+      }),
     ).toBe(false);
   });
 });

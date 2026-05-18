@@ -109,8 +109,10 @@ export async function runAddNote(
   }
   ctx.setters.setBusy(true);
   ctx.setters.setErr(null);
+  let createdUri: string | null = null;
   try {
     const created = await createInboxMarkdownNote(vaultRoot, fs, title, body);
+    createdUri = created.uri;
     markVaultWriteSettled();
     subtreeMarkdownCache.invalidateForMutation(vaultRoot, created.uri, 'file');
     await refreshNotes(vaultRoot);
@@ -119,7 +121,7 @@ export async function runAddNote(
     return true;
   } catch (e) {
     ctx.setters.setErr(e instanceof Error ? e.message : String(e));
-    return false;
+    return createdUri != null;
   } finally {
     ctx.setters.setBusy(false);
   }

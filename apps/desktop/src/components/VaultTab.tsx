@@ -44,7 +44,7 @@ import {submitComposeEntryAndApplyResult} from './vaultTabComposeSubmitResult';
 import {VaultTabEditorPane} from './vaultTab/VaultTabEditorPane';
 import {useVaultTabInboxPaneLifecycle} from './vaultTab/useVaultTabInboxPaneLifecycle';
 import {useVaultTabRevealState} from './vaultTab/useVaultTabRevealState';
-import {shouldHandleDeleteNoteGlobalShortcut} from './vaultTabDeleteNoteShortcut';
+import {canOpenDeleteNoteShortcut, shouldHandleDeleteNoteGlobalShortcut} from './vaultTabDeleteNoteShortcut';
 import {buildVaultTabBacklinkRows} from './vaultTabBacklinkRows';
 import {buildVaultTabEditorAndComposeLinkDerivedData} from './vaultTabLinkContexts';
 import type {
@@ -261,11 +261,11 @@ export function VaultTab({
   ]);
 
   const onDeleteNoteShortcut = useCallback(() => {
-    if (busy || selectedUri == null) {
+    if (!canOpenDeleteNoteShortcut({busy, selectedUri, composingNewEntry})) {
       return;
     }
     setConfirmDeleteUri(selectedUri);
-  }, [busy, selectedUri]);
+  }, [busy, composingNewEntry, selectedUri]);
 
   const onDeleteNoteShortcutRef = useRef(onDeleteNoteShortcut);
   useLayoutEffect(() => {

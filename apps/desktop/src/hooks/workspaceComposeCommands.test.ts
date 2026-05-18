@@ -176,6 +176,19 @@ describe('workspaceComposeCommands', () => {
     expect(ctx.openMarkdownInEditor).not.toHaveBeenCalled();
   });
 
+  it('runAddNote treats post-create open failures as committed', async () => {
+    const ctx = createContext();
+    ctx.openMarkdownInEditor = vi.fn(async () => {
+      throw new Error('open failed');
+    });
+
+    const created = await runAddNote(ctx, 'Title', '# body');
+
+    expect(created).toBe(true);
+    expect(vaultBootstrap.createInboxMarkdownNote).toHaveBeenCalledTimes(1);
+    expect(ctx.setters.setErr).toHaveBeenCalledWith('open failed');
+  });
+
   it('runSubmitNewEntry surfaces persistTransientMarkdownImages failures', async () => {
     const ctx = createContext();
     vi.mocked(persistTransientMarkdownImages.persistTransientMarkdownImages).mockRejectedValueOnce(

@@ -52,3 +52,11 @@ export function shouldHandleDeleteNoteGlobalShortcut(
   }
   return true;
 }
+
+export function canOpenDeleteNoteShortcut(args: {
+  busy: boolean;
+  selectedUri: string | null;
+  composingNewEntry: boolean;
+}): boolean {
+  return !args.busy && args.selectedUri != null && !args.composingNewEntry;
+}
