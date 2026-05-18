@@ -6,6 +6,11 @@ import {
 } from 'react';
 
 import {
+  initialDoubleCtrlState,
+  reduceDoubleCtrlKeyDown,
+  reduceDoubleCtrlKeyUp,
+} from '../lib/doubleCtrlKeySequence';
+import {
   initialDoubleShiftState,
   reduceDoubleShiftKeyDown,
   reduceDoubleShiftKeyUp,
@@ -25,6 +30,7 @@ type AppMainWindowKeyboardEffectsArgs = {
   setQuickOpenOpen: (open: boolean) => void;
   vaultSearchOpen: boolean;
   setVaultSearchOpen: (open: boolean) => void;
+  onAddEntry: () => void;
   manualSyncDisabled?: boolean;
   manualSyncRunning?: boolean;
   onManualSync?: () => void;
@@ -44,6 +50,7 @@ export function useAppMainWindowKeyboardEffects({
   setQuickOpenOpen,
   vaultSearchOpen,
   setVaultSearchOpen,
+  onAddEntry,
   manualSyncDisabled = true,
   manualSyncRunning = false,
   onManualSync,
@@ -63,12 +70,16 @@ export function useAppMainWindowKeyboardEffects({
 
   const quickOpenOpenRef = useRef(quickOpenOpen);
   const vaultSearchOpenRef = useRef(vaultSearchOpen);
+  const onAddEntryRef = useRef(onAddEntry);
   useLayoutEffect(() => {
     quickOpenOpenRef.current = quickOpenOpen;
   }, [quickOpenOpen]);
   useLayoutEffect(() => {
     vaultSearchOpenRef.current = vaultSearchOpen;
   }, [vaultSearchOpen]);
+  useLayoutEffect(() => {
+    onAddEntryRef.current = onAddEntry;
+  }, [onAddEntry]);
 
   const onManualSyncRef = useRef(onManualSync);
   const manualSyncDisabledRef = useRef(manualSyncDisabled);
@@ -238,4 +249,42 @@ export function useAppMainWindowKeyboardEffects({
       window.removeEventListener('keyup', onKeyUp, true);
     };
   }, [vaultRoot, busy, setQuickOpenOpen]);
+
+  useEffect(() => {
+    let state = initialDoubleCtrlState;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!vaultRoot || quickOpenOpenRef.current || vaultSearchOpenRef.current || busy) {
+        return;
+      }
+      state = reduceDoubleCtrlKeyDown(state, e.key, e.ctrlKey, e.metaKey, e.altKey);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!vaultRoot || quickOpenOpenRef.current || vaultSearchOpenRef.current || busy) {
+        return;
+      }
+      if (e.repeat || composingNewEntry) {
+        return;
+      }
+      const next = reduceDoubleCtrlKeyUp(
+        state,
+        performance.now(),
+        e.key,
+        e.ctrlKey,
+        e.metaKey,
+        e.altKey,
+      );
+      state = next.state;
+      if (next.shouldOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        onAddEntryRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+    };
+  }, [vaultRoot, busy, composingNewEntry]);
 }

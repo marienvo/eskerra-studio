@@ -203,6 +203,14 @@ export default function App() {
     [selectNoteInNewActiveTab],
   );
 
+  const openAddToInbox = useCallback(() => {
+    startNewEntry(
+      composeDraftMarkdown === ''
+        ? DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN
+        : composeDraftMarkdown,
+    );
+  }, [composeDraftMarkdown, startNewEntry]);
+
   const handleMuteLinkSnippetDomain = useCallback(
     async (domain: string) => {
       if (!vaultRoot || !vaultSettings) return;
@@ -407,6 +415,7 @@ export default function App() {
     setQuickOpenOpen,
     vaultSearchOpen,
     setVaultSearchOpen,
+    onAddEntry: openAddToInbox,
     manualSyncDisabled: manualSyncUnavailable,
     manualSyncRunning: manualGitSync.running,
     onManualSync: manualGitSync.run,
@@ -535,12 +544,7 @@ export default function App() {
                         selectedUri,
                         onSelectNote: selectNote,
                         onSelectNoteInNewActiveTab: selectNoteInNewActiveTab,
-                        onAddEntry: () =>
-                          startNewEntry(
-                            composeDraftMarkdown === ''
-                              ? DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN
-                              : composeDraftMarkdown,
-                          ),
+                        onAddEntry: openAddToInbox,
                         composeDraftMarkdown,
                         composeDraftResetNonce,
                         onComposeDraftChange: setComposeDraftMarkdown,
