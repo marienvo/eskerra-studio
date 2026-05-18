@@ -3,7 +3,7 @@
     "apps/desktop/src/App.tsx": 553,
     "apps/desktop/src/components/TodayHubCanvas.tsx": 1010,
     "apps/desktop/src/components/VaultPaneTree.tsx": 1108,
-    "apps/desktop/src/components/VaultTab.tsx": 765,
+    "apps/desktop/src/components/VaultTab.tsx": 763,
     "apps/desktop/src/components/vaultTab/VaultTabEditorPane.tsx": 539,
     "apps/desktop/src/editor/frontmatterEditor/FrontmatterEditor.tsx": 1203,
     "apps/desktop/src/editor/noteEditor/eskerraTableV1/EskerraTableShell.tsx": 1703,
