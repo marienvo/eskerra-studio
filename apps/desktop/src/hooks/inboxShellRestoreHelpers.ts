@@ -18,6 +18,7 @@ export type StoredWorkspaceRow = {id: string; entries: string[]; index: number};
 export type RestoredInboxState = {
   vaultRoot: string;
   composingNewEntry: boolean;
+  composeDraftMarkdown?: string;
   selectedUri: string | null;
   openTabUris?: readonly string[] | null;
   editorWorkspaceTabs?: ReadonlyArray<StoredWorkspaceRow> | null;

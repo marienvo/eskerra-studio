@@ -16,6 +16,7 @@ import type {
   VaultWikiLinkActivatePayload,
 } from '../editor/noteEditor/vaultLinkActivatePayload';
 import type {InboxEditorShellScrollDirective} from '../hooks/workspaceEditorScrollMap';
+import type {SubmitNewEntryResult} from '../hooks/workspaceComposeCommands';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {SessionNotification} from '../lib/sessionNotifications';
 import type {
@@ -95,9 +96,12 @@ export type VaultTabEditorController = {
   onSelectNote: (uri: string) => void;
   onSelectNoteInNewActiveTab: (uri: string) => void;
   onAddEntry: () => void;
+  composeDraftMarkdown: string;
+  composeDraftResetNonce: number;
+  onComposeDraftChange: (markdown: string) => void;
   composingNewEntry: boolean;
   onCancelNewEntry: () => void;
-  onCreateNewEntry: () => void;
+  onCreateNewEntry: (liveComposeMarkdown?: string) => Promise<SubmitNewEntryResult>;
   editorBody: string;
   onEditorChange: (body: string) => void;
   inboxEditorResetNonce: number;

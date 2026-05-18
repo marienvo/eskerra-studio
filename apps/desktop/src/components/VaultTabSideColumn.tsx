@@ -70,7 +70,6 @@ export function VaultTabSideColumn({
   } = layoutController;
   const {
     selectedUri,
-    composingNewEntry,
     busy,
     onAddEntry,
     onSelectNote,
@@ -86,7 +85,7 @@ export function VaultTabSideColumn({
     onDismissNotification,
     onClearAllNotifications,
   } = notificationsController;
-  const editorActiveMarkdownUri = composingNewEntry ? null : selectedUri;
+  const editorActiveMarkdownUri = selectedUri;
 
   const notificationsPanelEl = (
     <NotificationsPanel

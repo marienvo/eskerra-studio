@@ -1,11 +1,9 @@
 import type {Dispatch, MutableRefObject, RefObject, SetStateAction} from 'react';
 
 import {
-  buildInboxMarkdownFromCompose,
   innerToFencedFrontmatterBlock,
   markdownContainsTransientImageUrls,
   mergeYamlFrontmatterBody,
-  parseComposeInput,
   type SubtreeMarkdownPresenceCache,
   type VaultFilesystem,
 } from '@eskerra/core';
@@ -21,6 +19,29 @@ import {
 } from './inboxNoteBodyCache';
 import type {DiskConflictSoftState, DiskConflictState} from './workspaceFsWatchReconcile';
 import type {InboxEditorShellScrollDirective} from './workspaceEditorScrollMap';
+
+export const DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN = '# ';
+
+function parseAddToInboxDraftMarkdown(markdown: string): {
+  fileMarkdown: string;
+  titleForFilename: string;
+} {
+  const normalized = markdown.trimEnd();
+  const [firstLineRaw = ''] = normalized.split(/\r?\n/, 1);
+  let titleSource = firstLineRaw;
+  if (titleSource.startsWith('#')) {
+    titleSource = titleSource.slice(1);
+    while (titleSource.startsWith(' ') || titleSource.startsWith('\t')) {
+      titleSource = titleSource.slice(1);
+    }
+  }
+  const titleForFilename = titleSource.trim();
+
+  return {
+    fileMarkdown: normalized ? `${normalized}\n` : '',
+    titleForFilename,
+  };
+}
 
 export type ComposeCommandsContext = {
   fs: VaultFilesystem;
@@ -60,6 +81,8 @@ export type ComposeCommandsContext = {
     setErr: Dispatch<SetStateAction<string | null>>;
     setFsRefreshNonce: Dispatch<SetStateAction<number>>;
     setEditorBody: Dispatch<SetStateAction<string>>;
+    setComposeDraftMarkdown: Dispatch<SetStateAction<string>>;
+    setComposeDraftResetNonce: Dispatch<SetStateAction<number>>;
     setComposingNewEntry: Dispatch<SetStateAction<boolean>>;
     setSelectedUri: Dispatch<SetStateAction<string | null>>;
     setDiskConflict: Dispatch<SetStateAction<DiskConflictState | null>>;
@@ -70,44 +93,51 @@ export type ComposeCommandsContext = {
   openMarkdownInEditor: (uri: string) => Promise<void>;
 };
 
+export type SubmitNewEntryResult = {
+  created: boolean;
+  rewrittenMarkdown?: string;
+};
+
 export async function runAddNote(
   ctx: ComposeCommandsContext,
   title: string,
   body: string,
-): Promise<void> {
+): Promise<boolean> {
   const {vaultRoot, fs, subtreeMarkdownCache, markVaultWriteSettled, refreshNotes} = ctx;
   if (!vaultRoot) {
-    return;
+    return false;
   }
   ctx.setters.setBusy(true);
   ctx.setters.setErr(null);
+  let createdUri: string | null = null;
   try {
     const created = await createInboxMarkdownNote(vaultRoot, fs, title, body);
+    createdUri = created.uri;
     markVaultWriteSettled();
     subtreeMarkdownCache.invalidateForMutation(vaultRoot, created.uri, 'file');
     await refreshNotes(vaultRoot);
     ctx.setters.setFsRefreshNonce(n => n + 1);
     await ctx.openMarkdownInEditor(created.uri);
+    return true;
   } catch (e) {
     ctx.setters.setErr(e instanceof Error ? e.message : String(e));
+    return createdUri != null;
   } finally {
     ctx.setters.setBusy(false);
   }
 }
 
-export function runStartNewEntry(ctx: ComposeCommandsContext): void {
+export function runStartNewEntry(ctx: ComposeCommandsContext, draftMarkdown?: string): void {
   void (async () => {
     await ctx.flushInboxSave();
     ctx.setters.setErr(null);
-    ctx.setters.setDiskConflict(null);
-    ctx.refs.diskConflictRef.current = null;
-    ctx.setters.setDiskConflictSoft(null);
-    ctx.refs.diskConflictSoftRef.current = null;
-    ctx.refs.inboxEditorShellScrollDirectiveRef.current = {kind: 'snapTop'};
     ctx.setters.setComposingNewEntry(true);
-    ctx.setters.setSelectedUri(null);
-    ctx.setters.clearLastPersistedSnapshot();
-    ctx.resetInboxEditorComposeState();
+    if (typeof draftMarkdown === 'string') {
+      ctx.setters.setComposeDraftMarkdown(
+        draftMarkdown === '' ? DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN : draftMarkdown,
+      );
+      ctx.setters.setComposeDraftResetNonce(n => n + 1);
+    }
   })();
 }
 
@@ -115,44 +145,50 @@ export function runCancelNewEntry(ctx: ComposeCommandsContext): void {
   void (async () => {
     await ctx.flushInboxSave();
     ctx.setters.setComposingNewEntry(false);
-    ctx.resetInboxEditorComposeState();
   })();
 }
 
 export async function runSubmitNewEntry(
   ctx: ComposeCommandsContext,
-  editorBody: string,
-): Promise<void> {
+  composeDraftMarkdown: string,
+  liveComposeMarkdown?: string,
+): Promise<SubmitNewEntryResult> {
   if (!ctx.vaultRoot) {
-    return;
+    return {created: false};
   }
   ctx.setters.setErr(null);
-  const rawBody = ctx.inboxEditorRef.current?.getMarkdown() ?? editorBody;
+  const rawBody =
+    typeof liveComposeMarkdown === 'string' ? liveComposeMarkdown : composeDraftMarkdown;
   let body = rawBody;
   try {
     body = await persistTransientMarkdownImages(body, ctx.vaultRoot);
   } catch (e) {
     ctx.setters.setErr(e instanceof Error ? e.message : String(e));
-    return;
+    return {created: false};
   }
   if (markdownContainsTransientImageUrls(body)) {
     ctx.setters.setErr(
       'Cannot create this note: some images are still temporary (blob or data URLs). Paste images again so they are stored under Assets/Attachments, or remove those image references.',
     );
-    return;
+    return {created: false};
   }
+  const result: SubmitNewEntryResult = {created: false};
   if (body !== rawBody) {
-    ctx.inboxEditorRef.current?.loadMarkdown(body, {selection: 'preserve'});
-    ctx.scheduleBacklinksDeferOneFrameAfterLoad();
-    ctx.setters.setEditorBody(body);
+    ctx.setters.setComposeDraftMarkdown(body);
+    result.rewrittenMarkdown = body;
   }
-  const {titleLine, bodyAfterBlank} = parseComposeInput(body);
-  if (!titleLine.trim()) {
+  const {fileMarkdown, titleForFilename} = parseAddToInboxDraftMarkdown(body);
+  if (!titleForFilename.trim()) {
     ctx.setters.setErr('First line is required.');
-    return;
+    return result;
   }
-  const fullMarkdown = buildInboxMarkdownFromCompose(titleLine, bodyAfterBlank);
-  await runAddNote(ctx, titleLine, fullMarkdown);
+  const created = await runAddNote(ctx, titleForFilename, fileMarkdown);
+  if (created) {
+    ctx.setters.setComposingNewEntry(false);
+    ctx.setters.setComposeDraftMarkdown('');
+    ctx.setters.setComposeDraftResetNonce(n => n + 1);
+  }
+  return {...result, created};
 }
 
 export function runCleanNoteInbox(ctx: ComposeCommandsContext): void {

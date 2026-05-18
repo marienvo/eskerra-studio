@@ -38,6 +38,7 @@ function renderKeyboardEffects(
     setQuickOpenOpen: vi.fn(),
     vaultSearchOpen: false,
     setVaultSearchOpen: vi.fn(),
+    onAddEntry: vi.fn(),
     manualSyncDisabled: false,
     manualSyncRunning: false,
     onManualSync: vi.fn(),
@@ -62,6 +63,54 @@ function dispatchModS(init: {ctrlKey?: boolean; metaKey?: boolean} = {ctrlKey: t
     window.dispatchEvent(event);
   });
   return event;
+}
+
+function dispatchCtrlTap() {
+  const keyDown = new KeyboardEvent('keydown', {
+    key: 'Control',
+    ctrlKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  const keyUp = new KeyboardEvent('keyup', {
+    key: 'Control',
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(keyDown);
+    window.dispatchEvent(keyUp);
+  });
+}
+
+function dispatchShiftTap() {
+  const keyDown = new KeyboardEvent('keydown', {
+    key: 'Shift',
+    bubbles: true,
+    cancelable: true,
+  });
+  const keyUp = new KeyboardEvent('keyup', {
+    key: 'Shift',
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(keyDown);
+    window.dispatchEvent(keyUp);
+  });
+}
+
+function dispatchCtrlShiftF() {
+  const event = new KeyboardEvent('keydown', {
+    key: 'f',
+    ctrlKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(event);
+  });
 }
 
 describe('useAppMainWindowKeyboardEffects manual sync shortcut', () => {
@@ -154,5 +203,66 @@ describe('useAppMainWindowKeyboardEffects manual sync shortcut', () => {
     dispatchModS({ctrlKey: true});
 
     expect(onManualSync).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useAppMainWindowKeyboardEffects modifier double-tap shortcuts', () => {
+  it('opens Add to inbox on double Ctrl', () => {
+    const onAddEntry = vi.fn();
+    renderKeyboardEffects({onAddEntry});
+
+    dispatchCtrlTap();
+    dispatchCtrlTap();
+
+    expect(onAddEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not open Add to inbox when busy', () => {
+    const onAddEntry = vi.fn();
+    renderKeyboardEffects({busy: true, onAddEntry});
+
+    dispatchCtrlTap();
+    dispatchCtrlTap();
+
+    expect(onAddEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not open Add to inbox when quick open is already open', () => {
+    const onAddEntry = vi.fn();
+    renderKeyboardEffects({quickOpenOpen: true, onAddEntry});
+
+    dispatchCtrlTap();
+    dispatchCtrlTap();
+
+    expect(onAddEntry).not.toHaveBeenCalled();
+  });
+
+  it('still opens quick open on double Shift', () => {
+    const setQuickOpenOpen = vi.fn();
+    renderKeyboardEffects({setQuickOpenOpen});
+
+    dispatchShiftTap();
+    dispatchShiftTap();
+
+    expect(setQuickOpenOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('does not open quick open on double Shift while composing', () => {
+    const setQuickOpenOpen = vi.fn();
+    renderKeyboardEffects({setQuickOpenOpen, composingNewEntry: true});
+
+    dispatchShiftTap();
+    dispatchShiftTap();
+
+    expect(setQuickOpenOpen).not.toHaveBeenCalled();
+  });
+
+  it('does not open vault search on Ctrl+Shift+F while composing', () => {
+    const setVaultSearchOpen = vi.fn();
+    renderKeyboardEffects({setVaultSearchOpen, composingNewEntry: true});
+
+    dispatchCtrlShiftF();
+
+    expect(setVaultSearchOpen).not.toHaveBeenCalled();
   });
 });

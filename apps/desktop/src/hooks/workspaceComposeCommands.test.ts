@@ -58,6 +58,8 @@ function createContext(): ComposeCommandsContext {
       setErr: vi.fn(),
       setFsRefreshNonce: vi.fn(),
       setEditorBody: vi.fn(),
+      setComposeDraftMarkdown: vi.fn(),
+      setComposeDraftResetNonce: vi.fn(),
       setComposingNewEntry: vi.fn(),
       setSelectedUri: vi.fn(),
       setDiskConflict: vi.fn(),
@@ -83,24 +85,21 @@ describe('workspaceComposeCommands', () => {
     );
   });
 
-  it('start/cancel new entry flushes saves and resets compose state', async () => {
+  it('start/cancel new entry flushes saves without resetting the selected note editor', async () => {
     const ctx = createContext();
 
-    runStartNewEntry(ctx);
+    runStartNewEntry(ctx, 'Draft title');
     await Promise.resolve();
     await Promise.resolve();
 
     expect(ctx.flushInboxSave).toHaveBeenCalledTimes(1);
     expect(ctx.setters.setErr).toHaveBeenCalledWith(null);
-    expect(ctx.setters.setDiskConflict).toHaveBeenCalledWith(null);
-    expect(ctx.setters.setDiskConflictSoft).toHaveBeenCalledWith(null);
-    expect(ctx.refs.diskConflictRef.current).toBeNull();
-    expect(ctx.refs.diskConflictSoftRef.current).toBeNull();
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(true);
-    expect(ctx.setters.setSelectedUri).toHaveBeenCalledWith(null);
-    expect(ctx.setters.clearLastPersistedSnapshot).toHaveBeenCalledTimes(1);
-    expect(ctx.refs.inboxEditorShellScrollDirectiveRef.current).toEqual({kind: 'snapTop'});
-    expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(1);
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith('Draft title');
+    expect(ctx.setters.setComposeDraftResetNonce).toHaveBeenCalledTimes(1);
+    expect(ctx.setters.setSelectedUri).not.toHaveBeenCalled();
+    expect(ctx.setters.clearLastPersistedSnapshot).not.toHaveBeenCalled();
+    expect(ctx.resetInboxEditorComposeState).not.toHaveBeenCalled();
 
     runCancelNewEntry(ctx);
     await Promise.resolve();
@@ -108,7 +107,30 @@ describe('workspaceComposeCommands', () => {
 
     expect(ctx.flushInboxSave).toHaveBeenCalledTimes(2);
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
-    expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(2);
+    expect(ctx.resetInboxEditorComposeState).not.toHaveBeenCalled();
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores non-string start payloads from direct click handlers', async () => {
+    const ctx = createContext();
+
+    runStartNewEntry(ctx, {type: 'click'} as unknown as string);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(true);
+    expect(ctx.setters.setComposeDraftMarkdown).not.toHaveBeenCalled();
+    expect(ctx.setters.setComposeDraftResetNonce).not.toHaveBeenCalled();
+  });
+
+  it('normalizes an empty restored draft to the H1 prompt', async () => {
+    const ctx = createContext();
+
+    runStartNewEntry(ctx, '');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith('# ');
   });
 
   it('submit new entry validates first line before creating note', async () => {
@@ -154,6 +176,19 @@ describe('workspaceComposeCommands', () => {
     expect(ctx.openMarkdownInEditor).not.toHaveBeenCalled();
   });
 
+  it('runAddNote treats post-create open failures as committed', async () => {
+    const ctx = createContext();
+    ctx.openMarkdownInEditor = vi.fn(async () => {
+      throw new Error('open failed');
+    });
+
+    const created = await runAddNote(ctx, 'Title', '# body');
+
+    expect(created).toBe(true);
+    expect(vaultBootstrap.createInboxMarkdownNote).toHaveBeenCalledTimes(1);
+    expect(ctx.setters.setErr).toHaveBeenCalledWith('open failed');
+  });
+
   it('runSubmitNewEntry surfaces persistTransientMarkdownImages failures', async () => {
     const ctx = createContext();
     vi.mocked(persistTransientMarkdownImages.persistTransientMarkdownImages).mockRejectedValueOnce(
@@ -180,13 +215,57 @@ describe('workspaceComposeCommands', () => {
     expect(vaultBootstrap.createInboxMarkdownNote).not.toHaveBeenCalled();
   });
 
+  it('runSubmitNewEntry returns rewritten markdown for failed retry paths', async () => {
+    const ctx = createContext();
+    vi.mocked(persistTransientMarkdownImages.persistTransientMarkdownImages).mockResolvedValue(
+      '   \n![](Assets/Attachments/image.png)',
+    );
+
+    const result = await runSubmitNewEntry(ctx, '   \n![](blob:http://localhost/abc)');
+
+    expect(result).toEqual({
+      created: false,
+      rewrittenMarkdown: '   \n![](Assets/Attachments/image.png)',
+    });
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith(
+      '   \n![](Assets/Attachments/image.png)',
+    );
+    expect(ctx.setters.setErr).toHaveBeenLastCalledWith('First line is required.');
+    expect(vaultBootstrap.createInboxMarkdownNote).not.toHaveBeenCalled();
+  });
+
   it('runSubmitNewEntry creates note and opens editor on success', async () => {
     const ctx = createContext();
 
-    await runSubmitNewEntry(ctx, 'My note title\nBody here');
+    await runSubmitNewEntry(ctx, '# My note title\nBody here');
 
-    expect(vaultBootstrap.createInboxMarkdownNote).toHaveBeenCalled();
+    expect(vaultBootstrap.createInboxMarkdownNote).toHaveBeenCalledWith(
+      '/vault',
+      ctx.fs,
+      'My note title',
+      '# My note title\nBody here\n',
+    );
     expect(ctx.openMarkdownInEditor).toHaveBeenCalledWith('/vault/Inbox/new.md');
+    expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith('');
+    expect(ctx.setters.setComposeDraftResetNonce).toHaveBeenCalledTimes(1);
+  });
+
+  it('runSubmitNewEntry prefers the live compose markdown when provided', async () => {
+    const ctx = createContext();
+
+    await runSubmitNewEntry(
+      ctx,
+      '# stale draft title\nstale body',
+      '# Live title\nFresh body',
+    );
+
+    expect(vaultBootstrap.createInboxMarkdownNote).toHaveBeenCalledWith(
+      '/vault',
+      ctx.fs,
+      'Live title',
+      '# Live title\nFresh body\n',
+    );
   });
 
   it('runCleanNoteInbox triggers Today hub bridge when canvas is visible', async () => {

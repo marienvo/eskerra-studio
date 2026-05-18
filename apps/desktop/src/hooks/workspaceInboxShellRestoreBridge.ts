@@ -172,7 +172,7 @@ export type RestoreInboxSelectionAfterShellDeps = {
   activeTodayHubUriRef: RefObject<string | null>;
   notesRef: RefObject<readonly {uri: string}[]>;
   getRestoredInboxState: () => RestoredInboxState | null;
-  startNewEntry: () => void;
+  startNewEntry: (draftMarkdown?: string) => void;
   selectNote: (uri: string) => void;
   /** Re-applies the Today hub Home surface (same as workspace selector) without tab navigation. */
   selectHomeCurrentNote: (todayNoteUri: string) => void | Promise<void>;
@@ -201,7 +201,7 @@ export function restoreInboxSelectionAfterShellRestoreBridge(
   }
   const knownNoteUris = new Set(notesRef.current.map(n => n.uri));
   if (restoredInboxState.composingNewEntry) {
-    startNewEntry();
+    startNewEntry(restoredInboxState.composeDraftMarkdown ?? '');
     return;
   }
   const hub = activeTodayHubUriRef.current;

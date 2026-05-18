@@ -25,6 +25,7 @@ export type UseAppOnMountLayoutHydrationArgs = {
     SetStateAction<{
       vaultRoot: string;
       composingNewEntry: boolean;
+      composeDraftMarkdown?: string;
       selectedUri: string | null;
       openTabUris?: readonly string[];
       editorWorkspaceTabs?: ReadonlyArray<{
@@ -67,6 +68,7 @@ export function useAppOnMountLayoutHydration({
         setRestoredInboxState({
           vaultRoot: ui.vaultRoot,
           composingNewEntry: ui.inbox.composingNewEntry,
+          composeDraftMarkdown: ui.inbox.composeDraftMarkdown,
           selectedUri: ui.inbox.selectedUri,
           openTabUris: ui.inbox.openTabUris,
           editorWorkspaceTabs: ui.inbox.editorWorkspaceTabs,
