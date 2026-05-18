@@ -1,9 +1,10 @@
 {
   "maxLinesByPath": {
-    "apps/desktop/src/App.tsx": 713,
+    "apps/desktop/src/App.tsx": 558,
     "apps/desktop/src/components/TodayHubCanvas.tsx": 1010,
     "apps/desktop/src/components/VaultPaneTree.tsx": 1108,
-    "apps/desktop/src/components/VaultTab.tsx": 1498,
+    "apps/desktop/src/components/VaultTab.tsx": 772,
+    "apps/desktop/src/components/vaultTab/VaultTabEditorPane.tsx": 539,
     "apps/desktop/src/editor/frontmatterEditor/FrontmatterEditor.tsx": 1203,
     "apps/desktop/src/editor/noteEditor/eskerraTableV1/EskerraTableShell.tsx": 1703,
     "apps/desktop/src/editor/noteEditor/markdownSelectionSurround.test.ts": 846,
@@ -11,7 +12,7 @@
     "apps/desktop/src/editor/noteEditor/markdownSmartExpandSelection.ts": 1499,
     "apps/desktop/src/editor/noteEditor/NoteMarkdownEditor.tsx": 1526,
     "apps/desktop/src/hooks/useMainWindowWorkspace.hydrateVault.test.ts": 1680,
-    "apps/desktop/src/hooks/useMainWindowWorkspace.ts": 1751,
+    "apps/desktop/src/hooks/useMainWindowWorkspace.ts": 1511,
     "apps/desktop/src/hooks/useTodayHubsState.ts": 914,
     "apps/desktop/src/hooks/workspaceLinkRouting.ts": 467,
     "apps/desktop/src/hooks/workspacePersistence.ts": 431,
