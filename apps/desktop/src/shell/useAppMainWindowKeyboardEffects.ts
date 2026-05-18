@@ -268,7 +268,7 @@ export function useAppMainWindowKeyboardEffects({
       if (!vaultRoot || quickOpenOpenRef.current || vaultSearchOpenRef.current || busy) {
         return;
       }
-      state = reduceDoubleCtrlKeyDown(state, e.key, e.ctrlKey, e.metaKey, e.altKey);
+      state = reduceDoubleCtrlKeyDown(state, e.key, e.ctrlKey, e.metaKey, e.altKey, e.shiftKey);
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (!vaultRoot || quickOpenOpenRef.current || vaultSearchOpenRef.current || busy) {
@@ -284,6 +284,7 @@ export function useAppMainWindowKeyboardEffects({
         e.ctrlKey,
         e.metaKey,
         e.altKey,
+        e.shiftKey,
       );
       state = next.state;
       if (next.shouldOpen) {
