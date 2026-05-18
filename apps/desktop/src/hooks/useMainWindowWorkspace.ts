@@ -280,7 +280,7 @@ export function useMainWindowWorkspace(options: {
   const todayHubCellEditorRef = useRef<NoteMarkdownEditorHandle | null>(null);
   const todayHubRowLastPersistedRef = useRef<Map<string, string>>(new Map());
   const todayHubSettingsRef = useRef<TodayHubSettings | null>(null);
-  const submitNewEntryRef = useRef<() => Promise<void>>(async () => {});
+  const submitNewEntryRef = useRef<() => Promise<unknown>>(async () => {});
   const openMarkdownInEditorRef = useRef<TodayHubOpenMarkdown>(async () => {});
   const activateOpenTabRef = useRef<(tabId: string) => void>(() => {});
   const selectNoteRef = useRef<(uri: string) => void>(() => {});

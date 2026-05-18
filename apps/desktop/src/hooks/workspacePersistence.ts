@@ -88,7 +88,7 @@ export function useWorkspacePersistence(args: {
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   todayHubBridgeRef: MutableRefObject<TodayHubWorkspaceBridge>;
-  submitNewEntryRef: MutableRefObject<() => Promise<void>>;
+  submitNewEntryRef: MutableRefObject<() => Promise<unknown>>;
   setErr: (value: string | null) => void;
   setInboxContentByUri: Dispatch<SetStateAction<Record<string, string>>>;
   refreshNotes: (root: string) => Promise<void>;
