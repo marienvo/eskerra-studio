@@ -58,6 +58,8 @@ function createContext(): ComposeCommandsContext {
       setErr: vi.fn(),
       setFsRefreshNonce: vi.fn(),
       setEditorBody: vi.fn(),
+      setComposeDraftMarkdown: vi.fn(),
+      setComposeDraftResetNonce: vi.fn(),
       setComposingNewEntry: vi.fn(),
       setSelectedUri: vi.fn(),
       setDiskConflict: vi.fn(),
@@ -86,21 +88,18 @@ describe('workspaceComposeCommands', () => {
   it('start/cancel new entry flushes saves and resets compose state', async () => {
     const ctx = createContext();
 
-    runStartNewEntry(ctx);
+    runStartNewEntry(ctx, 'Draft title');
     await Promise.resolve();
     await Promise.resolve();
 
     expect(ctx.flushInboxSave).toHaveBeenCalledTimes(1);
     expect(ctx.setters.setErr).toHaveBeenCalledWith(null);
-    expect(ctx.setters.setDiskConflict).toHaveBeenCalledWith(null);
-    expect(ctx.setters.setDiskConflictSoft).toHaveBeenCalledWith(null);
-    expect(ctx.refs.diskConflictRef.current).toBeNull();
-    expect(ctx.refs.diskConflictSoftRef.current).toBeNull();
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(true);
-    expect(ctx.setters.setSelectedUri).toHaveBeenCalledWith(null);
-    expect(ctx.setters.clearLastPersistedSnapshot).toHaveBeenCalledTimes(1);
-    expect(ctx.refs.inboxEditorShellScrollDirectiveRef.current).toEqual({kind: 'snapTop'});
-    expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(1);
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith('Draft title');
+    expect(ctx.setters.setComposeDraftResetNonce).toHaveBeenCalledTimes(1);
+    expect(ctx.setters.setSelectedUri).not.toHaveBeenCalled();
+    expect(ctx.setters.clearLastPersistedSnapshot).not.toHaveBeenCalled();
+    expect(ctx.resetInboxEditorComposeState).not.toHaveBeenCalled();
 
     runCancelNewEntry(ctx);
     await Promise.resolve();
@@ -108,7 +107,29 @@ describe('workspaceComposeCommands', () => {
 
     expect(ctx.flushInboxSave).toHaveBeenCalledTimes(2);
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
-    expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(2);
+    expect(ctx.resetInboxEditorComposeState).not.toHaveBeenCalled();
+  });
+
+  it('ignores non-string start payloads from direct click handlers', async () => {
+    const ctx = createContext();
+
+    runStartNewEntry(ctx, {type: 'click'} as unknown as string);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(true);
+    expect(ctx.setters.setComposeDraftMarkdown).not.toHaveBeenCalled();
+    expect(ctx.setters.setComposeDraftResetNonce).not.toHaveBeenCalled();
+  });
+
+  it('normalizes an empty restored draft to the H1 prompt', async () => {
+    const ctx = createContext();
+
+    runStartNewEntry(ctx, '');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith('# ');
   });
 
   it('submit new entry validates first line before creating note', async () => {
@@ -183,10 +204,18 @@ describe('workspaceComposeCommands', () => {
   it('runSubmitNewEntry creates note and opens editor on success', async () => {
     const ctx = createContext();
 
-    await runSubmitNewEntry(ctx, 'My note title\nBody here');
+    await runSubmitNewEntry(ctx, '# My note title\nBody here');
 
-    expect(vaultBootstrap.createInboxMarkdownNote).toHaveBeenCalled();
+    expect(vaultBootstrap.createInboxMarkdownNote).toHaveBeenCalledWith(
+      '/vault',
+      ctx.fs,
+      'My note title',
+      '# My note title\nBody here\n',
+    );
     expect(ctx.openMarkdownInEditor).toHaveBeenCalledWith('/vault/Inbox/new.md');
+    expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith('');
+    expect(ctx.setters.setComposeDraftResetNonce).toHaveBeenCalledTimes(1);
   });
 
   it('runCleanNoteInbox triggers Today hub bridge when canvas is visible', async () => {

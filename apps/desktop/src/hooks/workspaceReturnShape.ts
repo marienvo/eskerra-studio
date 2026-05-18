@@ -76,8 +76,11 @@ export type WorkspaceSelectionController = {
   editorBody: string;
   setEditorBody: (value: string) => void;
   inboxEditorResetNonce: number;
+  composeDraftMarkdown: string;
+  composeDraftResetNonce: number;
+  setComposeDraftMarkdown: (value: string) => void;
   composingNewEntry: boolean;
-  startNewEntry: () => void;
+  startNewEntry: (draftMarkdown?: string) => void;
   cancelNewEntry: () => void;
   selectNote: (uri: string) => void;
   selectNoteInNewActiveTab: (

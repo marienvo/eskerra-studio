@@ -56,7 +56,7 @@ export type UseInboxShellRestoreArgs = {
   mirrorShadowActiveTab: (tabId: string, reason: string) => void;
   mirrorShadowHomeSurface: (reason: string) => void;
   syncShadowWorkspaceFromShellRestore: (projection: ShellRestoreProjectionSyncArgs) => void;
-  startNewEntry: () => void;
+  startNewEntry: (draftMarkdown?: string) => void;
   selectNote: (uri: string) => void;
   selectHomeCurrentNote: (todayNoteUri: string) => void | Promise<void>;
 };

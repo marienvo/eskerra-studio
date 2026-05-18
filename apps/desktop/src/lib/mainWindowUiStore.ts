@@ -32,6 +32,7 @@ export type TodayHubWorkspaceSnapshot = {
 
 export type StoredMainWindowInbox = {
   composingNewEntry: boolean;
+  composeDraftMarkdown?: string;
   selectedUri: string | null;
   /**
    * Flat list of open note URIs for legacy restore and for hub-less vaults (no indexed
@@ -82,6 +83,7 @@ export type VaultMarkdownRefLike = {uri: string; name: string};
  */
 export function buildStoredMainWindowInboxForPersist(args: {
   composingNewEntry: boolean;
+  composeDraftMarkdown: string;
   selectedUri: string | null;
   activeTodayHubUri: string | null;
   todayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
@@ -91,6 +93,7 @@ export function buildStoredMainWindowInboxForPersist(args: {
 }): StoredMainWindowInbox {
   const base: StoredMainWindowInbox = {
     composingNewEntry: args.composingNewEntry,
+    composeDraftMarkdown: args.composeDraftMarkdown,
     selectedUri: args.selectedUri,
     activeTodayHubUri: args.activeTodayHubUri,
     todayHubWorkspaces: args.todayHubWorkspaces,
@@ -270,6 +273,9 @@ function mergeInboxCoreFieldsFromRaw(
 ): void {
   if (typeof ib.composingNewEntry === 'boolean') {
     inbox.composingNewEntry = ib.composingNewEntry;
+  }
+  if (typeof ib.composeDraftMarkdown === 'string') {
+    inbox.composeDraftMarkdown = ib.composeDraftMarkdown;
   }
   if (ib.selectedUri === null) {
     inbox.selectedUri = null;

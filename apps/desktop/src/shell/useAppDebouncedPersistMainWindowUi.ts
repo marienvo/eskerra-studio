@@ -16,6 +16,7 @@ export type UseAppDebouncedPersistMainWindowUiArgs = {
   inboxPaneVisible: boolean;
   notificationsPanelVisible: boolean;
   composingNewEntry: boolean;
+  composeDraftMarkdown: string;
   selectedUri: string | null;
   activeTodayHubUri: string | null;
   persistenceTodayHubWorkspaces: Record<string, TodayHubWorkspaceSnapshot>;
@@ -32,6 +33,7 @@ export function useAppDebouncedPersistMainWindowUi({
   inboxPaneVisible,
   notificationsPanelVisible,
   composingNewEntry,
+  composeDraftMarkdown,
   selectedUri,
   activeTodayHubUri,
   persistenceTodayHubWorkspaces,
@@ -45,6 +47,7 @@ export function useAppDebouncedPersistMainWindowUi({
     }
     const inbox = buildStoredMainWindowInboxForPersist({
       composingNewEntry,
+      composeDraftMarkdown,
       selectedUri,
       activeTodayHubUri,
       todayHubWorkspaces: persistenceTodayHubWorkspaces,
@@ -74,6 +77,7 @@ export function useAppDebouncedPersistMainWindowUi({
     notificationsPanelVisible,
     selectedUri,
     composingNewEntry,
+    composeDraftMarkdown,
     activeTodayHubUri,
     persistenceTodayHubWorkspaces,
     inboxShellRestored,

@@ -32,6 +32,10 @@ export type UseInboxEditorStateResult = {
   guardedSetEditorBody: Dispatch<SetStateAction<string>>;
   inboxEditorResetNonce: number;
   setInboxEditorResetNonce: Dispatch<SetStateAction<number>>;
+  composeDraftMarkdown: string;
+  setComposeDraftMarkdown: Dispatch<SetStateAction<string>>;
+  composeDraftResetNonce: number;
+  setComposeDraftResetNonce: Dispatch<SetStateAction<number>>;
   lastInboxEditorActivityAtRef: MutableRefObject<number>;
   skipRecencyDeferForUriRef: MutableRefObject<Set<string>>;
   composingNewEntry: boolean;
@@ -66,6 +70,8 @@ export function useInboxEditorState(
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [editorBody, setEditorBody] = useState('');
   const [inboxEditorResetNonce, setInboxEditorResetNonce] = useState(0);
+  const [composeDraftMarkdown, setComposeDraftMarkdown] = useState('');
+  const [composeDraftResetNonce, setComposeDraftResetNonce] = useState(0);
   const lastInboxEditorActivityAtRef = useRef(0);
   const skipRecencyDeferForUriRef = useRef<Set<string>>(new Set());
   const [composingNewEntry, setComposingNewEntry] = useState(false);
@@ -191,6 +197,10 @@ export function useInboxEditorState(
     guardedSetEditorBody,
     inboxEditorResetNonce,
     setInboxEditorResetNonce,
+    composeDraftMarkdown,
+    setComposeDraftMarkdown,
+    composeDraftResetNonce,
+    setComposeDraftResetNonce,
     lastInboxEditorActivityAtRef,
     skipRecencyDeferForUriRef,
     composingNewEntry,

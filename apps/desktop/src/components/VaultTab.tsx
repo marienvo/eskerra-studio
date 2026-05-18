@@ -60,6 +60,7 @@ import {
 import {DesktopHorizontalSplitEnd} from './DesktopHorizontalSplitEnd';
 import {EditorPaneOpenNoteTabs} from './EditorPaneOpenNoteTabs';
 import {EditorWorkspaceToolbar} from './EditorWorkspaceToolbar';
+import {AddToInboxDialog} from './AddToInboxDialog';
 import {MainWorkspaceSplit} from './MainWorkspaceSplit';
 import {MaterialIcon} from './MaterialIcon';
 import {TodayHubCanvas} from './TodayHubCanvas';
@@ -826,6 +827,9 @@ export function VaultTab({
     onSelectNote,
     onSelectNoteInNewActiveTab,
     onAddEntry,
+    composeDraftMarkdown,
+    composeDraftResetNonce,
+    onComposeDraftChange,
     composingNewEntry,
     onCancelNewEntry,
     onCreateNewEntry,
@@ -934,15 +938,13 @@ export function VaultTab({
   }, [vaultRoot]);
   const notificationsHasItems = notificationItems.length > 0;
   const revealActiveNoteDisabled =
-    composingNewEntry
-    || selectedUri == null
+    selectedUri == null
     || (
       selectedUri !== normalizedVaultRootForTree
       && !selectedUri.startsWith(`${normalizedVaultRootForTree}/`)
     );
   const revealInInboxTreeDisabled =
-    composingNewEntry
-    || selectedUri == null
+    selectedUri == null
     || (
       selectedUri !== inboxDirectoryUriForTree
       && !selectedUri.startsWith(`${inboxDirectoryUriForTree}/`)
@@ -977,6 +979,7 @@ export function VaultTab({
   const confirmDeleteNoteActionRef = useRef<HTMLButtonElement | null>(null);
   const confirmDeleteFolderActionRef = useRef<HTMLButtonElement | null>(null);
   const confirmBulkDeleteActionRef = useRef<HTMLButtonElement | null>(null);
+  const composeEditorRef = useRef<NoteMarkdownEditorHandle | null>(null);
   const vaultMarkdownRefsRef = useRef(vaultMarkdownRefs);
   const onMoveVaultTreeItemRef = useRef(onMoveVaultTreeItem);
   const onBulkMoveVaultTreeItemsRef = useRef(onBulkMoveVaultTreeItems);
@@ -992,11 +995,11 @@ export function VaultTab({
   ]);
 
   const onDeleteNoteShortcut = useCallback(() => {
-    if (busy || composingNewEntry || selectedUri == null) {
+    if (busy || selectedUri == null) {
       return;
     }
     setConfirmDeleteUri(selectedUri);
-  }, [busy, composingNewEntry, selectedUri]);
+  }, [busy, selectedUri]);
 
   const onDeleteNoteShortcutRef = useRef(onDeleteNoteShortcut);
   useLayoutEffect(() => {
@@ -1188,23 +1191,19 @@ export function VaultTab({
       buildVaultTabLinkDerivedData({
         vaultRoot,
         vaultMarkdownRefs,
-        composingNewEntry,
+        composingNewEntry: false,
         selectedUri,
         showTodayHubCanvas,
       }),
     [
       vaultRoot,
       vaultMarkdownRefs,
-      composingNewEntry,
       selectedUri,
       showTodayHubCanvas,
     ],
   );
 
   const editorPaneTitle = useMemo(() => {
-    if (composingNewEntry) {
-      return 'New entry';
-    }
     if (!selectedUri) {
       return 'Editor';
     }
@@ -1214,14 +1213,14 @@ export function VaultTab({
     }
     const tail = selectedUri.split(/[/\\]/).pop()?.trim();
     return tail || 'Editor';
-  }, [composingNewEntry, notes, selectedUri]);
+  }, [notes, selectedUri]);
 
   const backlinkRows = useMemo(
     () =>
       buildVaultTabBacklinkRows({
         backlinkUris,
         vaultMarkdownRefs,
-        composingNewEntry,
+        composingNewEntry: false,
         selectedUri,
         editorBody,
         inboxContentByUri,
@@ -1229,14 +1228,13 @@ export function VaultTab({
     [
       backlinkUris,
       vaultMarkdownRefs,
-      composingNewEntry,
       selectedUri,
       editorBody,
       inboxContentByUri,
     ],
   );
 
-  const editorOpen = composingNewEntry || Boolean(selectedUri);
+  const editorOpen = Boolean(selectedUri);
 
   useLayoutEffect(() => {
     if (!editorOpen) {
@@ -1266,13 +1264,12 @@ export function VaultTab({
   }, [
     editorOpen,
     selectedUri,
-    composingNewEntry,
     inboxEditorShellScrollDirectiveRef,
     inboxEditorShellScrollRef,
   ]);
 
   const titleBarTabsPortal =
-    titleBarEditorTabsHost != null && !composingNewEntry
+    titleBarEditorTabsHost != null
       ? createPortal(
           <EditorPaneOpenNoteTabs
             notes={notes}
@@ -1313,6 +1310,28 @@ export function VaultTab({
     <Fragment>
       {titleBarTabsPortal}
       <div className="inbox-root" data-app-surface="capture">
+      <AddToInboxDialog
+        open={composingNewEntry}
+        busy={busy}
+        vaultRoot={vaultRoot}
+        editorRef={composeEditorRef}
+        composeDraftMarkdown={composeDraftMarkdown}
+        composeDraftResetNonce={composeDraftResetNonce}
+        onComposeDraftChange={onComposeDraftChange}
+        onSave={() => void onCreateNewEntry()}
+        onCancel={onCancelNewEntry}
+        onEditorError={onEditorError}
+        onWikiLinkActivate={onWikiLinkActivate}
+        onMarkdownRelativeLinkActivate={onMarkdownRelativeLinkActivate}
+        onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
+        relativeMarkdownLinkHrefIsResolved={relativeMarkdownLinkHrefIsResolved}
+        wikiLinkTargetIsResolved={wikiLinkTargetIsResolved}
+        wikiLinkCompletionCandidates={wikiLinkCompletionCandidates}
+        attachmentHost={inboxAttachmentHost}
+        resolveVaultImagePreviewUrl={resolveVaultImagePreviewUrl}
+        linkSnippetBlockedDomains={linkSnippetBlockedDomains}
+        onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+      />
       <VaultTabDialogs
         busy={busy}
         vaultRoot={vaultRoot}
@@ -1360,9 +1379,9 @@ export function VaultTab({
         editorHistoryCanGoForward={editorHistoryCanGoForward}
         onEditorHistoryGoBack={onEditorHistoryGoBack}
         onEditorHistoryGoForward={onEditorHistoryGoForward}
-        composingNewEntry={composingNewEntry}
+        composingNewEntry={false}
         editorPaneTitle={editorPaneTitle}
-        onCancelNewEntry={onCancelNewEntry}
+        onCancelNewEntry={() => undefined}
         notificationsPanelVisible={notificationsPanelVisible}
         onToggleNotificationsPanel={onToggleNotificationsPanel}
         inboxHasItems={inboxHasItems}
@@ -1394,7 +1413,7 @@ export function VaultTab({
                 fs={fs}
                 fsRefreshNonce={fsRefreshNonce}
                 vaultTreeSelectionClearNonce={vaultTreeSelectionClearNonce}
-                editorActiveMarkdownUri={composingNewEntry ? null : selectedUri}
+                editorActiveMarkdownUri={selectedUri}
                 revealActiveNoteNonce={revealTreeNonce}
                 onRevealActiveNoteInTree={bumpRevealActiveNoteInTree}
                 revealActiveNoteDisabled={revealActiveNoteDisabled}
@@ -1429,7 +1448,7 @@ export function VaultTab({
                       vaultRoot={vaultRoot}
                       vaultMarkdownRefs={vaultMarkdownRefs}
                       inboxContentByUri={inboxContentByUri}
-                      composingNewEntry={composingNewEntry}
+                      composingNewEntry={false}
                       selectedUri={selectedUri}
                       inboxYamlFrontmatterInner={inboxYamlFrontmatterInner}
                       applyFrontmatterInnerChange={applyFrontmatterInnerChange}
@@ -1466,18 +1485,6 @@ export function VaultTab({
                       linkSnippetBlockedDomains={linkSnippetBlockedDomains}
                       onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
                     />
-                    {composingNewEntry ? (
-                      <div className="pane-footer">
-                        <button
-                          type="button"
-                          className="primary"
-                          onClick={() => void onCreateNewEntry()}
-                          disabled={busy}
-                        >
-                          Create note
-                        </button>
-                      </div>
-                    ) : null}
                   </>
                 ) : (
                   <p className="muted empty-hint">

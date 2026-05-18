@@ -113,11 +113,13 @@ describe('normalizeMainWindowUiPayload', () => {
       vaultRoot: '/v',
       inbox: {
         composingNewEntry: true,
+        composeDraftMarkdown: 'Draft body',
         selectedUri: '  /v/Inbox/x.md  ',
       },
     });
     expect(out?.inbox).toEqual({
       composingNewEntry: true,
+      composeDraftMarkdown: 'Draft body',
       selectedUri: '/v/Inbox/x.md',
     });
   });
@@ -285,6 +287,7 @@ describe('normalizeMainWindowUiPayload', () => {
 describe('buildStoredMainWindowInboxForPersist', () => {
   const baseArgs = {
     composingNewEntry: false,
+    composeDraftMarkdown: '',
     selectedUri: '/vault/Inbox/Sel.md',
     activeTodayHubUri: null as string | null,
     todayHubWorkspaces: {} as Record<string, TodayHubWorkspaceSnapshot>,

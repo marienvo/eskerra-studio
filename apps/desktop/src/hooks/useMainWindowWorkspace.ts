@@ -24,7 +24,9 @@ import {
 
 import {
   collectVaultMarkdownRefs,
+  normalizeVaultBaseUri,
   SubtreeMarkdownPresenceCache,
+  trimTrailingSlashes,
   type EskerraSettings,
   type VaultFilesystem,
   type VaultMarkdownRef,
@@ -176,6 +178,7 @@ export function useMainWindowWorkspace(options: {
   restoredInboxState: {
     vaultRoot: string;
     composingNewEntry: boolean;
+    composeDraftMarkdown?: string;
     selectedUri: string | null;
     openTabUris?: readonly string[] | null;
     editorWorkspaceTabs?: ReadonlyArray<{
@@ -217,6 +220,10 @@ export function useMainWindowWorkspace(options: {
     guardedSetEditorBody,
     inboxEditorResetNonce,
     setInboxEditorResetNonce,
+    composeDraftMarkdown,
+    setComposeDraftMarkdown,
+    composeDraftResetNonce,
+    setComposeDraftResetNonce,
     lastInboxEditorActivityAtRef,
     skipRecencyDeferForUriRef,
     composingNewEntry,
@@ -1239,6 +1246,8 @@ export function useMainWindowWorkspace(options: {
         setErr,
         setFsRefreshNonce,
         setEditorBody,
+        setComposeDraftMarkdown,
+        setComposeDraftResetNonce,
         setComposingNewEntry,
         setSelectedUri,
         setDiskConflict,
@@ -1276,6 +1285,8 @@ export function useMainWindowWorkspace(options: {
       setErr,
       setFsRefreshNonce,
       setEditorBody,
+      setComposeDraftMarkdown,
+      setComposeDraftResetNonce,
       setComposingNewEntry,
       setSelectedUri,
       setDiskConflict,
@@ -1286,8 +1297,8 @@ export function useMainWindowWorkspace(options: {
     ],
   );
 
-  const startNewEntry = useCallback(() => {
-    runStartNewEntry(composeCommandsContext);
+  const startNewEntry = useCallback((draftMarkdown?: string) => {
+    runStartNewEntry(composeCommandsContext, draftMarkdown);
   }, [composeCommandsContext]);
 
   const cancelNewEntry = useCallback(() => {
@@ -1405,8 +1416,8 @@ export function useMainWindowWorkspace(options: {
   );
 
   const submitNewEntry = useCallback(async () => {
-    await runSubmitNewEntry(composeCommandsContext, editorBody);
-  }, [composeCommandsContext, editorBody]);
+    await runSubmitNewEntry(composeCommandsContext, composeDraftMarkdown);
+  }, [composeCommandsContext, composeDraftMarkdown]);
 
   useLayoutEffect(() => {
     submitNewEntryRef.current = submitNewEntry;
@@ -1630,6 +1641,23 @@ export function useMainWindowWorkspace(options: {
     selectHomeCurrentNote,
   });
 
+  useEffect(() => {
+    if (!vaultRoot || restoredInboxState == null) {
+      return;
+    }
+    if (typeof restoredInboxState.composeDraftMarkdown !== 'string') {
+      return;
+    }
+    const openRoot = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
+    const restoredRoot = trimTrailingSlashes(
+      normalizeVaultBaseUri(restoredInboxState.vaultRoot).replace(/\\/g, '/'),
+    );
+    if (openRoot !== restoredRoot) {
+      return;
+    }
+    setComposeDraftMarkdown(restoredInboxState.composeDraftMarkdown);
+  }, [restoredInboxState, setComposeDraftMarkdown, vaultRoot]);
+
   return {
     vaultRoot,
     vaultSettings,
@@ -1645,6 +1673,9 @@ export function useMainWindowWorkspace(options: {
       editorBody,
       setEditorBody: guardedSetEditorBody,
       inboxEditorResetNonce,
+      composeDraftMarkdown,
+      composeDraftResetNonce,
+      setComposeDraftMarkdown,
       composingNewEntry,
       startNewEntry,
       cancelNewEntry,

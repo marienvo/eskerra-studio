@@ -54,6 +54,7 @@ import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect
 import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
+import {DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN} from './hooks/workspaceComposeCommands';
 
 import './App.css';
 
@@ -72,6 +73,7 @@ export default function App() {
   const [restoredInboxState, setRestoredInboxState] = useState<{
     vaultRoot: string;
     composingNewEntry: boolean;
+    composeDraftMarkdown?: string;
     selectedUri: string | null;
     openTabUris?: readonly string[];
     editorWorkspaceTabs?: ReadonlyArray<{
@@ -116,6 +118,9 @@ export default function App() {
     editorBody,
     setEditorBody,
     inboxEditorResetNonce,
+    composeDraftMarkdown,
+    composeDraftResetNonce,
+    setComposeDraftMarkdown,
     composingNewEntry,
     startNewEntry,
     cancelNewEntry,
@@ -319,6 +324,7 @@ export default function App() {
     inboxPaneVisible,
     notificationsPanelVisible,
     composingNewEntry,
+    composeDraftMarkdown,
     selectedUri,
     activeTodayHubUri: persistenceActiveTodayHubUri,
     persistenceTodayHubWorkspaces,
@@ -529,7 +535,15 @@ export default function App() {
                         selectedUri,
                         onSelectNote: selectNote,
                         onSelectNoteInNewActiveTab: selectNoteInNewActiveTab,
-                        onAddEntry: startNewEntry,
+                        onAddEntry: () =>
+                          startNewEntry(
+                            composeDraftMarkdown === ''
+                              ? DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN
+                              : composeDraftMarkdown,
+                          ),
+                        composeDraftMarkdown,
+                        composeDraftResetNonce,
+                        onComposeDraftChange: setComposeDraftMarkdown,
                         composingNewEntry,
                         onCancelNewEntry: cancelNewEntry,
                         onCreateNewEntry: () => void submitNewEntry(),
@@ -539,7 +553,7 @@ export default function App() {
                         onEditorError: setErr,
                         onSaveShortcut: onInboxSaveShortcut,
                         onCleanNote:
-                          !composingNewEntry && selectedUri
+                          selectedUri
                             ? onCleanNoteInbox
                             : undefined,
                         busy,

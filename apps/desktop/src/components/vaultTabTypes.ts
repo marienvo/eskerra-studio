@@ -95,6 +95,9 @@ export type VaultTabEditorController = {
   onSelectNote: (uri: string) => void;
   onSelectNoteInNewActiveTab: (uri: string) => void;
   onAddEntry: () => void;
+  composeDraftMarkdown: string;
+  composeDraftResetNonce: number;
+  onComposeDraftChange: (markdown: string) => void;
   composingNewEntry: boolean;
   onCancelNewEntry: () => void;
   onCreateNewEntry: () => void;

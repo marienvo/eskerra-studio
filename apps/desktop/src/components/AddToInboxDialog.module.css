@@ -1,0 +1,61 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(10 12 16 / 65%);
+  z-index: 300;
+}
+
+.content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1080px, calc(100vw - 48px));
+  height: min(820px, calc(100vh - 72px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #d8e5ee;
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f9fc 100%);
+  color: var(--color-text);
+  box-shadow: 0 22px 44px rgb(0 0 0 / 28%);
+  z-index: 301;
+}
+
+.title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111418;
+}
+
+.editorSurface {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid #d8e5ee;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.editorSurface :global(.note-markdown-editor-wrap) {
+  height: 100%;
+}
+
+.editorSurface :global(.note-markdown-editor-wrap .cm-editor) {
+  height: 100%;
+}
+
+.hint {
+  margin: 0;
+  color: #5d6873;
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

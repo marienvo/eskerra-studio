@@ -183,6 +183,33 @@ describe('runDeferredShellRestoreTabStateAndShadowSync', () => {
 });
 
 describe('restoreInboxSelectionAfterShellRestoreBridge', () => {
+  it('restores compose mode with persisted draft markdown', () => {
+    const startNewEntry = vi.fn();
+
+    restoreInboxSelectionAfterShellRestoreBridge(
+      {
+        editorWorkspaceTabsRef: {current: []},
+        activeEditorTabIdRef: {current: null},
+        activeTodayHubUriRef: {current: null},
+        notesRef: {current: []},
+        getRestoredInboxState: () => ({
+          vaultRoot: '/vault',
+          composingNewEntry: true,
+          composeDraftMarkdown: 'Draft title\n\nBody',
+          selectedUri: null,
+        }),
+        startNewEntry,
+        selectNote: vi.fn(),
+        selectHomeCurrentNote: vi.fn(),
+      },
+      '/vault',
+      [],
+      0,
+    );
+
+    expect(startNewEntry).toHaveBeenCalledWith('Draft title\n\nBody');
+  });
+
   it('uses selectHomeCurrentNote when the restored surface is Home (no active tab)', () => {
     const tabsRef: {current: EditorWorkspaceTab[]} = {
       current: [{id: 't1', history: {entries: [NOTE], index: 0}}],
