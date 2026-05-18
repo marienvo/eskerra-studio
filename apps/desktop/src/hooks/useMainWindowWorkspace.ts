@@ -23,7 +23,6 @@ import {
 } from 'react';
 
 import {
-  collectVaultMarkdownRefs,
   normalizeVaultBaseUri,
   SubtreeMarkdownPresenceCache,
   trimTrailingSlashes,
@@ -38,7 +37,7 @@ import {
   type TodayHubSettings,
   type TodayHubWorkspaceBridge,
 } from '../lib/todayHub';
-import {remapAllTabsUriPrefix, type EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
+import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
 import {
   createWorkspaceHomeState,
@@ -117,26 +116,13 @@ import {useTodayHubsState, type TodayHubOpenMarkdown} from './useTodayHubsState'
 import {
   createWorkspaceShadowMirrorCallbacks,
 } from './workspaceShadowBridge';
-import {
-  useWorkspaceRenameMaintenance,
-  type WorkspaceRenameMaintenanceCommitArgs,
-  type WorkspaceRenameMaintenanceSnapshot,
-} from './workspaceRenameMaintenance';
-import {remapEditorShellScrollMapExact} from './workspaceEditorScrollMap';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import {
   clearInboxYamlFrontmatterEditorRefs,
-  inboxEditorSliceToFullMarkdown,
 } from '../lib/inboxYamlFrontmatterEditor';
-import {
-  loadVaultMarkdownBodiesWithSeed,
-  mergeInboxNoteBodyIntoCache,
-  resolveInboxCachedBodyForEditor,
-  normalizeVaultMarkdownDiskRead,
-} from './inboxNoteBodyCache';
-
-/** Debounce scan of the active note body for backlinks (full vault scan is too heavy per keystroke). */
-const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
+import {useWorkspaceVaultMarkdownRefsScan} from './workspace/useWorkspaceVaultMarkdownRefsScan';
+import {useWorkspaceSelectedNoteHydration} from './workspace/useWorkspaceSelectedNoteHydration';
+import {useWorkspaceRenameMaintenanceBinding} from './workspace/useWorkspaceRenameMaintenanceBinding';
 
 export type UseMainWindowWorkspaceResult = {
   vaultRoot: string | null;
@@ -265,14 +251,6 @@ export function useMainWindowWorkspace(options: {
     clearLastPersistedSnapshot();
   }, [clearInboxSelectionFromInboxState, clearLastPersistedSnapshot]);
 
-  const [vaultMarkdownRefs, setVaultMarkdownRefs] = useState<VaultMarkdownRef[]>([]);
-  /**
-   * False while `vaultMarkdownRefs` for the current `{vaultRoot, fsRefreshNonce}` fetch has not
-   * completed. `vaultMarkdownRefs` stays `[]` until the async scan finishes, so without this flag
-   * {@link syncHubWorkspacesToVaultTodayRefsAction} could prune restored hub state on an empty URI
-   * list during startup.
-   */
-  const [vaultMarkdownRefsReady, setVaultMarkdownRefsReady] = useState(false);
   const [inboxShellRestored, setInboxShellRestored] = useState(!inboxRestoreEnabled);
   const {
     model: workspaceShadowModel,
@@ -292,11 +270,6 @@ export function useMainWindowWorkspace(options: {
   );
 
   const subtreeMarkdownCache = useMemo(() => new SubtreeMarkdownPresenceCache(), []);
-  const vaultRefsBuildGenRef = useRef(0);
-  const vaultMarkdownRefsFetchKeyRef = useRef<{
-    root: string | null;
-    nonce: number;
-  } | null>(null);
   const vaultMarkdownRefsRef = useRef<VaultMarkdownRef[]>([]);
   const vaultRootRef = useRef<string | null>(null);
   const showTodayHubCanvasRef = useRef(false);
@@ -373,6 +346,16 @@ export function useMainWindowWorkspace(options: {
   }, [vaultRoot]);
 
   const {
+    vaultMarkdownRefs,
+    vaultMarkdownRefsReady,
+  } = useWorkspaceVaultMarkdownRefsScan({
+    vaultRoot,
+    fs,
+    fsRefreshNonce,
+    vaultMarkdownRefsRef,
+  });
+
+  const {
     selectedNoteBacklinkUris,
     inboxBacklinksDeferNonce,
     backlinksActiveBodyRef,
@@ -395,23 +378,6 @@ export function useMainWindowWorkspace(options: {
   useLayoutEffect(() => {
     clearBacklinkDiskBodyCacheForHydrateRef.current = clearBacklinkDiskBodyCache;
   }, [clearBacklinkDiskBodyCache]);
-
-  useLayoutEffect(() => {
-    const prev = vaultMarkdownRefsFetchKeyRef.current;
-    const next = {root: vaultRoot, nonce: fsRefreshNonce};
-    if (
-      prev == null ||
-      prev.root !== next.root ||
-      prev.nonce !== next.nonce
-    ) {
-      vaultMarkdownRefsFetchKeyRef.current = next;
-      setVaultMarkdownRefsReady(vaultRoot == null);
-    }
-  }, [vaultRoot, fsRefreshNonce]);
-
-  useEffect(() => {
-    vaultMarkdownRefsRef.current = vaultMarkdownRefs;
-  }, [vaultMarkdownRefs]);
 
   /** Filled in layout after {@link useWorkspacePersistence}; stable identity for sub-hooks' `useCallback` deps. */
   const autosaveSchedulerTargetRef = useRef<MutableRefObject<InboxAutosaveScheduler> | null>(null);
@@ -587,78 +553,6 @@ export function useMainWindowWorkspace(options: {
     selectNoteRef,
   });
 
-  const getRenameMaintenanceSnapshot =
-    useCallback(async (): Promise<WorkspaceRenameMaintenanceSnapshot> => {
-      const wikiRefs = vaultMarkdownRefsRef.current.map(r => ({name: r.name, uri: r.uri}));
-      const activeUri = selectedUriRef.current;
-      const activeBody =
-        activeUri != null
-          ? inboxEditorSliceToFullMarkdown(
-              inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
-              activeUri,
-              composingNewEntryRef.current,
-              inboxYamlFrontmatterInnerRef.current,
-              inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-            )
-          : '';
-      const expandedContent = await loadVaultMarkdownBodiesWithSeed(
-        fs,
-        wikiRefs,
-        inboxContentByUriRef.current,
-        activeUri,
-        activeBody,
-      );
-      return {wikiRefs, activeUri, activeBody, expandedContent};
-    }, [fs, inboxEditorRef]);
-
-  const commitRenameMaintenanceResult = useCallback(
-    ({
-      oldUri,
-      nextUri,
-      rewritePlan,
-      applyResult,
-    }: WorkspaceRenameMaintenanceCommitArgs) => {
-      const succeededWriteUris = new Set(applyResult.succeededUris);
-      const plannedContentByWriteUri = new Map<string, string>();
-      for (const update of rewritePlan.updates) {
-        const writeUri = update.uri === oldUri ? nextUri : update.uri;
-        plannedContentByWriteUri.set(writeUri, update.markdown);
-      }
-      setInboxContentByUri(prev => {
-        const next = {...prev};
-        if (nextUri !== oldUri && prev[oldUri] !== undefined) {
-          next[nextUri] = prev[oldUri];
-          delete next[oldUri];
-        }
-        for (const [writeUri, markdown] of plannedContentByWriteUri) {
-          if (succeededWriteUris.has(writeUri)) {
-            next[writeUri] = markdown;
-          }
-        }
-        return next;
-      });
-      if (selectedUriRef.current === oldUri) {
-        selectedUriRef.current = nextUri;
-        setSelectedUri(nextUri);
-        const previousPersisted = lastPersistedRef.current;
-        if (previousPersisted && previousPersisted.uri === oldUri) {
-          setLastPersistedSnapshot({uri: nextUri, markdown: previousPersisted.markdown});
-        }
-      }
-      if (nextUri !== oldUri) {
-        remapEditorShellScrollMapExact(editorShellScrollByUriRef.current, oldUri, nextUri);
-        const remappedRenameTabs = remapAllTabsUriPrefix(
-          editorWorkspaceTabsRef.current,
-          oldUri,
-          nextUri,
-        );
-        replaceEditorWorkspaceTabs(remappedRenameTabs);
-        remapHomeStatesPrefix(oldUri, nextUri);
-      }
-    },
-    [remapHomeStatesPrefix, setLastPersistedSnapshot],
-  );
-
   const {
     wikiRenameNotice,
     renameLinkProgress,
@@ -668,18 +562,32 @@ export function useMainWindowWorkspace(options: {
     cancelPendingWikiLinkAmbiguityRename,
     clearRenameNotice,
     resetRenameMaintenanceState,
-  } = useWorkspaceRenameMaintenance({
+  } = useWorkspaceRenameMaintenanceBinding({
     vaultRoot,
     fs,
     autosaveSchedulerRef,
     flushInboxSaveRef,
-    getSnapshot: getRenameMaintenanceSnapshot,
-    commitRenameResult: commitRenameMaintenanceResult,
     refreshNotes,
     subtreeMarkdownCache,
     setBusy,
     setErr,
     setFsRefreshNonce,
+    vaultMarkdownRefsRef,
+    selectedUriRef,
+    inboxEditorRef,
+    editorBodyRef,
+    composingNewEntryRef,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    inboxContentByUriRef,
+    setInboxContentByUri,
+    lastPersistedRef,
+    setLastPersistedSnapshot,
+    setSelectedUri,
+    editorShellScrollByUriRef,
+    editorWorkspaceTabsRef,
+    replaceEditorWorkspaceTabs,
+    remapHomeStatesPrefix,
   });
 
   const openMarkdownCommandContext = useMemo(
@@ -1006,213 +914,34 @@ export function useMainWindowWorkspace(options: {
     syncWorkspaceModelRemoveOpenTabUri,
   });
 
-  useEffect(() => {
-    if (!vaultRoot) {
-      queueMicrotask(() => {
-        setVaultMarkdownRefs([]);
-      });
-      return;
-    }
-    const gen = ++vaultRefsBuildGenRef.current;
-    const ac = new AbortController();
-    void (async () => {
-      try {
-        const refs = await collectVaultMarkdownRefs(vaultRoot, fs, {signal: ac.signal});
-        if (gen !== vaultRefsBuildGenRef.current) {
-          return;
-        }
-        setVaultMarkdownRefs(refs);
-        setVaultMarkdownRefsReady(true);
-      } catch (e) {
-        if (ac.signal.aborted) {
-          return;
-        }
-        console.warn('[vaultMarkdownRefs]', e);
-      }
-    })();
-    return () => {
-      ac.abort();
-    };
-  }, [vaultRoot, fs, fsRefreshNonce]);
-
-  useLayoutEffect(() => {
-    if (!vaultRoot || !selectedUri) {
-      clearInboxBacklinksDeferAfterLoad();
-      return;
-    }
-    if (eagerEditorLoadUriRef.current === selectedUri) {
-      eagerEditorLoadUriRef.current = null;
-      return;
-    }
-    const cached = inboxContentByUriRef.current[selectedUri];
-    if (cached !== undefined) {
-      const {markdown: body, healedCache} = resolveInboxCachedBodyForEditor(
-        selectedUri,
-        cached,
-        lastPersistedRef.current,
-      );
-      if (healedCache) {
-        const healed = mergeInboxNoteBodyIntoCache(
-          inboxContentByUriRef.current,
-          selectedUri,
-          body,
-        );
-        if (healed) {
-          inboxContentByUriRef.current = healed;
-          setInboxContentByUri(prev =>
-            mergeInboxNoteBodyIntoCache(prev, selectedUri, body) ?? prev,
-          );
-        }
-      }
-      setLastPersistedSnapshot({uri: selectedUri, markdown: body});
-      loadFullMarkdownIntoInboxEditor(body, selectedUri, 'start');
-      scheduleBacklinksDeferOneFrameAfterLoad();
-    } else {
-      clearInboxBacklinksDeferAfterLoad();
-      clearInboxYamlFrontmatterEditorRefs({
-        inner: inboxYamlFrontmatterInnerRef,
-        leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-        setInner: setInboxYamlFrontmatterInner,
-        setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-      });
-      setEditorBody('');
-      clearLastPersistedSnapshot();
-    }
-  }, [
+  useWorkspaceSelectedNoteHydration({
     vaultRoot,
     selectedUri,
-    inboxEditorRef,
-    clearInboxBacklinksDeferAfterLoad,
-    clearLastPersistedSnapshot,
-    loadFullMarkdownIntoInboxEditor,
-    scheduleBacklinksDeferOneFrameAfterLoad,
-    setLastPersistedSnapshot,
-  ]);
-
-  /**
-   * Clear the open note in CodeMirror when the shell has no cached body yet.
-   * Runs after `NoteMarkdownEditor`'s mount effect creates the view (parent layout is too early).
-   */
-  useEffect(() => {
-    if (!vaultRoot || !selectedUri) {
-      return;
-    }
-    if (inboxContentByUriRef.current[selectedUri] !== undefined) {
-      return;
-    }
-    inboxYamlFrontmatterInnerRef.current = null;
-    inboxEditorYamlLeadingBeforeFrontmatterRef.current = '';
-    queueMicrotask(() => {
-      setInboxYamlFrontmatterInner(null);
-      setInboxEditorYamlLeadingBeforeFrontmatter('');
-    });
-    inboxEditorRef.current?.loadMarkdown('', {selection: 'start'});
-    scheduleBacklinksDeferOneFrameAfterLoad();
-  }, [vaultRoot, selectedUri, inboxEditorRef, scheduleBacklinksDeferOneFrameAfterLoad]);
-
-
-  useLayoutEffect(() => {
-    if (composingNewEntry || !selectedUri) {
-      if (backlinksActiveBodyRef.current !== '') {
-        queueMicrotask(() => {
-          setBacklinksActiveBody('');
-        });
-      }
-      return;
-    }
-    const snap = inboxContentByUriRef.current[selectedUri] ?? '';
-    if (backlinksActiveBodyRef.current === snap) {
-      return;
-    }
-    queueMicrotask(() => {
-      setBacklinksActiveBody(snap);
-    });
-  }, [
-    backlinksActiveBodyRef,
-    composingNewEntry,
-    selectedUri,
-    setBacklinksActiveBody,
-    vaultRoot,
-  ]);
-
-  useEffect(() => {
-    if (composingNewEntry || !selectedUri) {
-      return;
-    }
-    const id = window.setTimeout(() => {
-      const liveFull = inboxEditorSliceToFullMarkdown(
-        editorBody,
-        selectedUri,
-        composingNewEntry,
-        inboxYamlFrontmatterInnerRef.current,
-        inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-      );
-      if (backlinksActiveBodyRef.current === liveFull) {
-        return;
-      }
-      setBacklinksActiveBody(liveFull);
-    }, INBOX_BACKLINK_BODY_DEBOUNCE_MS);
-    return () => window.clearTimeout(id);
-  }, [
-    backlinksActiveBodyRef,
     composingNewEntry,
     editorBody,
     inboxYamlFrontmatterInner,
-    selectedUri,
-    setBacklinksActiveBody,
-  ]);
-
-  useEffect(() => {
-    if (!vaultRoot || !selectedUri) {
-      return;
-    }
-    if (inboxContentByUriRef.current[selectedUri] !== undefined) {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const raw = await fs.readFile(selectedUri, {encoding: 'utf8'});
-        if (!cancelled) {
-          const normalized = normalizeVaultMarkdownDiskRead(raw);
-          setLastPersistedSnapshot({uri: selectedUri, markdown: normalized});
-          setInboxContentByUri(prev => {
-            if (prev[selectedUri] === normalized) {
-              return prev;
-            }
-            return {...prev, [selectedUri]: normalized};
-          });
-          const currentFull = inboxEditorSliceToFullMarkdown(
-            editorBodyRef.current,
-            selectedUri,
-            composingNewEntryRef.current,
-            inboxYamlFrontmatterInnerRef.current,
-            inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-          );
-          if (normalized !== currentFull) {
-            loadFullMarkdownIntoInboxEditor(normalized, selectedUri, 'start');
-            scheduleBacklinksDeferOneFrameAfterLoad();
-          }
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setErr(e instanceof Error ? e.message : String(e));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    vaultRoot,
-    selectedUri,
     fs,
     inboxEditorRef,
-    loadFullMarkdownIntoInboxEditor,
-    scheduleBacklinksDeferOneFrameAfterLoad,
+    eagerEditorLoadUriRef,
+    inboxContentByUriRef,
+    lastPersistedRef,
     setInboxContentByUri,
     setLastPersistedSnapshot,
-  ]);
+    clearLastPersistedSnapshot,
+    loadFullMarkdownIntoInboxEditor,
+    scheduleBacklinksDeferOneFrameAfterLoad,
+    clearInboxBacklinksDeferAfterLoad,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    setInboxYamlFrontmatterInner,
+    setInboxEditorYamlLeadingBeforeFrontmatter,
+    setEditorBody,
+    backlinksActiveBodyRef,
+    setBacklinksActiveBody,
+    composingNewEntryRef,
+    editorBodyRef,
+    setErr,
+  });
 
   const composeCommandsContext = useMemo(
     () => ({

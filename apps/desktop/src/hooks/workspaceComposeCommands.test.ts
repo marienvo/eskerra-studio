@@ -99,7 +99,7 @@ describe('workspaceComposeCommands', () => {
     expect(ctx.setters.setComposeDraftResetNonce).toHaveBeenCalledTimes(1);
     expect(ctx.setters.setSelectedUri).not.toHaveBeenCalled();
     expect(ctx.setters.clearLastPersistedSnapshot).not.toHaveBeenCalled();
-    expect(ctx.resetInboxEditorComposeState).not.toHaveBeenCalled();
+    expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(1);
 
     runCancelNewEntry(ctx);
     await Promise.resolve();
@@ -107,7 +107,7 @@ describe('workspaceComposeCommands', () => {
 
     expect(ctx.flushInboxSave).toHaveBeenCalledTimes(2);
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
-    expect(ctx.resetInboxEditorComposeState).not.toHaveBeenCalled();
+    expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(1);
   });
 
   it('ignores non-string start payloads from direct click handlers', async () => {

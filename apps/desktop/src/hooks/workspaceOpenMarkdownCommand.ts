@@ -36,7 +36,7 @@ export type OpenMarkdownInEditorOptions = {
   workspaceShellPreserveTabs?: boolean;
 };
 
-type OpenMarkdownCommandContext = {
+export type OpenMarkdownCommandContext = {
   fs: VaultFilesystem;
   openMarkdownGenerationRef: MutableRefObject<number>;
   clearMergeViewForOpenRef: MutableRefObject<() => void>;

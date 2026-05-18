@@ -15,10 +15,8 @@ import {
 import {SettingsPage} from './components/SettingsPage';
 import {QuickOpenNotePalette} from './components/QuickOpenNotePalette';
 import {VaultSearchPalette} from './components/VaultSearchPalette';
-import {VaultTab} from './components/VaultTab.tsx';
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
-import {EpisodesPane} from './components/EpisodesPane';
-import {AppSetupTagline, AppStatusBar} from './components/AppStatusBar';
+import {AppStatusBar} from './components/AppStatusBar';
 import {GitStatusChip} from './components/GitStatusChip';
 import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
@@ -39,7 +37,6 @@ import {
   type TodayHubWorkspaceSnapshot,
 } from './lib/mainWindowUiStore';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
-import {writeVaultSettings} from './lib/vaultBootstrap';
 import {AppThemeShell} from './shell/AppThemeShell';
 import {useAppLayoutWidthPersisters} from './shell/useAppLayoutWidthPersisters';
 import {useAppMainWindowKeyboardEffects} from './shell/useAppMainWindowKeyboardEffects';
@@ -54,6 +51,10 @@ import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect
 import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
+import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
+import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
+import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
+import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
 import {DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN} from './hooks/workspaceComposeCommands';
 
 import './App.css';
@@ -113,42 +114,15 @@ export default function App() {
     inboxRestoreEnabled: layoutsReady,
   });
   const {
-    notes,
     selectedUri,
-    editorBody,
-    setEditorBody,
-    inboxEditorResetNonce,
     composeDraftMarkdown,
-    composeDraftResetNonce,
-    setComposeDraftMarkdown,
     composingNewEntry,
     startNewEntry,
-    cancelNewEntry,
     selectNote,
     selectNoteInNewActiveTab,
-    submitNewEntry,
-    inboxContentByUri,
     vaultMarkdownRefs,
-    selectedNoteBacklinkUris,
-    inboxEditorShellScrollDirectiveRef,
-    inboxBacklinksDeferNonce,
   } = workspaceSelectionController;
   const {
-    inboxYamlFrontmatterInner,
-    applyFrontmatterInnerChange,
-  } = workspaceFrontmatterController;
-  const {
-    deleteNote,
-    renameNote,
-    deleteFolder,
-    renameFolder,
-    moveVaultTreeItem,
-    bulkDeleteVaultTreeItems,
-    bulkMoveVaultTreeItems,
-    vaultTreeSelectionClearNonce,
-  } = workspaceTreeController;
-  const {
-    onInboxSaveShortcut,
     onCleanNoteInbox,
     flushInboxSave,
     saveSettledNonce,
@@ -158,9 +132,6 @@ export default function App() {
     setErr,
     wikiRenameNotice,
     renameLinkProgress,
-    pendingWikiLinkAmbiguityRename,
-    confirmPendingWikiLinkAmbiguityRename,
-    cancelPendingWikiLinkAmbiguityRename,
   } = workspaceNotificationsState;
   const {
     diskConflict,
@@ -169,22 +140,9 @@ export default function App() {
     diskConflictSoft,
     elevateDiskConflictSoftToBlocking,
     dismissDiskConflictSoft,
-    mergeView,
-    closeMergeView,
-    applyFullBackupFromMerge,
-    keepMyEditsFromMerge,
     enterDiskConflictMergeView,
-    applyMergedBodyFromMerge,
   } = workspaceConflictController;
   const {
-    showTodayHubCanvas,
-    todayHubSettings,
-    todayHubBridgeRef,
-    todayHubWikiNavParentRef,
-    todayHubCellEditorRef,
-    prehydrateTodayHubRows,
-    persistTodayHubRow,
-    todayHubCleanRowBlocked,
     todayHubSelectorItems,
     activeTodayHubUri,
     persistenceActiveTodayHubUri,
@@ -211,18 +169,12 @@ export default function App() {
     );
   }, [composeDraftMarkdown, startNewEntry]);
 
-  const handleMuteLinkSnippetDomain = useCallback(
-    async (domain: string) => {
-      if (!vaultRoot || !vaultSettings) return;
-      const current = new Set(vaultSettings.linkSnippetBlockedDomains ?? []);
-      if (current.has(domain)) return;
-      current.add(domain);
-      const next = {...vaultSettings, linkSnippetBlockedDomains: [...current]};
-      setVaultSettings(next);
-      await writeVaultSettings(vaultRoot, fs, next);
-    },
-    [vaultRoot, vaultSettings, fs, setVaultSettings],
-  );
+  const handleMuteLinkSnippetDomain = useLinkSnippetSettingsWriter({
+    vaultRoot,
+    vaultSettings,
+    fs,
+    setVaultSettings,
+  });
 
   const appRootClassName = useAppRootClassName(
     vaultRoot,
@@ -424,66 +376,44 @@ export default function App() {
 
   if (!vaultRoot) {
     return (
-      <AppThemeShell
-        vaultRoot={vaultRoot}
+      <AppNoVaultSetupScreen
+        appRootRef={appRootRef}
+        appRootClassName={appRootClassName}
         vaultSettings={vaultSettings}
         setVaultSettings={setVaultSettings}
-        fs={fs}>
-        <div ref={appRootRef} className={appRootClassName}>
-          <ThemedChromeBackground />
-          <CloseSyncProgressOverlay visible={closeSyncInProgress} />
-          <div className="app-root-chrome">
-            <WindowTitleBar
-              tiling={tiling}
-              closeSyncing={manualGitSync.running}
-              onCloseRequest={handleWindowCloseRequest}
-            />
-            <div className="shell setup-shell">
-              <h1>{settingsName}</h1>
-              <p className="muted">Choose your notes folder (vault root). Settings are stored in `.eskerra/` inside it.</p>
-              <button type="button" className="primary" onClick={() => void pickFolder()} disabled={busy}>
-                Choose folder…
-              </button>
-              {err ? <p className="error">{err}</p> : null}
-            </div>
-            <AppSetupTagline />
-            <ToastStack
-              items={notificationItems}
-              onDismiss={dismissNotification}
-            />
-          </div>
-        </div>
-      </AppThemeShell>
+        fs={fs}
+        tiling={tiling}
+        closeSyncing={manualGitSync.running}
+        onCloseRequest={handleWindowCloseRequest}
+        closeSyncInProgress={closeSyncInProgress}
+        notificationItems={notificationItems}
+        onDismissNotification={dismissNotification}
+        settingsName={settingsName}
+        busy={busy}
+        err={err}
+        onPickFolder={() => {
+          void pickFolder();
+        }}
+      />
     );
   }
 
   if (!layoutsReady) {
     return (
-      <AppThemeShell
+      <AppLayoutsLoadingScreen
+        appRootRef={appRootRef}
+        appRootClassName={appRootClassName}
         vaultRoot={vaultRoot}
         vaultSettings={vaultSettings}
         setVaultSettings={setVaultSettings}
-        fs={fs}>
-        <div ref={appRootRef} className={appRootClassName}>
-          <ThemedChromeBackground />
-          <CloseSyncProgressOverlay visible={closeSyncInProgress} />
-          <div className="app-root-chrome">
-            <WindowTitleBar
-              tiling={tiling}
-              closeSyncing={manualGitSync.running}
-              onCloseRequest={handleWindowCloseRequest}
-            />
-            <div className="shell setup-shell">
-              <p className="muted">Loading…</p>
-            </div>
-            <AppSetupTagline />
-            <ToastStack
-              items={notificationItems}
-              onDismiss={dismissNotification}
-            />
-          </div>
-        </div>
-      </AppThemeShell>
+        fs={fs}
+        tiling={tiling}
+        closeSyncing={manualGitSync.running}
+        onCloseRequest={handleWindowCloseRequest}
+        closeSyncInProgress={closeSyncInProgress}
+        notificationItems={notificationItems}
+        onDismissNotification={dismissNotification}
+      />
     );
   }
 
@@ -521,154 +451,51 @@ export default function App() {
                       }}
                     />
                   ) : (
-                    <VaultTab
+                    <MainWindowVaultTab
                       key={vaultRoot}
-                      environment={{
-                        vaultRoot,
-                        vaultSettings,
-                        fs,
-                        fsRefreshNonce,
-                        vaultMarkdownRefs,
-                      }}
-                      frontmatterController={{
-                        inboxYamlFrontmatterInner,
-                        applyFrontmatterInnerChange,
-                        diskConflict,
-                      }}
-                      editorController={{
-                        inboxEditorRef,
-                        inboxEditorShellScrollRef,
-                        inboxEditorShellScrollDirectiveRef,
-                        inboxContentByUri,
-                        backlinkUris: selectedNoteBacklinkUris,
-                        selectedUri,
-                        onSelectNote: selectNote,
-                        onSelectNoteInNewActiveTab: selectNoteInNewActiveTab,
-                        onAddEntry: openAddToInbox,
-                        composeDraftMarkdown,
-                        composeDraftResetNonce,
-                        onComposeDraftChange: setComposeDraftMarkdown,
-                        composingNewEntry,
-                        onCancelNewEntry: cancelNewEntry,
-                        onCreateNewEntry: () => void submitNewEntry(),
-                        editorBody,
-                        onEditorChange: setEditorBody,
-                        inboxEditorResetNonce,
-                        onEditorError: setErr,
-                        onSaveShortcut: onInboxSaveShortcut,
-                        onCleanNote:
-                          selectedUri
-                            ? onCleanNoteInbox
-                            : undefined,
-                        busy,
-                        inboxBacklinksDeferNonce,
-                      }}
-                      layoutController={{
-                        vaultPaneVisible,
-                        onToggleVault: () => setVaultPaneVisible(v => !v),
-                        episodesPaneVisible,
-                        onToggleEpisodes: () => setEpisodesPaneVisible(v => !v),
-                        inboxPaneVisible,
-                        onToggleInboxPane: () => setInboxPaneVisible(v => !v),
-                        onOpenInboxPane: () => setInboxPaneVisible(true),
-                        onCloseInboxPane: () => setInboxPaneVisible(false),
-                        notificationsInboxStackTopHeightPx:
-                          layouts.notificationsInboxStack.topHeightPx,
-                        onNotificationsInboxStackTopHeightPxChanged:
-                          persistNotificationsInboxStackTopHeightPx,
-                        vaultWidthPx: layouts.inbox.leftWidthPx,
-                        episodesWidthPx: layouts.inbox.leftWidthPx,
-                        onVaultWidthPxChanged: persistMainLeftWidthPx,
-                        onEpisodesWidthPxChanged: persistMainLeftWidthPx,
-                        stackTopHeightPx: layouts.vaultEpisodesStack.topHeightPx,
-                        onStackTopHeightPxChanged:
-                          persistVaultEpisodesStackTopHeightPx,
-                        notificationsWidthPx: layouts.notifications.widthPx,
-                        onNotificationsWidthPxChanged:
-                          persistNotificationsWidthPx,
-                        titleBarEditorTabsHost,
-                      }}
-                      playbackController={{
-                        playbackTransport,
-                        toolbarNowPlaying,
-                        episodesPane: episodesPaneVisible ? (
-                          <EpisodesPane
-                            sections={podcastCatalog.sections}
-                            catalogLoading={podcastCatalog.catalogLoading}
-                            playEpisode={desktopPlayback.playEpisode}
-                            markEpisodePlayed={desktopPlayback.markEpisodePlayed}
-                            openPodcastNote={selectNote}
-                            activeEpisodeId={desktopPlayback.activeEpisodeId}
-                            activeEpisodePlayControl={
-                              desktopPlayback.activeEpisodePlayControl
-                            }
-                            episodeSelectLocked={
-                              desktopPlayback.episodeSelectLocked
-                            }
-                            onRssSync={handleEpisodesRssSync}
-                            rssSyncing={rssSyncing}
-                            rssSyncPercent={rssSyncPercent}
-                          />
-                        ) : null,
-                      }}
-                      linkController={{
-                        onWikiLinkActivate: workspaceLinkController.onWikiLinkActivate,
-                        onMarkdownRelativeLinkActivate: workspaceLinkController.onMarkdownRelativeLinkActivate,
-                        onMarkdownExternalLinkOpen: workspaceLinkController.onMarkdownExternalLinkOpen,
-                        linkSnippetBlockedDomains: vaultSettings?.linkSnippetBlockedDomains,
-                        onMuteLinkSnippetDomain: handleMuteLinkSnippetDomain,
-                      }}
-                      treeController={{
-                        notes,
-                        onDeleteNote: uri => { void deleteNote(uri); },
-                        onRenameNote: (uri, nextDisplayName) => { void renameNote(uri, nextDisplayName); },
-                        onDeleteFolder: uri => { void deleteFolder(uri); },
-                        onRenameFolder: (uri, nextDisplayName) => { void renameFolder(uri, nextDisplayName); },
-                        onMoveVaultTreeItem: (src, kind, destDir) => { void moveVaultTreeItem(src, kind, destDir); },
-                        onBulkMoveVaultTreeItems: (items, destDir) => { void bulkMoveVaultTreeItems(items, destDir); },
-                        onBulkDeleteVaultTreeItems: items => { void bulkDeleteVaultTreeItems(items); },
-                        vaultTreeSelectionClearNonce,
-                      }}
-                      mergeController={{
-                        wikiLinkAmbiguityRenamePrompt: pendingWikiLinkAmbiguityRename?.summary ?? null,
-                        onConfirmWikiLinkAmbiguityRename: () => { void confirmPendingWikiLinkAmbiguityRename(); },
-                        onCancelWikiLinkAmbiguityRename: cancelPendingWikiLinkAmbiguityRename,
-                        mergeView,
-                        onCloseMergeView: closeMergeView,
-                        onApplyFullBackupFromMerge: applyFullBackupFromMerge,
-                        onApplyMergedBodyFromMerge: applyMergedBodyFromMerge,
-                        onKeepMyEditsFromMerge: keepMyEditsFromMerge,
-                      }}
-                      tabsController={{
-                        editorHistoryCanGoBack: workspaceTabsController.editorHistoryCanGoBack,
-                        editorHistoryCanGoForward: workspaceTabsController.editorHistoryCanGoForward,
-                        onEditorHistoryGoBack: workspaceTabsController.editorHistoryGoBack,
-                        onEditorHistoryGoForward: workspaceTabsController.editorHistoryGoForward,
-                        editorWorkspaceTabs: workspaceTabsController.editorWorkspaceTabs,
-                        activeEditorTabId: workspaceTabsController.activeEditorTabId,
-                        onActivateOpenTab: workspaceTabsController.activateOpenTab,
-                        onCloseEditorTab: workspaceTabsController.closeEditorTab,
-                        onReorderEditorWorkspaceTabs: workspaceTabsController.reorderEditorWorkspaceTabs,
-                        onCloseOtherEditorTabs: workspaceTabsController.closeOtherEditorTabs,
-                      }}
-                      notificationsController={{
-                        notificationsPanelVisible,
-                        onToggleNotificationsPanel: () => setNotificationsPanelVisible(v => !v),
-                        notificationItems,
-                        notificationHighlightId,
-                        onDismissNotification: dismissNotification,
-                        onClearAllNotifications: clearAllNotifications,
-                      }}
-                      todayHubController={{
-                        showTodayHubCanvas,
-                        todayHubSettings,
-                        todayHubBridgeRef,
-                        todayHubWikiNavParentRef,
-                        todayHubCellEditorRef,
-                        prehydrateTodayHubRows,
-                        persistTodayHubRow,
-                        todayHubCleanRowBlocked,
-                      }}
+                      vaultRoot={vaultRoot}
+                      vaultSettings={vaultSettings}
+                      fs={fs}
+                      fsRefreshNonce={fsRefreshNonce}
+                      inboxEditorRef={inboxEditorRef}
+                      inboxEditorShellScrollRef={inboxEditorShellScrollRef}
+                      selectionController={workspaceSelectionController}
+                      frontmatterController={workspaceFrontmatterController}
+                      notificationsState={workspaceNotificationsState}
+                      conflictController={workspaceConflictController}
+                      persistenceController={workspacePersistenceController}
+                      linkController={workspaceLinkController}
+                      treeController={workspaceTreeController}
+                      tabsController={workspaceTabsController}
+                      todayHubController={workspaceTodayHubController}
+                      vaultPaneVisible={vaultPaneVisible}
+                      setVaultPaneVisible={setVaultPaneVisible}
+                      episodesPaneVisible={episodesPaneVisible}
+                      setEpisodesPaneVisible={setEpisodesPaneVisible}
+                      inboxPaneVisible={inboxPaneVisible}
+                      setInboxPaneVisible={setInboxPaneVisible}
+                      layouts={layouts}
+                      persistMainLeftWidthPx={persistMainLeftWidthPx}
+                      persistVaultEpisodesStackTopHeightPx={persistVaultEpisodesStackTopHeightPx}
+                      persistNotificationsInboxStackTopHeightPx={persistNotificationsInboxStackTopHeightPx}
+                      persistNotificationsWidthPx={persistNotificationsWidthPx}
+                      titleBarEditorTabsHost={titleBarEditorTabsHost}
+                      onAddEntry={openAddToInbox}
+                      busy={busy}
+                      notificationsPanelVisible={notificationsPanelVisible}
+                      setNotificationsPanelVisible={setNotificationsPanelVisible}
+                      notificationItems={notificationItems}
+                      notificationHighlightId={notificationHighlightId}
+                      dismissNotification={dismissNotification}
+                      clearAllNotifications={clearAllNotifications}
+                      playbackTransport={playbackTransport}
+                      toolbarNowPlaying={toolbarNowPlaying}
+                      podcastCatalog={podcastCatalog}
+                      desktopPlayback={desktopPlayback}
+                      handleEpisodesRssSync={handleEpisodesRssSync}
+                      rssSyncing={rssSyncing}
+                      rssSyncPercent={rssSyncPercent}
+                      onMuteLinkSnippetDomain={handleMuteLinkSnippetDomain}
                     />
                   )}
                 </main>

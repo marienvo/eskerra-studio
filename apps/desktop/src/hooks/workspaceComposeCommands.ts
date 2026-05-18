@@ -125,6 +125,7 @@ export function runStartNewEntry(ctx: ComposeCommandsContext, draftMarkdown?: st
     await ctx.flushInboxSave();
     ctx.setters.setErr(null);
     ctx.setters.setComposingNewEntry(true);
+    ctx.resetInboxEditorComposeState();
     if (typeof draftMarkdown === 'string') {
       ctx.setters.setComposeDraftMarkdown(
         draftMarkdown === '' ? DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN : draftMarkdown,
