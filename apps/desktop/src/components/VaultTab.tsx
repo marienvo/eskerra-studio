@@ -40,6 +40,7 @@ import {MainWorkspaceSplit} from './MainWorkspaceSplit';
 import {VaultTreePane} from './VaultTreePane';
 import {VaultTabDialogs} from './VaultTabDialogs';
 import {VaultTabSideColumn} from './VaultTabSideColumn';
+import {submitComposeEntryAndApplyResult} from './vaultTabComposeSubmitResult';
 import {VaultTabEditorPane} from './vaultTab/VaultTabEditorPane';
 import {useVaultTabInboxPaneLifecycle} from './vaultTab/useVaultTabInboxPaneLifecycle';
 import {useVaultTabRevealState} from './vaultTab/useVaultTabRevealState';
@@ -573,10 +574,7 @@ export function VaultTab({
         composeDraftMarkdown={composeDraftMarkdown}
         composeDraftResetNonce={composeDraftResetNonce}
         onComposeDraftChange={onComposeDraftChange}
-        onSave={() =>
-          void onCreateNewEntry(
-            composeEditorRef.current?.getMarkdown() ?? composeDraftMarkdown,
-          )}
+        onSave={() => submitComposeEntryAndApplyResult({editor: composeEditorRef.current, draftMarkdown: composeDraftMarkdown, onCreateNewEntry, onError: onEditorError})}
         onCancel={onCancelNewEntry}
         onEditorError={onEditorError}
         onWikiLinkActivate={onWikiLinkActivate}

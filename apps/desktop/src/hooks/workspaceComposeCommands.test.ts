@@ -202,6 +202,25 @@ describe('workspaceComposeCommands', () => {
     expect(vaultBootstrap.createInboxMarkdownNote).not.toHaveBeenCalled();
   });
 
+  it('runSubmitNewEntry returns rewritten markdown for failed retry paths', async () => {
+    const ctx = createContext();
+    vi.mocked(persistTransientMarkdownImages.persistTransientMarkdownImages).mockResolvedValue(
+      '   \n![](Assets/Attachments/image.png)',
+    );
+
+    const result = await runSubmitNewEntry(ctx, '   \n![](blob:http://localhost/abc)');
+
+    expect(result).toEqual({
+      created: false,
+      rewrittenMarkdown: '   \n![](Assets/Attachments/image.png)',
+    });
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith(
+      '   \n![](Assets/Attachments/image.png)',
+    );
+    expect(ctx.setters.setErr).toHaveBeenLastCalledWith('First line is required.');
+    expect(vaultBootstrap.createInboxMarkdownNote).not.toHaveBeenCalled();
+  });
+
   it('runSubmitNewEntry creates note and opens editor on success', async () => {
     const ctx = createContext();
 

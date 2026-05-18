@@ -18,6 +18,7 @@ import type {
 } from '../editor/noteEditor/vaultLinkActivatePayload';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+import type {SubmitNewEntryResult} from './workspaceComposeCommands';
 import type {
   TodayHubSettings,
   TodayHubWorkspaceBridge,
@@ -87,7 +88,7 @@ export type WorkspaceSelectionController = {
     uri: string,
     opts?: {insertAfterActive?: boolean},
   ) => void;
-  submitNewEntry: (liveComposeMarkdown?: string) => Promise<void>;
+  submitNewEntry: (liveComposeMarkdown?: string) => Promise<SubmitNewEntryResult>;
   inboxContentByUri: Record<string, string>;
   vaultMarkdownRefs: VaultMarkdownRef[];
   selectedNoteBacklinkUris: readonly string[];

@@ -93,6 +93,11 @@ export type ComposeCommandsContext = {
   openMarkdownInEditor: (uri: string) => Promise<void>;
 };
 
+export type SubmitNewEntryResult = {
+  created: boolean;
+  rewrittenMarkdown?: string;
+};
+
 export async function runAddNote(
   ctx: ComposeCommandsContext,
   title: string,
@@ -145,9 +150,9 @@ export async function runSubmitNewEntry(
   ctx: ComposeCommandsContext,
   composeDraftMarkdown: string,
   liveComposeMarkdown?: string,
-): Promise<void> {
+): Promise<SubmitNewEntryResult> {
   if (!ctx.vaultRoot) {
-    return;
+    return {created: false};
   }
   ctx.setters.setErr(null);
   const rawBody =
@@ -157,21 +162,23 @@ export async function runSubmitNewEntry(
     body = await persistTransientMarkdownImages(body, ctx.vaultRoot);
   } catch (e) {
     ctx.setters.setErr(e instanceof Error ? e.message : String(e));
-    return;
+    return {created: false};
   }
   if (markdownContainsTransientImageUrls(body)) {
     ctx.setters.setErr(
       'Cannot create this note: some images are still temporary (blob or data URLs). Paste images again so they are stored under Assets/Attachments, or remove those image references.',
     );
-    return;
+    return {created: false};
   }
+  const result: SubmitNewEntryResult = {created: false};
   if (body !== rawBody) {
     ctx.setters.setComposeDraftMarkdown(body);
+    result.rewrittenMarkdown = body;
   }
   const {fileMarkdown, titleForFilename} = parseAddToInboxDraftMarkdown(body);
   if (!titleForFilename.trim()) {
     ctx.setters.setErr('First line is required.');
-    return;
+    return result;
   }
   const created = await runAddNote(ctx, titleForFilename, fileMarkdown);
   if (created) {
@@ -179,6 +186,7 @@ export async function runSubmitNewEntry(
     ctx.setters.setComposeDraftMarkdown('');
     ctx.setters.setComposeDraftResetNonce(n => n + 1);
   }
+  return {...result, created};
 }
 
 export function runCleanNoteInbox(ctx: ComposeCommandsContext): void {

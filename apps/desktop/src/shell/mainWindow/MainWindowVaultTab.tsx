@@ -149,9 +149,8 @@ export function MainWindowVaultTab({
         onComposeDraftChange: selectionController.setComposeDraftMarkdown,
         composingNewEntry: selectionController.composingNewEntry,
         onCancelNewEntry: selectionController.cancelNewEntry,
-        onCreateNewEntry: (liveComposeMarkdown?: string) => {
-          selectionController.submitNewEntry(liveComposeMarkdown).catch(() => undefined);
-        },
+        onCreateNewEntry: (liveComposeMarkdown?: string) =>
+          selectionController.submitNewEntry(liveComposeMarkdown),
         editorBody: selectionController.editorBody,
         onEditorChange: selectionController.setEditorBody,
         inboxEditorResetNonce: selectionController.inboxEditorResetNonce,
