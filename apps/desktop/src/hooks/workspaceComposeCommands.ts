@@ -125,7 +125,6 @@ export function runStartNewEntry(ctx: ComposeCommandsContext, draftMarkdown?: st
     await ctx.flushInboxSave();
     ctx.setters.setErr(null);
     ctx.setters.setComposingNewEntry(true);
-    ctx.resetInboxEditorComposeState();
     if (typeof draftMarkdown === 'string') {
       ctx.setters.setComposeDraftMarkdown(
         draftMarkdown === '' ? DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN : draftMarkdown,
@@ -145,12 +144,14 @@ export function runCancelNewEntry(ctx: ComposeCommandsContext): void {
 export async function runSubmitNewEntry(
   ctx: ComposeCommandsContext,
   composeDraftMarkdown: string,
+  liveComposeMarkdown?: string,
 ): Promise<void> {
   if (!ctx.vaultRoot) {
     return;
   }
   ctx.setters.setErr(null);
-  const rawBody = composeDraftMarkdown;
+  const rawBody =
+    typeof liveComposeMarkdown === 'string' ? liveComposeMarkdown : composeDraftMarkdown;
   let body = rawBody;
   try {
     body = await persistTransientMarkdownImages(body, ctx.vaultRoot);

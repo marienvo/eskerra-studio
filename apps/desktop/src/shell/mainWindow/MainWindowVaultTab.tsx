@@ -149,15 +149,15 @@ export function MainWindowVaultTab({
         onComposeDraftChange: selectionController.setComposeDraftMarkdown,
         composingNewEntry: selectionController.composingNewEntry,
         onCancelNewEntry: selectionController.cancelNewEntry,
-        onCreateNewEntry: () => {
-          selectionController.submitNewEntry().catch(() => undefined);
+        onCreateNewEntry: (liveComposeMarkdown?: string) => {
+          selectionController.submitNewEntry(liveComposeMarkdown).catch(() => undefined);
         },
         editorBody: selectionController.editorBody,
         onEditorChange: selectionController.setEditorBody,
         inboxEditorResetNonce: selectionController.inboxEditorResetNonce,
         onEditorError: notificationsState.setErr,
         onSaveShortcut: persistenceController.onInboxSaveShortcut,
-        onCleanNote: selectionController.selectedUri
+        onCleanNote: selectionController.selectedUri && !selectionController.composingNewEntry
           ? persistenceController.onCleanNoteInbox
           : undefined,
         busy,

@@ -45,9 +45,7 @@ import {useVaultTabInboxPaneLifecycle} from './vaultTab/useVaultTabInboxPaneLife
 import {useVaultTabRevealState} from './vaultTab/useVaultTabRevealState';
 import {shouldHandleDeleteNoteGlobalShortcut} from './vaultTabDeleteNoteShortcut';
 import {buildVaultTabBacklinkRows} from './vaultTabBacklinkRows';
-import {
-  buildVaultTabLinkDerivedData,
-} from './vaultTabLinkDerived';
+import {buildVaultTabEditorAndComposeLinkDerivedData} from './vaultTabLinkContexts';
 import type {
   VaultTabEnvironment,
   VaultTabEditorController,
@@ -449,25 +447,15 @@ export function VaultTab({
     return () => window.clearTimeout(id);
   }, [renameFolderUri]);
 
-  const {
-    wikiLinkTargetIsResolved,
-    relativeMarkdownLinkHrefIsResolved,
-    wikiLinkCompletionCandidates,
-  } = useMemo(
+  const {mainEditor: mainEditorLinkDerived, composeDialog: composeDialogLinkDerived} = useMemo(
     () =>
-      buildVaultTabLinkDerivedData({
+      buildVaultTabEditorAndComposeLinkDerivedData({
         vaultRoot,
         vaultMarkdownRefs,
-        composingNewEntry: false,
         selectedUri,
         showTodayHubCanvas,
       }),
-    [
-      vaultRoot,
-      vaultMarkdownRefs,
-      selectedUri,
-      showTodayHubCanvas,
-    ],
+    [vaultRoot, vaultMarkdownRefs, selectedUri, showTodayHubCanvas],
   );
 
   const editorPaneTitle = useMemo(() => {
@@ -585,15 +573,18 @@ export function VaultTab({
         composeDraftMarkdown={composeDraftMarkdown}
         composeDraftResetNonce={composeDraftResetNonce}
         onComposeDraftChange={onComposeDraftChange}
-        onSave={() => void onCreateNewEntry()}
+        onSave={() =>
+          void onCreateNewEntry(
+            composeEditorRef.current?.getMarkdown() ?? composeDraftMarkdown,
+          )}
         onCancel={onCancelNewEntry}
         onEditorError={onEditorError}
         onWikiLinkActivate={onWikiLinkActivate}
         onMarkdownRelativeLinkActivate={onMarkdownRelativeLinkActivate}
         onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
-        relativeMarkdownLinkHrefIsResolved={relativeMarkdownLinkHrefIsResolved}
-        wikiLinkTargetIsResolved={wikiLinkTargetIsResolved}
-        wikiLinkCompletionCandidates={wikiLinkCompletionCandidates}
+        relativeMarkdownLinkHrefIsResolved={composeDialogLinkDerived.relativeMarkdownLinkHrefIsResolved}
+        wikiLinkTargetIsResolved={composeDialogLinkDerived.wikiLinkTargetIsResolved}
+        wikiLinkCompletionCandidates={composeDialogLinkDerived.wikiLinkCompletionCandidates}
         attachmentHost={inboxAttachmentHost}
         resolveVaultImagePreviewUrl={resolveVaultImagePreviewUrl}
         linkSnippetBlockedDomains={linkSnippetBlockedDomains}
@@ -646,9 +637,9 @@ export function VaultTab({
         editorHistoryCanGoForward={editorHistoryCanGoForward}
         onEditorHistoryGoBack={onEditorHistoryGoBack}
         onEditorHistoryGoForward={onEditorHistoryGoForward}
-        composingNewEntry={false}
+        composingNewEntry={composingNewEntry}
         editorPaneTitle={editorPaneTitle}
-        onCancelNewEntry={() => undefined}
+        onCancelNewEntry={onCancelNewEntry}
         notificationsPanelVisible={notificationsPanelVisible}
         onToggleNotificationsPanel={onToggleNotificationsPanel}
         inboxHasItems={inboxHasItems}
@@ -730,10 +721,12 @@ export function VaultTab({
                       onMarkdownRelativeLinkActivate={onMarkdownRelativeLinkActivate}
                       onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
                       relativeMarkdownLinkHrefIsResolved={
-                        relativeMarkdownLinkHrefIsResolved
+                        mainEditorLinkDerived.relativeMarkdownLinkHrefIsResolved
                       }
-                      wikiLinkTargetIsResolved={wikiLinkTargetIsResolved}
-                      wikiLinkCompletionCandidates={wikiLinkCompletionCandidates}
+                      wikiLinkTargetIsResolved={mainEditorLinkDerived.wikiLinkTargetIsResolved}
+                      wikiLinkCompletionCandidates={
+                        mainEditorLinkDerived.wikiLinkCompletionCandidates
+                      }
                       onSaveShortcut={onSaveShortcut}
                       onCleanNote={onCleanNote}
                       onDeleteNoteShortcut={onDeleteNoteShortcut}

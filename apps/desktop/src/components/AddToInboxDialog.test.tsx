@@ -156,4 +156,43 @@ describe('AddToInboxDialog', () => {
       scrollIntoView: true,
     });
   });
+
+  it('does not refocus at the end when the draft changes while already open', async () => {
+    const editorRef = {
+      current: {
+        focus: editorHandleSpies.focus,
+        getMarkdown: vi.fn(() => '# Title'),
+        loadMarkdown: vi.fn(),
+        unfoldAllFolds: vi.fn(),
+        collapseAllFolds: vi.fn(),
+        replaceWikiLinkInnerAt: vi.fn(),
+        replaceMarkdownLinkHrefAt: vi.fn(),
+      },
+    };
+    const {rerender} = render(
+      <AddToInboxDialog
+        {...baseProps}
+        editorRef={editorRef}
+        composeDraftMarkdown="# Title"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(editorHandleSpies.focus).toHaveBeenCalledWith({
+        anchor: '# Title'.length,
+        scrollIntoView: false,
+      });
+    });
+
+    editorHandleSpies.focus.mockClear();
+    rerender(
+      <AddToInboxDialog
+        {...baseProps}
+        editorRef={editorRef}
+        composeDraftMarkdown="# Title\nmiddle edit"
+      />,
+    );
+
+    expect(editorHandleSpies.focus).not.toHaveBeenCalled();
+  });
 });

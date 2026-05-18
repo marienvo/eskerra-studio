@@ -155,7 +155,7 @@ export function useAppMainWindowKeyboardEffects({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!vaultRoot || busy) {
+      if (!vaultRoot || busy || composingNewEntry) {
         return;
       }
       const mod = e.ctrlKey || e.metaKey;
@@ -189,7 +189,7 @@ export function useAppMainWindowKeyboardEffects({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!vaultRoot || busy) {
+      if (!vaultRoot || busy || composingNewEntry) {
         return;
       }
       const mod = e.ctrlKey || e.metaKey;
@@ -210,18 +210,30 @@ export function useAppMainWindowKeyboardEffects({
     return () => {
       window.removeEventListener('keydown', onKeyDown, true);
     };
-  }, [vaultRoot, busy, setVaultSearchOpen]);
+  }, [vaultRoot, busy, composingNewEntry, setVaultSearchOpen]);
 
   useEffect(() => {
     let state = initialDoubleShiftState;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!vaultRoot || quickOpenOpenRef.current || vaultSearchOpenRef.current || busy) {
+      if (
+        !vaultRoot ||
+        quickOpenOpenRef.current ||
+        vaultSearchOpenRef.current ||
+        composingNewEntry ||
+        busy
+      ) {
         return;
       }
       state = reduceDoubleShiftKeyDown(state, e.key, e.ctrlKey, e.metaKey, e.altKey);
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (!vaultRoot || quickOpenOpenRef.current || vaultSearchOpenRef.current || busy) {
+      if (
+        !vaultRoot ||
+        quickOpenOpenRef.current ||
+        vaultSearchOpenRef.current ||
+        composingNewEntry ||
+        busy
+      ) {
         return;
       }
       if (e.repeat) {
@@ -248,7 +260,7 @@ export function useAppMainWindowKeyboardEffects({
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
     };
-  }, [vaultRoot, busy, setQuickOpenOpen]);
+  }, [vaultRoot, busy, composingNewEntry, setQuickOpenOpen]);
 
   useEffect(() => {
     let state = initialDoubleCtrlState;

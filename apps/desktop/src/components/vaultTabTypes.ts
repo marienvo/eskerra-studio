@@ -100,7 +100,7 @@ export type VaultTabEditorController = {
   onComposeDraftChange: (markdown: string) => void;
   composingNewEntry: boolean;
   onCancelNewEntry: () => void;
-  onCreateNewEntry: () => void;
+  onCreateNewEntry: (liveComposeMarkdown?: string) => void;
   editorBody: string;
   onEditorChange: (body: string) => void;
   inboxEditorResetNonce: number;

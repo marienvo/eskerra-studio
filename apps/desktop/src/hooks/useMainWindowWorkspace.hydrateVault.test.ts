@@ -1629,15 +1629,18 @@ describe('useMainWindowWorkspace + fake VaultFilesystem (hydrateVault)', () => {
     await waitFor(() => {
       expect(result.current.selectionController.composingNewEntry).toBe(true);
     });
+    // Add-to-inbox uses `composeDraftMarkdown` for the modal; the selected note body stays in
+    // `editorBody` so cancel does not blank the underlying note. `runStartNewEntry` still flushes
+    // the open note before `composingNewEntry` flips true.
     await waitFor(() => {
-      expect(result.current.selectionController.editorBody).toBe('');
+      expect(result.current.selectionController.editorBody).toBe(alphaDirty);
     });
 
     act(() => {
-      result.current.selectionController.setEditorBody(composeDraft);
+      result.current.selectionController.setComposeDraftMarkdown(composeDraft);
     });
     await waitFor(() => {
-      expect(result.current.selectionController.editorBody).toBe(composeDraft);
+      expect(result.current.selectionController.composeDraftMarkdown).toBe(composeDraft);
     });
 
     await act(async () => {

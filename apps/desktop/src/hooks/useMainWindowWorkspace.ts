@@ -1144,8 +1144,8 @@ export function useMainWindowWorkspace(options: {
     [tabCommandContext],
   );
 
-  const submitNewEntry = useCallback(async () => {
-    await runSubmitNewEntry(composeCommandsContext, composeDraftMarkdown);
+  const submitNewEntry = useCallback(async (liveComposeMarkdown?: string) => {
+    await runSubmitNewEntry(composeCommandsContext, composeDraftMarkdown, liveComposeMarkdown);
   }, [composeCommandsContext, composeDraftMarkdown]);
 
   useLayoutEffect(() => {

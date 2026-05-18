@@ -100,6 +100,19 @@ function dispatchShiftTap() {
   });
 }
 
+function dispatchCtrlShiftF() {
+  const event = new KeyboardEvent('keydown', {
+    key: 'f',
+    ctrlKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+}
+
 describe('useAppMainWindowKeyboardEffects manual sync shortcut', () => {
   it('runs manual sync on Ctrl+S when enabled', () => {
     const onManualSync = vi.fn();
@@ -232,5 +245,24 @@ describe('useAppMainWindowKeyboardEffects modifier double-tap shortcuts', () => 
     dispatchShiftTap();
 
     expect(setQuickOpenOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('does not open quick open on double Shift while composing', () => {
+    const setQuickOpenOpen = vi.fn();
+    renderKeyboardEffects({setQuickOpenOpen, composingNewEntry: true});
+
+    dispatchShiftTap();
+    dispatchShiftTap();
+
+    expect(setQuickOpenOpen).not.toHaveBeenCalled();
+  });
+
+  it('does not open vault search on Ctrl+Shift+F while composing', () => {
+    const setVaultSearchOpen = vi.fn();
+    renderKeyboardEffects({setVaultSearchOpen, composingNewEntry: true});
+
+    dispatchCtrlShiftF();
+
+    expect(setVaultSearchOpen).not.toHaveBeenCalled();
   });
 });

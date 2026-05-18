@@ -55,7 +55,6 @@ import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScree
 import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
-import {DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN} from './hooks/workspaceComposeCommands';
 
 import './App.css';
 
@@ -162,11 +161,7 @@ export default function App() {
   );
 
   const openAddToInbox = useCallback(() => {
-    startNewEntry(
-      composeDraftMarkdown === ''
-        ? DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN
-        : composeDraftMarkdown,
-    );
+    startNewEntry(composeDraftMarkdown);
   }, [composeDraftMarkdown, startNewEntry]);
 
   const handleMuteLinkSnippetDomain = useLinkSnippetSettingsWriter({

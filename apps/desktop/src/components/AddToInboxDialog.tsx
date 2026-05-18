@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import {
   useCallback,
   useEffect,
+  useRef,
   type MouseEvent,
   type RefObject,
 } from 'react';
@@ -68,16 +69,19 @@ export function AddToInboxDialog({
 }: AddToInboxDialogProps) {
   const safeComposeDraftMarkdown =
     typeof composeDraftMarkdown === 'string' ? composeDraftMarkdown : '';
+  const wasOpenRef = useRef(false);
   const focusEditorAtEnd = useCallback(
-    (scrollIntoView = false) => {
+    (scrollIntoView = false, fallbackLength: number) => {
       window.requestAnimationFrame(() => {
+        const anchor =
+          editorRef.current?.getMarkdown().length ?? fallbackLength;
         editorRef.current?.focus({
-          anchor: safeComposeDraftMarkdown.length,
+          anchor,
           scrollIntoView,
         });
       });
     },
-    [editorRef, safeComposeDraftMarkdown],
+    [editorRef],
   );
   const handleEditorSurfaceMouseDown = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
@@ -85,17 +89,19 @@ export function AddToInboxDialog({
       if (target?.closest('.cm-content')) {
         return;
       }
-      focusEditorAtEnd(true);
+      focusEditorAtEnd(true, safeComposeDraftMarkdown.length);
     },
-    [focusEditorAtEnd],
+    [focusEditorAtEnd, safeComposeDraftMarkdown.length],
   );
 
   useEffect(() => {
-    if (!open) {
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!open || wasOpen) {
       return;
     }
-    focusEditorAtEnd(false);
-  }, [focusEditorAtEnd, open]);
+    focusEditorAtEnd(false, safeComposeDraftMarkdown.length);
+  }, [focusEditorAtEnd, open, safeComposeDraftMarkdown.length]);
 
   return (
     <Dialog.Root

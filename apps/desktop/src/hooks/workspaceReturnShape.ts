@@ -87,7 +87,7 @@ export type WorkspaceSelectionController = {
     uri: string,
     opts?: {insertAfterActive?: boolean},
   ) => void;
-  submitNewEntry: () => Promise<void>;
+  submitNewEntry: (liveComposeMarkdown?: string) => Promise<void>;
   inboxContentByUri: Record<string, string>;
   vaultMarkdownRefs: VaultMarkdownRef[];
   selectedNoteBacklinkUris: readonly string[];

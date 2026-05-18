@@ -85,7 +85,7 @@ describe('workspaceComposeCommands', () => {
     );
   });
 
-  it('start/cancel new entry flushes saves and resets compose state', async () => {
+  it('start/cancel new entry flushes saves without resetting the selected note editor', async () => {
     const ctx = createContext();
 
     runStartNewEntry(ctx, 'Draft title');
@@ -99,7 +99,7 @@ describe('workspaceComposeCommands', () => {
     expect(ctx.setters.setComposeDraftResetNonce).toHaveBeenCalledTimes(1);
     expect(ctx.setters.setSelectedUri).not.toHaveBeenCalled();
     expect(ctx.setters.clearLastPersistedSnapshot).not.toHaveBeenCalled();
-    expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(1);
+    expect(ctx.resetInboxEditorComposeState).not.toHaveBeenCalled();
 
     runCancelNewEntry(ctx);
     await Promise.resolve();
@@ -107,7 +107,8 @@ describe('workspaceComposeCommands', () => {
 
     expect(ctx.flushInboxSave).toHaveBeenCalledTimes(2);
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
-    expect(ctx.resetInboxEditorComposeState).toHaveBeenCalledTimes(1);
+    expect(ctx.resetInboxEditorComposeState).not.toHaveBeenCalled();
+    expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledTimes(1);
   });
 
   it('ignores non-string start payloads from direct click handlers', async () => {
@@ -216,6 +217,23 @@ describe('workspaceComposeCommands', () => {
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
     expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith('');
     expect(ctx.setters.setComposeDraftResetNonce).toHaveBeenCalledTimes(1);
+  });
+
+  it('runSubmitNewEntry prefers the live compose markdown when provided', async () => {
+    const ctx = createContext();
+
+    await runSubmitNewEntry(
+      ctx,
+      '# stale draft title\nstale body',
+      '# Live title\nFresh body',
+    );
+
+    expect(vaultBootstrap.createInboxMarkdownNote).toHaveBeenCalledWith(
+      '/vault',
+      ctx.fs,
+      'Live title',
+      '# Live title\nFresh body\n',
+    );
   });
 
   it('runCleanNoteInbox triggers Today hub bridge when canvas is visible', async () => {
