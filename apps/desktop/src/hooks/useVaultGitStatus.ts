@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 
 import type {GitStatusResult, SyncError} from '../lib/tauriVaultGitSync';
 import {getVaultGitStatus} from '../lib/tauriVaultGitSync';
@@ -29,8 +29,10 @@ export function useVaultGitStatus({
   const requestIdRef = useRef(0);
   const statusRef = useRef(status);
   const loadedKeyRef = useRef(loadedKey);
-  statusRef.current = status;
-  loadedKeyRef.current = loadedKey;
+  useLayoutEffect(() => {
+    statusRef.current = status;
+    loadedKeyRef.current = loadedKey;
+  }, [status, loadedKey]);
 
   const load = useCallback(
     async (path: string, expectedBranch: string) => {
