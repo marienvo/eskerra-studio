@@ -69,6 +69,7 @@ import {
   markdownCaretInOpaquePasteBlock,
   markdownSmartExpandExtension,
 } from './markdownSmartExpandSelection';
+import {markdownCaseToggleKeymap} from './markdownCaseToggle';
 import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,
@@ -644,6 +645,7 @@ export function buildNoteMarkdownCellExtensions(
     ...markdownSmartExpandExtension(),
     markdownSelectionSurroundKeymap(),
     markdownFormattingModKeymap(),
+    markdownCaseToggleKeymap(),
     markdownInlineCodeSurroundInputHandler(),
     ...(onOpenNoteWideFind ? [] : [search()]),
     eskerraCellCharFilter(),

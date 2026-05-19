@@ -102,6 +102,7 @@ import {
   markdownCaretInOpaquePasteBlock,
   markdownSmartExpandExtension,
 } from './markdownSmartExpandSelection';
+import {markdownCaseToggleKeymap} from './markdownCaseToggle';
 import {
   clearEskerraTableNestedCellRegistrations,
   dispatchEskerraTableNestedCellEditors,
@@ -845,6 +846,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       ...markdownSmartExpandExtension(),
       markdownSelectionSurroundKeymap(),
       markdownFormattingModKeymap(),
+      markdownCaseToggleKeymap(),
       markdownInlineCodeSurroundInputHandler(),
       ...noteMarkdownSearchExtensionBundle,
       keymap.of([
