@@ -10,7 +10,7 @@
     "apps/desktop/src/editor/noteEditor/markdownSelectionSurround.test.ts": 846,
     "apps/desktop/src/editor/noteEditor/markdownSelectionSurround.ts": 1357,
     "apps/desktop/src/editor/noteEditor/markdownSmartExpandSelection.ts": 1499,
-    "apps/desktop/src/editor/noteEditor/NoteMarkdownEditor.tsx": 1526,
+    "apps/desktop/src/editor/noteEditor/NoteMarkdownEditor.tsx": 1360,
     "apps/desktop/src/hooks/useMainWindowWorkspace.hydrateVault.test.ts": 1683,
     "apps/desktop/src/hooks/useMainWindowWorkspace.ts": 1511,
     "apps/desktop/src/hooks/useTodayHubsState.ts": 914,
