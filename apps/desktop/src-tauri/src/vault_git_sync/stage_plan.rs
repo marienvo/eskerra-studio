@@ -173,10 +173,14 @@ fn classify_status_paths(
 }
 
 fn read_status_paths(vault_path: &Path) -> Result<Vec<StatusPath>, SyncError> {
-    let out = GitCmd::new(vault_path, &["status", "--porcelain=v2", "-z"]).run()?;
+    let out = GitCmd::new(
+        vault_path,
+        &["status", "--porcelain=v2", "-z", "--untracked-files=all"],
+    )
+    .run()?;
     if !out.success {
         return Err(SyncError::GitCommandFailed {
-            command: "git status --porcelain=v2 -z".into(),
+            command: "git status --porcelain=v2 -z --untracked-files=all".into(),
             exit_code: out.exit_code,
             stderr: out.stderr,
         });
@@ -681,6 +685,22 @@ mod tests {
     }
 
     #[test]
+    fn apply_untracked_file_inside_new_inbox_directory_becomes_staged() {
+        let repo = Repo::new();
+        repo.commit("base.md", "base", "init");
+        repo.write("Inbox/new.md", "new");
+
+        assert_eq!(porcelain(&repo), "?? Inbox/\n");
+
+        let result = apply_stage_plan(repo.path(), &config(vec!["**/*.md"], vec![])).unwrap();
+
+        assert!(result.mutated);
+        assert_eq!(paths(&result.staged_paths), vec!["Inbox/new.md"]);
+        assert_eq!(cached_name_status(&repo), "A\tInbox/new.md\n");
+        assert!(!porcelain(&repo).contains("?? Inbox/"));
+    }
+
+    #[test]
     fn apply_deleted_included_file_becomes_staged_deletion() {
         let repo = Repo::new();
         repo.commit("delete-me.md", "bye", "init");
@@ -981,6 +1001,24 @@ mod tests {
         let plan = build_stage_plan(repo.path(), &config(vec!["**/*.md"], vec![])).unwrap();
 
         assert_eq!(paths(&plan.included_paths), vec!["new.md"]);
+        assert_eq!(
+            plan.included_paths[0].change,
+            StagePlanChange::AddedUntracked
+        );
+    }
+
+    #[test]
+    fn untracked_file_inside_new_inbox_directory_appears_in_stage_plan() {
+        let repo = Repo::new();
+        repo.commit("base.txt", "base", "init");
+        repo.write("Inbox/new.md", "new");
+
+        assert_eq!(porcelain(&repo), "?? Inbox/\n");
+
+        let plan = build_stage_plan(repo.path(), &config(vec!["**/*.md"], vec![])).unwrap();
+
+        assert_eq!(paths(&plan.included_paths), vec!["Inbox/new.md"]);
+        assert!(plan.excluded_paths.is_empty());
         assert_eq!(
             plan.included_paths[0].change,
             StagePlanChange::AddedUntracked

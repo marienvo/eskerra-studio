@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 
 import type {GitStatusResult, SyncError} from '../lib/tauriVaultGitSync';
 import {getVaultGitStatus} from '../lib/tauriVaultGitSync';
@@ -14,7 +14,7 @@ type UseVaultGitStatusResult = {
   loading: boolean;
   error: string | null;
   /** Trigger a fresh load. Not exposed in UI yet — available for future use. */
-  refresh: () => void;
+  refresh: (opts?: {readonly silent?: boolean}) => void;
 };
 
 export function useVaultGitStatus({
@@ -27,6 +27,12 @@ export function useVaultGitStatus({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const statusRef = useRef(status);
+  const loadedKeyRef = useRef(loadedKey);
+  useLayoutEffect(() => {
+    statusRef.current = status;
+    loadedKeyRef.current = loadedKey;
+  }, [status, loadedKey]);
 
   const load = useCallback(
     async (path: string, expectedBranch: string) => {
@@ -80,12 +86,17 @@ export function useVaultGitStatus({
     };
   }, [vaultPath, remote, branch, load]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((opts?: {readonly silent?: boolean}) => {
     if (!vaultPath || !branch) return;
-    setLoading(true);
+    const currentRequestKey = statusRequestKey(vaultPath, remote, branch);
+    const hasLoadedCurrentStatus =
+      statusRef.current != null && loadedKeyRef.current === currentRequestKey;
+    if (!opts?.silent || !hasLoadedCurrentStatus) {
+      setLoading(true);
+    }
     setError(null);
     load(vaultPath, branch).catch(() => undefined);
-  }, [vaultPath, branch, load]);
+  }, [vaultPath, remote, branch, load]);
 
   const currentKey = vaultPath && branch ? statusRequestKey(vaultPath, remote, branch) : null;
   const hasCurrentStatusResult = currentKey != null && loadedKey === currentKey;

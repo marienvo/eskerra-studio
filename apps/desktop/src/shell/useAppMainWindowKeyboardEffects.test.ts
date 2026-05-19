@@ -150,6 +150,16 @@ describe('useAppMainWindowKeyboardEffects manual sync shortcut', () => {
     expect(onManualSync).not.toHaveBeenCalled();
   });
 
+  it('lets Add to inbox handle Ctrl+S while composing a new entry', () => {
+    const onManualSync = vi.fn();
+    renderKeyboardEffects({composingNewEntry: true, onManualSync});
+
+    const event = dispatchModS({ctrlKey: true});
+
+    expect(onManualSync).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it('prevents default when Ctrl+S starts manual sync', () => {
     const onManualSync = vi.fn();
     renderKeyboardEffects({onManualSync});

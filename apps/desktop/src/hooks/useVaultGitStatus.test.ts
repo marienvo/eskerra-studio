@@ -309,6 +309,57 @@ describe('useVaultGitStatus', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('keeps refresh callback stable after status loads', async () => {
+    mockGetVaultGitStatus.mockResolvedValue(cleanResult);
+    const {result} = renderGitStatus();
+
+    const refreshBefore = result.current.refresh;
+    await waitFor(() => expect(result.current.status).toEqual(cleanResult));
+    expect(result.current.refresh).toBe(refreshBefore);
+  });
+
+  it('keeps the current status visible during a silent refresh', async () => {
+    const silentRefresh = deferred<GitStatusResult>();
+    const initial: GitStatusResult = {...cleanResult, hasUncommittedChanges: true};
+    const refreshed: GitStatusResult = {...cleanResult, ahead: 1};
+    mockGetVaultGitStatus
+      .mockResolvedValueOnce(initial)
+      .mockImplementationOnce(() => silentRefresh.promise);
+
+    const {result} = renderGitStatus();
+    await waitFor(() => expect(result.current.status).toEqual(initial));
+
+    act(() => { result.current.refresh({silent: true}); });
+    await waitFor(() => expect(mockGetVaultGitStatus).toHaveBeenCalledTimes(2));
+
+    expect(result.current.status).toEqual(initial);
+    expect(result.current.loading).toBe(false);
+
+    await act(async () => { silentRefresh.resolve(refreshed); });
+
+    await waitFor(() => expect(result.current.status).toEqual(refreshed));
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('shows loading during a non-silent refresh when a status is already loaded', async () => {
+    const refreshLoad = deferred<GitStatusResult>();
+    mockGetVaultGitStatus
+      .mockResolvedValueOnce(cleanResult)
+      .mockImplementationOnce(() => refreshLoad.promise);
+
+    const {result} = renderGitStatus();
+    await waitFor(() => expect(result.current.status).toEqual(cleanResult));
+
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(mockGetVaultGitStatus).toHaveBeenCalledTimes(2));
+
+    expect(result.current.status).toEqual(cleanResult);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => { refreshLoad.resolve({...cleanResult, ahead: 1}); });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+  });
+
   it('ignores stale error when a newer refresh succeeds', async () => {
     const initialLoad = deferred<GitStatusResult>();
     const refreshLoad = deferred<GitStatusResult>();

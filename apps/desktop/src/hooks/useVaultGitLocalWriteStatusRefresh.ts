@@ -1,8 +1,10 @@
-import {useEffect} from 'react';
+import {useEffect, useLayoutEffect, useRef} from 'react';
+
+export const GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS = 500;
 
 type UseVaultGitLocalWriteStatusRefreshArgs = {
   saveSettledNonce: number;
-  refreshGitStatus: () => void;
+  refreshGitStatus: (opts?: {readonly silent?: boolean}) => void;
 };
 
 /**
@@ -13,8 +15,16 @@ export function useVaultGitLocalWriteStatusRefresh({
   saveSettledNonce,
   refreshGitStatus,
 }: UseVaultGitLocalWriteStatusRefreshArgs): void {
+  const refreshGitStatusRef = useRef(refreshGitStatus);
+  useLayoutEffect(() => {
+    refreshGitStatusRef.current = refreshGitStatus;
+  }, [refreshGitStatus]);
+
   useEffect(() => {
     if (saveSettledNonce === 0) return;
-    refreshGitStatus();
-  }, [saveSettledNonce, refreshGitStatus]);
+    const id = window.setTimeout(() => {
+      refreshGitStatusRef.current({silent: true});
+    }, GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [saveSettledNonce]);
 }

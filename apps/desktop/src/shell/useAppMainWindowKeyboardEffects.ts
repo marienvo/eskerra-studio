@@ -84,14 +84,16 @@ export function useAppMainWindowKeyboardEffects({
   const onManualSyncRef = useRef(onManualSync);
   const manualSyncDisabledRef = useRef(manualSyncDisabled);
   const manualSyncRunningRef = useRef(manualSyncRunning);
+  const composingNewEntryRef = useRef(composingNewEntry);
   // Hold a stable ref to the gitStatusRef pointer so we avoid listing it as an effect dep.
   const gitStatusRefHolderRef = useRef(gitStatusRef);
   useLayoutEffect(() => {
     onManualSyncRef.current = onManualSync;
     manualSyncDisabledRef.current = manualSyncDisabled;
     manualSyncRunningRef.current = manualSyncRunning;
+    composingNewEntryRef.current = composingNewEntry;
     gitStatusRefHolderRef.current = gitStatusRef;
-  }, [onManualSync, manualSyncDisabled, manualSyncRunning, gitStatusRef]);
+  }, [onManualSync, manualSyncDisabled, manualSyncRunning, composingNewEntry, gitStatusRef]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -103,6 +105,9 @@ export function useAppMainWindowKeyboardEffects({
         return;
       }
       if (e.key !== 's' && e.key !== 'S') {
+        return;
+      }
+      if (composingNewEntryRef.current) {
         return;
       }
       if (

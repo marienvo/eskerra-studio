@@ -1,9 +1,16 @@
-import {renderHook} from '@testing-library/react';
-import {describe, expect, it, vi} from 'vitest';
+import {act, renderHook} from '@testing-library/react';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import {useVaultGitLocalWriteStatusRefresh} from './useVaultGitLocalWriteStatusRefresh';
+import {
+  GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS,
+  useVaultGitLocalWriteStatusRefresh,
+} from './useVaultGitLocalWriteStatusRefresh';
 
 describe('useVaultGitLocalWriteStatusRefresh', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('does not refresh on mount before any write settles', () => {
     const refreshGitStatus = vi.fn();
     renderHook(() =>
@@ -16,7 +23,8 @@ describe('useVaultGitLocalWriteStatusRefresh', () => {
     expect(refreshGitStatus).not.toHaveBeenCalled();
   });
 
-  it('refreshes local Git status when a normal note save settles', () => {
+  it('refreshes local Git status silently after the debounce when a normal note save settles', () => {
+    vi.useFakeTimers();
     const refreshGitStatus = vi.fn();
     const runManualSync = vi.fn();
     const {rerender} = renderHook(
@@ -30,13 +38,19 @@ describe('useVaultGitLocalWriteStatusRefresh', () => {
 
     rerender({saveSettledNonce: 1});
 
+    expect(refreshGitStatus).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS);
+    });
+
     expect(refreshGitStatus).toHaveBeenCalledTimes(1);
+    expect(refreshGitStatus).toHaveBeenCalledWith({silent: true});
     expect(runManualSync).not.toHaveBeenCalled();
   });
 
-  it('refreshes local Git status when a TodayHub write settles', () => {
+  it('coalesces rapid settled writes into one silent refresh', () => {
+    vi.useFakeTimers();
     const refreshGitStatus = vi.fn();
-    const runManualSync = vi.fn();
     const {rerender} = renderHook(
       ({saveSettledNonce}) =>
         useVaultGitLocalWriteStatusRefresh({
@@ -47,8 +61,72 @@ describe('useVaultGitLocalWriteStatusRefresh', () => {
     );
 
     rerender({saveSettledNonce: 1});
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS - 1);
+    });
+    rerender({saveSettledNonce: 2});
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS - 1);
+    });
+    rerender({saveSettledNonce: 3});
+
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS);
+    });
 
     expect(refreshGitStatus).toHaveBeenCalledTimes(1);
-    expect(runManualSync).not.toHaveBeenCalled();
+    expect(refreshGitStatus).toHaveBeenCalledWith({silent: true});
+  });
+
+  it('does not reschedule refresh when refreshGitStatus identity changes', () => {
+    vi.useFakeTimers();
+    const refreshGitStatus = vi.fn();
+    const {rerender} = renderHook(
+      ({refreshGitStatus, saveSettledNonce}) =>
+        useVaultGitLocalWriteStatusRefresh({
+          saveSettledNonce,
+          refreshGitStatus,
+        }),
+      {initialProps: {saveSettledNonce: 0, refreshGitStatus}},
+    );
+
+    rerender({saveSettledNonce: 1, refreshGitStatus});
+
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS);
+    });
+    expect(refreshGitStatus).toHaveBeenCalledTimes(1);
+
+    const unstableRefresh = vi.fn();
+    rerender({saveSettledNonce: 1, refreshGitStatus: unstableRefresh});
+
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS);
+    });
+
+    expect(refreshGitStatus).toHaveBeenCalledTimes(1);
+    expect(unstableRefresh).not.toHaveBeenCalled();
+  });
+
+  it('clears a pending refresh on unmount', () => {
+    vi.useFakeTimers();
+    const refreshGitStatus = vi.fn();
+    const {rerender, unmount} = renderHook(
+      ({saveSettledNonce}) =>
+        useVaultGitLocalWriteStatusRefresh({
+          saveSettledNonce,
+          refreshGitStatus,
+        }),
+      {initialProps: {saveSettledNonce: 0}},
+    );
+
+    rerender({saveSettledNonce: 1});
+    unmount();
+
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS);
+    });
+
+    expect(refreshGitStatus).not.toHaveBeenCalled();
   });
 });
