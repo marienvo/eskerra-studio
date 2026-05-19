@@ -580,9 +580,6 @@ export async function runBulkDeleteVaultTreeItems(
       }
       return normSel === d;
     });
-  if (shouldClearEditor) {
-    ctx.clearInboxSelection();
-  }
   await saveChainRef.current.catch(() => undefined);
   setBusy(true);
   setErr(null);

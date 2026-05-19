@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type MutableRefObject,
 } from 'react';
 
@@ -127,6 +128,11 @@ export function useAppGitSyncOrchestration({
     onSettled: refreshGitStatus,
   });
   const runManualGitSync = manualGitSync.run;
+  const flushBeforeManualSyncBusyRef = useRef(false);
+  const flushBeforeManualSyncPromiseRef = useRef<Promise<boolean> | null>(null);
+  const [flushBeforeManualSyncRunning, setFlushBeforeManualSyncRunning] = useState(false);
+  const manualSyncRunning =
+    manualGitSync.running || flushBeforeManualSyncRunning;
   const refreshGitStatusSilently = useCallback(() => {
     refreshGitStatus({silent: true});
   }, [refreshGitStatus]);
@@ -136,7 +142,7 @@ export function useAppGitSyncOrchestration({
     remote: GIT_SYNC_REMOTE,
     branch: currentGitBranch,
     fetchTimeoutSecs: 30,
-    manualSyncRunning: manualGitSync.running,
+    manualSyncRunning,
     onRefreshed: refreshGitStatusSilently,
     gitOperationBusyRef: backgroundGitOperationBusyRef,
   });
@@ -148,7 +154,7 @@ export function useAppGitSyncOrchestration({
     gitStatusError,
     branchLoading: currentGitBranchLoading,
     branchUnavailable: !currentGitDetachedHead && (currentGitBranch == null || currentGitBranchError != null),
-    running: manualGitSync.running,
+    running: manualSyncRunning,
   });
   const manualSyncUnavailable = vaultPath == null || manualSyncDisabledReason != null;
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
@@ -159,15 +165,38 @@ export function useAppGitSyncOrchestration({
   );
   const flushThenRunManualSync = useCallback(
     async (opts?: {readonly silent?: boolean}) => {
-      try {
-        await flushInboxSave();
-      } catch {
-        // Keep Git sync available even if an autosave flush reports a stale error.
+      if (flushBeforeManualSyncBusyRef.current || manualGitSync.running) {
+        return false;
       }
-      return runManualGitSync(opts);
+
+      flushBeforeManualSyncBusyRef.current = true;
+      setFlushBeforeManualSyncRunning(true);
+      const runPromise = (async () => {
+        try {
+          await flushInboxSave();
+        } catch {
+          // Keep Git sync available even if an autosave flush reports a stale error.
+        }
+        return runManualGitSync(opts);
+      })();
+      flushBeforeManualSyncPromiseRef.current = runPromise;
+      try {
+        return await runPromise;
+      } finally {
+        flushBeforeManualSyncBusyRef.current = false;
+        flushBeforeManualSyncPromiseRef.current = null;
+        setFlushBeforeManualSyncRunning(false);
+      }
     },
-    [flushInboxSave, runManualGitSync],
+    [flushInboxSave, manualGitSync.running, runManualGitSync],
   );
+  const waitForFlushThenManualSync = useCallback((): Promise<boolean> | null => {
+    return (
+      flushBeforeManualSyncPromiseRef.current ??
+      manualGitSync.waitForCurrentRun?.() ??
+      null
+    );
+  }, [manualGitSync.waitForCurrentRun]);
   const fetchFreshGitStatusForClose = useCallback(async (): Promise<GitStatusResult | null> => {
     if (vaultPath == null || currentGitBranch == null) {
       return gitStatusForDisplay;
@@ -183,12 +212,12 @@ export function useAppGitSyncOrchestration({
     flushInboxSave,
     manualSyncRequired: vaultGitSyncApplies,
     manualSyncDisabledReason,
-    manualSyncRunning: manualGitSync.running,
+    manualSyncRunning,
     runManualSync: runManualSyncForClose,
     notify,
     gitStatus: gitStatusForDisplay,
     fetchFreshGitStatusForClose,
-    waitForCurrentRun: manualGitSync.waitForCurrentRun,
+    waitForCurrentRun: waitForFlushThenManualSync,
   });
   const closeSyncDisabledNoticeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -211,7 +240,7 @@ export function useAppGitSyncOrchestration({
             instant: true,
             manualSyncRequired: vaultGitSyncApplies,
             manualSyncDisabledReason,
-            manualSyncRunning: manualGitSync.running,
+            manualSyncRunning,
             runManualSync: runManualSyncForClose,
             close: programmaticClose,
             notify,
@@ -229,14 +258,14 @@ export function useAppGitSyncOrchestration({
             instant: false,
             manualSyncRequired: vaultGitSyncApplies,
             manualSyncDisabledReason,
-            manualSyncRunning: manualGitSync.running,
+            manualSyncRunning,
             runManualSync: runManualSyncForClose,
             close: programmaticClose,
             notify,
             notifyDisabled,
             showCloseSyncFeedback: true,
             gitStatus: gitStatusForClose,
-            waitForCurrentRun: manualGitSync.waitForCurrentRun,
+            waitForCurrentRun: waitForFlushThenManualSync,
           });
         });
       })();
@@ -245,8 +274,8 @@ export function useAppGitSyncOrchestration({
       fetchFreshGitStatusForClose,
       flushInboxSave,
       gitStatusForDisplay,
-      manualGitSync.running,
-      manualGitSync.waitForCurrentRun,
+      manualSyncRunning,
+      waitForFlushThenManualSync,
       manualSyncDisabledReason,
       markCloseSyncActive,
       notify,
@@ -262,7 +291,7 @@ export function useAppGitSyncOrchestration({
     gitStatusError,
     gitStatus: gitStatusForDisplay,
     manualSyncDisabledReason,
-    manualSyncRunning: manualGitSync.running,
+    manualSyncRunning,
     runManualSync: flushThenRunManualSync,
     notify,
   });
@@ -274,16 +303,16 @@ export function useAppGitSyncOrchestration({
     gitStatusError,
     gitStatus: gitStatusForDisplay,
     manualSyncDisabledReason,
-    manualSyncRunning: manualGitSync.running,
+    manualSyncRunning,
     runManualSync: flushThenRunManualSync,
     gitOperationBusyRef: backgroundGitOperationBusyRef,
   });
 
   return {
     manualGitSync: {
-      running: manualGitSync.running,
+      running: manualSyncRunning,
       run: flushThenRunManualSync,
-      waitForCurrentRun: manualGitSync.waitForCurrentRun,
+      waitForCurrentRun: waitForFlushThenManualSync,
     },
     manualSyncDisabledReason,
     manualSyncUnavailable,

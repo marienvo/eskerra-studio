@@ -471,7 +471,7 @@ describe('workspaceTreeCommands', () => {
       {kind: 'article', uri: '/vault/Inbox/drop.md'},
     ]);
 
-    expect(ctx.clearInboxSelection).toHaveBeenCalled();
+    expect(ctx.clearInboxSelection).not.toHaveBeenCalled();
     expect(ctx.refocusAfterActiveTabRemoved).toHaveBeenCalledWith(
       selected,
       [],
@@ -506,6 +506,8 @@ describe('workspaceTreeCommands', () => {
       null,
       {wasOnHomeNoActiveTab: true},
     );
+    expect(ctx.clearInboxSelection).not.toHaveBeenCalled();
+    expect(ctx.openMarkdownInEditor).not.toHaveBeenCalled();
   });
 
   it('runBulkMoveVaultTreeItems invokes move once per filtered source', async () => {
