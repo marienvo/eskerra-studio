@@ -78,6 +78,36 @@ describe('useVaultGitLocalWriteStatusRefresh', () => {
     expect(refreshGitStatus).toHaveBeenCalledWith({silent: true});
   });
 
+  it('does not reschedule refresh when refreshGitStatus identity changes', () => {
+    vi.useFakeTimers();
+    const refreshGitStatus = vi.fn();
+    const {rerender} = renderHook(
+      ({refreshGitStatus, saveSettledNonce}) =>
+        useVaultGitLocalWriteStatusRefresh({
+          saveSettledNonce,
+          refreshGitStatus,
+        }),
+      {initialProps: {saveSettledNonce: 0, refreshGitStatus}},
+    );
+
+    rerender({saveSettledNonce: 1, refreshGitStatus});
+
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS);
+    });
+    expect(refreshGitStatus).toHaveBeenCalledTimes(1);
+
+    const unstableRefresh = vi.fn();
+    rerender({saveSettledNonce: 1, refreshGitStatus: unstableRefresh});
+
+    act(() => {
+      vi.advanceTimersByTime(GIT_LOCAL_WRITE_REFRESH_DEBOUNCE_MS);
+    });
+
+    expect(refreshGitStatus).toHaveBeenCalledTimes(1);
+    expect(unstableRefresh).not.toHaveBeenCalled();
+  });
+
   it('clears a pending refresh on unmount', () => {
     vi.useFakeTimers();
     const refreshGitStatus = vi.fn();
