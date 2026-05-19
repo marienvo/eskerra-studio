@@ -1,13 +1,12 @@
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands';
 import {
-  foldedRanges,
   foldGutter,
   foldKeymap,
   unfoldAll,
 } from '@codemirror/language';
 import {commonmarkLanguage} from '@codemirror/lang-markdown';
 import {languages} from '@codemirror/language-data';
-import {search, searchKeymap, searchPanelOpen} from '@codemirror/search';
+import {searchKeymap} from '@codemirror/search';
 import {
   Compartment,
   EditorSelection,
@@ -33,14 +32,7 @@ import {
 } from 'react';
 
 import {MIDDLE_CLICK_BLOCK_PASTE_WINDOW_MS} from '../../hooks/middleClickPasteBlock';
-import {
-  isBrowserOpenableMarkdownHref,
-  isExternalMarkdownHref,
-  MARKDOWN_EXTENSION,
-  stripMarkdownLinkHrefToPathPart,
-  wikiLinkInnerBrowserOpenableHref,
-  type InboxWikiLinkCompletionCandidate,
-} from '@eskerra/core';
+import type {InboxWikiLinkCompletionCandidate} from '@eskerra/core';
 
 import {clipboardDataProbablyHasVaultImage} from '../../lib/clipboard/clipboardImageFiles';
 import {
@@ -70,8 +62,6 @@ import {
 } from './vaultImagePreviewCodemirror';
 import {todayHubSectionMarkerExtension} from './todayHubSectionMarkerCodemirror';
 import {linkRichPreviewExtension, linkRichBlockedDomainsBumpEffect, type LinkRichPreviewRefs} from './linkRichPreviewCodemirror';
-import {markdownBareBrowserUrlAtPosition} from './markdownBareUrl';
-import {markdownActivatableRelativeMdLinkAtPosition} from './markdownActivatableRelativeMdLinkAtPosition';
 import {markdownInlineLinkUrlAtPosition} from './markdownInlineLinkUrlAtPosition';
 import {markdownExternalLinkHighlightExtension} from './markdownExternalLinkCodemirror';
 import {markdownRelativeLinkHighlightExtensions} from './markdownRelativeLinkCodemirror';
@@ -102,22 +92,17 @@ import {
   markdownCaretInOpaquePasteBlock,
   markdownSmartExpandExtension,
 } from './markdownSmartExpandSelection';
+import {markdownCaseToggleKeymap} from './markdownCaseToggle';
 import {
   clearEskerraTableNestedCellRegistrations,
   dispatchEskerraTableNestedCellEditors,
 } from './eskerraTableV1/eskerraTableNestedCellEditors';
 import {eskerraTableV1Extension} from './eskerraTableV1/eskerraTableV1Codemirror';
 import {flushAllEskerraTableDrafts} from './eskerraTableV1/eskerraTableDraftFlush';
-import {
-  discardStoredPrimaryPointerDownForLinkClick,
-  recordPrimaryPointerDownForLinkClick,
-  resolveDocPositionForLinkPrimaryClick,
-} from './linkClickUseMousedownPosition';
+import {recordPrimaryPointerDownForLinkClick} from './linkClickUseMousedownPosition';
+import {createNoteMarkdownPointerLinkHandlers} from './noteMarkdownPointerLinks';
 import {multiCaretClickAddsSelectionRangeExtension} from './multiCaretClick';
-import {
-  wikiLinkMatchAtDocPosition,
-  wikiLinkPointerActivatableInnerAtDocPosition,
-} from './wikiLinkInnerAtDocPosition';
+import {wikiLinkMatchAtDocPosition} from './wikiLinkInnerAtDocPosition';
 import {
   beginProgrammaticMarkdownLoad,
   caretJumpDetectorExtension,
@@ -137,6 +122,11 @@ import {
   shouldUseSetStateBranchForMarkdownLoad,
 } from './noteMarkdownLoadMarkdown';
 import {eolMarkerCaretPointerFixExtension} from './eolMarkerCaretPointerFix';
+import {
+  createFoldGutterMarker,
+  foldedRangesPresent,
+} from './noteMarkdownFoldStatus';
+import {noteMarkdownSearchExtensionBundle} from './noteMarkdownSearchExtension';
 import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,
@@ -144,61 +134,6 @@ import type {
 
 const defaultWikiLinkCompletionCandidates: readonly InboxWikiLinkCompletionCandidate[] =
   [];
-
-/** Extra px below the sticky search bar so scroll-into-view clears the panel (outer scroll + `overflow: visible` scroller). */
-const NOTE_CAPTURE_SEARCH_SCROLL_MARGIN_PX = 8;
-
-function captureSearchPanelTopInsetPx(view: EditorView): number {
-  const panels = view.dom.querySelector('.cm-panels-top');
-  if (!panels) {
-    return NOTE_CAPTURE_SEARCH_SCROLL_MARGIN_PX;
-  }
-  return (
-    Math.round(panels.getBoundingClientRect().height)
-    + NOTE_CAPTURE_SEARCH_SCROLL_MARGIN_PX
-  );
-}
-
-/**
- * Search + scroll padding for the capture editor: sticky `.cm-panels-top` sits in the outer
- * `overflow-y` scroller, so default `scrollIntoView` margins miss the real obstruction.
- */
-const noteMarkdownSearchExtensionBundle: readonly Extension[] = [
-  search({
-    scrollToMatch: range =>
-      EditorView.scrollIntoView(range, {
-        y: 'start',
-        yMargin: NOTE_CAPTURE_SEARCH_SCROLL_MARGIN_PX,
-      }),
-  }),
-  EditorView.scrollMargins.of(view =>
-    searchPanelOpen(view.state)
-      ? {top: captureSearchPanelTopInsetPx(view)}
-      : null,
-  ),
-];
-
-function foldedRangesPresent(state: EditorState): boolean {
-  return foldedRanges(state).size > 0;
-}
-
-function createFoldGutterMarker(open: boolean): HTMLSpanElement {
-  const span = document.createElement('span');
-  span.textContent = open ? '⌄' : '›';
-  span.className = 'cm-foldGutter-marker app-tooltip-trigger';
-  span.setAttribute('data-tooltip', open ? 'Fold line' : 'Unfold line');
-  span.setAttribute('data-tooltip-placement', 'inline-end');
-  span.setAttribute('aria-label', open ? 'Fold line' : 'Unfold line');
-  return span;
-}
-
-function isActivatableRelativeMarkdownHref(href: string): boolean {
-  const part = stripMarkdownLinkHrefToPathPart(href);
-  if (part === '' || isExternalMarkdownHref(part)) {
-    return false;
-  }
-  return part.toLowerCase().endsWith(MARKDOWN_EXTENSION.toLowerCase());
-}
 
 export type NoteMarkdownEditorProps = {
   vaultRoot: string;
@@ -691,116 +626,14 @@ const NoteMarkdownEditorImpl = forwardRef<
       return runNativeClipboardPasteWhenWebDataEmpty(view);
     };
 
-    // Plain or Ctrl/Cmd+primary follows the link; Shift+primary is left to CodeMirror for selection extension.
-    const onEditorClick = (e: MouseEvent, view: EditorView): boolean => {
-      if (e.button !== 0) {
-        return false;
-      }
-      if (e.shiftKey) {
-        discardStoredPrimaryPointerDownForLinkClick(view);
-        return false;
-      }
-      if (e.altKey) {
-        discardStoredPrimaryPointerDownForLinkClick(view);
-        return false;
-      }
-      const pos = resolveDocPositionForLinkPrimaryClick(view, e);
-      if (pos == null) {
-        return false;
-      }
-      const inner = wikiLinkPointerActivatableInnerAtDocPosition(
-        view.state.doc,
-        pos,
-      );
-      if (inner) {
-        e.preventDefault();
-        e.stopPropagation();
-        onWikiLinkActivateRef.current({inner, at: pos});
-        return true;
-      }
-      const relHit = markdownActivatableRelativeMdLinkAtPosition(
-        view.state,
-        pos,
-        isActivatableRelativeMarkdownHref,
-      );
-      if (relHit) {
-        e.preventDefault();
-        e.stopPropagation();
-        onMarkdownRelativeLinkActivateRef.current({
-          href: relHit.href,
-          at: relHit.hrefFrom,
-        });
-        return true;
-      }
-      const extHit = markdownActivatableRelativeMdLinkAtPosition(
-        view.state,
-        pos,
-        isBrowserOpenableMarkdownHref,
-      );
-      const bareHit = markdownBareBrowserUrlAtPosition(view.state, pos);
-      if (extHit) {
-        e.preventDefault();
-        e.stopPropagation();
-        onMarkdownExternalLinkOpenRef.current({
-          href: extHit.href,
-          at: extHit.hrefFrom,
-        });
-        return true;
-      }
-      if (bareHit) {
-        e.preventDefault();
-        e.stopPropagation();
-        onMarkdownExternalLinkOpenRef.current({
-          href: bareHit.href,
-          at: bareHit.hrefFrom,
-        });
-        return true;
-      }
-      return false;
-    };
-
-    const onEditorMiddleClick = (e: MouseEvent, view: EditorView): boolean => {
-      if (e.button !== 1) {
-        return false;
-      }
-      const pos = view.posAtCoords({x: e.clientX, y: e.clientY});
-      if (pos == null) {
-        return false;
-      }
-      const inner = wikiLinkPointerActivatableInnerAtDocPosition(
-        view.state.doc,
-        pos,
-      );
-      if (inner) {
-        if (wikiLinkInnerBrowserOpenableHref(inner) != null) {
-          return false;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        onWikiLinkActivateRef.current({
-          inner,
-          at: pos,
-          openInBackgroundTab: true,
-        });
-        return true;
-      }
-      const relHit = markdownActivatableRelativeMdLinkAtPosition(
-        view.state,
-        pos,
-        isActivatableRelativeMarkdownHref,
-      );
-      if (relHit) {
-        e.preventDefault();
-        e.stopPropagation();
-        onMarkdownRelativeLinkActivateRef.current({
-          href: relHit.href,
-          at: relHit.hrefFrom,
-          openInBackgroundTab: true,
-        });
-        return true;
-      }
-      return false;
-    };
+    const {onEditorClick, onEditorMiddleClick} =
+      createNoteMarkdownPointerLinkHandlers({
+        onWikiLinkActivate: p => onWikiLinkActivateRef.current(p),
+        onMarkdownRelativeLinkActivate: p =>
+          onMarkdownRelativeLinkActivateRef.current(p),
+        onMarkdownExternalLinkOpen: p =>
+          onMarkdownExternalLinkOpenRef.current(p),
+      });
 
     const wikiLinkCompartment = wikiLinkCompartmentRef.current;
     if (!wikiLinkCompartment) {
@@ -845,6 +678,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       ...markdownSmartExpandExtension(),
       markdownSelectionSurroundKeymap(),
       markdownFormattingModKeymap(),
+      markdownCaseToggleKeymap(),
       markdownInlineCodeSurroundInputHandler(),
       ...noteMarkdownSearchExtensionBundle,
       keymap.of([

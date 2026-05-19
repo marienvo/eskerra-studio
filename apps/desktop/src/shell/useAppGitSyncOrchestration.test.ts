@@ -194,6 +194,34 @@ describe('useAppGitSyncOrchestration close handling', () => {
     expect(runManualSync).toHaveBeenCalledWith({silent: true});
   });
 
+  it('rejects concurrent manual sync calls while the pre-sync flush is in progress', async () => {
+    let resolveFlush!: () => void;
+    const flushInboxSave = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          resolveFlush = resolve;
+        }),
+    );
+    runManualSync.mockResolvedValue(true);
+
+    const {result} = renderOrchestration({flushInboxSave});
+
+    let firstResult!: boolean;
+    let secondResult!: boolean;
+    await act(async () => {
+      const first = result.current.manualGitSync.run();
+      const second = result.current.manualGitSync.run();
+      secondResult = await second;
+      resolveFlush();
+      firstResult = await first;
+    });
+
+    expect(secondResult).toBe(false);
+    expect(firstResult).toBe(true);
+    expect(flushInboxSave).toHaveBeenCalledTimes(1);
+    expect(runManualSync).toHaveBeenCalledTimes(1);
+  });
+
   it('still runs manual sync when the pre-sync flush rejects', async () => {
     const flushInboxSave = vi.fn().mockRejectedValue(new Error('flush failed'));
 

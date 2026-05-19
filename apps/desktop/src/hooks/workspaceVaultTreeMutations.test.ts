@@ -34,6 +34,18 @@ describe('workspaceVaultTreeMutations', () => {
     );
   });
 
+  it('pruneEditorTabsAfterBulkTreeDelete preserves workspace home when no tab is active', () => {
+    const t1 = createEditorWorkspaceTab('vault/Inbox/keep.md');
+    const t2 = createEditorWorkspaceTab('vault/Inbox/drop.md');
+    const {newTabs, nextActive} = pruneEditorTabsAfterBulkTreeDelete({
+      editorWorkspaceTabs: [t1, t2],
+      activeEditorTabId: null,
+      plan: [{kind: 'article', uri: 'vault/Inbox/drop.md'}],
+    });
+    expect(newTabs.map(t => t.history.entries[t.history.index])).toEqual(['vault/Inbox/keep.md']);
+    expect(nextActive).toBeNull();
+  });
+
   it('bulkDeleteUriRemovalPredicate flags URIs under deleted folders and leaves others', () => {
     const plan = [{kind: 'folder' as const, uri: 'vault/Projects/old'}];
     const pred = bulkDeleteUriRemovalPredicate(plan);

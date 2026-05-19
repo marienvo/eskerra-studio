@@ -28,11 +28,8 @@ import {
 import {normalizeEditorDocUri, remapVaultUriPrefix} from '../lib/editorDocumentHistory';
 import {
   ensureActiveTabId,
-  findTabById,
-  firstSurvivorUriFromTabs,
   remapAllTabsUriPrefix,
   removeUriFromAllTabs,
-  tabCurrentUri,
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
@@ -563,7 +560,7 @@ export async function runBulkDeleteVaultTreeItems(
   if (!vaultRoot) {
     return;
   }
-  const {autosaveSchedulerRef, saveChainRef, selectedUriRef} = refs;
+  const {autosaveSchedulerRef, saveChainRef, selectedUriRef, activeEditorTabIdRef} = refs;
   const {setBusy, setErr, setFsRefreshNonce} = setters;
 
   const rootId = trimTrailingSlashes(normalizeVaultBaseUri(vaultRoot).replace(/\\/g, '/'));
@@ -573,6 +570,7 @@ export async function runBulkDeleteVaultTreeItems(
   }
   autosaveSchedulerRef.current.cancel();
   const normSel = selectedUriRef.current?.replace(/\\/g, '/');
+  const wasOnHomeNoActiveTab = activeEditorTabIdRef.current === null;
   const shouldClearEditor =
     normSel != null
     && plan.some(entry => {
@@ -582,9 +580,6 @@ export async function runBulkDeleteVaultTreeItems(
       }
       return normSel === d;
     });
-  if (shouldClearEditor) {
-    ctx.clearInboxSelection();
-  }
   await saveChainRef.current.catch(() => undefined);
   setBusy(true);
   setErr(null);
@@ -594,12 +589,9 @@ export async function runBulkDeleteVaultTreeItems(
     }
     const {newTabs, nextActive} = runBulkDeletePruneTabsAndScroll(ctx, plan);
     if (shouldClearEditor) {
-      const activeTab = nextActive ? findTabById(newTabs, nextActive) : undefined;
-      const nextUri =
-        (activeTab ? tabCurrentUri(activeTab) : null) ?? firstSurvivorUriFromTabs(newTabs);
-      if (nextUri) {
-        await ctx.openMarkdownInEditor(nextUri, {skipHistory: true});
-      }
+      await ctx.refocusAfterActiveTabRemoved(normSel!, newTabs, nextActive, {
+        wasOnHomeNoActiveTab,
+      });
     }
     ctx.markVaultWriteSettled();
     await ctx.refreshNotes(vaultRoot);
