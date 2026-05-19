@@ -13,6 +13,7 @@ import * as vaultBootstrap from '../lib/vaultBootstrap';
 import {
   runBulkDeletePruneTabsAndScroll,
   runBulkDeleteRemoveVaultEntry,
+  runBulkDeleteVaultTreeItems,
   runBulkMoveVaultTreeItems,
   runCommitMoveVaultTreeResult,
   runDeleteFolder,
@@ -451,6 +452,60 @@ describe('workspaceTreeCommands', () => {
       ctx.fs,
     );
     expect(setInboxContentByUri).toHaveBeenCalled();
+  });
+
+  it('runBulkDeleteVaultTreeItems refocuses workspace home when selected deleted note has no surviving tab', async () => {
+    const selected = normalizeEditorDocUri('/vault/Inbox/drop.md');
+    const tabDrop = createEditorWorkspaceTab('/vault/Inbox/drop.md');
+    const editorWorkspaceTabsRef = {current: [tabDrop]};
+    const activeEditorTabIdRef = {current: tabDrop.id};
+    const ctx = buildCtx({
+      refs: {
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef,
+        selectedUriRef: {current: selected},
+      },
+    });
+
+    await runBulkDeleteVaultTreeItems(ctx, [
+      {kind: 'article', uri: '/vault/Inbox/drop.md'},
+    ]);
+
+    expect(ctx.clearInboxSelection).toHaveBeenCalled();
+    expect(ctx.refocusAfterActiveTabRemoved).toHaveBeenCalledWith(
+      selected,
+      [],
+      null,
+      {wasOnHomeNoActiveTab: false},
+    );
+    expect(ctx.openMarkdownInEditor).not.toHaveBeenCalled();
+  });
+
+  it('runBulkDeleteVaultTreeItems preserves home-active state while refocusing after selected deletion', async () => {
+    const selected = normalizeEditorDocUri('/vault/Inbox/drop.md');
+    const tabKeep = createEditorWorkspaceTab('/vault/Inbox/keep.md');
+    const tabDrop = createEditorWorkspaceTab('/vault/Inbox/drop.md');
+    const editorWorkspaceTabsRef = {current: [tabKeep, tabDrop]};
+    const activeEditorTabIdRef = {current: null as string | null};
+    const ctx = buildCtx({
+      refs: {
+        editorWorkspaceTabsRef,
+        activeEditorTabIdRef,
+        selectedUriRef: {current: selected},
+      },
+    });
+
+    await runBulkDeleteVaultTreeItems(ctx, [
+      {kind: 'article', uri: '/vault/Inbox/drop.md'},
+    ]);
+
+    expect(ctx.refs.activeEditorTabIdRef.current).toBeNull();
+    expect(ctx.refocusAfterActiveTabRemoved).toHaveBeenCalledWith(
+      selected,
+      [tabKeep],
+      null,
+      {wasOnHomeNoActiveTab: true},
+    );
   });
 
   it('runBulkMoveVaultTreeItems invokes move once per filtered source', async () => {

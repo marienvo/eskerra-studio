@@ -55,7 +55,10 @@ export function pruneEditorTabsAfterBulkTreeDelete(args: {
     args.editorWorkspaceTabs,
     u => vaultUriDeletedByTreeChange(u, deletedFiles, deletedFolders),
   );
-  const nextActive = ensureActiveTabId(newTabs, args.activeEditorTabId);
+  const nextActive =
+    args.activeEditorTabId === null
+      ? null
+      : ensureActiveTabId(newTabs, args.activeEditorTabId);
   const scrollKeysToRemove =
     args.scrollMapKeys == null
       ? []
