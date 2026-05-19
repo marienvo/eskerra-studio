@@ -128,6 +128,12 @@ describe('GitStatusChip', () => {
     expect(screen.getByText('Synced')).toBeInstanceOf(HTMLElement);
   });
 
+  it('renders Local changes for a dirty status when refresh loading is not exposed', () => {
+    render(<GitStatusChip status={{...cleanStatus, hasUncommittedChanges: true}} loading={false} />);
+    expect(screen.getByText('Local changes')).toBeInstanceOf(HTMLElement);
+    expect(screen.queryByText('Checking…')).toBeNull();
+  });
+
   it('renders correct tone class for Synced', () => {
     render(<GitStatusChip status={cleanStatus} />);
     const chip = screen.getByText('Synced').closest('span');

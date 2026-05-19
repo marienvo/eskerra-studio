@@ -14,7 +14,7 @@ type UseVaultGitStatusResult = {
   loading: boolean;
   error: string | null;
   /** Trigger a fresh load. Not exposed in UI yet — available for future use. */
-  refresh: () => void;
+  refresh: (opts?: {readonly silent?: boolean}) => void;
 };
 
 export function useVaultGitStatus({
@@ -80,12 +80,16 @@ export function useVaultGitStatus({
     };
   }, [vaultPath, remote, branch, load]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((opts?: {readonly silent?: boolean}) => {
     if (!vaultPath || !branch) return;
-    setLoading(true);
+    const currentRequestKey = statusRequestKey(vaultPath, remote, branch);
+    const hasLoadedCurrentStatus = status != null && loadedKey === currentRequestKey;
+    if (!opts?.silent || !hasLoadedCurrentStatus) {
+      setLoading(true);
+    }
     setError(null);
     load(vaultPath, branch).catch(() => undefined);
-  }, [vaultPath, branch, load]);
+  }, [vaultPath, remote, branch, status, loadedKey, load]);
 
   const currentKey = vaultPath && branch ? statusRequestKey(vaultPath, remote, branch) : null;
   const hasCurrentStatusResult = currentKey != null && loadedKey === currentKey;

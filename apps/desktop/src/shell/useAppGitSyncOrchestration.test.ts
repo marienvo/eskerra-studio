@@ -157,6 +157,83 @@ describe('useAppGitSyncOrchestration close handling', () => {
     });
   });
 
+  it('refreshes Git status silently after remote polling refreshes', () => {
+    const refreshGitStatus = vi.fn();
+    mockUseVaultGitStatus.mockReturnValue({
+      status: cleanStatus(),
+      loading: false,
+      error: null,
+      refresh: refreshGitStatus,
+    });
+
+    renderOrchestration();
+
+    const pollingArgs = mockUseVaultGitRemoteStatusPolling.mock.calls[0][0];
+    pollingArgs.onRefreshed?.(localChangesStatus());
+
+    expect(refreshGitStatus).toHaveBeenCalledWith({silent: true});
+  });
+
+  it('flushes before the returned manual sync runner and forwards options', async () => {
+    const order: string[] = [];
+    const flushInboxSave = vi.fn(async () => {
+      order.push('flush');
+    });
+    runManualSync.mockImplementation(async () => {
+      order.push('sync');
+      return true;
+    });
+
+    const {result} = renderOrchestration({flushInboxSave});
+
+    await act(async () => {
+      await result.current.manualGitSync.run({silent: true});
+    });
+
+    expect(order).toEqual(['flush', 'sync']);
+    expect(runManualSync).toHaveBeenCalledWith({silent: true});
+  });
+
+  it('still runs manual sync when the pre-sync flush rejects', async () => {
+    const flushInboxSave = vi.fn().mockRejectedValue(new Error('flush failed'));
+
+    const {result} = renderOrchestration({flushInboxSave});
+
+    await act(async () => {
+      await result.current.manualGitSync.run();
+    });
+
+    expect(flushInboxSave).toHaveBeenCalledTimes(1);
+    expect(runManualSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the flush-before-sync runner to startup sync and autosync', async () => {
+    const order: string[] = [];
+    const flushInboxSave = vi.fn(async () => {
+      order.push('flush');
+    });
+    runManualSync.mockImplementation(async () => {
+      order.push('sync');
+      return true;
+    });
+
+    renderOrchestration({flushInboxSave});
+
+    const startupRun = mockUseVaultGitStartupSync.mock.calls[0][0].runManualSync;
+    const autosyncRun = mockUseVaultGitAutosyncScheduler.mock.calls[0][0].runManualSync;
+
+    await act(async () => {
+      await startupRun({silent: true});
+    });
+    expect(order).toEqual(['flush', 'sync']);
+
+    order.length = 0;
+    await act(async () => {
+      await autosyncRun({silent: true});
+    });
+    expect(order).toEqual(['flush', 'sync']);
+  });
+
   it('flushes and uses fresh status before title-bar close preflight', async () => {
     const order: string[] = [];
     const flushInboxSave = vi.fn(async () => {
@@ -179,6 +256,7 @@ describe('useAppGitSyncOrchestration close handling', () => {
 
     await waitFor(() => expect(runManualSync).toHaveBeenCalledTimes(1));
     expect(order).toEqual(['flush', 'fresh-status', 'sync']);
+    expect(flushInboxSave).toHaveBeenCalledTimes(1);
     expect(programmaticClose).toHaveBeenCalledTimes(1);
   });
 
