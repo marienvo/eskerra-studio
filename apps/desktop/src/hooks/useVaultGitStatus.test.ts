@@ -309,6 +309,15 @@ describe('useVaultGitStatus', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('keeps refresh callback stable after status loads', async () => {
+    mockGetVaultGitStatus.mockResolvedValue(cleanResult);
+    const {result} = renderGitStatus();
+
+    const refreshBefore = result.current.refresh;
+    await waitFor(() => expect(result.current.status).toEqual(cleanResult));
+    expect(result.current.refresh).toBe(refreshBefore);
+  });
+
   it('keeps the current status visible during a silent refresh', async () => {
     const silentRefresh = deferred<GitStatusResult>();
     const initial: GitStatusResult = {...cleanResult, hasUncommittedChanges: true};
