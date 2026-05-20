@@ -186,6 +186,15 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md).not.toMatch(/<pre/i);
   });
 
+  it('uses GFM highlighted fence for pretty-printed pre>code', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<pre>\n  <code class="language-javascript">const x = 1;</code>\n</pre>',
+    );
+    expect(md).toContain('```javascript');
+    expect(md).toContain('const x = 1;');
+    expect(md).not.toMatch(/```\n\nconst x = 1;/);
+  });
+
   it('uses a longer fence when pre content contains triple backticks', () => {
     const md = clipboardHtmlToMarkdown('<pre>```not a fence```</pre>');
     expect(md).toContain('````\n```not a fence```\n````');

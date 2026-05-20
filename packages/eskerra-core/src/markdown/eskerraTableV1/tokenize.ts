@@ -4,6 +4,13 @@
  * Only `\|` is treated as an escaped literal pipe inside a cell (not a column
  * delimiter). Sequences like `\\|` are read as `\` + escaped pipe.
  * Doubled backslashes (`\\`) decode to a single `\` (inverse of serialize).
+ *
+ * **Backward compatibility:** vault table cells written before serialize started
+ * escaping `\` may have stored a literal pair `\\` (two backslashes). On read,
+ * `decodeCellEscapes` collapses each `\\` to `\`, so those cells change in memory
+ * and the next save will persist the decoded form. This is intentional (inverse
+ * of `escapeCellPipes` in serialize) but can surprise users who relied on `\\`
+ * as literal text in old notes.
  */
 
 /** Inverse of serialize cell escaping: decode `\|` then `\\`. */

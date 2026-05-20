@@ -46,6 +46,30 @@ function fenceLengthForPreContent(text: string): number {
   return Math.max(3, longest + 1);
 }
 
+/** Turndown's built-in fenced rule uses `firstChild`, which misses `<pre>\\n  <code>`. */
+function fencedPreCodeReplacement(
+  node: HTMLElement,
+  fence: string,
+): string {
+  const codeEl = node.firstElementChild as HTMLElement;
+  const className = codeEl.getAttribute('class') ?? '';
+  const languageMatch = className.match(/language-(\S+)/);
+  const language = languageMatch?.[1] ?? '';
+  const code = codeEl.textContent ?? '';
+  const fenceChar = fence.charAt(0) || '`';
+  let fenceSize = 3;
+  const fenceInCodeRegex = new RegExp(`^${fenceChar}{3,}`, 'gm');
+  let match: RegExpExecArray | null;
+  while ((match = fenceInCodeRegex.exec(code)) !== null) {
+    if (match[0].length >= fenceSize) {
+      fenceSize = match[0].length + 1;
+    }
+  }
+  const fenceStr = fenceChar.repeat(fenceSize);
+  const trimmed = code.replace(/\n$/, '');
+  return `\n\n${fenceStr}${language}\n${trimmed}\n${fenceStr}\n\n`;
+}
+
 function slackEmojiImgReplacement(img: HTMLImageElement): string | null {
   const alt = img.getAttribute('alt') ?? '';
   const src = img.getAttribute('src') ?? '';
@@ -87,7 +111,7 @@ function getTurndown(): TurndownService {
     td.addRule('preWithoutCode', {
       filter: (node: HTMLElement) =>
         node.nodeName === 'PRE'
-        && !(node.firstChild && node.firstChild.nodeName === 'CODE'),
+        && !(node.firstElementChild && node.firstElementChild.nodeName === 'CODE'),
       replacement: (_content: string, node: HTMLElement) => {
         const text = (node as HTMLElement).textContent ?? '';
         const fence = '`'.repeat(fenceLengthForPreContent(text));
@@ -114,6 +138,14 @@ function getTurndown(): TurndownService {
         const emoji = slackEmojiImgReplacement(img);
         return emoji ?? turndownDefaultImageMarkdown(img);
       },
+    });
+    td.addRule('fencedPreCode', {
+      filter: (node: HTMLElement, options) =>
+        options.codeBlockStyle === 'fenced'
+        && node.nodeName === 'PRE'
+        && node.firstElementChild?.nodeName === 'CODE',
+      replacement: (_content: string, node: HTMLElement, options) =>
+        fencedPreCodeReplacement(node, options.fence ?? '```'),
     });
     turndownSingleton = td;
   }

@@ -76,6 +76,12 @@ describe('expandKnownEmojiShortcodes', () => {
     );
   });
 
+  it('skips multi-backtick inline code', () => {
+    expect(expandKnownEmojiShortcodes('text ``:joy:`` end')).toBe(
+      'text ``:joy:`` end',
+    );
+  });
+
   it('skips four-backtick fenced code blocks', () => {
     expect(expandKnownEmojiShortcodes('````\n:joy:\n````')).toBe(
       '````\n:joy:\n````',

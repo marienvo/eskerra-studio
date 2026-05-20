@@ -39,6 +39,11 @@ describe('stripLeakedHtmlInMarkdown', () => {
     expect(stripLeakedHtmlInMarkdown(md)).toBe(md);
   });
 
+  it('leaves multi-backtick inline code literal', () => {
+    const md = 'use ``<u>x</u>`` here';
+    expect(stripLeakedHtmlInMarkdown(md)).toBe(md);
+  });
+
   it('decodes common HTML entities in prose', () => {
     expect(stripLeakedHtmlInMarkdown('&amp; &lt; &gt; &nbsp;')).toBe('& < >  ');
     expect(stripLeakedHtmlInMarkdown('&#39; &quot;')).toBe("' \"");

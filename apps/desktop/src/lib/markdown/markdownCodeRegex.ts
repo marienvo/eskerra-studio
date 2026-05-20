@@ -1,5 +1,8 @@
-/** Inline code span (single line, no nested backticks). */
-export const INLINE_CODE_RE = /`[^`\n]+`/g;
+/**
+ * Inline code span (single line). Opening and closing backtick runs must match
+ * length (GFM / Turndown: `` `code` `` when the payload contains a backtick).
+ */
+export const INLINE_CODE_RE = /(`+)(?:[^`\n]|`(?!\1))*?\1/g;
 
 export type MarkdownFencedCodeSpan = {
   readonly start: number;

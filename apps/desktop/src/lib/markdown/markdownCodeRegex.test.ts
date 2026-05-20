@@ -2,8 +2,30 @@ import {describe, expect, it} from 'vitest';
 
 import {
   findFencedCodeSpans,
+  INLINE_CODE_RE,
   transformMarkdownPreservingFencedCode,
 } from './markdownCodeRegex';
+
+describe('INLINE_CODE_RE', () => {
+  function inlineSpans(md: string): string[] {
+    const re = new RegExp(INLINE_CODE_RE.source, INLINE_CODE_RE.flags);
+    return [...md.matchAll(re)].map(m => m[0]);
+  }
+
+  it('matches single-backtick spans', () => {
+    expect(inlineSpans('use `one` here')).toEqual(['`one`']);
+  });
+
+  it('matches multi-backtick spans when content contains backticks', () => {
+    expect(inlineSpans('``code with ` tick`` prose')).toEqual([
+      '``code with ` tick``',
+    ]);
+  });
+
+  it('matches adjacent spans', () => {
+    expect(inlineSpans('`a` then ``b``')).toEqual(['`a`', '``b``']);
+  });
+});
 
 describe('findFencedCodeSpans', () => {
   it('finds a triple-backtick block', () => {
