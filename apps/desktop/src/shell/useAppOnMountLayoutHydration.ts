@@ -11,7 +11,7 @@ import {
 } from '../lib/layout/layoutStore';
 import {
   loadMainWindowUi,
-  type TodayHubWorkspaceSnapshot,
+  type RestoredInboxState,
 } from '../lib/mainWindowUiStore';
 import type {PaneVisibility} from './usePaneVisibility';
 
@@ -19,23 +19,7 @@ export type UseAppOnMountLayoutHydrationArgs = {
   setLayouts: Dispatch<SetStateAction<StoredLayouts>>;
   setLayoutsReady: (ready: boolean) => void;
   setPaneVisibility: (partial: Partial<PaneVisibility>) => void;
-  setRestoredInboxState: Dispatch<
-    SetStateAction<{
-      vaultRoot: string;
-      composingNewEntry: boolean;
-      composeDraftMarkdown?: string;
-      selectedUri: string | null;
-      openTabUris?: readonly string[];
-      editorWorkspaceTabs?: ReadonlyArray<{
-        id: string;
-        entries: string[];
-        index: number;
-      }>;
-      activeEditorTabId?: string | null;
-      activeTodayHubUri?: string | null;
-      todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot> | null;
-    } | null>
-  >;
+  setRestoredInboxState: Dispatch<SetStateAction<RestoredInboxState | null>>;
 };
 
 export function useAppOnMountLayoutHydration({

@@ -38,7 +38,10 @@ import {
   type TodayHubWorkspaceBridge,
 } from '../lib/todayHub';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
-import type {TodayHubWorkspaceSnapshot} from '../lib/mainWindowUiStore';
+import type {
+  RestoredInboxState,
+  TodayHubWorkspaceSnapshot,
+} from '../lib/mainWindowUiStore';
 import {
   createWorkspaceHomeState,
   type WorkspaceHomeState,
@@ -161,21 +164,7 @@ export function useMainWindowWorkspace(options: {
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   /** `.note-markdown-editor-scroll`: used to snapshot and restore scroll offsets per note URI. */
   inboxEditorShellScrollRef: RefObject<HTMLDivElement | null>;
-  restoredInboxState: {
-    vaultRoot: string;
-    composingNewEntry: boolean;
-    composeDraftMarkdown?: string;
-    selectedUri: string | null;
-    openTabUris?: readonly string[] | null;
-    editorWorkspaceTabs?: ReadonlyArray<{
-      id: string;
-      entries: string[];
-      index: number;
-    }> | null;
-    activeEditorTabId?: string | null;
-    activeTodayHubUri?: string | null;
-    todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot> | null;
-  } | null;
+  restoredInboxState: RestoredInboxState | null;
   inboxRestoreEnabled: boolean;
 }): UseMainWindowWorkspaceResult {
   const {

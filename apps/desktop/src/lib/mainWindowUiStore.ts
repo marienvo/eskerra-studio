@@ -30,6 +30,22 @@ export type TodayHubWorkspaceSnapshot = {
   homeHistory?: EditorDocumentHistoryState;
 };
 
+export type RestoredInboxState = {
+  vaultRoot: string;
+  composingNewEntry: boolean;
+  composeDraftMarkdown?: string;
+  selectedUri: string | null;
+  openTabUris?: readonly string[] | null;
+  editorWorkspaceTabs?: ReadonlyArray<{
+    id: string;
+    entries: string[];
+    index: number;
+  }> | null;
+  activeEditorTabId?: string | null;
+  activeTodayHubUri?: string | null;
+  todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot> | null;
+};
+
 export type StoredMainWindowInbox = {
   composingNewEntry: boolean;
   composeDraftMarkdown?: string;

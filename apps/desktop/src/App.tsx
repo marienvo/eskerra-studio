@@ -3,13 +3,11 @@
  *
  * Ownership: app-level orchestration and Tauri window integration; vault editing behavior is in `VaultTab` / workspace hook.
  */
-import {open} from '@tauri-apps/plugin-dialog';
 import {
   useCallback,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
+  useRef,
 } from 'react';
 
 import {SettingsPage} from './components/SettingsPage';
@@ -32,8 +30,9 @@ import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
 } from './lib/layout/layoutStore';
-import type {TodayHubWorkspaceSnapshot} from './lib/mainWindowUiStore';
+import type {RestoredInboxState} from './lib/mainWindowUiStore';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
+import {useLiveRef} from './hooks/useLiveRef';
 import {AppThemeShell} from './shell/AppThemeShell';
 import {useAppLayoutWidthPersisters} from './shell/useAppLayoutWidthPersisters';
 import {useAppMainWindowKeyboardEffects} from './shell/useAppMainWindowKeyboardEffects';
@@ -47,6 +46,7 @@ import {useAppGitSyncOrchestration} from './shell/useAppGitSyncOrchestration';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
 import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
+import {useAppPickFolder} from './shell/useAppPickFolder';
 import {usePaneVisibility} from './shell/usePaneVisibility';
 import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
@@ -68,21 +68,7 @@ export default function App() {
   const inboxEditorShellScrollRef = useRef<HTMLDivElement | null>(null);
   const [layoutsReady, setLayoutsReady] = useState(false);
   const [activePage, setActivePage] = useState<AppPage>('vault');
-  const [restoredInboxState, setRestoredInboxState] = useState<{
-    vaultRoot: string;
-    composingNewEntry: boolean;
-    composeDraftMarkdown?: string;
-    selectedUri: string | null;
-    openTabUris?: readonly string[];
-    editorWorkspaceTabs?: ReadonlyArray<{
-      id: string;
-      entries: string[];
-      index: number;
-    }>;
-    activeEditorTabId?: string | null;
-    activeTodayHubUri?: string | null;
-    todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot> | null;
-  } | null>(null);
+  const [restoredInboxState, setRestoredInboxState] = useState<RestoredInboxState | null>(null);
   const workspace = useMainWindowWorkspace({
     fs,
     inboxEditorRef,
@@ -170,7 +156,7 @@ export default function App() {
     tilingDebug,
   );
 
-  const titleBarTodayHubSelect = useAppTitleBarTodayHubSelect(
+  const titleBarTodayHubSelect = useAppTitleBarTodayHubSelect({
     vaultRoot,
     todayHubSelectorItems,
     activeTodayHubUri,
@@ -180,7 +166,7 @@ export default function App() {
     switchTodayHubWorkspace,
     openTodayHubInNewTabAfterActive,
     openWorkspaceHomeCurrentInBackgroundTab,
-  );
+  });
 
   const paneVisibility = usePaneVisibility();
   const {visibility: paneVisibilityState, setVisibility: setPaneVisibility} =
@@ -245,10 +231,7 @@ export default function App() {
     setRestoredInboxState,
   });
 
-  const desktopPlaybackRef = useRef(desktopPlayback);
-  useLayoutEffect(() => {
-    desktopPlaybackRef.current = desktopPlayback;
-  }, [desktopPlayback]);
+  const desktopPlaybackRef = useLiveRef(desktopPlayback);
 
   useAppMediaControlDesktopPlayback(desktopPlaybackRef);
 
@@ -266,15 +249,11 @@ export default function App() {
     activeEditorTabId: tabsController.activeEditorTabId,
   });
 
-  const pickFolder = async () => {
-    setErr(null);
-    const dir = await open({directory: true, multiple: false});
-    if (dir === null || Array.isArray(dir)) {
-      return;
-    }
-    await hydrateVault(dir);
-    setActivePage('vault');
-  };
+  const pickFolder = useAppPickFolder({
+    setErr,
+    hydrateVault,
+    setActivePage,
+  });
 
   const {
     persistMainLeftWidthPx,
@@ -328,10 +307,7 @@ export default function App() {
 
   // Keep a ref to gitStatusForDisplay so keyboard effects can check preflight
   // without re-registering the listener on every status update.
-  const gitStatusRef = useRef(gitStatusForDisplay);
-  useLayoutEffect(() => {
-    gitStatusRef.current = gitStatusForDisplay;
-  }, [gitStatusForDisplay]);
+  const gitStatusRef = useLiveRef(gitStatusForDisplay);
 
   useAppMainWindowKeyboardEffects({
     vaultRoot,
@@ -369,9 +345,7 @@ export default function App() {
         settingsName={settingsName}
         busy={busy}
         err={err}
-        onPickFolder={() => {
-          void pickFolder();
-        }}
+        onPickFolder={pickFolder}
       />
     );
   }
@@ -424,9 +398,7 @@ export default function App() {
                       fs={fs}
                       vaultSettings={vaultSettings}
                       setVaultSettings={setVaultSettings}
-                      onChangeVaultFolder={async () => {
-                        await pickFolder();
-                      }}
+                      onChangeVaultFolder={pickFolder}
                     />
                   ) : (
                     <MainWindowVaultTab
