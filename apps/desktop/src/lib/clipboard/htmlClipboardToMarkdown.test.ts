@@ -232,6 +232,21 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
   });
 
+  it('escapes pipes inside inline code in table cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>Input</th><th>Output</th></tr></thead>'
+        + '<tbody><tr><td><p><code>&lt;table&gt;</code></p></td>'
+        + '<td><p><code>| ... |</code> GFM</p></td></tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows.length).toBe(3);
+    const dataRow = pipeRows[2]!;
+    expect(dataRow).toContain('`<table>`');
+    expect(dataRow).toContain('`\\| ... \\|`');
+    expect(dataRow).toContain('GFM');
+    expect(dataRow.match(/(?<!\\)\|/g)?.length).toBe(3);
+  });
+
   it('converts rendered chat-style coverage tables without broken pipe rows', () => {
     const md = clipboardHtmlToMarkdown(
       '<table><thead><tr>'

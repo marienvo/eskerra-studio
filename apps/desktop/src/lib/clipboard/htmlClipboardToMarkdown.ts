@@ -61,6 +61,22 @@ function getTurndown(): TurndownService {
     td.use(highlightedCodeBlock);
     td.use(tables);
     td.use(taskListItems);
+    td.addRule('tableCellEscapePipes', {
+      filter: (node: HTMLElement) =>
+        node.nodeName === 'TH' || node.nodeName === 'TD',
+      replacement: (content: string, node: HTMLElement) => {
+        const parent = node.parentNode;
+        const index = parent
+          ? Array.prototype.indexOf.call(parent.childNodes, node)
+          : 0;
+        const prefix = index === 0 ? '| ' : ' ';
+        const escaped = content
+          .replace(/\n+/g, ' ')
+          .replace(/(?<!\\)\|/g, '\\|')
+          .trim();
+        return `${prefix}${escaped} |`;
+      },
+    });
     td.addRule('preWithoutCode', {
       filter: (node: HTMLElement) =>
         node.nodeName === 'PRE'
