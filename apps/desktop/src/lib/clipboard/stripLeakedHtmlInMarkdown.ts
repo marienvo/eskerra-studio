@@ -1,5 +1,7 @@
-const FENCED_CODE_RE = /```[\s\S]*?```/g;
-const INLINE_CODE_RE = /`[^`\n]+`/g;
+import {
+  INLINE_CODE_RE,
+  transformMarkdownPreservingFencedCode,
+} from '../markdown/markdownCodeRegex';
 
 /** GFM pipe table row (allows `<br>` inside cells). */
 const GFM_TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
@@ -82,19 +84,5 @@ function stripProseOutsideInlineCode(segment: string): string {
  * in prose segments.
  */
 export function stripLeakedHtmlInMarkdown(md: string): string {
-  let out = '';
-  let last = 0;
-  let m: RegExpExecArray | null;
-  const fenceRe = new RegExp(FENCED_CODE_RE.source, FENCED_CODE_RE.flags);
-  while ((m = fenceRe.exec(md)) !== null) {
-    if (m.index > last) {
-      out += stripProseOutsideInlineCode(md.slice(last, m.index));
-    }
-    out += m[0];
-    last = m.index + m[0].length;
-  }
-  if (last < md.length) {
-    out += stripProseOutsideInlineCode(md.slice(last));
-  }
-  return out;
+  return transformMarkdownPreservingFencedCode(md, stripProseOutsideInlineCode);
 }

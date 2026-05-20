@@ -1,3 +1,4 @@
+import {parseEskerraTableV1FromLines} from '@eskerra/core';
 import {describe, expect, it} from 'vitest';
 
 import {
@@ -183,6 +184,66 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(fenceClose).toBeGreaterThan(fenceOpen);
     expect(md.slice(fenceOpen, fenceClose + 3)).toContain('raw text');
     expect(md).not.toMatch(/<pre/i);
+  });
+
+  it('uses GFM highlighted fence for pretty-printed pre>code', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<pre>\n  <code class="language-javascript">const x = 1;</code>\n</pre>',
+    );
+    expect(md).toContain('```javascript');
+    expect(md).toContain('const x = 1;');
+    expect(md).not.toMatch(/```\n\nconst x = 1;/);
+  });
+
+  it('uses a longer fence when pre content contains triple backticks', () => {
+    const md = clipboardHtmlToMarkdown('<pre>```not a fence```</pre>');
+    expect(md).toContain('````\n```not a fence```\n````');
+    expect(md).not.toMatch(/^```\n```not/m);
+  });
+
+  it('does not expand shortcodes inside a four-backtick pre fence', () => {
+    const md = clipboardHtmlToMarkdown('<pre>```\n:joy:\n```</pre>');
+    expect(md).toContain('````\n```\n:joy:\n```\n````');
+    expect(md).not.toContain('😂');
+  });
+
+  it('uses a longer fence when pre content contains indented triple backticks', () => {
+    const md = clipboardHtmlToMarkdown('<pre>   ```\nline\n   ```</pre>');
+    expect(md).toContain('````\n   ```\nline\n   ```\n````');
+    expect(md).not.toMatch(/^```\n {3}```/m);
+  });
+
+  it('does not rewrite non-Slack images whose path contains slack-edge.com', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img src="https://example.com/slack-edge.com/1f602.png" alt="x"></p>',
+    );
+    expect(md).toContain('![x](https://example.com/slack-edge.com/1f602.png)');
+    expect(md).not.toContain('😂');
+  });
+
+  it('emits a leading pipe for the first cell when row HTML has whitespace text nodes', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr>\n  <th>A</th>\n  <th>B</th>\n</tr></thead>'
+        + '<tbody><tr>\n  <td>1</td>\n  <td>2</td>\n</tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows[0]).toMatch(/^\| A \| B \|$/);
+    expect(pipeRows[2]).toMatch(/^\| 1 \| 2 \|$/);
+  });
+
+  it('escapes backslashes before pipes in table cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td>a\\\\|b</td><td>c</td></tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows[2]!.match(/(?<!\\)\|/g)?.length).toBe(3);
+    const parsed = parseEskerraTableV1FromLines(pipeRows);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error('Expected pasted table to parse as Eskerra v1');
+    }
+    expect(parsed.model.cells[1]).toEqual(['a\\\\|b', 'c']);
   });
 
   it('keeps pre with code child as fenced block', () => {

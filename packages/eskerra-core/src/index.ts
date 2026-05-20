@@ -117,6 +117,7 @@ export type {
   ParseEskerraTableV1Result,
 } from './markdown/eskerraTableV1';
 export {
+  decodeCellEscapes,
   parseEskerraTableV1FromLines,
   serializeEskerraTableV1ToMarkdown,
   tokenizeDelimitedRowInner,

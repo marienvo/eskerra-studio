@@ -1,4 +1,8 @@
 import emojiRows from '../../editor/noteEditor/data/emojiColonCompletionData.json';
+import {
+  INLINE_CODE_RE,
+  transformMarkdownPreservingFencedCode,
+} from '../markdown/markdownCodeRegex';
 
 type EmojiCompletionRow = {
   readonly e: string;
@@ -9,8 +13,6 @@ type EmojiCompletionRow = {
 const SLACK_EMOJI_IMG_PATH_RE = /\/([0-9a-f]+(?:-[0-9a-f]+)*)\.png$/i;
 
 const BARE_SHORTCODE_RE = /(^|\W)(:[\p{L}\p{N}_+-]+:)/gu;
-const FENCED_CODE_RE = /```[\s\S]*?```/g;
-const INLINE_CODE_RE = /`[^`\n]+`/g;
 
 let shortcodeMap: Map<string, string> | null = null;
 
@@ -46,7 +48,13 @@ export function shortcodeToEmoji(shortcode: string): string | null {
  * Custom Slack emoji URLs without a codepoint filename return null.
  */
 export function slackEmojiImgUrlToCodepoint(url: string): string | null {
-  if (!url.includes('slack-edge.com')) {
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (hostname !== 'slack-edge.com' && !hostname.endsWith('.slack-edge.com')) {
     return null;
   }
   const match = url.match(SLACK_EMOJI_IMG_PATH_RE);
@@ -95,21 +103,7 @@ function expandShortcodesOutsideInlineCode(segment: string): string {
  * Skips fenced code blocks and inline code spans.
  */
 export function expandKnownEmojiShortcodes(md: string): string {
-  let out = '';
-  let last = 0;
-  let m: RegExpExecArray | null;
-  const fenceRe = new RegExp(FENCED_CODE_RE.source, FENCED_CODE_RE.flags);
-  while ((m = fenceRe.exec(md)) !== null) {
-    if (m.index > last) {
-      out += expandShortcodesOutsideInlineCode(md.slice(last, m.index));
-    }
-    out += m[0];
-    last = m.index + m[0].length;
-  }
-  if (last < md.length) {
-    out += expandShortcodesOutsideInlineCode(md.slice(last));
-  }
-  return out;
+  return transformMarkdownPreservingFencedCode(md, expandShortcodesOutsideInlineCode);
 }
 
 /** Vitest harness: drop cached shortcode map. */

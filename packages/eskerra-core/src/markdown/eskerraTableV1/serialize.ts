@@ -1,7 +1,7 @@
 import type {EskerraTableAlignment, EskerraTableModelV1} from './model';
 
 function escapeCellPipes(cell: string): string {
-  return cell.trim().replace(/\|/g, '\\|');
+  return cell.trim().replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 }
 
 function serializeRow(cells: string[]): string {

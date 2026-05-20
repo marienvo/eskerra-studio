@@ -29,8 +29,18 @@ describe('stripLeakedHtmlInMarkdown', () => {
     expect(stripLeakedHtmlInMarkdown(md)).toBe(md);
   });
 
+  it('leaves four-backtick fenced code blocks literal', () => {
+    const md = '````\n<u>x</u>\n:joy:\n````';
+    expect(stripLeakedHtmlInMarkdown(md)).toBe(md);
+  });
+
   it('leaves inline code literal', () => {
     const md = 'use `<u>x</u>` here';
+    expect(stripLeakedHtmlInMarkdown(md)).toBe(md);
+  });
+
+  it('leaves multi-backtick inline code literal', () => {
+    const md = 'use ``<u>x</u>`` here';
     expect(stripLeakedHtmlInMarkdown(md)).toBe(md);
   });
 

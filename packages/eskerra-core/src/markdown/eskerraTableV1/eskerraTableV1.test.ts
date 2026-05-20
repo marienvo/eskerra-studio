@@ -204,6 +204,46 @@ describe('serializeEskerraTableV1ToMarkdown', () => {
     expect(reparsed).toEqual(parsed);
   });
 
+  it('escapes backslashes before pipes when serializing cells', () => {
+    const model = {
+      cells: [
+        ['Cell', 'Note'],
+        ['a\\b', 'has \\| pipe'],
+      ],
+      align: [undefined, undefined] as const,
+    };
+    const markdown = serializeEskerraTableV1ToMarkdown(model);
+    expect(markdown).toBe(
+      '| Cell | Note |\n| --- | --- |\n| a\\\\b | has \\\\\\| pipe |',
+    );
+    const reparsed = parseEskerraTableV1FromLines(markdown.split('\n'));
+    expect(reparsed).toEqual({
+      ok: true,
+      lineCount: 3,
+      model: {
+        cells: model.cells,
+        align: [undefined, undefined],
+      },
+    });
+  });
+
+  it('round-trips literal backslash-only cells', () => {
+    const input = [
+      '| Cell |',
+      '| --- |',
+      '| a\\b |',
+    ];
+    const parsed = parseEskerraTableV1FromLines(input);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error('Expected parse to succeed');
+    }
+    const markdown = serializeEskerraTableV1ToMarkdown(parsed.model);
+    expect(markdown).toBe('| Cell |\n| --- |\n| a\\\\b |');
+    const reparsed = parseEskerraTableV1FromLines(markdown.split('\n'));
+    expect(reparsed).toEqual(parsed);
+  });
+
   it('round-trips parse+serialize+parse for v1 subset', () => {
     const input = [
       '| Title | Value |',

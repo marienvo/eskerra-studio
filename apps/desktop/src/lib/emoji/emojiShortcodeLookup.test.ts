@@ -39,6 +39,22 @@ describe('slackEmojiImgUrlToCodepoint', () => {
   it('returns null for non-Slack URLs', () => {
     expect(slackEmojiImgUrlToCodepoint('https://example.com/1f602.png')).toBeNull();
   });
+
+  it('returns null when slack-edge.com appears only in the path', () => {
+    expect(
+      slackEmojiImgUrlToCodepoint('https://example.com/slack-edge.com/1f602.png'),
+    ).toBeNull();
+  });
+
+  it('returns null for lookalike hostnames', () => {
+    expect(
+      slackEmojiImgUrlToCodepoint('https://slack-edge.com.evil.com/1f602.png'),
+    ).toBeNull();
+  });
+
+  it('returns null for invalid URLs', () => {
+    expect(slackEmojiImgUrlToCodepoint('not-a-url')).toBeNull();
+  });
 });
 
 describe('expandKnownEmojiShortcodes', () => {
@@ -55,8 +71,20 @@ describe('expandKnownEmojiShortcodes', () => {
   });
 
   it('skips fenced and inline code', () => {
-    expect(expandKnownEmojiShortcodes('`:joy:` and ```\n:joy:\n```')).toBe(
-      '`:joy:` and ```\n:joy:\n```',
+    expect(expandKnownEmojiShortcodes('`:joy:` and\n```\n:joy:\n```')).toBe(
+      '`:joy:` and\n```\n:joy:\n```',
+    );
+  });
+
+  it('skips multi-backtick inline code', () => {
+    expect(expandKnownEmojiShortcodes('text ``:joy:`` end')).toBe(
+      'text ``:joy:`` end',
+    );
+  });
+
+  it('skips four-backtick fenced code blocks', () => {
+    expect(expandKnownEmojiShortcodes('````\n:joy:\n````')).toBe(
+      '````\n:joy:\n````',
     );
   });
 });

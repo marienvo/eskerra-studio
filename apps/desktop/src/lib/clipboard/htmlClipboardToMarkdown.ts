@@ -1,3 +1,4 @@
+import {decodeCellEscapes} from '@eskerra/core';
 import TurndownService from 'turndown';
 import {
   highlightedCodeBlock,
@@ -36,6 +37,39 @@ function trimTrailingNewlines(text: string): string {
   return text.slice(0, end);
 }
 
+function fenceLengthForPreContent(text: string): number {
+  const runs = text.match(/`+/g);
+  if (!runs) {
+    return 3;
+  }
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  return Math.max(3, longest + 1);
+}
+
+/** Turndown's built-in fenced rule uses `firstChild`, which misses `<pre>\\n  <code>`. */
+function fencedPreCodeReplacement(
+  node: HTMLElement,
+  fence: string,
+): string {
+  const codeEl = node.firstElementChild as HTMLElement;
+  const className = codeEl.getAttribute('class') ?? '';
+  const languageMatch = className.match(/language-(\S+)/);
+  const language = languageMatch?.[1] ?? '';
+  const code = codeEl.textContent ?? '';
+  const fenceChar = fence.charAt(0) || '`';
+  let fenceSize = 3;
+  const fenceInCodeRegex = new RegExp(`^ {0,3}${fenceChar}{3,}`, 'gm');
+  let match: RegExpExecArray | null;
+  while ((match = fenceInCodeRegex.exec(code)) !== null) {
+    if (match[0].length >= fenceSize) {
+      fenceSize = match[0].length + 1;
+    }
+  }
+  const fenceStr = fenceChar.repeat(fenceSize);
+  const trimmed = code.replace(/\n$/, '');
+  return `\n\n${fenceStr}${language}\n${trimmed}\n${fenceStr}\n\n`;
+}
+
 function slackEmojiImgReplacement(img: HTMLImageElement): string | null {
   const alt = img.getAttribute('alt') ?? '';
   const src = img.getAttribute('src') ?? '';
@@ -65,25 +99,23 @@ function getTurndown(): TurndownService {
       filter: (node: HTMLElement) =>
         node.nodeName === 'TH' || node.nodeName === 'TD',
       replacement: (content: string, node: HTMLElement) => {
-        const parent = node.parentNode;
-        const index = parent
-          ? Array.prototype.indexOf.call(parent.childNodes, node)
-          : 0;
-        const prefix = index === 0 ? '| ' : ' ';
-        const escaped = content
-          .replace(/\n+/g, ' ')
-          .replace(/(?<!\\)\|/g, '\\|')
-          .trim();
+        const isFirst = node.previousElementSibling === null;
+        const prefix = isFirst ? '| ' : ' ';
+        const plain = decodeCellEscapes(content.replace(/\n+/g, ' ').trim());
+        const escaped = plain
+          .replace(/\\/g, '\\\\')
+          .replace(/\|/g, '\\|');
         return `${prefix}${escaped} |`;
       },
     });
     td.addRule('preWithoutCode', {
       filter: (node: HTMLElement) =>
         node.nodeName === 'PRE'
-        && !(node.firstChild && node.firstChild.nodeName === 'CODE'),
+        && !(node.firstElementChild && node.firstElementChild.nodeName === 'CODE'),
       replacement: (_content: string, node: HTMLElement) => {
         const text = (node as HTMLElement).textContent ?? '';
-        return `\n\n\`\`\`\n${trimTrailingNewlines(text)}\n\`\`\`\n\n`;
+        const fence = '`'.repeat(fenceLengthForPreContent(text));
+        return `\n\n${fence}\n${trimTrailingNewlines(text)}\n${fence}\n\n`;
       },
     });
     td.addRule('eskerraHighlight', {
@@ -106,6 +138,14 @@ function getTurndown(): TurndownService {
         const emoji = slackEmojiImgReplacement(img);
         return emoji ?? turndownDefaultImageMarkdown(img);
       },
+    });
+    td.addRule('fencedPreCode', {
+      filter: (node: HTMLElement, options) =>
+        options.codeBlockStyle === 'fenced'
+        && node.nodeName === 'PRE'
+        && node.firstElementChild?.nodeName === 'CODE',
+      replacement: (_content: string, node: HTMLElement, options) =>
+        fencedPreCodeReplacement(node, options.fence ?? '```'),
     });
     turndownSingleton = td;
   }
