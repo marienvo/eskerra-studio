@@ -4,6 +4,8 @@ Thanks for taking the time to contribute.
 
 Please start with an issue before opening a pull request. Direct pull requests without a linked issue may be closed, even when the change itself is useful.
 
+By contributing to this project, you agree that your contribution is licensed under the GNU AGPL version 3 or later and that the App Store exception in APPSTORE-EXCEPTION.txt applies to your contribution.
+
 ## Before opening a pull request
 
 1. Open an issue first.
