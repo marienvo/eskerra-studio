@@ -1,0 +1,7 @@
+Additional permission under GNU AGPL version 3 section 7
+
+The copyright holder grants permission to distribute official builds of this
+software through app stores or similar digital distribution platforms, even if
+those platforms impose terms, technical restrictions, or digital rights
+management that would otherwise be incompatible with the AGPL, provided that
+the complete corresponding source code remains available under the AGPL.
