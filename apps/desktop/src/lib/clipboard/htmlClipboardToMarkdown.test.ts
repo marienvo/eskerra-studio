@@ -1,3 +1,4 @@
+import {parseEskerraTableV1FromLines} from '@eskerra/core';
 import {describe, expect, it} from 'vitest';
 
 import {
@@ -191,6 +192,12 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md).not.toMatch(/^```\n```not/m);
   });
 
+  it('does not expand shortcodes inside a four-backtick pre fence', () => {
+    const md = clipboardHtmlToMarkdown('<pre>```\n:joy:\n```</pre>');
+    expect(md).toContain('````\n```\n:joy:\n```\n````');
+    expect(md).not.toContain('😂');
+  });
+
   it('does not rewrite non-Slack images whose path contains slack-edge.com', () => {
     const md = clipboardHtmlToMarkdown(
       '<p><img src="https://example.com/slack-edge.com/1f602.png" alt="x"></p>',
@@ -215,9 +222,13 @@ describe('clipboardHtmlToMarkdown', () => {
         + '<tbody><tr><td>a\\\\|b</td><td>c</td></tr></tbody></table>',
     );
     const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
-    const dataRow = pipeRows[2]!;
-    expect(dataRow).toMatch(/^\| a\\+\\\|b \| c \|$/);
-    expect(dataRow.match(/(?<!\\)\|/g)?.length).toBe(3);
+    expect(pipeRows[2]!.match(/(?<!\\)\|/g)?.length).toBe(3);
+    const parsed = parseEskerraTableV1FromLines(pipeRows);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error('Expected pasted table to parse as Eskerra v1');
+    }
+    expect(parsed.model.cells[1]).toEqual(['a\\\\|b', 'c']);
   });
 
   it('keeps pre with code child as fenced block', () => {

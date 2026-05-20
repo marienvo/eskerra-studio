@@ -7,6 +7,7 @@ export type {
 export {parseEskerraTableV1FromLines} from './parse';
 export {serializeEskerraTableV1ToMarkdown} from './serialize';
 export {
+  decodeCellEscapes,
   tokenizeDelimitedRowInner,
   type EskerraTableCellToken,
 } from './tokenize';

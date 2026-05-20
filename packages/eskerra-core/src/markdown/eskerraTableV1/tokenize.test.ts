@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 
-import {tokenizeDelimitedRowInner} from './tokenize';
+import {decodeCellEscapes, tokenizeDelimitedRowInner} from './tokenize';
 
 describe('tokenizeDelimitedRowInner', () => {
   it('splits on unescaped pipes and decodes \\| in cells', () => {
@@ -24,5 +24,13 @@ describe('tokenizeDelimitedRowInner', () => {
     const tokens = tokenizeDelimitedRowInner('a\\b');
     expect(tokens).toHaveLength(1);
     expect(tokens[0]!.value).toBe('a\\b');
+  });
+
+  it('decodes doubled backslashes from serialized cells', () => {
+    expect(decodeCellEscapes('a\\\\b')).toBe('a\\b');
+  });
+
+  it('decodes backslash-pipe sequences from serialized cells', () => {
+    expect(decodeCellEscapes('has \\\\\\| pipe')).toBe('has \\| pipe');
   });
 });

@@ -1,4 +1,4 @@
-import {FENCED_CODE_RE, INLINE_CODE_RE} from './markdownCodeRegex';
+import {FENCED_CODE_RE, INLINE_CODE_RE} from '../markdown/markdownCodeRegex';
 
 /** GFM pipe table row (allows `<br>` inside cells). */
 const GFM_TABLE_ROW_RE = /^\s*\|.*\|\s*$/;

@@ -1,3 +1,4 @@
+import {decodeCellEscapes} from '@eskerra/core';
 import TurndownService from 'turndown';
 import {
   highlightedCodeBlock,
@@ -76,11 +77,10 @@ function getTurndown(): TurndownService {
       replacement: (content: string, node: HTMLElement) => {
         const isFirst = node.previousElementSibling === null;
         const prefix = isFirst ? '| ' : ' ';
-        const escaped = content
-          .replace(/\n+/g, ' ')
+        const plain = decodeCellEscapes(content.replace(/\n+/g, ' ').trim());
+        const escaped = plain
           .replace(/\\/g, '\\\\')
-          .replace(/\|/g, '\\|')
-          .trim();
+          .replace(/\|/g, '\\|');
         return `${prefix}${escaped} |`;
       },
     });

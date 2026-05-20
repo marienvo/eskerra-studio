@@ -2,9 +2,14 @@
  * GFM pipe-table cell tokenizer for Eskerra table v1.
  *
  * Only `\|` is treated as an escaped literal pipe inside a cell (not a column
- * delimiter). Sequences like `\\|` are read as `\` + escaped pipe (v1 has no
- * general backslash escapes).
+ * delimiter). Sequences like `\\|` are read as `\` + escaped pipe.
+ * Doubled backslashes (`\\`) decode to a single `\` (inverse of serialize).
  */
+
+/** Inverse of serialize cell escaping: decode `\|` then `\\`. */
+export function decodeCellEscapes(raw: string): string {
+  return raw.replace(/\\\|/g, '|').replace(/\\\\/g, '\\');
+}
 export type EskerraTableCellToken = {
   /** Inclusive start offset into the inner row (line without outer `|`). */
   rawStart: number;
@@ -33,7 +38,7 @@ export function tokenizeDelimitedRowInner(inner: string): EskerraTableCellToken[
         rawStart,
         rawEnd,
         raw,
-        value: raw.replace(/\\\|/g, '|'),
+        value: decodeCellEscapes(raw),
       });
       if (i < inner.length) {
         i += 1;

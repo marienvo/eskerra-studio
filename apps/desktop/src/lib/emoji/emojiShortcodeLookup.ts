@@ -2,7 +2,7 @@ import emojiRows from '../../editor/noteEditor/data/emojiColonCompletionData.jso
 import {
   FENCED_CODE_RE,
   INLINE_CODE_RE,
-} from '../clipboard/markdownCodeRegex';
+} from '../markdown/markdownCodeRegex';
 
 type EmojiCompletionRow = {
   readonly e: string;
