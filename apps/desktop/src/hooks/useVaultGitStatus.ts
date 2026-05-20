@@ -13,6 +13,11 @@ type UseVaultGitStatusResult = {
   status: GitStatusResult | null;
   loading: boolean;
   error: string | null;
+  /**
+   * Increments when an accepted status load updates status/error for the current
+   * vault/remote/branch key. Used to detect stale snapshots (e.g. before post-save refresh).
+   */
+  statusRevision: number;
   /** Trigger a fresh load. Not exposed in UI yet — available for future use. */
   refresh: (opts?: {readonly silent?: boolean}) => void;
 };
@@ -26,6 +31,7 @@ export function useVaultGitStatus({
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusRevision, setStatusRevision] = useState(0);
   const requestIdRef = useRef(0);
   const statusRef = useRef(status);
   const loadedKeyRef = useRef(loadedKey);
@@ -45,10 +51,12 @@ export function useVaultGitStatus({
         setError(null);
         setStatus(result);
         setLoadedKey(requestKey);
+        setStatusRevision(r => r + 1);
       } catch (e) {
         if (requestId !== requestIdRef.current) return;
         setError(formatSyncError(e));
         setLoadedKey(requestKey);
+        setStatusRevision(r => r + 1);
       } finally {
         if (requestId === requestIdRef.current) setLoading(false);
       }
@@ -71,11 +79,13 @@ export function useVaultGitStatus({
         setError(null);
         setStatus(result);
         setLoadedKey(requestKey);
+        setStatusRevision(r => r + 1);
       })
       .catch((e: unknown) => {
         if (requestId !== requestIdRef.current) return;
         setError(formatSyncError(e));
         setLoadedKey(requestKey);
+        setStatusRevision(r => r + 1);
       })
       .finally(() => {
         if (requestId === requestIdRef.current) setLoading(false);
@@ -104,6 +114,7 @@ export function useVaultGitStatus({
     status: hasCurrentStatusResult ? status : null,
     loading: currentKey != null && (loading || !hasCurrentStatusResult),
     error: hasCurrentStatusResult ? error : null,
+    statusRevision: hasCurrentStatusResult ? statusRevision : 0,
     refresh,
   };
 }

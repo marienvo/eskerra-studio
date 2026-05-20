@@ -1,4 +1,11 @@
-import {useEffect, useEffectEvent, useRef, useState, type MutableRefObject} from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react';
 
 import {getAutosyncPreflight} from '../lib/gitAutosyncCountdown';
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
@@ -16,6 +23,8 @@ type UseVaultGitAutosyncSchedulerArgs = {
   gitStatusLoading: boolean;
   gitStatusError: string | null;
   gitStatus?: GitStatusResult | null;
+  /** Revision of the current git status snapshot; must advance after a pending save to clear on clean status. */
+  gitStatusRevision?: number;
   manualSyncDisabledReason: string | null;
   manualSyncRunning: boolean;
   runManualSync: (opts?: {readonly silent?: boolean}) => Promise<boolean>;
@@ -33,6 +42,7 @@ export function useVaultGitAutosyncScheduler({
   gitStatusLoading,
   gitStatusError,
   gitStatus,
+  gitStatusRevision = 0,
   manualSyncDisabledReason,
   manualSyncRunning,
   runManualSync,
@@ -41,6 +51,11 @@ export function useVaultGitAutosyncScheduler({
 }: UseVaultGitAutosyncSchedulerArgs): VaultGitAutosyncSchedulerState {
   const pendingGenerationRef = useRef(0);
   const syncedGenerationRef = useRef(0);
+  const pendingStatusRevisionRef = useRef(0);
+  const gitStatusRevisionRef = useRef(gitStatusRevision);
+  useLayoutEffect(() => {
+    gitStatusRevisionRef.current = gitStatusRevision;
+  }, [gitStatusRevision]);
   const inFlightRef = useRef(false);
   const nextAutosyncAtMsRef = useRef(0);
   const [schedulerState, setSchedulerState] = useState<VaultGitAutosyncSchedulerState>({
@@ -63,6 +78,7 @@ export function useVaultGitAutosyncScheduler({
   useEffect(() => {
     pendingGenerationRef.current = 0;
     syncedGenerationRef.current = 0;
+    pendingStatusRevisionRef.current = 0;
     nextAutosyncAtMsRef.current = Date.now() + intervalMs;
     setSchedulerState({
       autosyncPending: false,
@@ -73,8 +89,17 @@ export function useVaultGitAutosyncScheduler({
   useEffect(() => {
     if (saveSettledNonce === 0) return;
     pendingGenerationRef.current += 1;
+    pendingStatusRevisionRef.current = gitStatusRevisionRef.current;
     publishSchedulerState();
   }, [saveSettledNonce]);
+
+  const clearPendingIfCleanStatusIsFresh = useEffectEvent(() => {
+    if (gitStatusRevision <= pendingStatusRevisionRef.current) {
+      return;
+    }
+    syncedGenerationRef.current = pendingGenerationRef.current;
+    publishSchedulerState();
+  });
 
   const runPendingSync = useEffectEvent(async () => {
     scheduleNextAutosyncAt(Date.now() + intervalMs);
@@ -91,8 +116,7 @@ export function useVaultGitAutosyncScheduler({
 
     const preflight = getAutosyncPreflight(gitStatus);
     if (preflight === 'skip-clear-pending') {
-      syncedGenerationRef.current = pendingGenerationRef.current;
-      publishSchedulerState();
+      clearPendingIfCleanStatusIsFresh();
       return;
     }
     if (preflight === 'skip-keep-pending') {

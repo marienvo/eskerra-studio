@@ -67,6 +67,21 @@ describe('useVaultGitStatus', () => {
 
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
+    expect(result.current.statusRevision).toBe(1);
+  });
+
+  it('increments statusRevision on each accepted load including silent refresh', async () => {
+    const refreshed: GitStatusResult = {...cleanResult, ahead: 1};
+    mockGetVaultGitStatus
+      .mockResolvedValueOnce(cleanResult)
+      .mockResolvedValueOnce(refreshed);
+
+    const {result} = renderGitStatus();
+    await waitFor(() => expect(result.current.statusRevision).toBe(1));
+
+    act(() => { result.current.refresh({silent: true}); });
+    await waitFor(() => expect(result.current.statusRevision).toBe(2));
+    expect(result.current.status).toEqual(refreshed);
   });
 
   it('passes correct arguments to getVaultGitStatus', async () => {

@@ -81,6 +81,7 @@ export function useAppGitSyncOrchestration({
     status: gitStatus,
     loading: gitStatusLoading,
     error: gitStatusError,
+    statusRevision: gitStatusRevision,
     refresh: refreshGitStatus,
   } = useVaultGitStatus({vaultPath, remote: GIT_SYNC_REMOTE, branch: currentGitBranch});
   useVaultGitLocalWriteStatusRefresh({
@@ -305,6 +306,7 @@ export function useAppGitSyncOrchestration({
     gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
     gitStatusError,
     gitStatus: gitStatusForDisplay,
+    gitStatusRevision,
     manualSyncDisabledReason,
     manualSyncRunning,
     runManualSync: flushThenRunManualSync,
