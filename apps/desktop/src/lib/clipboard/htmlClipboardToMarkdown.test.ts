@@ -161,6 +161,67 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md).toContain(':notarealemoji:');
     expect(md).not.toContain('😂');
   });
+
+  it('converts mark to Eskerra highlight syntax', () => {
+    const md = clipboardHtmlToMarkdown('<p><mark>highlight</mark></p>');
+    expect(md).toContain('==highlight==');
+    expect(md).not.toMatch(/<mark/i);
+  });
+
+  it('converts kbd to inline code backticks', () => {
+    const md = clipboardHtmlToMarkdown('<p><kbd>Ctrl</kbd>+<kbd>C</kbd></p>');
+    expect(md).toContain('`Ctrl`');
+    expect(md).toContain('`C`');
+    expect(md).not.toMatch(/<kbd/i);
+  });
+
+  it('converts standalone pre to fenced code block', () => {
+    const md = clipboardHtmlToMarkdown('<pre>raw text</pre>');
+    const fenceOpen = md.indexOf('```');
+    const fenceClose = md.indexOf('```', fenceOpen + 3);
+    expect(fenceOpen).toBeGreaterThanOrEqual(0);
+    expect(fenceClose).toBeGreaterThan(fenceOpen);
+    expect(md.slice(fenceOpen, fenceClose + 3)).toContain('raw text');
+    expect(md).not.toMatch(/<pre/i);
+  });
+
+  it('keeps pre with code child as fenced block', () => {
+    const md = clipboardHtmlToMarkdown('<pre><code>fn()</code></pre>');
+    expect(md).toContain('```');
+    expect(md).toContain('fn()');
+    expect(md).not.toMatch(/<pre/i);
+    expect(md).not.toMatch(/<code/i);
+  });
+
+  it('strips tags with no markdown equivalent from paste output', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><u>u</u> <sub>s</sub> <sup>p</sup> <font>x</font></p>'
+        + '<details><summary>S</summary>D</details>'
+        + '<dl><dt>T</dt><dd>D</dd></dl>',
+    );
+    expect(md).not.toMatch(/<[a-z]/i);
+    expect(md).toContain('u');
+    expect(md).toContain('SD');
+  });
+
+  it('converts HTML tables with line breaks in cells to GFM pipe tables', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td>a<br>b</td><td>c</td></tr></tbody></table>',
+    );
+    expect(md).toContain('|');
+    expect(md).not.toMatch(/<td/i);
+    expect(md).toContain('a');
+    expect(md).toContain('b');
+    expect(md.indexOf('b')).toBeGreaterThan(md.indexOf('a'));
+  });
+
+  it('decodes HTML entities in pasted prose', () => {
+    const md = clipboardHtmlToMarkdown('<p>&amp; ok</p>');
+    expect(md).toContain('&');
+    expect(md).not.toContain('&amp;');
+    expect(md).not.toMatch(/<[a-z]/i);
+  });
 });
 
 describe('tryClipboardHtmlToMarkdownInsert', () => {

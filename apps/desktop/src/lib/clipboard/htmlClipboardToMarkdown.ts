@@ -11,6 +11,7 @@ import {
   slackEmojiImgUrlToCodepoint,
 } from '../emoji/emojiShortcodeLookup';
 import {sanitizeClipboardHtml} from './sanitizeClipboardHtml';
+import {stripLeakedHtmlInMarkdown} from './stripLeakedHtmlInMarkdown';
 
 /** Reject huge clipboard HTML to avoid blocking the editor thread. */
 export const CLIPBOARD_HTML_MAX_CHARS = 512_000;
@@ -25,6 +26,14 @@ function turndownDefaultImageMarkdown(img: HTMLImageElement): string {
   const title = img.getAttribute('title') ?? '';
   const titlePart = title ? ` "${title}"` : '';
   return src ? `![${alt}](${src}${titlePart})` : '';
+}
+
+function trimTrailingNewlines(text: string): string {
+  let end = text.length;
+  while (end > 0 && text[end - 1] === '\n') {
+    end -= 1;
+  }
+  return text.slice(0, end);
 }
 
 function slackEmojiImgReplacement(img: HTMLImageElement): string | null {
@@ -52,6 +61,23 @@ function getTurndown(): TurndownService {
     td.use(highlightedCodeBlock);
     td.use(tables);
     td.use(taskListItems);
+    td.addRule('preWithoutCode', {
+      filter: (node: HTMLElement) =>
+        node.nodeName === 'PRE'
+        && !(node.firstChild && node.firstChild.nodeName === 'CODE'),
+      replacement: (_content: string, node: HTMLElement) => {
+        const text = (node as HTMLElement).textContent ?? '';
+        return `\n\n\`\`\`\n${trimTrailingNewlines(text)}\n\`\`\`\n\n`;
+      },
+    });
+    td.addRule('eskerraHighlight', {
+      filter: (node: HTMLElement) => node.nodeName === 'MARK',
+      replacement: (content: string) => `==${content}==`,
+    });
+    td.addRule('kbdAsInlineCode', {
+      filter: (node: HTMLElement) => node.nodeName === 'KBD',
+      replacement: (content: string) => `\`${content}\``,
+    });
     td.addRule('strikethrough', {
       filter: (node: HTMLElement) =>
         node.nodeName === 'DEL' || node.nodeName === 'S' || node.nodeName === 'STRIKE',
@@ -111,6 +137,7 @@ const STRUCTURAL_HTML_MARKERS = [
   '<sub',
   '<code',
   '<kbd',
+  '<mark',
 ] as const;
 
 /**
@@ -258,7 +285,7 @@ function clipboardSanitizedHtmlToMarkdown(safeHtml: string): string {
     .turndown(cleaned)
     .replace(/\\\[\\\[/g, '[[')
     .replace(/\\\]\\\]/g, ']]');
-  return expandKnownEmojiShortcodes(md);
+  return stripLeakedHtmlInMarkdown(expandKnownEmojiShortcodes(md));
 }
 
 /**
