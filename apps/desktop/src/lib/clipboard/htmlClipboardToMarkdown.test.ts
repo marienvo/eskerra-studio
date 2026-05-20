@@ -110,6 +110,57 @@ describe('clipboardHtmlToMarkdown', () => {
     );
     expect(md).not.toContain(jsScheme);
   });
+
+  it('converts Slack emoji img tags to Unicode', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p>Die zien we te vaak <img alt=":joy:" '
+        + 'src="https://a.slack-edge.com/production-standard-emoji-assets/15.0/google-medium/1f602.png"></p>',
+    );
+    expect(md).toContain('😂');
+    expect(md).not.toContain('![:joy:]');
+    expect(md).not.toContain('slack-edge.com');
+  });
+
+  it('converts Slack emoji img by URL when alt is not a shortcode', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img alt="custom" '
+        + 'src="https://a.slack-edge.com/production-standard-emoji-assets/15.0/google-medium/1f602.png"></p>',
+    );
+    expect(md).toBe('😂');
+    expect(md).not.toContain('slack-edge.com');
+  });
+
+  it('keeps non-Slack images as markdown image links', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img src="https://example.com/foo.png" alt="Foo"></p>',
+    );
+    expect(md).toContain('![Foo](https://example.com/foo.png)');
+  });
+
+  it('expands bare :shortcode: text from HTML paste', () => {
+    const md = clipboardHtmlToMarkdown('<p>Die zien we te vaak :joy:</p>');
+    expect(md).toContain('😂');
+    expect(md).not.toContain(':joy:');
+  });
+
+  it('leaves :shortcode: inside code elements literal', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><code>:joy:</code> and</p><pre><code>:joy:</code></pre>',
+    );
+    expect(md).toContain('`:joy:`');
+    const fenceOpen = md.indexOf('```');
+    const fenceClose = md.indexOf('```', fenceOpen + 3);
+    expect(fenceOpen).toBeGreaterThanOrEqual(0);
+    expect(fenceClose).toBeGreaterThan(fenceOpen);
+    expect(md.slice(fenceOpen, fenceClose + 3)).toContain(':joy:');
+    expect(md).not.toContain('😂');
+  });
+
+  it('leaves unknown shortcodes literal', () => {
+    const md = clipboardHtmlToMarkdown('<p>:notarealemoji: stays</p>');
+    expect(md).toContain(':notarealemoji:');
+    expect(md).not.toContain('😂');
+  });
 });
 
 describe('tryClipboardHtmlToMarkdownInsert', () => {

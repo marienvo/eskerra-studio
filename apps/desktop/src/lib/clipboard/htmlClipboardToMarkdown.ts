@@ -5,12 +5,40 @@ import {
   taskListItems,
 } from 'turndown-plugin-gfm';
 
+import {
+  expandKnownEmojiShortcodes,
+  shortcodeToEmoji,
+  slackEmojiImgUrlToCodepoint,
+} from '../emoji/emojiShortcodeLookup';
 import {sanitizeClipboardHtml} from './sanitizeClipboardHtml';
 
 /** Reject huge clipboard HTML to avoid blocking the editor thread. */
 export const CLIPBOARD_HTML_MAX_CHARS = 512_000;
 
 let turndownSingleton: TurndownService | null = null;
+
+const SLACK_EMOJI_ALT_SHORTCODE_RE = /^:([\p{L}\p{N}_+-]+):$/u;
+
+function turndownDefaultImageMarkdown(img: HTMLImageElement): string {
+  const alt = img.getAttribute('alt') ?? '';
+  const src = img.getAttribute('src') ?? '';
+  const title = img.getAttribute('title') ?? '';
+  const titlePart = title ? ` "${title}"` : '';
+  return src ? `![${alt}](${src}${titlePart})` : '';
+}
+
+function slackEmojiImgReplacement(img: HTMLImageElement): string | null {
+  const alt = img.getAttribute('alt') ?? '';
+  const src = img.getAttribute('src') ?? '';
+  const altMatch = alt.match(SLACK_EMOJI_ALT_SHORTCODE_RE);
+  if (altMatch) {
+    const fromAlt = shortcodeToEmoji(altMatch[1]!);
+    if (fromAlt) {
+      return fromAlt;
+    }
+  }
+  return slackEmojiImgUrlToCodepoint(src);
+}
 
 function getTurndown(): TurndownService {
   if (!turndownSingleton) {
@@ -28,6 +56,14 @@ function getTurndown(): TurndownService {
       filter: (node: HTMLElement) =>
         node.nodeName === 'DEL' || node.nodeName === 'S' || node.nodeName === 'STRIKE',
       replacement: (content: string) => `~~${content}~~`,
+    });
+    td.addRule('slackEmojiImg', {
+      filter: (node: HTMLElement) => node.nodeName === 'IMG',
+      replacement: (_content: string, node: HTMLElement) => {
+        const img = node as HTMLImageElement;
+        const emoji = slackEmojiImgReplacement(img);
+        return emoji ?? turndownDefaultImageMarkdown(img);
+      },
     });
     turndownSingleton = td;
   }
@@ -218,10 +254,11 @@ function clipboardSanitizedHtmlToMarkdown(safeHtml: string): string {
   const cleaned = preprocessClipboardHtmlFragment(safeHtml);
   // Turndown escapes [ and ] individually, turning [[wiki link]] into \[\[wiki link\]\].
   // Undo that for double-bracket sequences so wiki links survive paste.
-  return getTurndown()
+  const md = getTurndown()
     .turndown(cleaned)
     .replace(/\\\[\\\[/g, '[[')
     .replace(/\\\]\\\]/g, ']]');
+  return expandKnownEmojiShortcodes(md);
 }
 
 /**
