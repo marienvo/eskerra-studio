@@ -36,6 +36,15 @@ function trimTrailingNewlines(text: string): string {
   return text.slice(0, end);
 }
 
+function fenceLengthForPreContent(text: string): number {
+  const runs = text.match(/`+/g);
+  if (!runs) {
+    return 3;
+  }
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  return Math.max(3, longest + 1);
+}
+
 function slackEmojiImgReplacement(img: HTMLImageElement): string | null {
   const alt = img.getAttribute('alt') ?? '';
   const src = img.getAttribute('src') ?? '';
@@ -65,14 +74,12 @@ function getTurndown(): TurndownService {
       filter: (node: HTMLElement) =>
         node.nodeName === 'TH' || node.nodeName === 'TD',
       replacement: (content: string, node: HTMLElement) => {
-        const parent = node.parentNode;
-        const index = parent
-          ? Array.prototype.indexOf.call(parent.childNodes, node)
-          : 0;
-        const prefix = index === 0 ? '| ' : ' ';
+        const isFirst = node.previousElementSibling === null;
+        const prefix = isFirst ? '| ' : ' ';
         const escaped = content
           .replace(/\n+/g, ' ')
-          .replace(/(?<!\\)\|/g, '\\|')
+          .replace(/\\/g, '\\\\')
+          .replace(/\|/g, '\\|')
           .trim();
         return `${prefix}${escaped} |`;
       },
@@ -83,7 +90,8 @@ function getTurndown(): TurndownService {
         && !(node.firstChild && node.firstChild.nodeName === 'CODE'),
       replacement: (_content: string, node: HTMLElement) => {
         const text = (node as HTMLElement).textContent ?? '';
-        return `\n\n\`\`\`\n${trimTrailingNewlines(text)}\n\`\`\`\n\n`;
+        const fence = '`'.repeat(fenceLengthForPreContent(text));
+        return `\n\n${fence}\n${trimTrailingNewlines(text)}\n${fence}\n\n`;
       },
     });
     td.addRule('eskerraHighlight', {

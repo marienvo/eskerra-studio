@@ -185,6 +185,41 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md).not.toMatch(/<pre/i);
   });
 
+  it('uses a longer fence when pre content contains triple backticks', () => {
+    const md = clipboardHtmlToMarkdown('<pre>```not a fence```</pre>');
+    expect(md).toContain('````\n```not a fence```\n````');
+    expect(md).not.toMatch(/^```\n```not/m);
+  });
+
+  it('does not rewrite non-Slack images whose path contains slack-edge.com', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img src="https://example.com/slack-edge.com/1f602.png" alt="x"></p>',
+    );
+    expect(md).toContain('![x](https://example.com/slack-edge.com/1f602.png)');
+    expect(md).not.toContain('😂');
+  });
+
+  it('emits a leading pipe for the first cell when row HTML has whitespace text nodes', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr>\n  <th>A</th>\n  <th>B</th>\n</tr></thead>'
+        + '<tbody><tr>\n  <td>1</td>\n  <td>2</td>\n</tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows[0]).toMatch(/^\| A \| B \|$/);
+    expect(pipeRows[2]).toMatch(/^\| 1 \| 2 \|$/);
+  });
+
+  it('escapes backslashes before pipes in table cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td>a\\\\|b</td><td>c</td></tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    const dataRow = pipeRows[2]!;
+    expect(dataRow).toMatch(/^\| a\\+\\\|b \| c \|$/);
+    expect(dataRow.match(/(?<!\\)\|/g)?.length).toBe(3);
+  });
+
   it('keeps pre with code child as fenced block', () => {
     const md = clipboardHtmlToMarkdown('<pre><code>fn()</code></pre>');
     expect(md).toContain('```');

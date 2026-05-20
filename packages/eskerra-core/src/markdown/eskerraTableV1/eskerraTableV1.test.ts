@@ -204,6 +204,19 @@ describe('serializeEskerraTableV1ToMarkdown', () => {
     expect(reparsed).toEqual(parsed);
   });
 
+  it('escapes backslashes before pipes when serializing cells', () => {
+    const markdown = serializeEskerraTableV1ToMarkdown({
+      cells: [
+        ['Cell', 'Note'],
+        ['a\\b', 'has \\| pipe'],
+      ],
+      align: [undefined, undefined],
+    });
+    expect(markdown).toBe(
+      '| Cell | Note |\n| --- | --- |\n| a\\\\b | has \\\\\\| pipe |',
+    );
+  });
+
   it('round-trips parse+serialize+parse for v1 subset', () => {
     const input = [
       '| Title | Value |',
