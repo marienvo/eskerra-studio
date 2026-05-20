@@ -1,7 +1,11 @@
 import type {EskerraTableAlignment, EskerraTableModelV1} from './model';
 
+function escapeCellPipes(cell: string): string {
+  return cell.trim().replace(/\|/g, '\\|');
+}
+
 function serializeRow(cells: string[]): string {
-  return `| ${cells.map(cell => cell.trim()).join(' | ')} |`;
+  return `| ${cells.map(escapeCellPipes).join(' | ')} |`;
 }
 
 function normalizeAlignment(value: EskerraTableAlignment): string {
@@ -31,8 +35,8 @@ function ensureRectangular(model: EskerraTableModelV1): number {
       throw new Error('Eskerra table model rows must be rectangular.');
     }
     for (const cell of row) {
-      if (cell.includes('|') || cell.includes('\n') || cell.includes('\r')) {
-        throw new Error('Eskerra table v1 does not support pipes or newlines inside cells.');
+      if (cell.includes('\n') || cell.includes('\r')) {
+        throw new Error('Eskerra table v1 does not support newlines inside cells.');
       }
     }
   }

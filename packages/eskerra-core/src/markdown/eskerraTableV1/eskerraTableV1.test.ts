@@ -25,14 +25,73 @@ describe('parseEskerraTableV1FromLines', () => {
     });
   });
 
-  it('fails closed for escaped pipes', () => {
+  it('parses cells with escaped pipes', () => {
     expect(
       parseEskerraTableV1FromLines([
         '| Name | Note |',
         '| --- | --- |',
         '| A | has \\| pipe |',
       ]),
-    ).toEqual({ok: false, reason: 'unsupported_escaped_pipe'});
+    ).toEqual({
+      ok: true,
+      lineCount: 3,
+      model: {
+        cells: [
+          ['Name', 'Note'],
+          ['A', 'has | pipe'],
+        ],
+        align: [undefined, undefined],
+      },
+    });
+  });
+
+  it('parses paste-style table with escaped pipes in inline code cell', () => {
+    const result = parseEskerraTableV1FromLines([
+      '| Input | Markdown output | Bron |',
+      '| --- | --- | --- |',
+      '| `<table>` | `\\| ... \\|` GFM | bestaand (GFM plugin) |',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error('Expected parse to succeed');
+    }
+    expect(result.model.cells[1]![0]).toBe('`<table>`');
+    expect(result.model.cells[1]![1]).toBe('`| ... |` GFM');
+    expect(result.model.cells[1]![2]).toBe('bestaand (GFM plugin)');
+  });
+
+  it('parses a single cell with mixed escaped and literal pipe intent', () => {
+    expect(
+      parseEskerraTableV1FromLines([
+        '| Cell |',
+        '| --- |',
+        '| a \\| b |',
+      ]),
+    ).toEqual({
+      ok: true,
+      lineCount: 3,
+      model: {
+        cells: [['Cell'], ['a | b']],
+        align: [undefined],
+      },
+    });
+  });
+
+  it('keeps backslashes that are not pipe escapes', () => {
+    expect(
+      parseEskerraTableV1FromLines([
+        '| Cell |',
+        '| --- |',
+        '| a\\b |',
+      ]),
+    ).toEqual({
+      ok: true,
+      lineCount: 3,
+      model: {
+        cells: [['Cell'], ['a\\b']],
+        align: [undefined],
+      },
+    });
   });
 
   it('accepts separator cells with only one or two hyphens (markdown-it / export interop)', () => {
@@ -126,6 +185,23 @@ describe('serializeEskerraTableV1ToMarkdown', () => {
     expect(markdown).toBe(
       '| Name | Score |\n| :--- | ---: |\n| Alice | 42 |',
     );
+  });
+
+  it('round-trips tables with escaped pipes', () => {
+    const input = [
+      '| Name | Note |',
+      '| --- | --- |',
+      '| A | has \\| pipe |',
+    ];
+    const parsed = parseEskerraTableV1FromLines(input);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error('Expected parse to succeed');
+    }
+    const markdown = serializeEskerraTableV1ToMarkdown(parsed.model);
+    expect(markdown).toBe(input.join('\n'));
+    const reparsed = parseEskerraTableV1FromLines(markdown.split('\n'));
+    expect(reparsed).toEqual(parsed);
   });
 
   it('round-trips parse+serialize+parse for v1 subset', () => {

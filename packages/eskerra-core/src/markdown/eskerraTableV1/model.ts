@@ -13,8 +13,7 @@ export type ParseEskerraTableV1FailureReason =
   | 'blank_line'
   | 'invalid_row_shape'
   | 'invalid_separator'
-  | 'column_mismatch'
-  | 'unsupported_escaped_pipe';
+  | 'column_mismatch';
 
 export type ParseEskerraTableV1Result =
   | {

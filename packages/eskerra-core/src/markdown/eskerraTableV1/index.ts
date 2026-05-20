@@ -6,3 +6,7 @@ export type {
 } from './model';
 export {parseEskerraTableV1FromLines} from './parse';
 export {serializeEskerraTableV1ToMarkdown} from './serialize';
+export {
+  tokenizeDelimitedRowInner,
+  type EskerraTableCellToken,
+} from './tokenize';

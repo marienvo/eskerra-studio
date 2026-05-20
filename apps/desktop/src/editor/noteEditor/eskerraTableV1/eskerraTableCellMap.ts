@@ -1,4 +1,4 @@
-import {parseEskerraTableV1FromLines} from '@eskerra/core';
+import {parseEskerraTableV1FromLines, tokenizeDelimitedRowInner} from '@eskerra/core';
 import {type Text} from '@codemirror/state';
 
 import {type EskerraTableDocBlock} from './eskerraTableV1DocBlocks';
@@ -27,15 +27,15 @@ function mappingsForDelimitedLine(
     return null;
   }
   const inner = lineText.slice(1, -1);
-  const parts = inner.split('|');
+  const tokens = tokenizeDelimitedRowInner(inner);
   const out: EskerraTableCellMapping[] = [];
-  let innerOffset = 0;
-  for (let col = 0; col < parts.length; col += 1) {
-    const part = parts[col]!;
+  for (let col = 0; col < tokens.length; col += 1) {
+    const token = tokens[col]!;
+    const part = token.raw;
     const lead = part.length - part.trimStart().length;
     const trimContent = part.trim();
-    const zoneFrom = lineFrom + 1 + innerOffset;
-    const zoneTo = zoneFrom + part.length;
+    const zoneFrom = lineFrom + 1 + token.rawStart;
+    const zoneTo = lineFrom + 1 + token.rawEnd;
     const interiorFrom = zoneFrom + lead;
     const interiorTo = interiorFrom + trimContent.length;
     out.push({
@@ -46,10 +46,6 @@ function mappingsForDelimitedLine(
       interiorFrom,
       interiorTo,
     });
-    innerOffset += part.length;
-    if (col < parts.length - 1) {
-      innerOffset += 1;
-    }
   }
   return out;
 }
