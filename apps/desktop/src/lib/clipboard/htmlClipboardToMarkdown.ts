@@ -160,6 +160,90 @@ function lowerHtmlContainsTagOpen(lowerHtml: string, marker: string): boolean {
   return false;
 }
 
+/** Block tags that break GFM pipe-table rows when left as direct `<th>`/`<td>` children. */
+const BLOCK_TAGS_IN_CELL = new Set([
+  'P',
+  'DIV',
+  'SECTION',
+  'ARTICLE',
+  'HEADER',
+  'FOOTER',
+  'ASIDE',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'BLOCKQUOTE',
+  'PRE',
+  'UL',
+  'OL',
+  'LI',
+  'DL',
+  'DT',
+  'DD',
+  'FIGURE',
+  'FIGCAPTION',
+  'DETAILS',
+  'SUMMARY',
+]);
+
+const FLATTEN_CELL_MAX_ITERATIONS = 50;
+
+function trimCellBrNoise(cell: Element): void {
+  while (cell.firstChild && (cell.firstChild as HTMLElement).tagName === 'BR') {
+    cell.removeChild(cell.firstChild);
+  }
+  while (cell.lastChild && (cell.lastChild as HTMLElement).tagName === 'BR') {
+    cell.removeChild(cell.lastChild);
+  }
+}
+
+function unwrapBlockChildInCell(
+  cell: Element,
+  child: Element,
+  doc: Document,
+): void {
+  if (child.tagName === 'LI') {
+    cell.insertBefore(doc.createTextNode('- '), child);
+  }
+  const ref = child.nextSibling;
+  while (child.firstChild) {
+    cell.insertBefore(child.firstChild, child);
+  }
+  if (ref) {
+    cell.insertBefore(doc.createElement('br'), ref);
+  }
+  cell.removeChild(child);
+}
+
+function flattenSingleTableCell(cell: Element, doc: Document): void {
+  let mutated = true;
+  let safety = 0;
+  while (mutated && safety++ < FLATTEN_CELL_MAX_ITERATIONS) {
+    mutated = false;
+    for (const child of Array.from(cell.children)) {
+      if (!BLOCK_TAGS_IN_CELL.has(child.tagName)) {
+        continue;
+      }
+      unwrapBlockChildInCell(cell, child, doc);
+      mutated = true;
+    }
+  }
+  trimCellBrNoise(cell);
+}
+
+/**
+ * Flatten block content inside table cells so Turndown's GFM tables plugin can emit
+ * one `| ... |` row per `<tr>` (rendered chat HTML often wraps each cell in `<p>`).
+ */
+function flattenTableCellsForGfm(doc: Document): void {
+  doc.querySelectorAll('th, td').forEach(cell => {
+    flattenSingleTableCell(cell, doc);
+  });
+}
+
 function preprocessClipboardHtmlFragment(html: string): string {
   try {
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -167,6 +251,7 @@ function preprocessClipboardHtmlFragment(html: string): string {
       .querySelectorAll('script, style, meta')
       .forEach(el => el.remove());
     doc.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.remove());
+    flattenTableCellsForGfm(doc);
     return doc.body?.innerHTML ?? html;
   } catch {
     return html;

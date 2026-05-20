@@ -204,6 +204,65 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md).toContain('SD');
   });
 
+  it('flattens paragraph-wrapped table cells into one GFM pipe row', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td><p>x</p></td><td><p>y</p></td></tr></tbody></table>',
+    );
+    const rows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(rows).toContain('| x | y |');
+    expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
+  });
+
+  it('joins multiple paragraphs in one cell with br inside a single pipe row', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td><p>a</p><p>b</p></td><td>c</td></tr></tbody></table>',
+    );
+    expect(md).toMatch(/\| a[\s\S]*b \| c \|/);
+    expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
+  });
+
+  it('flattens paragraph-wrapped header cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th><p>Input</p></th><th><p>Output</p></th></tr></thead>'
+        + '<tbody><tr><td><p>x</p></td><td><p>y</p></td></tr></tbody></table>',
+    );
+    expect(md).toContain('| Input | Output |');
+    expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
+  });
+
+  it('converts rendered chat-style coverage tables without broken pipe rows', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr>'
+        + '<th><p>Input</p></th><th><p>Markdown output</p></th><th><p>Bron</p></th>'
+        + '</tr></thead><tbody>'
+        + '<tr><td><p><code>&lt;table&gt;</code></p></td>'
+        + '<td><p><code>| ... |</code> GFM</p></td>'
+        + '<td><p>bestaand (GFM plugin)</p></td></tr>'
+        + '<tr><td><p><code>&lt;pre&gt;</code></p></td>'
+        + '<td><p>fenced</p></td><td><p>bestaand</p></td></tr>'
+        + '</tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    const separatorRows = pipeRows.filter(line =>
+      /\|\s*---/.test(line) || /---\s*\|/.test(line),
+    );
+    expect(separatorRows.length).toBe(1);
+    expect(pipeRows.length).toBe(4);
+    expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
+    expect(md).toContain('`<table>`');
+    expect(md).toContain('bestaand (GFM plugin)');
+  });
+
+  it('keeps non-table paragraphs as separate blocks', () => {
+    const md = clipboardHtmlToMarkdown('<p>a</p><p>b</p>');
+    expect(md).toContain('a');
+    expect(md).toContain('b');
+    const blankGap = md.indexOf('\n\n', md.indexOf('a'));
+    expect(blankGap).toBeGreaterThanOrEqual(0);
+  });
+
   it('converts HTML tables with line breaks in cells to GFM pipe tables', () => {
     const md = clipboardHtmlToMarkdown(
       '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
