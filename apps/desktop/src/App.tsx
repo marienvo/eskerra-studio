@@ -32,10 +32,7 @@ import {
   DEFAULT_LAYOUTS,
   type StoredLayouts,
 } from './lib/layout/layoutStore';
-import {
-  DEFAULT_MAIN_WINDOW_PANE_VISIBILITY,
-  type TodayHubWorkspaceSnapshot,
-} from './lib/mainWindowUiStore';
+import type {TodayHubWorkspaceSnapshot} from './lib/mainWindowUiStore';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {AppThemeShell} from './shell/AppThemeShell';
 import {useAppLayoutWidthPersisters} from './shell/useAppLayoutWidthPersisters';
@@ -50,6 +47,7 @@ import {useAppGitSyncOrchestration} from './shell/useAppGitSyncOrchestration';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
 import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
+import {usePaneVisibility} from './shell/usePaneVisibility';
 import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
 import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
@@ -85,27 +83,7 @@ export default function App() {
     activeTodayHubUri?: string | null;
     todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot> | null;
   } | null>(null);
-  const {
-    vaultRoot,
-    vaultSettings,
-    setVaultSettings,
-    settingsName,
-    busy,
-    selectionController: workspaceSelectionController,
-    frontmatterController: workspaceFrontmatterController,
-    notificationsState: workspaceNotificationsState,
-    conflictController: workspaceConflictController,
-    fsRefreshNonce,
-    podcastFsNonce,
-    deviceInstanceId,
-    hydrateVault,
-    persistenceController: workspacePersistenceController,
-    linkController: workspaceLinkController,
-    treeController: workspaceTreeController,
-    inboxShellRestored,
-    tabsController: workspaceTabsController,
-    todayHubController: workspaceTodayHubController,
-  } = useMainWindowWorkspace({
+  const workspace = useMainWindowWorkspace({
     fs,
     inboxEditorRef,
     inboxEditorShellScrollRef,
@@ -113,45 +91,58 @@ export default function App() {
     inboxRestoreEnabled: layoutsReady,
   });
   const {
-    selectedUri,
-    composeDraftMarkdown,
-    composingNewEntry,
-    startNewEntry,
-    selectNote,
-    selectNoteInNewActiveTab,
-    vaultMarkdownRefs,
-  } = workspaceSelectionController;
-  const {
-    onCleanNoteInbox,
-    flushInboxSave,
-    saveSettledNonce,
-  } = workspacePersistenceController;
-  const {
-    err,
-    setErr,
-    wikiRenameNotice,
-    renameLinkProgress,
-  } = workspaceNotificationsState;
-  const {
-    diskConflict,
-    resolveDiskConflictReloadFromDisk,
-    resolveDiskConflictKeepLocal,
-    diskConflictSoft,
-    elevateDiskConflictSoftToBlocking,
-    dismissDiskConflictSoft,
-    enterDiskConflictMergeView,
-  } = workspaceConflictController;
-  const {
-    todayHubSelectorItems,
-    activeTodayHubUri,
-    persistenceActiveTodayHubUri,
-    persistenceTodayHubWorkspaces,
-    switchTodayHubWorkspace,
-    focusActiveTodayHubNote,
-    workspaceSelectorSubLabel,
-    workspaceSelectShowsActiveTabPill,
-    openWorkspaceHomeCurrentInBackgroundTab,
-  } = workspaceTodayHubController;
+    vaultRoot,
+    vaultSettings,
+    setVaultSettings,
+    settingsName,
+    busy,
+    fsRefreshNonce,
+    podcastFsNonce,
+    deviceInstanceId,
+    hydrateVault,
+    inboxShellRestored,
+    selectionController: {
+      selectedUri,
+      composeDraftMarkdown,
+      composingNewEntry,
+      startNewEntry,
+      selectNote,
+      selectNoteInNewActiveTab,
+      vaultMarkdownRefs,
+    },
+    persistenceController: {
+      onCleanNoteInbox,
+      flushInboxSave,
+      saveSettledNonce,
+    },
+    notificationsState: {
+      err,
+      setErr,
+      wikiRenameNotice,
+      renameLinkProgress,
+    },
+    conflictController: {
+      diskConflict,
+      resolveDiskConflictReloadFromDisk,
+      resolveDiskConflictKeepLocal,
+      diskConflictSoft,
+      elevateDiskConflictSoftToBlocking,
+      dismissDiskConflictSoft,
+      enterDiskConflictMergeView,
+    },
+    tabsController,
+    todayHubController: {
+      todayHubSelectorItems,
+      activeTodayHubUri,
+      persistenceActiveTodayHubUri,
+      persistenceTodayHubWorkspaces,
+      switchTodayHubWorkspace,
+      focusActiveTodayHubNote,
+      workspaceSelectorSubLabel,
+      workspaceSelectShowsActiveTabPill,
+      openWorkspaceHomeCurrentInBackgroundTab,
+    },
+  } = workspace;
 
   const openTodayHubInNewTabAfterActive = useCallback(
     (uri: string) => {
@@ -191,25 +182,19 @@ export default function App() {
     openWorkspaceHomeCurrentInBackgroundTab,
   );
 
-  const [vaultPaneVisible, setVaultPaneVisible] = useState(
-    DEFAULT_MAIN_WINDOW_PANE_VISIBILITY.vaultPaneVisible,
-  );
-  const [episodesPaneVisible, setEpisodesPaneVisible] = useState(
-    DEFAULT_MAIN_WINDOW_PANE_VISIBILITY.episodesPaneVisible,
-  );
-  const [inboxPaneVisible, setInboxPaneVisible] = useState(
-    DEFAULT_MAIN_WINDOW_PANE_VISIBILITY.inboxPaneVisible,
-  );
+  const paneVisibility = usePaneVisibility();
+  const {visibility: paneVisibilityState, setVisibility: setPaneVisibility} =
+    paneVisibility;
   const [titleBarEditorTabsHost, setTitleBarEditorTabsHost] = useState<HTMLDivElement | null>(
     null,
   );
   useEditorHistoryMouseButtons({
     vaultRoot,
     busy,
-    editorHistoryCanGoBack: workspaceTabsController.editorHistoryCanGoBack,
-    editorHistoryCanGoForward: workspaceTabsController.editorHistoryCanGoForward,
-    editorHistoryGoBack: workspaceTabsController.editorHistoryGoBack,
-    editorHistoryGoForward: workspaceTabsController.editorHistoryGoForward,
+    editorHistoryCanGoBack: tabsController.editorHistoryCanGoBack,
+    editorHistoryCanGoForward: tabsController.editorHistoryCanGoForward,
+    editorHistoryGoBack: tabsController.editorHistoryGoBack,
+    editorHistoryGoForward: tabsController.editorHistoryGoForward,
   });
   usePreventMiddleClickPaste();
 
@@ -217,7 +202,6 @@ export default function App() {
   const [vaultSearchOpen, setVaultSearchOpen] = useState(false);
 
   const [layouts, setLayouts] = useState<StoredLayouts>(DEFAULT_LAYOUTS);
-  const [notificationsPanelVisible, setNotificationsPanelVisible] = useState(true);
 
   const {
     podcastCatalog,
@@ -257,10 +241,7 @@ export default function App() {
   useAppOnMountLayoutHydration({
     setLayouts,
     setLayoutsReady,
-    setVaultPaneVisible,
-    setEpisodesPaneVisible,
-    setInboxPaneVisible,
-    setNotificationsPanelVisible,
+    setPaneVisibility,
     setRestoredInboxState,
   });
 
@@ -274,18 +255,15 @@ export default function App() {
   useAppDebouncedPersistMainWindowUi({
     vaultRoot,
     inboxShellRestored,
-    vaultPaneVisible,
-    episodesPaneVisible,
-    inboxPaneVisible,
-    notificationsPanelVisible,
+    paneVisibility: paneVisibilityState,
     composingNewEntry,
     composeDraftMarkdown,
     selectedUri,
     activeTodayHubUri: persistenceActiveTodayHubUri,
     persistenceTodayHubWorkspaces,
     vaultMarkdownRefs,
-    editorWorkspaceTabs: workspaceTabsController.editorWorkspaceTabs,
-    activeEditorTabId: workspaceTabsController.activeEditorTabId,
+    editorWorkspaceTabs: tabsController.editorWorkspaceTabs,
+    activeEditorTabId: tabsController.activeEditorTabId,
   });
 
   const pickFolder = async () => {
@@ -307,6 +285,10 @@ export default function App() {
 
   useAppTauriCloseAndFocusSave(flushInboxSave);
 
+  const openNotificationsPanel = useCallback(
+    () => setPaneVisibility({notifications: true}),
+    [setPaneVisibility],
+  );
   const {
     items: notificationItems,
     dismissItem: dismissNotification,
@@ -320,7 +302,7 @@ export default function App() {
     selectedUri,
     statusBarCenter,
     renameLinkProgress,
-    setNotificationsPanelVisible,
+    openNotificationsPanel,
   });
   const {
     manualGitSync,
@@ -354,8 +336,8 @@ export default function App() {
   useAppMainWindowKeyboardEffects({
     vaultRoot,
     busy,
-    canReopenClosedEditorTab: workspaceTabsController.canReopenClosedEditorTab,
-    reopenLastClosedEditorTab: workspaceTabsController.reopenLastClosedEditorTab,
+    canReopenClosedEditorTab: tabsController.canReopenClosedEditorTab,
+    reopenLastClosedEditorTab: tabsController.reopenLastClosedEditorTab,
     composingNewEntry,
     selectedUri,
     onCleanNoteInbox,
@@ -455,21 +437,8 @@ export default function App() {
                       fsRefreshNonce={fsRefreshNonce}
                       inboxEditorRef={inboxEditorRef}
                       inboxEditorShellScrollRef={inboxEditorShellScrollRef}
-                      selectionController={workspaceSelectionController}
-                      frontmatterController={workspaceFrontmatterController}
-                      notificationsState={workspaceNotificationsState}
-                      conflictController={workspaceConflictController}
-                      persistenceController={workspacePersistenceController}
-                      linkController={workspaceLinkController}
-                      treeController={workspaceTreeController}
-                      tabsController={workspaceTabsController}
-                      todayHubController={workspaceTodayHubController}
-                      vaultPaneVisible={vaultPaneVisible}
-                      setVaultPaneVisible={setVaultPaneVisible}
-                      episodesPaneVisible={episodesPaneVisible}
-                      setEpisodesPaneVisible={setEpisodesPaneVisible}
-                      inboxPaneVisible={inboxPaneVisible}
-                      setInboxPaneVisible={setInboxPaneVisible}
+                      workspace={workspace}
+                      paneVisibility={paneVisibility}
                       layouts={layouts}
                       persistMainLeftWidthPx={persistMainLeftWidthPx}
                       persistVaultEpisodesStackTopHeightPx={persistVaultEpisodesStackTopHeightPx}
@@ -478,8 +447,6 @@ export default function App() {
                       titleBarEditorTabsHost={titleBarEditorTabsHost}
                       onAddEntry={openAddToInbox}
                       busy={busy}
-                      notificationsPanelVisible={notificationsPanelVisible}
-                      setNotificationsPanelVisible={setNotificationsPanelVisible}
                       notificationItems={notificationItems}
                       notificationHighlightId={notificationHighlightId}
                       dismissNotification={dismissNotification}

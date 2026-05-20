@@ -7,14 +7,12 @@ import {
   type StoredMainWindowUi,
   type TodayHubWorkspaceSnapshot,
 } from '../lib/mainWindowUiStore';
+import type {PaneVisibility} from './usePaneVisibility';
 
 export type UseAppDebouncedPersistMainWindowUiArgs = {
   vaultRoot: string | null;
   inboxShellRestored: boolean;
-  vaultPaneVisible: boolean;
-  episodesPaneVisible: boolean;
-  inboxPaneVisible: boolean;
-  notificationsPanelVisible: boolean;
+  paneVisibility: PaneVisibility;
   composingNewEntry: boolean;
   composeDraftMarkdown: string;
   selectedUri: string | null;
@@ -28,10 +26,7 @@ export type UseAppDebouncedPersistMainWindowUiArgs = {
 export function useAppDebouncedPersistMainWindowUi({
   vaultRoot,
   inboxShellRestored,
-  vaultPaneVisible,
-  episodesPaneVisible,
-  inboxPaneVisible,
-  notificationsPanelVisible,
+  paneVisibility,
   composingNewEntry,
   composeDraftMarkdown,
   selectedUri,
@@ -57,10 +52,10 @@ export function useAppDebouncedPersistMainWindowUi({
     });
     const payload: StoredMainWindowUi = {
       vaultRoot,
-      vaultPaneVisible,
-      episodesPaneVisible,
-      inboxPaneVisible,
-      notificationsPanelVisible,
+      vaultPaneVisible: paneVisibility.vault,
+      episodesPaneVisible: paneVisibility.episodes,
+      inboxPaneVisible: paneVisibility.inbox,
+      notificationsPanelVisible: paneVisibility.notifications,
       inbox,
     };
     const t = window.setTimeout(() => {
@@ -71,10 +66,7 @@ export function useAppDebouncedPersistMainWindowUi({
     };
   }, [
     vaultRoot,
-    vaultPaneVisible,
-    episodesPaneVisible,
-    inboxPaneVisible,
-    notificationsPanelVisible,
+    paneVisibility,
     selectedUri,
     composingNewEntry,
     composeDraftMarkdown,

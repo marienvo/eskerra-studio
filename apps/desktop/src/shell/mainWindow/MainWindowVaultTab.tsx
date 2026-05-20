@@ -1,22 +1,13 @@
 import type {EskerraSettings, VaultFilesystem} from '@eskerra/core';
-import type {ComponentProps, Dispatch, RefObject, SetStateAction} from 'react';
+import type {ComponentProps, RefObject} from 'react';
 
 import {EpisodesPane} from '../../components/EpisodesPane';
 import {VaultTab} from '../../components/VaultTab';
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
 import type {SessionNotification} from '../../lib/sessionNotifications';
-import type {
-  WorkspaceConflictController,
-  WorkspaceFrontmatterController,
-  WorkspaceLinkController,
-  WorkspaceNotificationsState,
-  WorkspacePersistenceController,
-  WorkspaceSelectionController,
-  WorkspaceTabsController,
-  WorkspaceTodayHubController,
-  WorkspaceTreeController,
-} from '../../hooks/workspaceReturnShape';
+import type {UseMainWindowWorkspaceResult} from '../../hooks/useMainWindowWorkspace';
 import type {StoredLayouts} from '../../lib/layout/layoutStore';
+import type {PaneVisibilityController} from '../usePaneVisibility';
 
 type MainWindowVaultTabProps = {
   vaultRoot: string;
@@ -25,21 +16,8 @@ type MainWindowVaultTabProps = {
   fsRefreshNonce: number;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   inboxEditorShellScrollRef: RefObject<HTMLDivElement | null>;
-  selectionController: WorkspaceSelectionController;
-  frontmatterController: WorkspaceFrontmatterController;
-  notificationsState: WorkspaceNotificationsState;
-  conflictController: WorkspaceConflictController;
-  persistenceController: WorkspacePersistenceController;
-  linkController: WorkspaceLinkController;
-  treeController: WorkspaceTreeController;
-  tabsController: WorkspaceTabsController;
-  todayHubController: WorkspaceTodayHubController;
-  vaultPaneVisible: boolean;
-  setVaultPaneVisible: Dispatch<SetStateAction<boolean>>;
-  episodesPaneVisible: boolean;
-  setEpisodesPaneVisible: Dispatch<SetStateAction<boolean>>;
-  inboxPaneVisible: boolean;
-  setInboxPaneVisible: Dispatch<SetStateAction<boolean>>;
+  workspace: UseMainWindowWorkspaceResult;
+  paneVisibility: PaneVisibilityController;
   layouts: StoredLayouts;
   persistMainLeftWidthPx: (px: number) => void;
   persistVaultEpisodesStackTopHeightPx: (px: number) => void;
@@ -48,8 +26,6 @@ type MainWindowVaultTabProps = {
   titleBarEditorTabsHost: HTMLDivElement | null;
   onAddEntry: () => void;
   busy: boolean;
-  notificationsPanelVisible: boolean;
-  setNotificationsPanelVisible: Dispatch<SetStateAction<boolean>>;
   notificationItems: readonly SessionNotification[];
   notificationHighlightId: string | null;
   dismissNotification: (id: string) => void;
@@ -80,21 +56,8 @@ export function MainWindowVaultTab({
   fsRefreshNonce,
   inboxEditorRef,
   inboxEditorShellScrollRef,
-  selectionController,
-  frontmatterController,
-  notificationsState,
-  conflictController,
-  persistenceController,
-  linkController,
-  treeController,
-  tabsController,
-  todayHubController,
-  vaultPaneVisible,
-  setVaultPaneVisible,
-  episodesPaneVisible,
-  setEpisodesPaneVisible,
-  inboxPaneVisible,
-  setInboxPaneVisible,
+  workspace,
+  paneVisibility,
   layouts,
   persistMainLeftWidthPx,
   persistVaultEpisodesStackTopHeightPx,
@@ -103,8 +66,6 @@ export function MainWindowVaultTab({
   titleBarEditorTabsHost,
   onAddEntry,
   busy,
-  notificationsPanelVisible,
-  setNotificationsPanelVisible,
   notificationItems,
   notificationHighlightId,
   dismissNotification,
@@ -118,6 +79,18 @@ export function MainWindowVaultTab({
   rssSyncPercent,
   onMuteLinkSnippetDomain,
 }: MainWindowVaultTabProps) {
+  const {
+    selectionController,
+    frontmatterController,
+    notificationsState,
+    conflictController,
+    persistenceController,
+    linkController,
+    treeController,
+    tabsController,
+    todayHubController,
+  } = workspace;
+  const {visibility, setVisibility, togglePane} = paneVisibility;
   return (
     <VaultTab
       key={vaultRoot}
@@ -163,14 +136,14 @@ export function MainWindowVaultTab({
         inboxBacklinksDeferNonce: selectionController.inboxBacklinksDeferNonce,
       }}
       layoutController={{
-        vaultPaneVisible,
-        onToggleVault: () => setVaultPaneVisible(v => !v),
-        episodesPaneVisible,
-        onToggleEpisodes: () => setEpisodesPaneVisible(v => !v),
-        inboxPaneVisible,
-        onToggleInboxPane: () => setInboxPaneVisible(v => !v),
-        onOpenInboxPane: () => setInboxPaneVisible(true),
-        onCloseInboxPane: () => setInboxPaneVisible(false),
+        vaultPaneVisible: visibility.vault,
+        onToggleVault: () => togglePane('vault'),
+        episodesPaneVisible: visibility.episodes,
+        onToggleEpisodes: () => togglePane('episodes'),
+        inboxPaneVisible: visibility.inbox,
+        onToggleInboxPane: () => togglePane('inbox'),
+        onOpenInboxPane: () => setVisibility({inbox: true}),
+        onCloseInboxPane: () => setVisibility({inbox: false}),
         notificationsInboxStackTopHeightPx: layouts.notificationsInboxStack.topHeightPx,
         onNotificationsInboxStackTopHeightPxChanged:
           persistNotificationsInboxStackTopHeightPx,
@@ -187,7 +160,7 @@ export function MainWindowVaultTab({
       playbackController={{
         playbackTransport,
         toolbarNowPlaying,
-        episodesPane: episodesPaneVisible ? (
+        episodesPane: visibility.episodes ? (
           <EpisodesPane
             sections={podcastCatalog.sections}
             catalogLoading={podcastCatalog.catalogLoading}
@@ -247,8 +220,8 @@ export function MainWindowVaultTab({
         onCloseOtherEditorTabs: tabsController.closeOtherEditorTabs,
       }}
       notificationsController={{
-        notificationsPanelVisible,
-        onToggleNotificationsPanel: () => setNotificationsPanelVisible(v => !v),
+        notificationsPanelVisible: visibility.notifications,
+        onToggleNotificationsPanel: () => togglePane('notifications'),
         notificationItems,
         notificationHighlightId,
         onDismissNotification: dismissNotification,
