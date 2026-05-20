@@ -71,8 +71,8 @@ describe('expandKnownEmojiShortcodes', () => {
   });
 
   it('skips fenced and inline code', () => {
-    expect(expandKnownEmojiShortcodes('`:joy:` and ```\n:joy:\n```')).toBe(
-      '`:joy:` and ```\n:joy:\n```',
+    expect(expandKnownEmojiShortcodes('`:joy:` and\n```\n:joy:\n```')).toBe(
+      '`:joy:` and\n```\n:joy:\n```',
     );
   });
 

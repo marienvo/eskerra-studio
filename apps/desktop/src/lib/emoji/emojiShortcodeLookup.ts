@@ -1,7 +1,7 @@
 import emojiRows from '../../editor/noteEditor/data/emojiColonCompletionData.json';
 import {
-  FENCED_CODE_RE,
   INLINE_CODE_RE,
+  transformMarkdownPreservingFencedCode,
 } from '../markdown/markdownCodeRegex';
 
 type EmojiCompletionRow = {
@@ -103,21 +103,7 @@ function expandShortcodesOutsideInlineCode(segment: string): string {
  * Skips fenced code blocks and inline code spans.
  */
 export function expandKnownEmojiShortcodes(md: string): string {
-  let out = '';
-  let last = 0;
-  let m: RegExpExecArray | null;
-  const fenceRe = new RegExp(FENCED_CODE_RE.source, FENCED_CODE_RE.flags);
-  while ((m = fenceRe.exec(md)) !== null) {
-    if (m.index > last) {
-      out += expandShortcodesOutsideInlineCode(md.slice(last, m.index));
-    }
-    out += m[0];
-    last = m.index + m[0].length;
-  }
-  if (last < md.length) {
-    out += expandShortcodesOutsideInlineCode(md.slice(last));
-  }
-  return out;
+  return transformMarkdownPreservingFencedCode(md, expandShortcodesOutsideInlineCode);
 }
 
 /** Vitest harness: drop cached shortcode map. */
