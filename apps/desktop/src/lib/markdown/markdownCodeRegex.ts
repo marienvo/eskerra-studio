@@ -9,24 +9,65 @@ export type MarkdownFencedCodeSpan = {
   readonly end: number;
 };
 
-function isLineStart(md: string, index: number): boolean {
-  return index === 0 || md[index - 1] === '\n';
+function lineStartIndex(md: string, index: number): number {
+  const prevNewline = md.lastIndexOf('\n', index - 1);
+  return prevNewline < 0 ? 0 : prevNewline + 1;
 }
 
-function backtickRunLength(md: string, index: number): number {
-  let len = 0;
-  while (index + len < md.length && md[index + len] === '`') {
-    len += 1;
+/** CommonMark: up to 3 spaces, then optional `>` blockquote markers. */
+function skipFenceLinePrefix(line: string, start: number): number {
+  let i = start;
+  let spaces = 0;
+  while (i < line.length && line[i] === ' ' && spaces < 3) {
+    spaces += 1;
+    i += 1;
   }
-  return len;
+  while (i < line.length && line[i] === '>') {
+    i += 1;
+    if (i < line.length && line[i] === ' ') {
+      i += 1;
+    }
+  }
+  return i;
+}
+
+function openingFenceOnLine(
+  line: string,
+): {fenceStart: number; fenceLen: number} | null {
+  const fenceStart = skipFenceLinePrefix(line, 0);
+  if (fenceStart >= line.length || line[fenceStart] !== '`') {
+    return null;
+  }
+  let fenceLen = 0;
+  while (
+    fenceStart + fenceLen < line.length
+    && line[fenceStart + fenceLen] === '`'
+  ) {
+    fenceLen += 1;
+  }
+  if (fenceLen < 3) {
+    return null;
+  }
+  return {fenceStart, fenceLen};
 }
 
 function isClosingFenceLine(line: string, fenceLen: number): boolean {
-  if (line.length !== fenceLen) {
+  const fenceStart = skipFenceLinePrefix(line, 0);
+  if (fenceStart >= line.length || line[fenceStart] !== '`') {
     return false;
   }
-  for (let i = 0; i < fenceLen; i += 1) {
-    if (line[i] !== '`') {
+  let closeLen = 0;
+  while (
+    fenceStart + closeLen < line.length
+    && line[fenceStart + closeLen] === '`'
+  ) {
+    closeLen += 1;
+  }
+  if (closeLen < fenceLen) {
+    return false;
+  }
+  for (let i = fenceStart + closeLen; i < line.length; i += 1) {
+    if (line[i] !== ' ' && line[i] !== '\t') {
       return false;
     }
   }
@@ -58,22 +99,25 @@ function tryFencedBlockAt(
   md: string,
   tickIndex: number,
 ): MarkdownFencedCodeSpan | null {
-  if (!isLineStart(md, tickIndex)) {
-    return null;
-  }
-  const fenceLen = backtickRunLength(md, tickIndex);
-  if (fenceLen < 3) {
-    return null;
-  }
+  const openLineStart = lineStartIndex(md, tickIndex);
   const openLineEnd = md.indexOf('\n', tickIndex);
   if (openLineEnd < 0) {
     return null;
   }
-  const closeEnd = findClosingFenceEnd(md, openLineEnd + 1, fenceLen);
+  const openLine = md.slice(openLineStart, openLineEnd);
+  const opening = openingFenceOnLine(openLine);
+  if (!opening || openLineStart + opening.fenceStart !== tickIndex) {
+    return null;
+  }
+  const closeEnd = findClosingFenceEnd(
+    md,
+    openLineEnd + 1,
+    opening.fenceLen,
+  );
   if (closeEnd < 0) {
     return null;
   }
-  return {start: tickIndex, end: closeEnd};
+  return {start: openLineStart, end: closeEnd};
 }
 
 /**

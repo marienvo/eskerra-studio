@@ -58,7 +58,7 @@ function fencedPreCodeReplacement(
   const code = codeEl.textContent ?? '';
   const fenceChar = fence.charAt(0) || '`';
   let fenceSize = 3;
-  const fenceInCodeRegex = new RegExp(`^${fenceChar}{3,}`, 'gm');
+  const fenceInCodeRegex = new RegExp(`^ {0,3}${fenceChar}{3,}`, 'gm');
   let match: RegExpExecArray | null;
   while ((match = fenceInCodeRegex.exec(code)) !== null) {
     if (match[0].length >= fenceSize) {

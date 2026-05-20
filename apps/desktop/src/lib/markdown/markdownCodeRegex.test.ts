@@ -54,6 +54,16 @@ describe('findFencedCodeSpans', () => {
   it('ignores inline triple backticks on the same line', () => {
     expect(findFencedCodeSpans('use ``` inline')).toEqual([]);
   });
+
+  it('finds indented fences up to three spaces', () => {
+    const md = '   ```\nline\n   ```\n';
+    expect(findFencedCodeSpans(md)).toEqual([{start: 0, end: md.length}]);
+  });
+
+  it('finds blockquote-prefixed fences', () => {
+    const md = '> ```\n> line\n> ```\n';
+    expect(findFencedCodeSpans(md)).toEqual([{start: 0, end: md.length}]);
+  });
 });
 
 describe('transformMarkdownPreservingFencedCode', () => {
@@ -63,5 +73,13 @@ describe('transformMarkdownPreservingFencedCode', () => {
       segment.replace(/:joy:/g, '😂'),
     );
     expect(out).toBe('prose 😂\n````\n:joy:\n````\nmore 😂');
+  });
+
+  it('skips blockquote-prefixed fenced regions', () => {
+    const md = 'prose :joy:\n> ```\n> :joy:\n> ```\nmore :joy:';
+    const out = transformMarkdownPreservingFencedCode(md, segment =>
+      segment.replace(/:joy:/g, '😂'),
+    );
+    expect(out).toBe('prose 😂\n> ```\n> :joy:\n> ```\nmore 😂');
   });
 });

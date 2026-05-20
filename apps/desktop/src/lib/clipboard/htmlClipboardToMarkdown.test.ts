@@ -207,6 +207,12 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md).not.toContain('😂');
   });
 
+  it('uses a longer fence when pre content contains indented triple backticks', () => {
+    const md = clipboardHtmlToMarkdown('<pre>   ```\nline\n   ```</pre>');
+    expect(md).toContain('````\n   ```\nline\n   ```\n````');
+    expect(md).not.toMatch(/^```\n {3}```/m);
+  });
+
   it('does not rewrite non-Slack images whose path contains slack-edge.com', () => {
     const md = clipboardHtmlToMarkdown(
       '<p><img src="https://example.com/slack-edge.com/1f602.png" alt="x"></p>',
