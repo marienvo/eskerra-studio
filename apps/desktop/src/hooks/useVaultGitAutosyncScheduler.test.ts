@@ -43,9 +43,13 @@ function ready(overrides: Partial<HookArgs> = {}): HookArgs {
 }
 
 function render(args: HookArgs) {
-  return renderHook((props: HookArgs) => useVaultGitAutosyncScheduler(props), {
-    initialProps: args,
-  });
+  return renderHook(
+    (props: HookArgs) => {
+      const state = useVaultGitAutosyncScheduler(props);
+      return {state, runManualSync: props.runManualSync};
+    },
+    {initialProps: args},
+  );
 }
 
 function deferred<T>() {
@@ -64,9 +68,33 @@ describe('useVaultGitAutosyncScheduler', () => {
   it('does not run sync on mount', () => {
     vi.useFakeTimers();
     const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
-    render(ready({runManualSync}));
+    const {result} = render(ready({runManualSync}));
 
     expect(runManualSync).not.toHaveBeenCalled();
+    expect(result.current.state.autosyncPending).toBe(false);
+  });
+
+  it('reports pending after a save and advances nextAutosyncAtMs on interval', async () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.setSystemTime(now);
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const {result, rerender} = render(ready({runManualSync}));
+
+    const initialNext = result.current.state.nextAutosyncAtMs;
+    expect(initialNext).toBeGreaterThanOrEqual(now + INTERVAL_MS - 5);
+    expect(initialNext).toBeLessThanOrEqual(now + INTERVAL_MS + 5);
+
+    rerender(ready({saveSettledNonce: 1, runManualSync}));
+    expect(result.current.state.autosyncPending).toBe(true);
+
+    await act(async () => {
+      vi.advanceTimersByTime(INTERVAL_MS);
+    });
+
+    expect(result.current.state.nextAutosyncAtMs).toBeGreaterThanOrEqual(now + INTERVAL_MS * 2 - 10);
+    expect(runManualSync).toHaveBeenCalledTimes(1);
+    expect(result.current.state.autosyncPending).toBe(false);
   });
 
   it('marks a save as pending without syncing immediately', () => {

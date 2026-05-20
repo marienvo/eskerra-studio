@@ -1,33 +1,14 @@
-import {useEffect, useEffectEvent, useRef, type MutableRefObject} from 'react';
+import {useEffect, useEffectEvent, useRef, useState, type MutableRefObject} from 'react';
 
-import {shouldRunVaultGitSync} from '../lib/gitSyncPreflight';
+import {getAutosyncPreflight} from '../lib/gitAutosyncCountdown';
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
-type AutosyncPreflightResult = 'run' | 'skip-keep-pending' | 'skip-clear-pending';
-
-/**
- * Checks whether an autosync should run given the current git status.
- * Returns 'run' to proceed, 'skip-clear-pending' when repo is clean (discard pending),
- * or 'skip-keep-pending' when status is unknown/error (retry next interval).
- * Returns 'run' when gitStatus is undefined (no preflight wired up yet).
- */
-function autosyncPreflight(gitStatus: GitStatusResult | null | undefined): AutosyncPreflightResult {
-  if (gitStatus === undefined) return 'run';
-  if (shouldRunVaultGitSync(gitStatus, 'autosync')) return 'run';
-  // Preflight says skip. Decide whether to clear or keep pending.
-  const isCleanSynced =
-    gitStatus != null &&
-    gitStatus.unsafeState == null &&
-    !gitStatus.isWrongBranch &&
-    !gitStatus.hasUncommittedChanges &&
-    !gitStatus.hasStagedChanges &&
-    !gitStatus.hasUntrackedFiles &&
-    gitStatus.ahead === 0 &&
-    gitStatus.behind === 0;
-  return isCleanSynced ? 'skip-clear-pending' : 'skip-keep-pending';
-}
-
 export const AUTOSYNC_INTERVAL_MS = 5 * 60 * 1000;
+
+export type VaultGitAutosyncSchedulerState = {
+  autosyncPending: boolean;
+  nextAutosyncAtMs: number;
+};
 
 type UseVaultGitAutosyncSchedulerArgs = {
   saveSettledNonce: number;
@@ -57,22 +38,47 @@ export function useVaultGitAutosyncScheduler({
   runManualSync,
   intervalMs = AUTOSYNC_INTERVAL_MS,
   gitOperationBusyRef,
-}: UseVaultGitAutosyncSchedulerArgs): void {
+}: UseVaultGitAutosyncSchedulerArgs): VaultGitAutosyncSchedulerState {
   const pendingGenerationRef = useRef(0);
   const syncedGenerationRef = useRef(0);
   const inFlightRef = useRef(false);
+  const nextAutosyncAtMsRef = useRef(0);
+  const [schedulerState, setSchedulerState] = useState<VaultGitAutosyncSchedulerState>({
+    autosyncPending: false,
+    nextAutosyncAtMs: 0,
+  });
+
+  const publishSchedulerState = useEffectEvent(() => {
+    setSchedulerState({
+      autosyncPending: pendingGenerationRef.current !== syncedGenerationRef.current,
+      nextAutosyncAtMs: nextAutosyncAtMsRef.current,
+    });
+  });
+
+  const scheduleNextAutosyncAt = useEffectEvent((atMs: number) => {
+    nextAutosyncAtMsRef.current = atMs;
+    publishSchedulerState();
+  });
 
   useEffect(() => {
     pendingGenerationRef.current = 0;
     syncedGenerationRef.current = 0;
-  }, [vaultPath]);
+    nextAutosyncAtMsRef.current = Date.now() + intervalMs;
+    setSchedulerState({
+      autosyncPending: false,
+      nextAutosyncAtMs: nextAutosyncAtMsRef.current,
+    });
+  }, [vaultPath, intervalMs]);
 
   useEffect(() => {
     if (saveSettledNonce === 0) return;
     pendingGenerationRef.current += 1;
+    publishSchedulerState();
   }, [saveSettledNonce]);
 
   const runPendingSync = useEffectEvent(async () => {
+    scheduleNextAutosyncAt(Date.now() + intervalMs);
+
     const pendingGeneration = pendingGenerationRef.current;
     if (pendingGeneration === syncedGenerationRef.current) return;
     if (inFlightRef.current) return;
@@ -83,9 +89,10 @@ export function useVaultGitAutosyncScheduler({
     if (manualSyncRunning) return;
     if (gitOperationBusyRef?.current) return;
 
-    const preflight = autosyncPreflight(gitStatus);
+    const preflight = getAutosyncPreflight(gitStatus);
     if (preflight === 'skip-clear-pending') {
       syncedGenerationRef.current = pendingGenerationRef.current;
+      publishSchedulerState();
       return;
     }
     if (preflight === 'skip-keep-pending') {
@@ -100,6 +107,7 @@ export function useVaultGitAutosyncScheduler({
       const success = await runManualSync({silent: true});
       if (success && pendingGenerationRef.current === pendingGeneration) {
         syncedGenerationRef.current = pendingGeneration;
+        publishSchedulerState();
       }
     } finally {
       if (gitOperationBusyRef) {
@@ -111,7 +119,12 @@ export function useVaultGitAutosyncScheduler({
 
   useEffect(() => {
     if (intervalMs <= 0) return;
-    const id = window.setInterval(runPendingSync, intervalMs);
+    scheduleNextAutosyncAt(Date.now() + intervalMs);
+    const id = window.setInterval(() => {
+      void runPendingSync();
+    }, intervalMs);
     return () => window.clearInterval(id);
   }, [intervalMs]);
+
+  return schedulerState;
 }

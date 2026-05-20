@@ -31,8 +31,8 @@ export function useVaultGitRemoteStatusPolling({
   manualSyncRunning,
   onRefreshed,
   gitOperationBusyRef,
-}: UseVaultGitRemoteStatusPollingInput): void {
-  const {refresh} = useVaultGitRemoteRefresh({
+}: UseVaultGitRemoteStatusPollingInput): {remoteRefreshLoading: boolean} {
+  const {refresh, loading: remoteRefreshLoading} = useVaultGitRemoteRefresh({
     vaultPath,
     remote,
     branch,
@@ -58,4 +58,6 @@ export function useVaultGitRemoteStatusPolling({
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
+
+  return {remoteRefreshLoading};
 }

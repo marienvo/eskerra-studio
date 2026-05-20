@@ -12,6 +12,8 @@ type GitStatusChipProps = {
   error?: string | null;
   syncing?: boolean;
   transient?: TransientGitStatus | null;
+  /** Replaces "Local changes" label when autosync countdown is active. */
+  autosyncCountdownLabel?: string | null;
 };
 
 export function GitStatusChip({
@@ -20,6 +22,7 @@ export function GitStatusChip({
   error = null,
   syncing = false,
   transient = null,
+  autosyncCountdownLabel = null,
 }: GitStatusChipProps) {
   if (syncing) {
     return (
@@ -81,16 +84,26 @@ export function GitStatusChip({
   }
 
   const view = mapGitStatusToView(status);
+  const useAutosyncCountdown =
+    autosyncCountdownLabel != null && view.label === 'Local changes';
+  const displayLabel = useAutosyncCountdown ? autosyncCountdownLabel : view.label;
+  let ariaLabel = view.label;
+  if (useAutosyncCountdown) {
+    ariaLabel =
+      view.description != null ? `${displayLabel}: ${view.description}` : displayLabel;
+  } else if (view.description != null) {
+    ariaLabel = `${view.label}: ${view.description}`;
+  }
 
   return (
     <span
       className={`git-status-chip git-status-chip--${view.tone}`}
-      aria-label={view.description != null ? `${view.label}: ${view.description}` : view.label}
+      aria-label={ariaLabel}
       data-tooltip={view.description ?? undefined}
       data-tooltip-placement="inline-start"
     >
       <IconGlyph name={view.icon} size={12} aria-hidden />
-      {view.label}
+      {displayLabel}
     </span>
   );
 }
