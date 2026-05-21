@@ -44,8 +44,8 @@ function turndownDefaultImageMarkdown(img: HTMLImageElement): string {
   return `![${alt}](<${safeSrc}>${titlePart})`;
 }
 
-function escapeTableCellPipes(content: string): string {
-  return content.replace(/\|/g, '\\|');
+function formatTableCellForPipeRow(content: string): string {
+  return content.split('|').join('\\|');
 }
 
 function trimTrailingNewlines(text: string): string {
@@ -120,8 +120,8 @@ function getTurndown(): TurndownService {
       replacement: (content: string, node: HTMLElement) => {
         const isFirst = node.previousElementSibling === null;
         const prefix = isFirst ? '| ' : ' ';
-        const escaped = escapeTableCellPipes(content.replace(/\n+/g, ' ').trim());
-        return `${prefix}${escaped} |`;
+        const cell = formatTableCellForPipeRow(content.replace(/\n+/g, ' ').trim());
+        return `${prefix}${cell} |`;
       },
     });
     td.addRule('preWithoutCode', {
