@@ -112,6 +112,20 @@ describe('clipboardHtmlToMarkdown', () => {
     expect(md).not.toContain(jsScheme);
   });
 
+  it('does not emit Markdown links for data: URLs', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><a href="data:text/html;base64,PHNjcmlwdD4=">click</a></p>',
+    );
+    expect(md).toBe('click');
+  });
+
+  it('preserves default-safe non-http link protocols', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><a href="sms:+15551234567">Text me</a></p>',
+    );
+    expect(md).toContain('[Text me](sms:+15551234567)');
+  });
+
   it('converts Slack emoji img tags to Unicode', () => {
     const md = clipboardHtmlToMarkdown(
       '<p>Die zien we te vaak <img alt=":joy:" '
