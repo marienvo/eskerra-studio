@@ -3,6 +3,8 @@
  *
  * Only `\|` is treated as an escaped literal pipe inside a cell (not a column
  * delimiter). Sequences like `\\|` are read as `\` + escaped pipe.
+ * Serialized cells may double literal backslashes before a pipe, so `\\\|` is
+ * also decoded as `\|`.
  *
  * Backslashes that are not part of a pipe escape are preserved literally. That
  * avoids silently mutating older vault notes, which stored user-entered
@@ -11,7 +13,11 @@
 
 /** Decode escaped literal pipes while preserving all other backslashes. */
 export function decodeCellEscapes(raw: string): string {
-  return raw.replace(/\\\|/g, '|');
+  return raw
+    .replace(/\\\|/g, '|')
+    .replace(/\\+(?=\|)/g, backslashes =>
+      '\\'.repeat(Math.ceil(backslashes.length / 2)),
+    );
 }
 export type EskerraTableCellToken = {
   /** Inclusive start offset into the inner row (line without outer `|`). */

@@ -214,7 +214,7 @@ describe('serializeEskerraTableV1ToMarkdown', () => {
     };
     const markdown = serializeEskerraTableV1ToMarkdown(model);
     expect(markdown).toBe(
-      '| Cell | Note |\n| --- | --- |\n| a\\b | has \\\\| pipe |',
+      '| Cell | Note |\n| --- | --- |\n| a\\b | has \\\\\\| pipe |',
     );
     const reparsed = parseEskerraTableV1FromLines(markdown.split('\n'));
     expect(reparsed).toEqual({
@@ -223,6 +223,27 @@ describe('serializeEskerraTableV1ToMarkdown', () => {
       model: {
         cells: model.cells,
         align: [undefined, undefined],
+      },
+    });
+  });
+
+  it('escapes multiple literal backslashes before pipes when serializing cells', () => {
+    const model = {
+      cells: [
+        ['Cell'],
+        ['a\\\\|b'],
+      ],
+      align: [undefined] as const,
+    };
+    const markdown = serializeEskerraTableV1ToMarkdown(model);
+    expect(markdown).toBe('| Cell |\n| --- |\n| a\\\\\\\\\\|b |');
+    const reparsed = parseEskerraTableV1FromLines(markdown.split('\n'));
+    expect(reparsed).toEqual({
+      ok: true,
+      lineCount: 3,
+      model: {
+        cells: model.cells,
+        align: [undefined],
       },
     });
   });

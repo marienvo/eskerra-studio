@@ -33,4 +33,8 @@ describe('tokenizeDelimitedRowInner', () => {
   it('decodes escaped pipes while preserving preceding literal backslashes', () => {
     expect(decodeCellEscapes('has \\\\| pipe')).toBe('has \\| pipe');
   });
+
+  it('decodes serialized backslashes before escaped pipes', () => {
+    expect(decodeCellEscapes('has \\\\\\| pipe')).toBe('has \\| pipe');
+  });
 });

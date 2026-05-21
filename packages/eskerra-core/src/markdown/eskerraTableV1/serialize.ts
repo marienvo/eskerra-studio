@@ -1,7 +1,10 @@
 import type {EskerraTableAlignment, EskerraTableModelV1} from './model';
 
 function escapeCellPipes(cell: string): string {
-  return cell.trim().replace(/\|/g, '\\|');
+  return cell.trim().replace(/\\*\|/g, match => {
+    const backslashes = match.slice(0, -1);
+    return `${'\\'.repeat(backslashes.length * 2)}\\|`;
+  });
 }
 
 function serializeRow(cells: string[]): string {

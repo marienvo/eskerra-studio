@@ -49,7 +49,10 @@ function formatTableCellForPipeRow(content: string): string {
     /\\+(?=\|)/g,
     backslashes => '\\'.repeat(Math.ceil(backslashes.length / 2)),
   );
-  return normalizedBackslashesBeforePipes.split('|').join('\\|');
+  return normalizedBackslashesBeforePipes.replace(/\\*\|/g, match => {
+    const backslashes = match.slice(0, -1);
+    return `${'\\'.repeat(backslashes.length * 2)}\\|`;
+  });
 }
 
 function trimTrailingNewlines(text: string): string {
