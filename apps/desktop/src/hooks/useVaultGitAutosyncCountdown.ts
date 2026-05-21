@@ -9,9 +9,31 @@ import type {VaultGitAutosyncSchedulerState} from './useVaultGitAutosyncSchedule
 
 const COUNTDOWN_TICK_MS = 1000;
 
+let countdownClockSubscriberCount = 0;
+let countdownClockSnapshotInitialized = false;
+let countdownClockSnapshotMs = 0;
+
+function refreshCountdownClockSnapshot(): void {
+  countdownClockSnapshotInitialized = true;
+  countdownClockSnapshotMs = Date.now();
+}
+
 function subscribeCountdownClock(onStoreChange: () => void): () => void {
-  const id = window.setInterval(onStoreChange, COUNTDOWN_TICK_MS);
-  return () => window.clearInterval(id);
+  countdownClockSubscriberCount += 1;
+  refreshCountdownClockSnapshot();
+
+  const id = window.setInterval(() => {
+    refreshCountdownClockSnapshot();
+    onStoreChange();
+  }, COUNTDOWN_TICK_MS);
+
+  return () => {
+    countdownClockSubscriberCount -= 1;
+    if (countdownClockSubscriberCount === 0) {
+      countdownClockSnapshotInitialized = false;
+    }
+    window.clearInterval(id);
+  };
 }
 
 function subscribeStableCountdownClock(): () => void {
@@ -19,7 +41,10 @@ function subscribeStableCountdownClock(): () => void {
 }
 
 function getCountdownClockSnapshot(): number {
-  return Date.now();
+  if (!countdownClockSnapshotInitialized) {
+    refreshCountdownClockSnapshot();
+  }
+  return countdownClockSnapshotMs;
 }
 
 function getStableCountdownClockSnapshot(): number {
