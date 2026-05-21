@@ -135,7 +135,16 @@ describe('clipboardHtmlToMarkdown', () => {
     const md = clipboardHtmlToMarkdown(
       '<p><img src="https://example.com/foo.png" alt="Foo"></p>',
     );
-    expect(md).toContain('![Foo](https://example.com/foo.png)');
+    expect(md).toContain('![Foo](<https://example.com/foo.png>)');
+  });
+
+  it('escapes non-Slack image fallback fields', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img alt="a]b" src="https://example.com/a)b.png" title="quote &quot; ok"></p>',
+    );
+    expect(md).toContain(
+      '![a\\]b](<https://example.com/a)b.png> "quote \\" ok")',
+    );
   });
 
   it('expands bare :shortcode: text from HTML paste', () => {
@@ -217,7 +226,7 @@ describe('clipboardHtmlToMarkdown', () => {
     const md = clipboardHtmlToMarkdown(
       '<p><img src="https://example.com/slack-edge.com/1f602.png" alt="x"></p>',
     );
-    expect(md).toContain('![x](https://example.com/slack-edge.com/1f602.png)');
+    expect(md).toContain('![x](<https://example.com/slack-edge.com/1f602.png>)');
     expect(md).not.toContain('😂');
   });
 
@@ -244,6 +253,18 @@ describe('clipboardHtmlToMarkdown', () => {
       throw new Error('Expected pasted table to parse as Eskerra v1');
     }
     expect(parsed.model.cells[1]).toEqual(['a\\\\|b', 'c']);
+  });
+
+  it('preserves Turndown markdown escapes in table cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th></tr></thead>'
+        + '<tbody><tr><td>[text] *x* _y_ !z</td></tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows[2]).toBe('| \\[text\\] \\*x\\* \\_y\\_ !z |');
+    expect(pipeRows[2]).not.toContain('\\\\[');
+    expect(pipeRows[2]).not.toContain('\\\\*');
+    expect(pipeRows[2]).not.toContain('\\\\_');
   });
 
   it('keeps pre with code child as fenced block', () => {
