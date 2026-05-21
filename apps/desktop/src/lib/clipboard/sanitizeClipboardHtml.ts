@@ -1,11 +1,29 @@
-import DOMPurify from 'dompurify';
+import DOMPurify, {type UponSanitizeAttributeHook} from 'dompurify';
+
+const TRANSIENT_IMAGE_SRC_REGEXP = /^(?:blob:|data:image\/)/i;
+
+function sanitizeClipboardHtmlWithDefaultUris(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: {html: true},
+  });
+}
+
+const keepTransientImageSrc: UponSanitizeAttributeHook = (node, hookEvent) => {
+  if (
+    hookEvent.attrName === 'src'
+    && node.nodeName.toLowerCase() === 'img'
+    && TRANSIENT_IMAGE_SRC_REGEXP.test(hookEvent.attrValue.trim())
+  ) {
+    hookEvent.forceKeepAttr = true;
+  }
+};
 
 /**
  * Sanitize untrusted clipboard HTML before any module-owned `DOMParser` use.
  * Matches the profile used for HTML-to-Markdown paste conversion.
  */
 export function sanitizeClipboardHtml(html: string): string {
-  return DOMPurify.sanitize(html, {USE_PROFILES: {html: true}});
+  return sanitizeClipboardHtmlWithDefaultUris(html);
 }
 
 /**
@@ -14,9 +32,10 @@ export function sanitizeClipboardHtml(html: string): string {
  * other URI schemes on `src` are stripped by DOMPurify.
  */
 export function sanitizeClipboardHtmlForImgSrcExtraction(html: string): string {
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: {html: true},
-    ALLOWED_URI_REGEXP:
-      /^(?:(?:https?|mailto|ftp|tel|blob|data):|[^a-z]|[a-z+.\u002d]+(?:[^a-z+.\u002d:]|$))/i,
-  });
+  DOMPurify.addHook('uponSanitizeAttribute', keepTransientImageSrc);
+  try {
+    return sanitizeClipboardHtmlWithDefaultUris(html);
+  } finally {
+    DOMPurify.removeHook('uponSanitizeAttribute', keepTransientImageSrc);
+  }
 }

@@ -49,6 +49,10 @@ describe('stripLeakedHtmlInMarkdown', () => {
     expect(stripLeakedHtmlInMarkdown('&#39; &quot;')).toBe("' \"");
   });
 
+  it('does not reintroduce escaped HTML as raw HTML', () => {
+    expect(stripLeakedHtmlInMarkdown('&lt;u&gt;text&lt;/u&gt;')).toBe('text');
+  });
+
   it('strips tags and decodes entities together', () => {
     const out = stripLeakedHtmlInMarkdown('<p>&amp; ok</p>');
     expectNoHtmlTags(out);

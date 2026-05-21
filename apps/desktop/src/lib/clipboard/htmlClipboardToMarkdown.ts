@@ -1,4 +1,3 @@
-import {decodeCellEscapes} from '@eskerra/core';
 import TurndownService from 'turndown';
 import {
   highlightedCodeBlock,
@@ -21,12 +20,32 @@ let turndownSingleton: TurndownService | null = null;
 
 const SLACK_EMOJI_ALT_SHORTCODE_RE = /^:([\p{L}\p{N}_+-]+):$/u;
 
+function escapeMarkdownImageLabel(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/\]/g, '\\]');
+}
+
+function escapeMarkdownAngleDestination(text: string): string {
+  return text.replace(/</g, '%3C').replace(/>/g, '%3E').replace(/\n/g, '%0A');
+}
+
+function escapeMarkdownTitle(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ');
+}
+
 function turndownDefaultImageMarkdown(img: HTMLImageElement): string {
-  const alt = img.getAttribute('alt') ?? '';
   const src = img.getAttribute('src') ?? '';
+  if (!src) {
+    return '';
+  }
+  const alt = escapeMarkdownImageLabel(img.getAttribute('alt') ?? '');
+  const safeSrc = escapeMarkdownAngleDestination(src);
   const title = img.getAttribute('title') ?? '';
-  const titlePart = title ? ` "${title}"` : '';
-  return src ? `![${alt}](${src}${titlePart})` : '';
+  const titlePart = title ? ` "${escapeMarkdownTitle(title)}"` : '';
+  return `![${alt}](<${safeSrc}>${titlePart})`;
+}
+
+function formatTableCellForPipeRow(content: string): string {
+  return content.split('|').join('\\|');
 }
 
 function trimTrailingNewlines(text: string): string {
@@ -101,11 +120,8 @@ function getTurndown(): TurndownService {
       replacement: (content: string, node: HTMLElement) => {
         const isFirst = node.previousElementSibling === null;
         const prefix = isFirst ? '| ' : ' ';
-        const plain = decodeCellEscapes(content.replace(/\n+/g, ' ').trim());
-        const escaped = plain
-          .replace(/\\/g, '\\\\')
-          .replace(/\|/g, '\\|');
-        return `${prefix}${escaped} |`;
+        const cell = formatTableCellForPipeRow(content.replace(/\n+/g, ' ').trim());
+        return `${prefix}${cell} |`;
       },
     });
     td.addRule('preWithoutCode', {

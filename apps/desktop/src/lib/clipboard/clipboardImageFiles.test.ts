@@ -77,6 +77,16 @@ describe('extractClipboardImageUrlsFromHtml', () => {
     ]);
   });
 
+  it('does not extract blob or data:image URLs from non-img attributes', () => {
+    const html =
+      '<a href="data:image/png;base64,AAAA">data</a>'
+      + '<a href="blob:http://localhost/x">blob</a>';
+    expect(extractClipboardImageUrlsFromHtml(html)).toEqual({
+      blobUrls: [],
+      dataImageUrls: [],
+    });
+  });
+
   it('extracts blob after script tags are removed from clipboard fragment', () => {
     const html =
       '<script>void(0)</script><img src="blob:http://localhost/y">';

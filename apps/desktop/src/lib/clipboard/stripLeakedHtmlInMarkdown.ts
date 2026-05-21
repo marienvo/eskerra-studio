@@ -7,6 +7,7 @@ import {
 const GFM_TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
 
 const BR_TAG_RE = /^<br\s*\/?>$/i;
+const HTML_TAG_RE = /^<\/?[a-z][a-z0-9:-]*(?:\s[^<>]*)?\/?>$/i;
 
 const HTML_ENTITY_REPLACEMENTS: ReadonlyArray<readonly [RegExp, string]> = [
   [/&nbsp;/gi, ' '],
@@ -33,7 +34,7 @@ function stripTagsInLine(line: string, preserveBr: boolean): string {
       break;
     }
     const tag = line.slice(open, close + 1);
-    if (preserveBr && BR_TAG_RE.test(tag)) {
+    if ((preserveBr && BR_TAG_RE.test(tag)) || !HTML_TAG_RE.test(tag)) {
       result += tag;
     }
     i = close + 1;
@@ -57,7 +58,7 @@ function decodeHtmlEntities(text: string): string {
 }
 
 function stripAndDecodeProse(text: string): string {
-  return decodeHtmlEntities(stripHtmlTagsInText(text));
+  return stripHtmlTagsInText(decodeHtmlEntities(text));
 }
 
 function stripProseOutsideInlineCode(segment: string): string {
