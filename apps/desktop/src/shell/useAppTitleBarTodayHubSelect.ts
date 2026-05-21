@@ -2,20 +2,32 @@ import {useMemo} from 'react';
 
 import type {WindowTitleBarTodayHubSelect} from '../components/WindowTitleBar';
 
-export function useAppTitleBarTodayHubSelect(
-  vaultRoot: string | null,
+export type UseAppTitleBarTodayHubSelectArgs = {
+  vaultRoot: string | null;
   todayHubSelectorItems: ReadonlyArray<{
     todayNoteUri: string;
     label: string;
-  }>,
-  activeTodayHubUri: string | null,
-  workspaceSelectorSubLabel: string | undefined,
-  workspaceSelectShowsActiveTabPill: boolean,
-  focusActiveTodayHubNote: () => void,
-  switchTodayHubWorkspace: (uri: string) => void | Promise<void>,
-  openTodayHubInNewTabAfterActive: (uri: string) => void,
-  openWorkspaceHomeCurrentInBackgroundTab: () => void,
-): WindowTitleBarTodayHubSelect {
+  }>;
+  activeTodayHubUri: string | null;
+  workspaceSelectorSubLabel: string | undefined;
+  workspaceSelectShowsActiveTabPill: boolean;
+  focusActiveTodayHubNote: () => void;
+  switchTodayHubWorkspace: (uri: string) => void | Promise<void>;
+  openTodayHubInNewTabAfterActive: (uri: string) => void;
+  openWorkspaceHomeCurrentInBackgroundTab: () => void;
+};
+
+export function useAppTitleBarTodayHubSelect({
+  vaultRoot,
+  todayHubSelectorItems,
+  activeTodayHubUri,
+  workspaceSelectorSubLabel,
+  workspaceSelectShowsActiveTabPill,
+  focusActiveTodayHubNote,
+  switchTodayHubWorkspace,
+  openTodayHubInNewTabAfterActive,
+  openWorkspaceHomeCurrentInBackgroundTab,
+}: UseAppTitleBarTodayHubSelectArgs): WindowTitleBarTodayHubSelect {
   return useMemo((): WindowTitleBarTodayHubSelect => {
     if (
       !vaultRoot

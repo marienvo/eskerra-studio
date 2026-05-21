@@ -3,19 +3,43 @@
  *
  * Only `\|` is treated as an escaped literal pipe inside a cell (not a column
  * delimiter). Sequences like `\\|` are read as `\` + escaped pipe.
- * Doubled backslashes (`\\`) decode to a single `\` (inverse of serialize).
+ * Serialized cells may double literal backslashes before a pipe, so `\\\|` is
+ * also decoded as `\|`.
  *
- * **Backward compatibility:** vault table cells written before serialize started
- * escaping `\` may have stored a literal pair `\\` (two backslashes). On read,
- * `decodeCellEscapes` collapses each `\\` to `\`, so those cells change in memory
- * and the next save will persist the decoded form. This is intentional (inverse
- * of `escapeCellPipes` in serialize) but can surprise users who relied on `\\`
- * as literal text in old notes.
+ * Backslashes that are not part of a pipe escape are preserved literally. That
+ * avoids silently mutating older vault notes, which stored user-entered
+ * backslashes without any table-specific escaping.
  */
 
-/** Inverse of serialize cell escaping: decode `\|` then `\\`. */
+/** Decode escaped literal pipes while preserving all other backslashes. */
 export function decodeCellEscapes(raw: string): string {
-  return raw.replace(/\\\|/g, '|').replace(/\\\\/g, '\\');
+  let decoded = '';
+  let backslashRunLength = 0;
+
+  for (const char of raw) {
+    if (char === '\\') {
+      backslashRunLength += 1;
+      continue;
+    }
+
+    if (char === '|' && backslashRunLength > 0) {
+      decoded += '\\'.repeat(Math.floor(backslashRunLength / 2));
+      decoded += '|';
+      backslashRunLength = 0;
+      continue;
+    }
+
+    if (backslashRunLength > 0) {
+      decoded += '\\'.repeat(backslashRunLength);
+      backslashRunLength = 0;
+    }
+    decoded += char;
+  }
+
+  if (backslashRunLength > 0) {
+    decoded += '\\'.repeat(backslashRunLength);
+  }
+  return decoded;
 }
 export type EskerraTableCellToken = {
   /** Inclusive start offset into the inner row (line without outer `|`). */

@@ -11,42 +11,21 @@ import {
 } from '../lib/layout/layoutStore';
 import {
   loadMainWindowUi,
-  type TodayHubWorkspaceSnapshot,
+  type RestoredInboxState,
 } from '../lib/mainWindowUiStore';
+import type {PaneVisibility} from './usePaneVisibility';
 
 export type UseAppOnMountLayoutHydrationArgs = {
   setLayouts: Dispatch<SetStateAction<StoredLayouts>>;
   setLayoutsReady: (ready: boolean) => void;
-  setVaultPaneVisible: Dispatch<SetStateAction<boolean>>;
-  setEpisodesPaneVisible: Dispatch<SetStateAction<boolean>>;
-  setInboxPaneVisible: Dispatch<SetStateAction<boolean>>;
-  setNotificationsPanelVisible: Dispatch<SetStateAction<boolean>>;
-  setRestoredInboxState: Dispatch<
-    SetStateAction<{
-      vaultRoot: string;
-      composingNewEntry: boolean;
-      composeDraftMarkdown?: string;
-      selectedUri: string | null;
-      openTabUris?: readonly string[];
-      editorWorkspaceTabs?: ReadonlyArray<{
-        id: string;
-        entries: string[];
-        index: number;
-      }>;
-      activeEditorTabId?: string | null;
-      activeTodayHubUri?: string | null;
-      todayHubWorkspaces?: Record<string, TodayHubWorkspaceSnapshot> | null;
-    } | null>
-  >;
+  setPaneVisibility: (partial: Partial<PaneVisibility>) => void;
+  setRestoredInboxState: Dispatch<SetStateAction<RestoredInboxState | null>>;
 };
 
 export function useAppOnMountLayoutHydration({
   setLayouts,
   setLayoutsReady,
-  setVaultPaneVisible,
-  setEpisodesPaneVisible,
-  setInboxPaneVisible,
-  setNotificationsPanelVisible,
+  setPaneVisibility,
   setRestoredInboxState,
 }: UseAppOnMountLayoutHydrationArgs) {
   useEffect(() => {
@@ -61,10 +40,12 @@ export function useAppOnMountLayoutHydration({
       }
       setLayouts(loadedLayouts);
       if (ui) {
-        setVaultPaneVisible(ui.vaultPaneVisible);
-        setEpisodesPaneVisible(ui.episodesPaneVisible);
-        setInboxPaneVisible(ui.inboxPaneVisible);
-        setNotificationsPanelVisible(ui.notificationsPanelVisible);
+        setPaneVisibility({
+          vault: ui.vaultPaneVisible,
+          episodes: ui.episodesPaneVisible,
+          inbox: ui.inboxPaneVisible,
+          notifications: ui.notificationsPanelVisible,
+        });
         setRestoredInboxState({
           vaultRoot: ui.vaultRoot,
           composingNewEntry: ui.inbox.composingNewEntry,
@@ -86,9 +67,6 @@ export function useAppOnMountLayoutHydration({
     setLayouts,
     setLayoutsReady,
     setRestoredInboxState,
-    setVaultPaneVisible,
-    setEpisodesPaneVisible,
-    setInboxPaneVisible,
-    setNotificationsPanelVisible,
+    setPaneVisibility,
   ]);
 }

@@ -64,6 +64,10 @@ describe('expandKnownEmojiShortcodes', () => {
     );
   });
 
+  it('expands consecutive bare shortcodes in prose', () => {
+    expect(expandKnownEmojiShortcodes(':joy::tada:')).toBe('😂🎉');
+  });
+
   it('leaves unknown shortcodes unchanged', () => {
     expect(expandKnownEmojiShortcodes(':notarealemoji: stays')).toBe(
       ':notarealemoji: stays',

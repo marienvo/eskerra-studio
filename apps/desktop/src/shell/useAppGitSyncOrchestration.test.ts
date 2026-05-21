@@ -132,7 +132,10 @@ describe('useAppGitSyncOrchestration close handling', () => {
       run: runManualSync,
       waitForCurrentRun: vi.fn().mockReturnValue(null),
     });
-    mockUseVaultGitAutosyncScheduler.mockReturnValue(undefined);
+    mockUseVaultGitAutosyncScheduler.mockReturnValue({
+      autosyncPending: false,
+      nextAutosyncAtMs: Date.now() + 300_000,
+    });
     mockUseVaultGitCurrentBranch.mockReturnValue({
       branch: 'main',
       detachedHead: false,
@@ -142,7 +145,7 @@ describe('useAppGitSyncOrchestration close handling', () => {
       refresh: vi.fn(),
     });
     mockUseVaultGitLocalWriteStatusRefresh.mockReturnValue(undefined);
-    mockUseVaultGitRemoteStatusPolling.mockReturnValue(undefined);
+    mockUseVaultGitRemoteStatusPolling.mockReturnValue({remoteRefreshLoading: false});
     mockUseVaultGitStartupSync.mockReturnValue(undefined);
     mockUseVaultGitStatus.mockReturnValue({
       status: cleanStatus(),

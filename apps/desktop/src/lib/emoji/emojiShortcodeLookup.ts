@@ -12,7 +12,8 @@ type EmojiCompletionRow = {
 /** Slack standard emoji CDN: `.../1f602.png` or ZWJ sequences `.../1f468-200d-1f469.png`. */
 const SLACK_EMOJI_IMG_PATH_RE = /\/([0-9a-f]+(?:-[0-9a-f]+)*)\.png$/i;
 
-const BARE_SHORTCODE_RE = /(^|\W)(:[\p{L}\p{N}_+-]+:)/gu;
+const BARE_SHORTCODE_RE = /:[\p{L}\p{N}_+-]+:/gu;
+const SHORTCODE_WORD_CHAR_RE = /[\p{L}\p{N}_+-]/u;
 
 let shortcodeMap: Map<string, string> | null = null;
 
@@ -73,10 +74,14 @@ export function slackEmojiImgUrlToCodepoint(url: string): string | null {
 }
 
 function expandShortcodesInPlainText(text: string): string {
-  return text.replace(BARE_SHORTCODE_RE, (match, prefix: string, token: string) => {
+  return text.replace(BARE_SHORTCODE_RE, (token: string, offset: number) => {
+    const prev = offset > 0 ? Array.from(text.slice(0, offset)).at(-1) : '';
+    if (prev != null && prev !== '' && SHORTCODE_WORD_CHAR_RE.test(prev)) {
+      return token;
+    }
     const inner = token.slice(1, -1);
     const emoji = shortcodeToEmoji(inner);
-    return emoji != null ? prefix + emoji : match;
+    return emoji != null ? emoji : token;
   });
 }
 

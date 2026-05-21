@@ -1,9 +1,4 @@
-import {
-  useCallback,
-  useMemo,
-  type Dispatch,
-  type SetStateAction,
-} from 'react';
+import {useMemo} from 'react';
 
 import {useSessionNotifications} from '../hooks/useSessionNotifications';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
@@ -16,7 +11,7 @@ type UseAppNotificationSessionArgs = {
   selectedUri: string | null;
   statusBarCenter: AppStatusBarCenter;
   renameLinkProgress: {done: number; total: number} | null;
-  setNotificationsPanelVisible: Dispatch<SetStateAction<boolean>>;
+  openNotificationsPanel: () => void;
 };
 
 export function useAppNotificationSession({
@@ -26,7 +21,7 @@ export function useAppNotificationSession({
   selectedUri,
   statusBarCenter,
   renameLinkProgress,
-  setNotificationsPanelVisible,
+  openNotificationsPanel,
 }: UseAppNotificationSessionArgs) {
   const diskConflictSoftVisible = useMemo(
     () =>
@@ -38,10 +33,6 @@ export function useAppNotificationSession({
         normalizeEditorDocUri(selectedUri),
     [err, diskConflict, diskConflictSoft, selectedUri],
   );
-
-  const openNotificationsPanel = useCallback(() => {
-    setNotificationsPanelVisible(true);
-  }, [setNotificationsPanelVisible]);
 
   const session = useSessionNotifications(
     {

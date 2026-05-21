@@ -134,6 +134,17 @@ describe('GitStatusChip', () => {
     expect(screen.queryByText('Checking…')).toBeNull();
   });
 
+  it('renders autosync countdown instead of Local changes when provided', () => {
+    render(
+      <GitStatusChip
+        status={{...cleanStatus, hasUncommittedChanges: true}}
+        autosyncCountdownLabel="Syncs in 1:00"
+      />,
+    );
+    expect(screen.getByText('Syncs in 1:00')).toBeInstanceOf(HTMLElement);
+    expect(screen.queryByText('Local changes')).toBeNull();
+  });
+
   it('renders correct tone class for Synced', () => {
     render(<GitStatusChip status={cleanStatus} />);
     const chip = screen.getByText('Synced').closest('span');

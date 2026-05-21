@@ -44,8 +44,62 @@ function turndownDefaultImageMarkdown(img: HTMLImageElement): string {
   return `![${alt}](<${safeSrc}>${titlePart})`;
 }
 
+function normalizeBackslashesBeforePipes(content: string): string {
+  let formatted = '';
+  let i = 0;
+  while (i < content.length) {
+    if (content[i] !== '\\') {
+      formatted += content[i];
+      i += 1;
+      continue;
+    }
+
+    let end = i;
+    while (content[end] === '\\') {
+      end += 1;
+    }
+    const runLength = end - i;
+    const normalizedLength = content[end] === '|'
+      ? Math.ceil(runLength / 2)
+      : runLength;
+    formatted += '\\'.repeat(normalizedLength);
+    i = end;
+  }
+  return formatted;
+}
+
+function escapePipesWithBackslashRuns(content: string): string {
+  let formatted = '';
+  let backslashRunLength = 0;
+
+  for (const char of content) {
+    if (char === '\\') {
+      backslashRunLength += 1;
+      continue;
+    }
+
+    if (char === '|') {
+      formatted += '\\'.repeat(backslashRunLength * 2);
+      formatted += '\\|';
+      backslashRunLength = 0;
+      continue;
+    }
+
+    if (backslashRunLength > 0) {
+      formatted += '\\'.repeat(backslashRunLength);
+      backslashRunLength = 0;
+    }
+    formatted += char;
+  }
+
+  if (backslashRunLength > 0) {
+    formatted += '\\'.repeat(backslashRunLength);
+  }
+  return formatted;
+}
+
 function formatTableCellForPipeRow(content: string): string {
-  return content.split('|').join('\\|');
+  return escapePipesWithBackslashRuns(normalizeBackslashesBeforePipes(content));
 }
 
 function trimTrailingNewlines(text: string): string {

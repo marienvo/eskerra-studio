@@ -280,13 +280,15 @@ The scheduler is the only autosync trigger for local writes. It runs `useManualV
 
 Successful autosync clears only the write generation that was current when the run started. If another vault write settles during the sync, the scheduler leaves sync-needed pending for the next interval. Failed sync attempts keep sync-needed pending and retry on later intervals. Switching vault paths resets pending sync-needed state so writes from one vault do not trigger autosync in another vault. If autosync skips because remote polling is currently refreshing, pending sync-needed work is preserved for a later interval. Success and failure notifications are silent for this background path.
 
+**Status chip countdown:** When autosync is pending, the chip would show "Local changes", and the next interval tick can run autosync, `GitStatusChip` shows a live **"Syncs in M:SS"** countdown (`useVaultGitAutosyncCountdown`, `gitAutosyncCountdown.ts`) tied to the scheduler's next interval fire. Higher-priority chip states, blocked gates, and non-pending dirty trees keep the existing labels.
+
 **Shared frontend busy gate:** `App.tsx` owns `backgroundGitOperationBusyRef` and passes it to both `useVaultGitRemoteStatusPolling` / `useVaultGitRemoteRefresh` and `useVaultGitAutosyncScheduler`.
 - Remote polling skips while manual/autosync sync is running.
 - Autosync skips while remote polling is refreshing.
 - Skips are silent and do not create notifications.
 - The autosync and remote-poll intervals remain unchanged.
 
-**Tests:** `useVaultGitAutosyncScheduler.test.ts` covers no mount sync, save-only marking, interval sync, coalescing, no-op without pending writes, gate preservation, retry after failure, no overlapping runs, vault-switch reset, preserving newer writes during an in-flight sync, and preserving pending work when a remote refresh is in flight. `useVaultGitRemoteRefresh.test.ts` and `useVaultGitRemoteStatusPolling.test.ts` cover the shared busy gate. `useVaultGitLocalWriteStatusRefresh.test.ts` covers write-settled local status refresh without sync.
+**Tests:** `useVaultGitAutosyncScheduler.test.ts` covers no mount sync, save-only marking, interval sync, coalescing, no-op without pending writes, gate preservation, retry after failure, no overlapping runs, vault-switch reset, preserving newer writes during an in-flight sync, preserving pending work when a remote refresh is in flight, and exposed `autosyncPending` / `nextAutosyncAtMs` state. `gitAutosyncCountdown.test.ts`, `useVaultGitAutosyncCountdown.test.ts`, and `GitStatusChip.test.tsx` cover countdown formatting, display gates, and chip override. `useVaultGitRemoteRefresh.test.ts` and `useVaultGitRemoteStatusPolling.test.ts` cover the shared busy gate. `useVaultGitLocalWriteStatusRefresh.test.ts` covers write-settled local status refresh without sync.
 
 ---
 
