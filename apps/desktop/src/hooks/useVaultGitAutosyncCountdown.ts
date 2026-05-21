@@ -14,8 +14,16 @@ function subscribeCountdownClock(onStoreChange: () => void): () => void {
   return () => window.clearInterval(id);
 }
 
+function subscribeStableCountdownClock(): () => void {
+  return () => {};
+}
+
 function getCountdownClockSnapshot(): number {
   return Date.now();
+}
+
+function getStableCountdownClockSnapshot(): number {
+  return 0;
 }
 
 type UseVaultGitAutosyncCountdownArgs = ShouldShowAutosyncCountdownInput &
@@ -30,9 +38,9 @@ export function useVaultGitAutosyncCountdown(
 ): string | null {
   const showCountdown = shouldShowAutosyncCountdown(args);
   const nowMs = useSyncExternalStore(
-    subscribeCountdownClock,
-    getCountdownClockSnapshot,
-    getCountdownClockSnapshot,
+    showCountdown ? subscribeCountdownClock : subscribeStableCountdownClock,
+    showCountdown ? getCountdownClockSnapshot : getStableCountdownClockSnapshot,
+    showCountdown ? getCountdownClockSnapshot : getStableCountdownClockSnapshot,
   );
 
   return useMemo(() => {

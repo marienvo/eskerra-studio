@@ -114,4 +114,8 @@ describe('shouldShowAutosyncCountdown', () => {
       }),
     ).toBe(false);
   });
+
+  it('returns false when git status is unknown', () => {
+    expect(shouldShowAutosyncCountdown({...base, gitStatus: null})).toBe(false);
+  });
 });

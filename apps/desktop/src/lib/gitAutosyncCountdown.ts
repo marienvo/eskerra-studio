@@ -56,8 +56,8 @@ export function shouldShowAutosyncCountdown(input: ShouldShowAutosyncCountdownIn
   if (input.manualSyncDisabledReason != null) return false;
   if (input.manualSyncRunning) return false;
   if (input.gitOperationBusy) return false;
-  if (getAutosyncPreflight(input.gitStatus) !== 'run') return false;
   if (input.gitStatus == null) return false;
+  if (getAutosyncPreflight(input.gitStatus) !== 'run') return false;
   return mapGitStatusToView(input.gitStatus).label === 'Local changes';
 }
 

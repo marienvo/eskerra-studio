@@ -21,10 +21,13 @@ function localDirtyStatus(): GitStatusResult {
 
 describe('useVaultGitAutosyncCountdown', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
   it('returns null when countdown should not show', () => {
+    const setIntervalSpy = vi.spyOn(window, 'setInterval');
+
     const {result} = renderHook(() =>
       useVaultGitAutosyncCountdown({
         autosyncPending: false,
@@ -39,6 +42,7 @@ describe('useVaultGitAutosyncCountdown', () => {
     );
 
     expect(result.current).toBeNull();
+    expect(setIntervalSpy).not.toHaveBeenCalled();
   });
 
   it('recomputes the label when the next autosync target moves earlier', () => {
