@@ -45,7 +45,11 @@ function turndownDefaultImageMarkdown(img: HTMLImageElement): string {
 }
 
 function formatTableCellForPipeRow(content: string): string {
-  return content.split('|').join('\\|');
+  const normalizedBackslashesBeforePipes = content.replace(
+    /\\+(?=\|)/g,
+    backslashes => '\\'.repeat(Math.ceil(backslashes.length / 2)),
+  );
+  return normalizedBackslashesBeforePipes.split('|').join('\\|');
 }
 
 function trimTrailingNewlines(text: string): string {
