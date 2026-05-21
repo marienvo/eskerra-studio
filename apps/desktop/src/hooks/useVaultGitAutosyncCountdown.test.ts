@@ -1,4 +1,4 @@
-import {renderHook} from '@testing-library/react';
+import {act, renderHook} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {useVaultGitAutosyncCountdown} from './useVaultGitAutosyncCountdown';
@@ -72,5 +72,37 @@ describe('useVaultGitAutosyncCountdown', () => {
     rerender(now + 60_000);
 
     expect(result.current).toBe('Syncs in 1:00');
+  });
+
+  it('keeps the countdown clock snapshot cached between timer ticks', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-20T12:00:00.000Z'));
+
+    const now = Date.now();
+    const args = {
+      autosyncPending: true,
+      nextAutosyncAtMs: now + 65_000,
+      gitStatus: localDirtyStatus(),
+      gitStatusLoading: false,
+      gitStatusError: null,
+      manualSyncDisabledReason: null,
+      manualSyncRunning: false,
+      gitOperationBusy: false,
+    };
+
+    const {result, rerender} = renderHook(() => useVaultGitAutosyncCountdown(args));
+
+    expect(result.current).toBe('Syncs in 1:05');
+
+    vi.setSystemTime(new Date(now + 5_000));
+    rerender();
+
+    expect(result.current).toBe('Syncs in 1:05');
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(result.current).toBe('Syncs in 0:59');
   });
 });
