@@ -13,11 +13,33 @@
 
 /** Decode escaped literal pipes while preserving all other backslashes. */
 export function decodeCellEscapes(raw: string): string {
-  return raw
-    .replace(/\\\|/g, '|')
-    .replace(/\\+(?=\|)/g, backslashes =>
-      '\\'.repeat(Math.ceil(backslashes.length / 2)),
-    );
+  let decoded = '';
+  let backslashRunLength = 0;
+
+  for (const char of raw) {
+    if (char === '\\') {
+      backslashRunLength += 1;
+      continue;
+    }
+
+    if (char === '|' && backslashRunLength > 0) {
+      decoded += '\\'.repeat(Math.floor(backslashRunLength / 2));
+      decoded += '|';
+      backslashRunLength = 0;
+      continue;
+    }
+
+    if (backslashRunLength > 0) {
+      decoded += '\\'.repeat(backslashRunLength);
+      backslashRunLength = 0;
+    }
+    decoded += char;
+  }
+
+  if (backslashRunLength > 0) {
+    decoded += '\\'.repeat(backslashRunLength);
+  }
+  return decoded;
 }
 export type EskerraTableCellToken = {
   /** Inclusive start offset into the inner row (line without outer `|`). */

@@ -1,10 +1,33 @@
 import type {EskerraTableAlignment, EskerraTableModelV1} from './model';
 
 function escapeCellPipes(cell: string): string {
-  return cell.trim().replace(/\\*\|/g, match => {
-    const backslashes = match.slice(0, -1);
-    return `${'\\'.repeat(backslashes.length * 2)}\\|`;
-  });
+  let formatted = '';
+  let backslashRunLength = 0;
+
+  for (const char of cell.trim()) {
+    if (char === '\\') {
+      backslashRunLength += 1;
+      continue;
+    }
+
+    if (char === '|') {
+      formatted += '\\'.repeat(backslashRunLength * 2);
+      formatted += '\\|';
+      backslashRunLength = 0;
+      continue;
+    }
+
+    if (backslashRunLength > 0) {
+      formatted += '\\'.repeat(backslashRunLength);
+      backslashRunLength = 0;
+    }
+    formatted += char;
+  }
+
+  if (backslashRunLength > 0) {
+    formatted += '\\'.repeat(backslashRunLength);
+  }
+  return formatted;
 }
 
 function serializeRow(cells: string[]): string {
