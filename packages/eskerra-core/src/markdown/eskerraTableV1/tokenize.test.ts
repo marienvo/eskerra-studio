@@ -26,11 +26,11 @@ describe('tokenizeDelimitedRowInner', () => {
     expect(tokens[0]!.value).toBe('a\\b');
   });
 
-  it('decodes doubled backslashes from serialized cells', () => {
-    expect(decodeCellEscapes('a\\\\b')).toBe('a\\b');
+  it('preserves doubled backslashes as literal text', () => {
+    expect(decodeCellEscapes('a\\\\b')).toBe('a\\\\b');
   });
 
-  it('decodes backslash-pipe sequences from serialized cells', () => {
-    expect(decodeCellEscapes('has \\\\\\| pipe')).toBe('has \\| pipe');
+  it('decodes escaped pipes while preserving preceding literal backslashes', () => {
+    expect(decodeCellEscapes('has \\\\| pipe')).toBe('has \\| pipe');
   });
 });
