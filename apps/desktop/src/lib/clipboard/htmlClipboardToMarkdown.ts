@@ -45,7 +45,7 @@ function turndownDefaultImageMarkdown(img: HTMLImageElement): string {
 }
 
 function escapeTableCellPipes(content: string): string {
-  return content.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+  return content.replace(/\|/g, '\\|');
 }
 
 function trimTrailingNewlines(text: string): string {
