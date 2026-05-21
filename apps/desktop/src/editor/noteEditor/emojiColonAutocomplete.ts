@@ -18,6 +18,7 @@ import {Prec, type Extension} from '@codemirror/state';
 import {EditorView, keymap} from '@codemirror/view';
 
 import {getEmojiUsageCount, recordEmojiUsage} from '../../lib/emojiUsageStore';
+import emojiRows from './data/emojiColonCompletionData.json';
 import {
   colonQueryFromEmojiPrefixMatch,
   EMOJI_COLON_PREFIX_PATTERN,
@@ -29,20 +30,7 @@ import {
 
 export const EMOJI_COMPLETION_MAX_OPTIONS = 50;
 
-let cachedRows: readonly EmojiCompletionRow[] | null = null;
-let loadPromise: Promise<void> | null = null;
-
-function ensureEmojiRowsLoaded(): Promise<void> {
-  if (cachedRows) {
-    return Promise.resolve();
-  }
-  if (!loadPromise) {
-    loadPromise = import('./data/emojiColonCompletionData.json').then(mod => {
-      cachedRows = mod.default as EmojiCompletionRow[];
-    });
-  }
-  return loadPromise;
-}
+const completionRows = emojiRows as readonly EmojiCompletionRow[];
 
 function buildEmojiCompletions(
   rows: readonly EmojiCompletionRow[],
@@ -106,36 +94,17 @@ export const emojiColonCompletionSource: CompletionSource = (
 
   const queryLower = parsed.query.toLowerCase();
 
-  if (cachedRows) {
-    const options = buildEmojiCompletions(cachedRows, queryLower);
-    if (options.length === 0) {
-      return null;
-    }
-    return {
-      from: parsed.colonFrom,
-      filter: false,
-      options,
-    };
+  const options = buildEmojiCompletions(completionRows, queryLower);
+  if (options.length === 0) {
+    return null;
   }
-
-  return ensureEmojiRowsLoaded().then(() => {
-    if (!cachedRows) {
-      return null;
-    }
-    const options = buildEmojiCompletions(cachedRows, queryLower);
-    if (options.length === 0) {
-      return null;
-    }
-    return {
-      from: parsed.colonFrom,
-      filter: false,
-      options,
-    };
-  });
+  return {
+    from: parsed.colonFrom,
+    filter: false,
+    options,
+  };
 };
 
-/** Vitest harness: drop lazy-loaded emoji completion rows cache. */
+/** Vitest harness: retained for setup modules that reset editor singletons. */
 export function __resetForTests(): void {
-  cachedRows = null;
-  loadPromise = null;
 }
