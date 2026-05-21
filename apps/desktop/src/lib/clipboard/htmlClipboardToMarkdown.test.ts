@@ -1,3 +1,4 @@
+import {parseEskerraTableV1FromLines} from '@eskerra/core';
 import {describe, expect, it} from 'vitest';
 
 import {
@@ -109,6 +110,287 @@ describe('clipboardHtmlToMarkdown', () => {
       `<p><a href="${jsScheme}alert(1)">click</a></p>`,
     );
     expect(md).not.toContain(jsScheme);
+  });
+
+  it('does not emit Markdown links for data: URLs', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><a href="data:text/html;base64,PHNjcmlwdD4=">click</a></p>',
+    );
+    expect(md).toBe('click');
+  });
+
+  it('preserves default-safe non-http link protocols', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><a href="sms:+15551234567">Text me</a></p>',
+    );
+    expect(md).toContain('[Text me](sms:+15551234567)');
+  });
+
+  it('converts Slack emoji img tags to Unicode', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p>Die zien we te vaak <img alt=":joy:" '
+        + 'src="https://a.slack-edge.com/production-standard-emoji-assets/15.0/google-medium/1f602.png"></p>',
+    );
+    expect(md).toContain('😂');
+    expect(md).not.toContain('![:joy:]');
+    expect(md).not.toContain('slack-edge.com');
+  });
+
+  it('converts Slack emoji img by URL when alt is not a shortcode', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img alt="custom" '
+        + 'src="https://a.slack-edge.com/production-standard-emoji-assets/15.0/google-medium/1f602.png"></p>',
+    );
+    expect(md).toBe('😂');
+    expect(md).not.toContain('slack-edge.com');
+  });
+
+  it('keeps non-Slack images as markdown image links', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img src="https://example.com/foo.png" alt="Foo"></p>',
+    );
+    expect(md).toContain('![Foo](<https://example.com/foo.png>)');
+  });
+
+  it('escapes non-Slack image fallback fields', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img alt="a]b" src="https://example.com/a)b.png" title="quote &quot; ok"></p>',
+    );
+    expect(md).toContain(
+      '![a\\]b](<https://example.com/a)b.png> "quote \\" ok")',
+    );
+  });
+
+  it('expands bare :shortcode: text from HTML paste', () => {
+    const md = clipboardHtmlToMarkdown('<p>Die zien we te vaak :joy:</p>');
+    expect(md).toContain('😂');
+    expect(md).not.toContain(':joy:');
+  });
+
+  it('leaves :shortcode: inside code elements literal', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><code>:joy:</code> and</p><pre><code>:joy:</code></pre>',
+    );
+    expect(md).toContain('`:joy:`');
+    const fenceOpen = md.indexOf('```');
+    const fenceClose = md.indexOf('```', fenceOpen + 3);
+    expect(fenceOpen).toBeGreaterThanOrEqual(0);
+    expect(fenceClose).toBeGreaterThan(fenceOpen);
+    expect(md.slice(fenceOpen, fenceClose + 3)).toContain(':joy:');
+    expect(md).not.toContain('😂');
+  });
+
+  it('leaves unknown shortcodes literal', () => {
+    const md = clipboardHtmlToMarkdown('<p>:notarealemoji: stays</p>');
+    expect(md).toContain(':notarealemoji:');
+    expect(md).not.toContain('😂');
+  });
+
+  it('converts mark to Eskerra highlight syntax', () => {
+    const md = clipboardHtmlToMarkdown('<p><mark>highlight</mark></p>');
+    expect(md).toContain('==highlight==');
+    expect(md).not.toMatch(/<mark/i);
+  });
+
+  it('converts kbd to inline code backticks', () => {
+    const md = clipboardHtmlToMarkdown('<p><kbd>Ctrl</kbd>+<kbd>C</kbd></p>');
+    expect(md).toContain('`Ctrl`');
+    expect(md).toContain('`C`');
+    expect(md).not.toMatch(/<kbd/i);
+  });
+
+  it('converts standalone pre to fenced code block', () => {
+    const md = clipboardHtmlToMarkdown('<pre>raw text</pre>');
+    const fenceOpen = md.indexOf('```');
+    const fenceClose = md.indexOf('```', fenceOpen + 3);
+    expect(fenceOpen).toBeGreaterThanOrEqual(0);
+    expect(fenceClose).toBeGreaterThan(fenceOpen);
+    expect(md.slice(fenceOpen, fenceClose + 3)).toContain('raw text');
+    expect(md).not.toMatch(/<pre/i);
+  });
+
+  it('uses GFM highlighted fence for pretty-printed pre>code', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<pre>\n  <code class="language-javascript">const x = 1;</code>\n</pre>',
+    );
+    expect(md).toContain('```javascript');
+    expect(md).toContain('const x = 1;');
+    expect(md).not.toMatch(/```\n\nconst x = 1;/);
+  });
+
+  it('uses a longer fence when pre content contains triple backticks', () => {
+    const md = clipboardHtmlToMarkdown('<pre>```not a fence```</pre>');
+    expect(md).toContain('````\n```not a fence```\n````');
+    expect(md).not.toMatch(/^```\n```not/m);
+  });
+
+  it('does not expand shortcodes inside a four-backtick pre fence', () => {
+    const md = clipboardHtmlToMarkdown('<pre>```\n:joy:\n```</pre>');
+    expect(md).toContain('````\n```\n:joy:\n```\n````');
+    expect(md).not.toContain('😂');
+  });
+
+  it('uses a longer fence when pre content contains indented triple backticks', () => {
+    const md = clipboardHtmlToMarkdown('<pre>   ```\nline\n   ```</pre>');
+    expect(md).toContain('````\n   ```\nline\n   ```\n````');
+    expect(md).not.toMatch(/^```\n {3}```/m);
+  });
+
+  it('does not rewrite non-Slack images whose path contains slack-edge.com', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><img src="https://example.com/slack-edge.com/1f602.png" alt="x"></p>',
+    );
+    expect(md).toContain('![x](<https://example.com/slack-edge.com/1f602.png>)');
+    expect(md).not.toContain('😂');
+  });
+
+  it('emits a leading pipe for the first cell when row HTML has whitespace text nodes', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr>\n  <th>A</th>\n  <th>B</th>\n</tr></thead>'
+        + '<tbody><tr>\n  <td>1</td>\n  <td>2</td>\n</tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows[0]).toMatch(/^\| A \| B \|$/);
+    expect(pipeRows[2]).toMatch(/^\| 1 \| 2 \|$/);
+  });
+
+  it('escapes backslashes before pipes in table cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td>a\\\\|b</td><td>c</td></tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows[2]!.match(/(?<!\\)\|/g)?.length).toBe(3);
+    const parsed = parseEskerraTableV1FromLines(pipeRows);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      throw new Error('Expected pasted table to parse as Eskerra v1');
+    }
+    expect(parsed.model.cells[1]).toEqual(['a\\\\|b', 'c']);
+  });
+
+  it('preserves Turndown markdown escapes in table cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th></tr></thead>'
+        + '<tbody><tr><td>[text] *x* _y_ !z</td></tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows[2]).toBe('| \\[text\\] \\*x\\* \\_y\\_ !z |');
+    expect(pipeRows[2]).not.toContain('\\\\[');
+    expect(pipeRows[2]).not.toContain('\\\\*');
+    expect(pipeRows[2]).not.toContain('\\\\_');
+  });
+
+  it('keeps pre with code child as fenced block', () => {
+    const md = clipboardHtmlToMarkdown('<pre><code>fn()</code></pre>');
+    expect(md).toContain('```');
+    expect(md).toContain('fn()');
+    expect(md).not.toMatch(/<pre/i);
+    expect(md).not.toMatch(/<code/i);
+  });
+
+  it('strips tags with no markdown equivalent from paste output', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<p><u>u</u> <sub>s</sub> <sup>p</sup> <font>x</font></p>'
+        + '<details><summary>S</summary>D</details>'
+        + '<dl><dt>T</dt><dd>D</dd></dl>',
+    );
+    expect(md).not.toMatch(/<[a-z]/i);
+    expect(md).toContain('u');
+    expect(md).toContain('SD');
+  });
+
+  it('flattens paragraph-wrapped table cells into one GFM pipe row', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td><p>x</p></td><td><p>y</p></td></tr></tbody></table>',
+    );
+    const rows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(rows).toContain('| x | y |');
+    expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
+  });
+
+  it('joins multiple paragraphs in one cell with br inside a single pipe row', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td><p>a</p><p>b</p></td><td>c</td></tr></tbody></table>',
+    );
+    expect(md).toMatch(/\| a[\s\S]*b \| c \|/);
+    expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
+  });
+
+  it('flattens paragraph-wrapped header cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th><p>Input</p></th><th><p>Output</p></th></tr></thead>'
+        + '<tbody><tr><td><p>x</p></td><td><p>y</p></td></tr></tbody></table>',
+    );
+    expect(md).toContain('| Input | Output |');
+    expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
+  });
+
+  it('escapes pipes inside inline code in table cells', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>Input</th><th>Output</th></tr></thead>'
+        + '<tbody><tr><td><p><code>&lt;table&gt;</code></p></td>'
+        + '<td><p><code>| ... |</code> GFM</p></td></tr></tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    expect(pipeRows.length).toBe(3);
+    const dataRow = pipeRows[2]!;
+    expect(dataRow).toContain('`<table>`');
+    expect(dataRow).toContain('`\\| ... \\|`');
+    expect(dataRow).toContain('GFM');
+    expect(dataRow.match(/(?<!\\)\|/g)?.length).toBe(3);
+  });
+
+  it('converts rendered chat-style coverage tables without broken pipe rows', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr>'
+        + '<th><p>Input</p></th><th><p>Markdown output</p></th><th><p>Bron</p></th>'
+        + '</tr></thead><tbody>'
+        + '<tr><td><p><code>&lt;table&gt;</code></p></td>'
+        + '<td><p><code>| ... |</code> GFM</p></td>'
+        + '<td><p>bestaand (GFM plugin)</p></td></tr>'
+        + '<tr><td><p><code>&lt;pre&gt;</code></p></td>'
+        + '<td><p>fenced</p></td><td><p>bestaand</p></td></tr>'
+        + '</tbody></table>',
+    );
+    const pipeRows = md.split('\n').filter(line => /^\s*\|.*\|\s*$/.test(line));
+    const separatorRows = pipeRows.filter(line =>
+      /\|\s*---/.test(line) || /---\s*\|/.test(line),
+    );
+    expect(separatorRows.length).toBe(1);
+    expect(pipeRows.length).toBe(4);
+    expect(md.split('\n').filter(line => line.trim() === '|').length).toBe(0);
+    expect(md).toContain('`<table>`');
+    expect(md).toContain('bestaand (GFM plugin)');
+  });
+
+  it('keeps non-table paragraphs as separate blocks', () => {
+    const md = clipboardHtmlToMarkdown('<p>a</p><p>b</p>');
+    expect(md).toContain('a');
+    expect(md).toContain('b');
+    const blankGap = md.indexOf('\n\n', md.indexOf('a'));
+    expect(blankGap).toBeGreaterThanOrEqual(0);
+  });
+
+  it('converts HTML tables with line breaks in cells to GFM pipe tables', () => {
+    const md = clipboardHtmlToMarkdown(
+      '<table><thead><tr><th>A</th><th>B</th></tr></thead>'
+        + '<tbody><tr><td>a<br>b</td><td>c</td></tr></tbody></table>',
+    );
+    expect(md).toContain('|');
+    expect(md).not.toMatch(/<td/i);
+    expect(md).toContain('a');
+    expect(md).toContain('b');
+    expect(md.indexOf('b')).toBeGreaterThan(md.indexOf('a'));
+  });
+
+  it('decodes HTML entities in pasted prose', () => {
+    const md = clipboardHtmlToMarkdown('<p>&amp; ok</p>');
+    expect(md).toContain('&');
+    expect(md).not.toContain('&amp;');
+    expect(md).not.toMatch(/<[a-z]/i);
   });
 });
 

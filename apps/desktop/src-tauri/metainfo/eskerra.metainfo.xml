@@ -17,6 +17,16 @@
   <url type="bugtracker">https://github.com/marienvo/notebox/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.54.3" date="2026-05-21"/>
+    <release version="0.54.2" date="2026-05-21"/>
+    <release version="0.54.1" date="2026-05-21"/>
+    <release version="0.54.0" date="2026-05-21"/>
+    <release version="0.53.0" date="2026-05-20"/>
+    <release version="0.52.4" date="2026-05-20"/>
+    <release version="0.52.3" date="2026-05-20"/>
+    <release version="0.52.2" date="2026-05-20"/>
+    <release version="0.52.1" date="2026-05-20"/>
+    <release version="0.52.0" date="2026-05-20"/>
     <release version="0.51.0" date="2026-05-19"/>
     <release version="0.50.4" date="2026-05-19"/>
     <release version="0.50.3" date="2026-05-18"/>

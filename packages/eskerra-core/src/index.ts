@@ -117,9 +117,12 @@ export type {
   ParseEskerraTableV1Result,
 } from './markdown/eskerraTableV1';
 export {
+  decodeCellEscapes,
   parseEskerraTableV1FromLines,
   serializeEskerraTableV1ToMarkdown,
+  tokenizeDelimitedRowInner,
 } from './markdown/eskerraTableV1';
+export type {EskerraTableCellToken} from './markdown/eskerraTableV1';
 export {
   computeStartupBarDisplayGain,
   computeStartupSpectrumSample,

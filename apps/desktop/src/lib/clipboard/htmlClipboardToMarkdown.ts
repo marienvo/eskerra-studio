@@ -5,12 +5,102 @@ import {
   taskListItems,
 } from 'turndown-plugin-gfm';
 
+import {
+  expandKnownEmojiShortcodes,
+  shortcodeToEmoji,
+  slackEmojiImgUrlToCodepoint,
+} from '../emoji/emojiShortcodeLookup';
 import {sanitizeClipboardHtml} from './sanitizeClipboardHtml';
+import {stripLeakedHtmlInMarkdown} from './stripLeakedHtmlInMarkdown';
 
 /** Reject huge clipboard HTML to avoid blocking the editor thread. */
 export const CLIPBOARD_HTML_MAX_CHARS = 512_000;
 
 let turndownSingleton: TurndownService | null = null;
+
+const SLACK_EMOJI_ALT_SHORTCODE_RE = /^:([\p{L}\p{N}_+-]+):$/u;
+
+function escapeMarkdownImageLabel(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/\]/g, '\\]');
+}
+
+function escapeMarkdownAngleDestination(text: string): string {
+  return text.replace(/</g, '%3C').replace(/>/g, '%3E').replace(/\n/g, '%0A');
+}
+
+function escapeMarkdownTitle(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ');
+}
+
+function turndownDefaultImageMarkdown(img: HTMLImageElement): string {
+  const src = img.getAttribute('src') ?? '';
+  if (!src) {
+    return '';
+  }
+  const alt = escapeMarkdownImageLabel(img.getAttribute('alt') ?? '');
+  const safeSrc = escapeMarkdownAngleDestination(src);
+  const title = img.getAttribute('title') ?? '';
+  const titlePart = title ? ` "${escapeMarkdownTitle(title)}"` : '';
+  return `![${alt}](<${safeSrc}>${titlePart})`;
+}
+
+function formatTableCellForPipeRow(content: string): string {
+  return content.split('|').join('\\|');
+}
+
+function trimTrailingNewlines(text: string): string {
+  let end = text.length;
+  while (end > 0 && text[end - 1] === '\n') {
+    end -= 1;
+  }
+  return text.slice(0, end);
+}
+
+function fenceLengthForPreContent(text: string): number {
+  const runs = text.match(/`+/g);
+  if (!runs) {
+    return 3;
+  }
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  return Math.max(3, longest + 1);
+}
+
+/** Turndown's built-in fenced rule uses `firstChild`, which misses `<pre>\\n  <code>`. */
+function fencedPreCodeReplacement(
+  node: HTMLElement,
+  fence: string,
+): string {
+  const codeEl = node.firstElementChild as HTMLElement;
+  const className = codeEl.getAttribute('class') ?? '';
+  const languageMatch = className.match(/language-(\S+)/);
+  const language = languageMatch?.[1] ?? '';
+  const code = codeEl.textContent ?? '';
+  const fenceChar = fence.charAt(0) || '`';
+  let fenceSize = 3;
+  const fenceInCodeRegex = new RegExp(`^ {0,3}${fenceChar}{3,}`, 'gm');
+  let match: RegExpExecArray | null;
+  while ((match = fenceInCodeRegex.exec(code)) !== null) {
+    if (match[0].length >= fenceSize) {
+      fenceSize = match[0].length + 1;
+    }
+  }
+  const fenceStr = fenceChar.repeat(fenceSize);
+  const trimmed = code.replace(/\n$/, '');
+  return `\n\n${fenceStr}${language}\n${trimmed}\n${fenceStr}\n\n`;
+}
+
+function slackEmojiImgReplacement(img: HTMLImageElement): string | null {
+  const alt = img.getAttribute('alt') ?? '';
+  const src = img.getAttribute('src') ?? '';
+  const altMatch = alt.match(SLACK_EMOJI_ALT_SHORTCODE_RE);
+  if (altMatch) {
+    const fromAlt = shortcodeToEmoji(altMatch[1]!);
+    if (fromAlt) {
+      return fromAlt;
+    }
+  }
+  return slackEmojiImgUrlToCodepoint(src);
+}
 
 function getTurndown(): TurndownService {
   if (!turndownSingleton) {
@@ -24,10 +114,54 @@ function getTurndown(): TurndownService {
     td.use(highlightedCodeBlock);
     td.use(tables);
     td.use(taskListItems);
+    td.addRule('tableCellEscapePipes', {
+      filter: (node: HTMLElement) =>
+        node.nodeName === 'TH' || node.nodeName === 'TD',
+      replacement: (content: string, node: HTMLElement) => {
+        const isFirst = node.previousElementSibling === null;
+        const prefix = isFirst ? '| ' : ' ';
+        const cell = formatTableCellForPipeRow(content.replace(/\n+/g, ' ').trim());
+        return `${prefix}${cell} |`;
+      },
+    });
+    td.addRule('preWithoutCode', {
+      filter: (node: HTMLElement) =>
+        node.nodeName === 'PRE'
+        && !(node.firstElementChild && node.firstElementChild.nodeName === 'CODE'),
+      replacement: (_content: string, node: HTMLElement) => {
+        const text = (node as HTMLElement).textContent ?? '';
+        const fence = '`'.repeat(fenceLengthForPreContent(text));
+        return `\n\n${fence}\n${trimTrailingNewlines(text)}\n${fence}\n\n`;
+      },
+    });
+    td.addRule('eskerraHighlight', {
+      filter: (node: HTMLElement) => node.nodeName === 'MARK',
+      replacement: (content: string) => `==${content}==`,
+    });
+    td.addRule('kbdAsInlineCode', {
+      filter: (node: HTMLElement) => node.nodeName === 'KBD',
+      replacement: (content: string) => `\`${content}\``,
+    });
     td.addRule('strikethrough', {
       filter: (node: HTMLElement) =>
         node.nodeName === 'DEL' || node.nodeName === 'S' || node.nodeName === 'STRIKE',
       replacement: (content: string) => `~~${content}~~`,
+    });
+    td.addRule('slackEmojiImg', {
+      filter: (node: HTMLElement) => node.nodeName === 'IMG',
+      replacement: (_content: string, node: HTMLElement) => {
+        const img = node as HTMLImageElement;
+        const emoji = slackEmojiImgReplacement(img);
+        return emoji ?? turndownDefaultImageMarkdown(img);
+      },
+    });
+    td.addRule('fencedPreCode', {
+      filter: (node: HTMLElement, options) =>
+        options.codeBlockStyle === 'fenced'
+        && node.nodeName === 'PRE'
+        && node.firstElementChild?.nodeName === 'CODE',
+      replacement: (_content: string, node: HTMLElement, options) =>
+        fencedPreCodeReplacement(node, options.fence ?? '```'),
     });
     turndownSingleton = td;
   }
@@ -75,6 +209,7 @@ const STRUCTURAL_HTML_MARKERS = [
   '<sub',
   '<code',
   '<kbd',
+  '<mark',
 ] as const;
 
 /**
@@ -97,6 +232,90 @@ function lowerHtmlContainsTagOpen(lowerHtml: string, marker: string): boolean {
   return false;
 }
 
+/** Block tags that break GFM pipe-table rows when left as direct `<th>`/`<td>` children. */
+const BLOCK_TAGS_IN_CELL = new Set([
+  'P',
+  'DIV',
+  'SECTION',
+  'ARTICLE',
+  'HEADER',
+  'FOOTER',
+  'ASIDE',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'BLOCKQUOTE',
+  'PRE',
+  'UL',
+  'OL',
+  'LI',
+  'DL',
+  'DT',
+  'DD',
+  'FIGURE',
+  'FIGCAPTION',
+  'DETAILS',
+  'SUMMARY',
+]);
+
+const FLATTEN_CELL_MAX_ITERATIONS = 50;
+
+function trimCellBrNoise(cell: Element): void {
+  while (cell.firstChild && (cell.firstChild as HTMLElement).tagName === 'BR') {
+    cell.removeChild(cell.firstChild);
+  }
+  while (cell.lastChild && (cell.lastChild as HTMLElement).tagName === 'BR') {
+    cell.removeChild(cell.lastChild);
+  }
+}
+
+function unwrapBlockChildInCell(
+  cell: Element,
+  child: Element,
+  doc: Document,
+): void {
+  if (child.tagName === 'LI') {
+    cell.insertBefore(doc.createTextNode('- '), child);
+  }
+  const ref = child.nextSibling;
+  while (child.firstChild) {
+    cell.insertBefore(child.firstChild, child);
+  }
+  if (ref) {
+    cell.insertBefore(doc.createElement('br'), ref);
+  }
+  cell.removeChild(child);
+}
+
+function flattenSingleTableCell(cell: Element, doc: Document): void {
+  let mutated = true;
+  let safety = 0;
+  while (mutated && safety++ < FLATTEN_CELL_MAX_ITERATIONS) {
+    mutated = false;
+    for (const child of Array.from(cell.children)) {
+      if (!BLOCK_TAGS_IN_CELL.has(child.tagName)) {
+        continue;
+      }
+      unwrapBlockChildInCell(cell, child, doc);
+      mutated = true;
+    }
+  }
+  trimCellBrNoise(cell);
+}
+
+/**
+ * Flatten block content inside table cells so Turndown's GFM tables plugin can emit
+ * one `| ... |` row per `<tr>` (rendered chat HTML often wraps each cell in `<p>`).
+ */
+function flattenTableCellsForGfm(doc: Document): void {
+  doc.querySelectorAll('th, td').forEach(cell => {
+    flattenSingleTableCell(cell, doc);
+  });
+}
+
 function preprocessClipboardHtmlFragment(html: string): string {
   try {
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -104,6 +323,7 @@ function preprocessClipboardHtmlFragment(html: string): string {
       .querySelectorAll('script, style, meta')
       .forEach(el => el.remove());
     doc.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.remove());
+    flattenTableCellsForGfm(doc);
     return doc.body?.innerHTML ?? html;
   } catch {
     return html;
@@ -218,10 +438,11 @@ function clipboardSanitizedHtmlToMarkdown(safeHtml: string): string {
   const cleaned = preprocessClipboardHtmlFragment(safeHtml);
   // Turndown escapes [ and ] individually, turning [[wiki link]] into \[\[wiki link\]\].
   // Undo that for double-bracket sequences so wiki links survive paste.
-  return getTurndown()
+  const md = getTurndown()
     .turndown(cleaned)
     .replace(/\\\[\\\[/g, '[[')
     .replace(/\\\]\\\]/g, ']]');
+  return stripLeakedHtmlInMarkdown(expandKnownEmojiShortcodes(md));
 }
 
 /**

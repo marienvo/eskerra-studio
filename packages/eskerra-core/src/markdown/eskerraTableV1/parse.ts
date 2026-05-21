@@ -2,6 +2,7 @@ import type {
   EskerraTableAlignment,
   ParseEskerraTableV1Result,
 } from './model';
+import {tokenizeDelimitedRowInner} from './tokenize';
 
 type ParsedRow = {
   cells: string[];
@@ -12,7 +13,7 @@ function parseDelimitedRow(line: string): ParsedRow | null {
     return null;
   }
   const inner = line.slice(1, -1);
-  const cells = inner.split('|').map(cell => cell.trim());
+  const cells = tokenizeDelimitedRowInner(inner).map(token => token.value.trim());
   if (cells.length < 1) {
     return null;
   }
@@ -56,9 +57,6 @@ export function parseEskerraTableV1FromLines(lines: string[]): ParseEskerraTable
   for (const line of lines) {
     if (line.trim() === '') {
       return {ok: false, reason: 'blank_line'};
-    }
-    if (line.includes('\\|')) {
-      return {ok: false, reason: 'unsupported_escaped_pipe'};
     }
   }
 

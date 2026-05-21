@@ -48,6 +48,24 @@ describe('buildEskerraTableCellMappings', () => {
     expect(doc.sliceString(findCellMappingByLogicalCoords(maps, 1, 0)!.interiorFrom, findCellMappingByLogicalCoords(maps, 1, 0)!.interiorTo)).toBe('x');
   });
 
+  it('maps cells when a row contains escaped pipes', () => {
+    const md = [
+      '| Input | Output |',
+      '| --- | --- |',
+      '| `<table>` | `\\| ... \\|` GFM |',
+    ].join('\n');
+    const doc = Text.of(md.split('\n'));
+    const block = {from: 0, to: doc.length};
+    const maps = buildEskerraTableCellMappings(doc, block);
+    expect(maps).not.toBeNull();
+    expect(maps!.length).toBe(4);
+    const outputCell = findCellMappingByLogicalCoords(maps!, 1, 1)!;
+    expect(doc.sliceString(outputCell.interiorFrom, outputCell.interiorTo)).toBe(
+      '`\\| ... \\|` GFM',
+    );
+    expect(findEskerraTableDocBlocks(doc)).toHaveLength(1);
+  });
+
   it('works when the table does not start at doc position 0', () => {
     const doc = Text.of(['intro', '| A |', '| --- |', '| z |']);
     const block = findEskerraTableDocBlocks(doc)[0]!;
