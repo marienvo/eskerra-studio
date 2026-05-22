@@ -298,6 +298,7 @@ export function useAppGitSyncOrchestration({
     manualSyncRunning,
     runManualSync: flushThenRunManualSync,
     notify,
+    localWriteNonce: saveSettledNonce,
   });
 
   const autosyncSchedulerState = useVaultGitAutosyncScheduler({
