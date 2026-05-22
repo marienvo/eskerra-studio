@@ -22,6 +22,13 @@
   -webkit-user-select: none;
 }
 
+.git-status-chip--autosync-countdown {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  max-width: none;
+}
+
 .git-status-chip--danger {
   background: var(--color-shell-status-error-bg);
   border-color: var(--color-shell-status-error-border);

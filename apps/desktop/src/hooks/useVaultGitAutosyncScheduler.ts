@@ -11,6 +11,7 @@ import {getAutosyncPreflight} from '../lib/gitAutosyncCountdown';
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 export const AUTOSYNC_INTERVAL_MS = 5 * 60 * 1000;
+export const AUTOSYNC_RETRY_DELAY_MS = 30 * 1000;
 
 export type VaultGitAutosyncSchedulerState = {
   autosyncPending: boolean;
@@ -29,6 +30,7 @@ type UseVaultGitAutosyncSchedulerArgs = {
   manualSyncRunning: boolean;
   runManualSync: (opts?: {readonly silent?: boolean}) => Promise<boolean>;
   intervalMs?: number;
+  retryDelayMs?: number;
   gitOperationBusyRef?: MutableRefObject<boolean>;
 };
 
@@ -47,6 +49,7 @@ export function useVaultGitAutosyncScheduler({
   manualSyncRunning,
   runManualSync,
   intervalMs = AUTOSYNC_INTERVAL_MS,
+  retryDelayMs = AUTOSYNC_RETRY_DELAY_MS,
   gitOperationBusyRef,
 }: UseVaultGitAutosyncSchedulerArgs): VaultGitAutosyncSchedulerState {
   const pendingGenerationRef = useRef(0);
@@ -58,6 +61,7 @@ export function useVaultGitAutosyncScheduler({
   }, [gitStatusRevision]);
   const inFlightRef = useRef(false);
   const nextAutosyncAtMsRef = useRef(0);
+  const autosyncTimeoutRef = useRef<number | null>(null);
   const [schedulerState, setSchedulerState] = useState<VaultGitAutosyncSchedulerState>({
     autosyncPending: false,
     nextAutosyncAtMs: 0,
@@ -71,8 +75,23 @@ export function useVaultGitAutosyncScheduler({
   });
 
   const scheduleNextAutosyncAt = useEffectEvent((atMs: number) => {
+    if (autosyncTimeoutRef.current != null) {
+      window.clearTimeout(autosyncTimeoutRef.current);
+    }
     nextAutosyncAtMsRef.current = atMs;
     publishSchedulerState();
+    autosyncTimeoutRef.current = window.setTimeout(() => {
+      autosyncTimeoutRef.current = null;
+      void runPendingSync();
+    }, Math.max(0, atMs - Date.now()));
+  });
+
+  const scheduleRegularAutosync = useEffectEvent(() => {
+    scheduleNextAutosyncAt(Date.now() + intervalMs);
+  });
+
+  const scheduleAutosyncRetry = useEffectEvent(() => {
+    scheduleNextAutosyncAt(Date.now() + Math.max(0, retryDelayMs));
   });
 
   useEffect(() => {
@@ -84,6 +103,16 @@ export function useVaultGitAutosyncScheduler({
       autosyncPending: false,
       nextAutosyncAtMs: nextAutosyncAtMsRef.current,
     });
+    autosyncTimeoutRef.current = window.setTimeout(() => {
+      autosyncTimeoutRef.current = null;
+      void runPendingSync();
+    }, intervalMs);
+    return () => {
+      if (autosyncTimeoutRef.current != null) {
+        window.clearTimeout(autosyncTimeoutRef.current);
+        autosyncTimeoutRef.current = null;
+      }
+    };
   }, [vaultPath, intervalMs]);
 
   useEffect(() => {
@@ -102,24 +131,48 @@ export function useVaultGitAutosyncScheduler({
   });
 
   const runPendingSync = useEffectEvent(async () => {
-    scheduleNextAutosyncAt(Date.now() + intervalMs);
-
     const pendingGeneration = pendingGenerationRef.current;
-    if (pendingGeneration === syncedGenerationRef.current) return;
-    if (inFlightRef.current) return;
-    if (vaultPath == null) return;
-    if (gitStatusLoading) return;
-    if (gitStatusError != null) return;
-    if (manualSyncDisabledReason != null) return;
-    if (manualSyncRunning) return;
-    if (gitOperationBusyRef?.current) return;
+    if (pendingGeneration === syncedGenerationRef.current) {
+      scheduleRegularAutosync();
+      return;
+    }
+    if (inFlightRef.current) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (vaultPath == null) {
+      scheduleRegularAutosync();
+      return;
+    }
+    if (gitStatusLoading) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (gitStatusError != null) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (manualSyncDisabledReason != null) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (manualSyncRunning) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (gitOperationBusyRef?.current) {
+      scheduleAutosyncRetry();
+      return;
+    }
 
     const preflight = getAutosyncPreflight(gitStatus);
     if (preflight === 'skip-clear-pending') {
       clearPendingIfCleanStatusIsFresh();
+      scheduleRegularAutosync();
       return;
     }
     if (preflight === 'skip-keep-pending') {
+      scheduleAutosyncRetry();
       return;
     }
 
@@ -138,17 +191,9 @@ export function useVaultGitAutosyncScheduler({
         gitOperationBusyRef.current = false;
       }
       inFlightRef.current = false;
+      scheduleRegularAutosync();
     }
   });
-
-  useEffect(() => {
-    if (intervalMs <= 0) return;
-    scheduleNextAutosyncAt(Date.now() + intervalMs);
-    const id = window.setInterval(() => {
-      void runPendingSync();
-    }, intervalMs);
-    return () => window.clearInterval(id);
-  }, [intervalMs]);
 
   return schedulerState;
 }

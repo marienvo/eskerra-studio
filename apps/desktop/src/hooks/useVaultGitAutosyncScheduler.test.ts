@@ -39,6 +39,7 @@ function ready(overrides: Partial<HookArgs> = {}): HookArgs {
     manualSyncRunning: false,
     runManualSync: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
     intervalMs: INTERVAL_MS,
+    retryDelayMs: INTERVAL_MS,
     ...overrides,
   };
 }
@@ -174,6 +175,32 @@ describe('useVaultGitAutosyncScheduler', () => {
     rerender(ready({saveSettledNonce: 1, runManualSync, gitOperationBusyRef}));
     await act(async () => { vi.advanceTimersByTime(INTERVAL_MS); });
 
+    expect(runManualSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a short retry instead of a full interval when a git operation is busy at the due time', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-20T12:00:00.000Z'));
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const gitOperationBusyRef = {current: true};
+    const retryDelayMs = 25;
+    const {result, rerender} = render(
+      ready({runManualSync, gitOperationBusyRef, retryDelayMs}),
+    );
+
+    rerender(ready({saveSettledNonce: 1, runManualSync, gitOperationBusyRef, retryDelayMs}));
+    await act(async () => { vi.advanceTimersByTime(INTERVAL_MS); });
+
+    expect(runManualSync).not.toHaveBeenCalled();
+    expect(result.current.state.autosyncPending).toBe(true);
+    expect(result.current.state.nextAutosyncAtMs).toBe(Date.now() + retryDelayMs);
+
+    gitOperationBusyRef.current = false;
+    rerender(ready({saveSettledNonce: 1, runManualSync, gitOperationBusyRef, retryDelayMs}));
+    await act(async () => { vi.advanceTimersByTime(retryDelayMs - 1); });
+    expect(runManualSync).not.toHaveBeenCalled();
+
+    await act(async () => { vi.advanceTimersByTime(1); });
     expect(runManualSync).toHaveBeenCalledTimes(1);
   });
 
