@@ -13,6 +13,7 @@ type UseVaultGitStartupSyncArgs = {
   manualSyncRunning: boolean;
   runManualSync: (opts?: {readonly silent?: boolean}) => Promise<boolean>;
   notify: (tone: SessionNotificationTone, text: string) => void;
+  localWriteNonce?: number;
 };
 
 /**
@@ -29,6 +30,7 @@ export function useVaultGitStartupSync({
   manualSyncRunning,
   runManualSync,
   notify,
+  localWriteNonce = 0,
 }: UseVaultGitStartupSyncArgs): void {
   // Tracks all vault paths that have already triggered startup sync this session.
   const attemptedVaultPathsRef = useRef(new Set<string>());
@@ -46,6 +48,7 @@ export function useVaultGitStartupSync({
     if (gitStatusError != null) return;
     if (manualSyncDisabledReason != null) return;
     if (manualSyncRunning) return;
+    if (localWriteNonce > 0) return;
 
     // Preflight: skip silently if status is provided and shows nothing to sync.
     if (gitStatus !== undefined && !shouldRunVaultGitSync(gitStatus, 'startup')) return;
@@ -57,5 +60,13 @@ export function useVaultGitStartupSync({
     attemptedVaultPathsRef.current.add(vaultPath);
 
     runStartupSync();
-  }, [vaultPath, gitStatusLoading, gitStatusError, gitStatus, manualSyncDisabledReason, manualSyncRunning]);
+  }, [
+    vaultPath,
+    gitStatusLoading,
+    gitStatusError,
+    gitStatus,
+    manualSyncDisabledReason,
+    manualSyncRunning,
+    localWriteNonce,
+  ]);
 }

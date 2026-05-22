@@ -36,6 +36,7 @@ function ready(overrides: Partial<HookArgs> = {}): HookArgs {
     manualSyncRunning: false,
     runManualSync: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
     notify: vi.fn(),
+    localWriteNonce: 0,
     ...overrides,
   };
 }
@@ -85,6 +86,39 @@ describe('useVaultGitStartupSync', () => {
     const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
     render(ready({manualSyncRunning: true, runManualSync}));
 
+    await act(async () => { await Promise.resolve(); });
+
+    expect(runManualSync).not.toHaveBeenCalled();
+  });
+
+  it('does not run after a local write in the current app session', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    render(ready({localWriteNonce: 1, runManualSync, gitStatus: localChangesStatus()}));
+
+    await act(async () => { await Promise.resolve(); });
+
+    expect(runManualSync).not.toHaveBeenCalled();
+  });
+
+  it('does not run when status becomes dirty after startup loading if a local write happened first', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const notify = vi.fn();
+    const {rerender} = render(
+      ready({gitStatusLoading: true, localWriteNonce: 0, runManualSync, notify}),
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    expect(runManualSync).not.toHaveBeenCalled();
+
+    rerender(
+      ready({
+        gitStatusLoading: false,
+        gitStatus: localChangesStatus(),
+        localWriteNonce: 1,
+        runManualSync,
+        notify,
+      }),
+    );
     await act(async () => { await Promise.resolve(); });
 
     expect(runManualSync).not.toHaveBeenCalled();
