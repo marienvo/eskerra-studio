@@ -61,7 +61,6 @@ export function useVaultGitAutosyncScheduler({
   }, [gitStatusRevision]);
   const inFlightRef = useRef(false);
   const nextAutosyncAtMsRef = useRef(0);
-  const autosyncTimeoutRef = useRef<number | null>(null);
   const [schedulerState, setSchedulerState] = useState<VaultGitAutosyncSchedulerState>({
     autosyncPending: false,
     nextAutosyncAtMs: 0,
@@ -75,15 +74,8 @@ export function useVaultGitAutosyncScheduler({
   });
 
   const scheduleNextAutosyncAt = useEffectEvent((atMs: number) => {
-    if (autosyncTimeoutRef.current != null) {
-      window.clearTimeout(autosyncTimeoutRef.current);
-    }
     nextAutosyncAtMsRef.current = atMs;
     publishSchedulerState();
-    autosyncTimeoutRef.current = window.setTimeout(() => {
-      autosyncTimeoutRef.current = null;
-      void runPendingSync();
-    }, Math.max(0, atMs - Date.now()));
   });
 
   const scheduleRegularAutosync = useEffectEvent(() => {
@@ -103,16 +95,6 @@ export function useVaultGitAutosyncScheduler({
       autosyncPending: false,
       nextAutosyncAtMs: nextAutosyncAtMsRef.current,
     });
-    autosyncTimeoutRef.current = window.setTimeout(() => {
-      autosyncTimeoutRef.current = null;
-      void runPendingSync();
-    }, intervalMs);
-    return () => {
-      if (autosyncTimeoutRef.current != null) {
-        window.clearTimeout(autosyncTimeoutRef.current);
-        autosyncTimeoutRef.current = null;
-      }
-    };
   }, [vaultPath, intervalMs]);
 
   useEffect(() => {
@@ -194,6 +176,14 @@ export function useVaultGitAutosyncScheduler({
       scheduleRegularAutosync();
     }
   });
+
+  useEffect(() => {
+    if (intervalMs <= 0 || schedulerState.nextAutosyncAtMs <= 0) return;
+    const id = window.setTimeout(() => {
+      runPendingSync().catch(() => undefined);
+    }, Math.max(0, schedulerState.nextAutosyncAtMs - Date.now()));
+    return () => window.clearTimeout(id);
+  }, [intervalMs, schedulerState.nextAutosyncAtMs]);
 
   return schedulerState;
 }
