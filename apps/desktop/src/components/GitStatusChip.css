@@ -22,11 +22,10 @@
   -webkit-user-select: none;
 }
 
-.git-status-chip--autosync-countdown {
+.git-status-chip__countdown-time {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
-  max-width: none;
 }
 
 .git-status-chip--danger {

@@ -87,9 +87,6 @@ export function GitStatusChip({
   const useAutosyncCountdown =
     autosyncCountdownLabel != null && view.label === 'Local changes';
   const displayLabel = useAutosyncCountdown ? autosyncCountdownLabel : view.label;
-  const className = `git-status-chip git-status-chip--${view.tone}${
-    useAutosyncCountdown ? ' git-status-chip--autosync-countdown' : ''
-  }`;
   let ariaLabel = view.label;
   if (useAutosyncCountdown) {
     ariaLabel =
@@ -100,13 +97,22 @@ export function GitStatusChip({
 
   return (
     <span
-      className={className}
+      className={`git-status-chip git-status-chip--${view.tone}`}
       aria-label={ariaLabel}
       data-tooltip={view.description ?? undefined}
       data-tooltip-placement="inline-start"
     >
       <IconGlyph name={view.icon} size={12} aria-hidden />
-      {displayLabel}
+      {useAutosyncCountdown ? (
+        <>
+          Syncs in{' '}
+          <span className="git-status-chip__countdown-time">
+            {autosyncCountdownLabel.replace(/^Syncs in\s+/, '')}
+          </span>
+        </>
+      ) : (
+        displayLabel
+      )}
     </span>
   );
 }
