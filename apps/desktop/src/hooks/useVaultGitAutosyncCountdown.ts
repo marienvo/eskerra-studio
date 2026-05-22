@@ -1,7 +1,7 @@
 import {useMemo, useSyncExternalStore} from 'react';
 
 import {
-  resolveAutosyncCountdownLabel,
+  resolveAutosyncCountdownTime,
   shouldShowAutosyncCountdown,
   type ShouldShowAutosyncCountdownInput,
 } from '../lib/gitAutosyncCountdown';
@@ -55,7 +55,7 @@ type UseVaultGitAutosyncCountdownArgs = ShouldShowAutosyncCountdownInput &
   VaultGitAutosyncSchedulerState;
 
 /**
- * Returns a live "Syncs in M:SS" label when autosync is pending and the chip
+ * Returns a live "M:SS" time when autosync is pending and the chip
  * would otherwise show "Local changes", or null when the countdown should not display.
  */
 export function useVaultGitAutosyncCountdown(
@@ -70,6 +70,6 @@ export function useVaultGitAutosyncCountdown(
 
   return useMemo(() => {
     if (!showCountdown) return null;
-    return resolveAutosyncCountdownLabel(args.nextAutosyncAtMs, nowMs);
+    return resolveAutosyncCountdownTime(args.nextAutosyncAtMs, nowMs);
   }, [showCountdown, args.nextAutosyncAtMs, nowMs]);
 }

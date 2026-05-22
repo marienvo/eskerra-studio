@@ -31,12 +31,17 @@ export function remainingMsUntil(targetMs: number, nowMs: number): number {
   return Math.max(0, targetMs - nowMs);
 }
 
-/** Formats remaining time as "Syncs in M:SS" (seconds ceil, sec zero-padded). */
-export function formatAutosyncCountdownLabel(remainingMs: number): string {
+/** Formats remaining time as "M:SS" (seconds ceil, sec zero-padded). */
+export function formatAutosyncCountdownTime(remainingMs: number): string {
   const totalSec = Math.max(0, Math.ceil(remainingMs / 1000));
   const min = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
-  return `Syncs in ${min}:${String(sec).padStart(2, '0')}`;
+  return `${min}:${String(sec).padStart(2, '0')}`;
+}
+
+/** Formats remaining time as "Syncs in M:SS". */
+export function formatAutosyncCountdownLabel(remainingMs: number): string {
+  return `Syncs in ${formatAutosyncCountdownTime(remainingMs)}`;
 }
 
 export type ShouldShowAutosyncCountdownInput = {
@@ -66,4 +71,11 @@ export function resolveAutosyncCountdownLabel(
   nowMs: number,
 ): string {
   return formatAutosyncCountdownLabel(remainingMsUntil(nextAutosyncAtMs, nowMs));
+}
+
+export function resolveAutosyncCountdownTime(
+  nextAutosyncAtMs: number,
+  nowMs: number,
+): string {
+  return formatAutosyncCountdownTime(remainingMsUntil(nextAutosyncAtMs, nowMs));
 }

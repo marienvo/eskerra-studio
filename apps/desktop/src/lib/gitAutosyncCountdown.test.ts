@@ -2,9 +2,11 @@ import {describe, expect, it} from 'vitest';
 
 import {
   formatAutosyncCountdownLabel,
+  formatAutosyncCountdownTime,
   getAutosyncPreflight,
   remainingMsUntil,
   resolveAutosyncCountdownLabel,
+  resolveAutosyncCountdownTime,
   shouldShowAutosyncCountdown,
 } from './gitAutosyncCountdown';
 import type {GitStatusResult} from './tauriVaultGitSync';
@@ -40,6 +42,12 @@ describe('formatAutosyncCountdownLabel', () => {
   });
 });
 
+describe('formatAutosyncCountdownTime', () => {
+  it('formats minutes and zero-padded seconds without label text', () => {
+    expect(formatAutosyncCountdownTime(4 * 60 * 1000 + 53 * 1000)).toBe('4:53');
+  });
+});
+
 describe('remainingMsUntil', () => {
   it('returns non-negative delta', () => {
     expect(remainingMsUntil(1000, 400)).toBe(600);
@@ -50,6 +58,12 @@ describe('remainingMsUntil', () => {
 describe('resolveAutosyncCountdownLabel', () => {
   it('combines target and now', () => {
     expect(resolveAutosyncCountdownLabel(10_000, 0)).toBe('Syncs in 0:10');
+  });
+});
+
+describe('resolveAutosyncCountdownTime', () => {
+  it('combines target and now without label text', () => {
+    expect(resolveAutosyncCountdownTime(10_000, 0)).toBe('0:10');
   });
 });
 

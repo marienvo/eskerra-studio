@@ -11,6 +11,8 @@ import {getAutosyncPreflight} from '../lib/gitAutosyncCountdown';
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 export const AUTOSYNC_INTERVAL_MS = 5 * 60 * 1000;
+export const AUTOSYNC_RETRY_DELAY_MS = 30 * 1000;
+export const AUTOSYNC_MIN_CHANGE_AGE_MS = 60 * 1000;
 
 export type VaultGitAutosyncSchedulerState = {
   autosyncPending: boolean;
@@ -29,12 +31,15 @@ type UseVaultGitAutosyncSchedulerArgs = {
   manualSyncRunning: boolean;
   runManualSync: (opts?: {readonly silent?: boolean}) => Promise<boolean>;
   intervalMs?: number;
+  retryDelayMs?: number;
+  minChangeAgeMs?: number;
   gitOperationBusyRef?: MutableRefObject<boolean>;
 };
 
 /**
  * Coalesces local vault writes into a single pending autosync flag.
- * The interval is the only automatic trigger; saves never run Git sync directly.
+ * Autosync only runs after the interval and after the newest pending write is old enough.
+ * Saves never run Git sync directly.
  */
 export function useVaultGitAutosyncScheduler({
   saveSettledNonce,
@@ -47,11 +52,14 @@ export function useVaultGitAutosyncScheduler({
   manualSyncRunning,
   runManualSync,
   intervalMs = AUTOSYNC_INTERVAL_MS,
+  retryDelayMs = AUTOSYNC_RETRY_DELAY_MS,
+  minChangeAgeMs = AUTOSYNC_MIN_CHANGE_AGE_MS,
   gitOperationBusyRef,
 }: UseVaultGitAutosyncSchedulerArgs): VaultGitAutosyncSchedulerState {
   const pendingGenerationRef = useRef(0);
   const syncedGenerationRef = useRef(0);
   const pendingStatusRevisionRef = useRef(0);
+  const latestPendingChangeAtMsRef = useRef(0);
   const gitStatusRevisionRef = useRef(gitStatusRevision);
   useLayoutEffect(() => {
     gitStatusRevisionRef.current = gitStatusRevision;
@@ -75,10 +83,27 @@ export function useVaultGitAutosyncScheduler({
     publishSchedulerState();
   });
 
+  const scheduleRegularAutosync = useEffectEvent(() => {
+    scheduleNextAutosyncAt(Date.now() + intervalMs);
+  });
+
+  const scheduleAutosyncRetry = useEffectEvent(() => {
+    scheduleNextAutosyncAt(Date.now() + Math.max(0, retryDelayMs));
+  });
+
+  const scheduleAutosyncWhenLatestChangeIsOldEnough = useEffectEvent(() => {
+    const earliestRunAtMs =
+      latestPendingChangeAtMsRef.current + Math.max(0, minChangeAgeMs);
+    if (nextAutosyncAtMsRef.current < earliestRunAtMs) {
+      scheduleNextAutosyncAt(earliestRunAtMs);
+    }
+  });
+
   useEffect(() => {
     pendingGenerationRef.current = 0;
     syncedGenerationRef.current = 0;
     pendingStatusRevisionRef.current = 0;
+    latestPendingChangeAtMsRef.current = 0;
     nextAutosyncAtMsRef.current = Date.now() + intervalMs;
     setSchedulerState({
       autosyncPending: false,
@@ -90,7 +115,9 @@ export function useVaultGitAutosyncScheduler({
     if (saveSettledNonce === 0) return;
     pendingGenerationRef.current += 1;
     pendingStatusRevisionRef.current = gitStatusRevisionRef.current;
+    latestPendingChangeAtMsRef.current = Date.now();
     publishSchedulerState();
+    scheduleAutosyncWhenLatestChangeIsOldEnough();
   }, [saveSettledNonce]);
 
   const clearPendingIfCleanStatusIsFresh = useEffectEvent(() => {
@@ -102,24 +129,55 @@ export function useVaultGitAutosyncScheduler({
   });
 
   const runPendingSync = useEffectEvent(async () => {
-    scheduleNextAutosyncAt(Date.now() + intervalMs);
-
     const pendingGeneration = pendingGenerationRef.current;
-    if (pendingGeneration === syncedGenerationRef.current) return;
-    if (inFlightRef.current) return;
-    if (vaultPath == null) return;
-    if (gitStatusLoading) return;
-    if (gitStatusError != null) return;
-    if (manualSyncDisabledReason != null) return;
-    if (manualSyncRunning) return;
-    if (gitOperationBusyRef?.current) return;
+    if (pendingGeneration === syncedGenerationRef.current) {
+      scheduleRegularAutosync();
+      return;
+    }
+    if (inFlightRef.current) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (vaultPath == null) {
+      scheduleRegularAutosync();
+      return;
+    }
+    if (gitStatusLoading) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (gitStatusError != null) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (manualSyncDisabledReason != null) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (manualSyncRunning) {
+      scheduleAutosyncRetry();
+      return;
+    }
+    if (gitOperationBusyRef?.current) {
+      scheduleAutosyncRetry();
+      return;
+    }
+
+    const earliestRunAtMs =
+      latestPendingChangeAtMsRef.current + Math.max(0, minChangeAgeMs);
+    if (Date.now() < earliestRunAtMs) {
+      scheduleNextAutosyncAt(earliestRunAtMs);
+      return;
+    }
 
     const preflight = getAutosyncPreflight(gitStatus);
     if (preflight === 'skip-clear-pending') {
       clearPendingIfCleanStatusIsFresh();
+      scheduleRegularAutosync();
       return;
     }
     if (preflight === 'skip-keep-pending') {
+      scheduleAutosyncRetry();
       return;
     }
 
@@ -138,17 +196,17 @@ export function useVaultGitAutosyncScheduler({
         gitOperationBusyRef.current = false;
       }
       inFlightRef.current = false;
+      scheduleRegularAutosync();
     }
   });
 
   useEffect(() => {
-    if (intervalMs <= 0) return;
-    scheduleNextAutosyncAt(Date.now() + intervalMs);
-    const id = window.setInterval(() => {
-      void runPendingSync();
-    }, intervalMs);
-    return () => window.clearInterval(id);
-  }, [intervalMs]);
+    if (intervalMs <= 0 || schedulerState.nextAutosyncAtMs <= 0) return;
+    const id = window.setTimeout(() => {
+      runPendingSync().catch(() => undefined);
+    }, Math.max(0, schedulerState.nextAutosyncAtMs - Date.now()));
+    return () => window.clearTimeout(id);
+  }, [intervalMs, schedulerState.nextAutosyncAtMs]);
 
   return schedulerState;
 }
