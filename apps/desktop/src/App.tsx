@@ -288,7 +288,7 @@ export default function App() {
     manualSyncUnavailable,
     manualSyncLabel,
     gitStatusForDisplay,
-    gitAutosyncCountdownLabel,
+    gitAutosyncCountdownTime,
     transientGitStatus,
     currentGitBranchLoading,
     gitStatusLoading,
@@ -465,7 +465,7 @@ export default function App() {
                 error={currentGitDetachedHead ? gitStatusError : currentGitBranchError ?? gitStatusError}
                 syncing={manualGitSync.running}
                 transient={transientGitStatus}
-                autosyncCountdownLabel={gitAutosyncCountdownLabel}
+                autosyncCountdownTime={gitAutosyncCountdownTime}
               />
             }
           />

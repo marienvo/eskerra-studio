@@ -12,8 +12,8 @@ type GitStatusChipProps = {
   error?: string | null;
   syncing?: boolean;
   transient?: TransientGitStatus | null;
-  /** Replaces "Local changes" label when autosync countdown is active. */
-  autosyncCountdownLabel?: string | null;
+  /** Replaces "Local changes" label with "Syncs in {time}" when autosync countdown is active. */
+  autosyncCountdownTime?: string | null;
 };
 
 export function GitStatusChip({
@@ -22,7 +22,7 @@ export function GitStatusChip({
   error = null,
   syncing = false,
   transient = null,
-  autosyncCountdownLabel = null,
+  autosyncCountdownTime = null,
 }: GitStatusChipProps) {
   if (syncing) {
     return (
@@ -85,8 +85,10 @@ export function GitStatusChip({
 
   const view = mapGitStatusToView(status);
   const useAutosyncCountdown =
-    autosyncCountdownLabel != null && view.label === 'Local changes';
-  const displayLabel = useAutosyncCountdown ? autosyncCountdownLabel : view.label;
+    autosyncCountdownTime != null && view.label === 'Local changes';
+  const displayLabel = useAutosyncCountdown
+    ? `Syncs in ${autosyncCountdownTime}`
+    : view.label;
   let ariaLabel = view.label;
   if (useAutosyncCountdown) {
     ariaLabel =
@@ -107,7 +109,7 @@ export function GitStatusChip({
         <>
           Syncs in{' '}
           <span className="git-status-chip__countdown-time">
-            {autosyncCountdownLabel.replace(/^Syncs in\s+/, '')}
+            {autosyncCountdownTime}
           </span>
         </>
       ) : (

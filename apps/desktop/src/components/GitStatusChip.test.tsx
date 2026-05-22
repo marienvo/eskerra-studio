@@ -138,7 +138,7 @@ describe('GitStatusChip', () => {
     render(
       <GitStatusChip
         status={{...cleanStatus, hasUncommittedChanges: true}}
-        autosyncCountdownLabel="Syncs in 1:00"
+        autosyncCountdownTime="1:00"
       />,
     );
     expect(screen.getByLabelText(/Syncs in 1:00/)).toBeInstanceOf(HTMLElement);
@@ -150,14 +150,14 @@ describe('GitStatusChip', () => {
     render(
       <GitStatusChip
         status={{...cleanStatus, hasUncommittedChanges: true}}
-        autosyncCountdownLabel="Syncs in 1:00"
+        autosyncCountdownTime="1:00"
       />,
     );
 
     const time = screen.getByText('1:00');
     const chip = screen.getByLabelText(/Syncs in 1:00/);
     expect(time.className).toContain('git-status-chip__countdown-time');
-    expect(chip.className).not.toContain('git-status-chip--autosync-countdown');
+    expect(chip.className).toBe('git-status-chip git-status-chip--info');
   });
 
   it('renders correct tone class for Synced', () => {

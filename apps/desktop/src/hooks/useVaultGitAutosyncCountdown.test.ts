@@ -67,11 +67,11 @@ describe('useVaultGitAutosyncCountdown', () => {
       {initialProps: now + 65_000},
     );
 
-    expect(result.current).toBe('Syncs in 1:05');
+    expect(result.current).toBe('1:05');
 
     rerender(now + 60_000);
 
-    expect(result.current).toBe('Syncs in 1:00');
+    expect(result.current).toBe('1:00');
   });
 
   it('keeps the countdown clock snapshot cached between timer ticks', () => {
@@ -92,17 +92,17 @@ describe('useVaultGitAutosyncCountdown', () => {
 
     const {result, rerender} = renderHook(() => useVaultGitAutosyncCountdown(args));
 
-    expect(result.current).toBe('Syncs in 1:05');
+    expect(result.current).toBe('1:05');
 
     vi.setSystemTime(new Date(now + 5_000));
     rerender();
 
-    expect(result.current).toBe('Syncs in 1:05');
+    expect(result.current).toBe('1:05');
 
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
 
-    expect(result.current).toBe('Syncs in 0:59');
+    expect(result.current).toBe('0:59');
   });
 });

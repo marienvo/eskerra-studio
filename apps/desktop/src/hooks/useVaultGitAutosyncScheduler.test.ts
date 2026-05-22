@@ -40,6 +40,7 @@ function ready(overrides: Partial<HookArgs> = {}): HookArgs {
     runManualSync: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
     intervalMs: INTERVAL_MS,
     retryDelayMs: INTERVAL_MS,
+    minChangeAgeMs: 0,
     ...overrides,
   };
 }
@@ -198,6 +199,27 @@ describe('useVaultGitAutosyncScheduler', () => {
     gitOperationBusyRef.current = false;
     rerender(ready({saveSettledNonce: 1, runManualSync, gitOperationBusyRef, retryDelayMs}));
     await act(async () => { vi.advanceTimersByTime(retryDelayMs - 1); });
+    expect(runManualSync).not.toHaveBeenCalled();
+
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(runManualSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits until the latest disk change is at least the configured age before syncing', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-20T12:00:00.000Z'));
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const minChangeAgeMs = 60_000;
+    const {result, rerender} = render(
+      ready({intervalMs: 5_000, minChangeAgeMs, runManualSync}),
+    );
+
+    await act(async () => { vi.advanceTimersByTime(4_500); });
+    rerender(ready({saveSettledNonce: 1, intervalMs: 5_000, minChangeAgeMs, runManualSync}));
+
+    expect(result.current.state.nextAutosyncAtMs).toBe(Date.now() + minChangeAgeMs);
+
+    await act(async () => { vi.advanceTimersByTime(59_999); });
     expect(runManualSync).not.toHaveBeenCalled();
 
     await act(async () => { vi.advanceTimersByTime(1); });
