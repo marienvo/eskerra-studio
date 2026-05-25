@@ -3,13 +3,7 @@
  *
  * Ownership: app-level orchestration and Tauri window integration; vault editing behavior is in `VaultTab` / workspace hook.
  */
-import {
-  Suspense,
-  useCallback,
-  useMemo,
-  useState,
-  useRef,
-} from 'react';
+import {useCallback, useMemo, useState, useRef} from 'react';
 
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
 import {AppStatusBar} from './components/AppStatusBar';
@@ -48,10 +42,9 @@ import {useAppPickFolder} from './shell/useAppPickFolder';
 import {usePaneVisibility} from './shell/usePaneVisibility';
 import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
-import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
-import {LazySettingsPage, appLazyFallback} from './shell/mainWindow/AppLazyUi';
+import {AppMainStage} from './shell/mainWindow/AppMainStage';
 import {
   AppPaletteLayer,
   useAppPaletteLayerState,
@@ -386,58 +379,47 @@ export default function App() {
             onCloseRequest={handleWindowCloseRequest}
           />
 
-          <div className="app-body">
-            <div className="main-shell-stage panel-group fill">
-              <div className="main-column">
-                <main className="main-stage">
-                  {activePage === 'settings' && vaultSettings ? (
-                    <Suspense fallback={appLazyFallback}>
-                      <LazySettingsPage
-                        onClose={() => setActivePage('vault')}
-                        vaultRoot={vaultRoot}
-                        fs={fs}
-                        vaultSettings={vaultSettings}
-                        setVaultSettings={setVaultSettings}
-                        onChangeVaultFolder={pickFolder}
-                      />
-                    </Suspense>
-                  ) : (
-                    <MainWindowVaultTab
-                      key={vaultRoot}
-                      vaultRoot={vaultRoot}
-                      vaultSettings={vaultSettings}
-                      fs={fs}
-                      fsRefreshNonce={fsRefreshNonce}
-                      inboxEditorRef={inboxEditorRef}
-                      inboxEditorShellScrollRef={inboxEditorShellScrollRef}
-                      workspace={workspace}
-                      paneVisibility={paneVisibility}
-                      layouts={layouts}
-                      persistMainLeftWidthPx={persistMainLeftWidthPx}
-                      persistVaultEpisodesStackTopHeightPx={persistVaultEpisodesStackTopHeightPx}
-                      persistNotificationsInboxStackTopHeightPx={persistNotificationsInboxStackTopHeightPx}
-                      persistNotificationsWidthPx={persistNotificationsWidthPx}
-                      titleBarEditorTabsHost={titleBarEditorTabsHost}
-                      onAddEntry={openAddToInbox}
-                      busy={busy}
-                      notificationItems={notificationItems}
-                      notificationHighlightId={notificationHighlightId}
-                      dismissNotification={dismissNotification}
-                      clearAllNotifications={clearAllNotifications}
-                      playbackTransport={playbackTransport}
-                      toolbarNowPlaying={toolbarNowPlaying}
-                      podcastCatalog={podcastCatalog}
-                      desktopPlayback={desktopPlayback}
-                      handleEpisodesRssSync={handleEpisodesRssSync}
-                      rssSyncing={rssSyncing}
-                      rssSyncPercent={rssSyncPercent}
-                      onMuteLinkSnippetDomain={handleMuteLinkSnippetDomain}
-                    />
-                  )}
-                </main>
-              </div>
-            </div>
-          </div>
+          <AppMainStage
+            activePage={activePage}
+            onCloseSettings={() => setActivePage('vault')}
+            settingsPageProps={{
+              vaultRoot,
+              fs,
+              vaultSettings,
+              setVaultSettings,
+              onChangeVaultFolder: pickFolder,
+            }}
+            vaultTabProps={{
+              vaultRoot,
+              vaultSettings,
+              fs,
+              fsRefreshNonce,
+              inboxEditorRef,
+              inboxEditorShellScrollRef,
+              workspace,
+              paneVisibility,
+              layouts,
+              persistMainLeftWidthPx,
+              persistVaultEpisodesStackTopHeightPx,
+              persistNotificationsInboxStackTopHeightPx,
+              persistNotificationsWidthPx,
+              titleBarEditorTabsHost,
+              onAddEntry: openAddToInbox,
+              busy,
+              notificationItems,
+              notificationHighlightId,
+              dismissNotification,
+              clearAllNotifications,
+              playbackTransport,
+              toolbarNowPlaying,
+              podcastCatalog,
+              desktopPlayback,
+              handleEpisodesRssSync,
+              rssSyncing,
+              rssSyncPercent,
+              onMuteLinkSnippetDomain: handleMuteLinkSnippetDomain,
+            }}
+          />
 
           <AppDiskConflictBanners
             err={err}
