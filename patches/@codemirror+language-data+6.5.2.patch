@@ -1,0 +1,66 @@
+diff --git a/node_modules/@codemirror/language-data/dist/index.js b/node_modules/@codemirror/language-data/dist/index.js
+index ee14593..f047f65 100644
+--- a/node_modules/@codemirror/language-data/dist/index.js
++++ b/node_modules/@codemirror/language-data/dist/index.js
+@@ -1,4 +1,7 @@
+ import { LanguageDescription, LanguageSupport, StreamLanguage } from '@codemirror/language';
++import { html } from '@codemirror/lang-html';
++import { javascript } from '@codemirror/lang-javascript';
++import { markdown } from '@codemirror/lang-markdown';
+ 
+ function legacy(parser) {
+     return new LanguageSupport(StreamLanguage.define(parser));
+@@ -51,7 +54,7 @@ const languages = [
+         alias: ["xhtml"],
+         extensions: ["html", "htm", "handlebars", "hbs"],
+         load() {
+-            return import('@codemirror/lang-html').then(m => m.html());
++            return Promise.resolve(html());
+         }
+     }),
+     /*@__PURE__*/LanguageDescription.of({
+@@ -66,7 +69,7 @@ const languages = [
+         alias: ["ecmascript", "js", "node"],
+         extensions: ["js", "mjs", "cjs"],
+         load() {
+-            return import('@codemirror/lang-javascript').then(m => m.javascript());
++            return Promise.resolve(javascript());
+         }
+     }),
+     /*@__PURE__*/LanguageDescription.of({
+@@ -88,7 +91,7 @@ const languages = [
+         name: "JSX",
+         extensions: ["jsx"],
+         load() {
+-            return import('@codemirror/lang-javascript').then(m => m.javascript({ jsx: true }));
++            return Promise.resolve(javascript({ jsx: true }));
+         }
+     }),
+     /*@__PURE__*/LanguageDescription.of({
+@@ -113,7 +116,7 @@ const languages = [
+         name: "Markdown",
+         extensions: ["md", "markdown", "mkd"],
+         load() {
+-            return import('@codemirror/lang-markdown').then(m => m.markdown());
++            return Promise.resolve(markdown());
+         }
+     }),
+     /*@__PURE__*/LanguageDescription.of({
+@@ -182,7 +185,7 @@ const languages = [
+         name: "TSX",
+         extensions: ["tsx"],
+         load() {
+-            return import('@codemirror/lang-javascript').then(m => m.javascript({ jsx: true, typescript: true }));
++            return Promise.resolve(javascript({ jsx: true, typescript: true }));
+         }
+     }),
+     /*@__PURE__*/LanguageDescription.of({
+@@ -190,7 +193,7 @@ const languages = [
+         alias: ["ts"],
+         extensions: ["ts", "mts", "cts"],
+         load() {
+-            return import('@codemirror/lang-javascript').then(m => m.javascript({ typescript: true }));
++            return Promise.resolve(javascript({ typescript: true }));
+         }
+     }),
+     /*@__PURE__*/LanguageDescription.of({

@@ -156,8 +156,8 @@ function mergeLanguageDescriptions(
  *
  * JavaScript, HTML, and Markdown fence grammars use static imports with `Promise.resolve` loaders
  * because the capture editor already pulls those packages in eagerly; dynamic `import()` would not
- * split them (Rolldown `INEFFECTIVE_DYNAMIC_IMPORT`). The same eager loaders are patched into
- * `@codemirror/language-data` via `patches/@codemirror+language-data+6.5.2.patch`.
+ * split them (Rolldown `INEFFECTIVE_DYNAMIC_IMPORT`, disabled in `vite.config.ts`). The same eager
+ * loaders are patched into `@codemirror/language-data` via `patches/@codemirror+language-data+6.5.2.patch`.
  */
 export const eskerraFenceLanguages: readonly LanguageDescription[] =
   mergeLanguageDescriptions(codeMirrorLanguages, eskerraFenceLanguageOverrides);

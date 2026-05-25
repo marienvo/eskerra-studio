@@ -54,6 +54,11 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 2048,
     rolldownOptions: {
+      // Fence grammars for js/html/markdown are already in the editor graph; language-data
+      // still uses dynamic import() for them — harmless, but not splittable.
+      checks: {
+        ineffectiveDynamicImport: false,
+      },
       output: {
         codeSplitting: {
           groups: [
