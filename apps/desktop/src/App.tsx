@@ -8,7 +8,6 @@ import {useCallback, useMemo, useState, useRef} from 'react';
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
 import {AppStatusBar} from './components/AppStatusBar';
 import {GitStatusChip} from './components/GitStatusChip';
-import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
 import {useDesktopPlaylistR2EtagPollingForMainWindow} from './hooks/useDesktopPlaylistR2EtagPolling';
@@ -36,11 +35,10 @@ import {useAppTauriCloseAndFocusSave} from './shell/useAppTauriCloseAndFocusSave
 import {useAppTauriDocumentChrome} from './shell/useAppTauriDocumentChrome';
 import {useAppGitSyncOrchestration} from './shell/useAppGitSyncOrchestration';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
-import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 import {useAppPickFolder} from './shell/useAppPickFolder';
 import {usePaneVisibility} from './shell/usePaneVisibility';
-import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
+import {AppChromeOverlays} from './shell/mainWindow/AppChromeOverlays';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
@@ -369,7 +367,7 @@ export default function App() {
       fs={fs}>
       <div ref={appRootRef} className={appRootClassName}>
         <ThemedChromeBackground />
-        <CloseSyncProgressOverlay visible={closeSyncInProgress} />
+        <AppChromeOverlays placement="closeSync" closeSyncInProgress={closeSyncInProgress} />
         <div className="app-root-chrome">
           <WindowTitleBar
             tiling={tiling}
@@ -421,7 +419,8 @@ export default function App() {
             }}
           />
 
-          <AppDiskConflictBanners
+          <AppChromeOverlays
+            placement="stage"
             err={err}
             diskConflict={diskConflict}
             diskConflictSoft={diskConflictSoft as {uri: string} | null}
@@ -431,6 +430,8 @@ export default function App() {
             resolveDiskConflictKeepLocal={resolveDiskConflictKeepLocal}
             elevateDiskConflictSoftToBlocking={elevateDiskConflictSoftToBlocking}
             dismissDiskConflictSoft={dismissDiskConflictSoft}
+            notificationItems={notificationItems}
+            onDismissNotification={dismissNotification}
           />
 
           <AppStatusBar
@@ -451,10 +452,6 @@ export default function App() {
                 autosyncCountdownLabel={gitAutosyncCountdownLabel}
               />
             }
-          />
-          <ToastStack
-            items={notificationItems}
-            onDismiss={dismissNotification}
           />
           <AppPaletteLayer
             vaultRoot={vaultRoot}
