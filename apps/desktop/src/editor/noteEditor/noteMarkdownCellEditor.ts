@@ -5,7 +5,6 @@ import {
 } from '@codemirror/autocomplete';
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands';
 import {commonmarkLanguage} from '@codemirror/lang-markdown';
-import {languages} from '@codemirror/language-data';
 import {openSearchPanel, search, searchKeymap} from '@codemirror/search';
 import {
   Compartment,
@@ -31,6 +30,7 @@ import {tryClipboardHtmlToMarkdownInsert} from '../../lib/clipboard/htmlClipboar
 import type {NoteInboxAttachmentHost} from '../../lib/noteInboxAttachmentHost';
 import {isActivatableRelativeMarkdownHref} from './markdownActivatableRelativeHref';
 import {markdownCodeBackgroundLayer} from './markdownCodeBackgroundLayer';
+import {eskerraFenceLanguages} from './eskerraFenceLanguages';
 import {MARKDOWN_INPUT_PASTE_USER_EVENT} from './markdownEditorUserEvents';
 import {
   noteMarkdownEditorAppearance,
@@ -634,7 +634,7 @@ export function buildNoteMarkdownCellExtensions(
     markdownEskerra({
       base: commonmarkLanguage,
       extensions: noteMarkdownParserExtensions,
-      codeLanguages: languages,
+      codeLanguages: eskerraFenceLanguages,
     }),
     ...noteMarkdownEditorAppearance,
     history(),

@@ -3,20 +3,9 @@
  *
  * Ownership: app-level orchestration and Tauri window integration; vault editing behavior is in `VaultTab` / workspace hook.
  */
-import {
-  useCallback,
-  useMemo,
-  useState,
-  useRef,
-} from 'react';
+import {useCallback, useMemo, useState, useRef} from 'react';
 
-import {SettingsPage} from './components/SettingsPage';
-import {QuickOpenNotePalette} from './components/QuickOpenNotePalette';
-import {VaultSearchPalette} from './components/VaultSearchPalette';
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
-import {AppStatusBar} from './components/AppStatusBar';
-import {GitStatusChip} from './components/GitStatusChip';
-import {ToastStack} from './components/ToastStack';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
 import {useDesktopPlaylistR2EtagPollingForMainWindow} from './hooks/useDesktopPlaylistR2EtagPolling';
@@ -31,28 +20,29 @@ import {
   type StoredLayouts,
 } from './lib/layout/layoutStore';
 import type {RestoredInboxState} from './lib/mainWindowUiStore';
-import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {useLiveRef} from './hooks/useLiveRef';
+import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {AppThemeShell} from './shell/AppThemeShell';
 import {useAppLayoutWidthPersisters} from './shell/useAppLayoutWidthPersisters';
-import {useAppMainWindowKeyboardEffects} from './shell/useAppMainWindowKeyboardEffects';
 import {useAppMediaControlDesktopPlayback} from './shell/useAppMediaControlDesktopPlayback';
-import {useAppNotificationSession} from './shell/useAppNotificationSession';
 import {useAppOnMountLayoutHydration} from './shell/useAppOnMountLayoutHydration';
 import {useAppRootClassName} from './shell/useAppRootClassName';
 import {useAppTauriCloseAndFocusSave} from './shell/useAppTauriCloseAndFocusSave';
 import {useAppTauriDocumentChrome} from './shell/useAppTauriDocumentChrome';
-import {useAppGitSyncOrchestration} from './shell/useAppGitSyncOrchestration';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
-import {AppDiskConflictBanners} from './shell/AppDiskConflictBanners';
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 import {useAppPickFolder} from './shell/useAppPickFolder';
 import {usePaneVisibility} from './shell/usePaneVisibility';
-import {CloseSyncProgressOverlay} from './shell/CloseSyncProgressOverlay';
+import {AppChromeOverlays} from './shell/mainWindow/AppChromeOverlays';
+import {AppStatusBarSection} from './shell/mainWindow/AppStatusBarSection';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
-import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
+import {AppMainStage} from './shell/mainWindow/AppMainStage';
+import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
+import {useAppMainWindowChromeSession} from './shell/mainWindow/useAppMainWindowChromeSession';
+import {AppPaletteLayer} from './shell/mainWindow/AppPaletteLayer';
+import {useAppPaletteLayerState} from './shell/mainWindow/useAppPaletteLayerState';
 
 import './App.css';
 
@@ -184,8 +174,7 @@ export default function App() {
   });
   usePreventMiddleClickPaste();
 
-  const [quickOpenOpen, setQuickOpenOpen] = useState(false);
-  const [vaultSearchOpen, setVaultSearchOpen] = useState(false);
+  const paletteLayer = useAppPaletteLayerState();
 
   const [layouts, setLayouts] = useState<StoredLayouts>(DEFAULT_LAYOUTS);
 
@@ -264,52 +253,29 @@ export default function App() {
 
   useAppTauriCloseAndFocusSave(flushInboxSave);
 
-  const openNotificationsPanel = useCallback(
-    () => setPaneVisibility({notifications: true}),
-    [setPaneVisibility],
-  );
   const {
-    items: notificationItems,
-    dismissItem: dismissNotification,
-    clearAll: clearAllNotifications,
-    highlightId: notificationHighlightId,
-    pushItem: pushNotification,
-  } = useAppNotificationSession({
-    err,
-    diskConflict,
-    diskConflictSoft: diskConflictSoft as {uri: string} | null,
-    selectedUri,
-    statusBarCenter,
-    renameLinkProgress,
-    openNotificationsPanel,
-  });
-  const {
-    manualGitSync,
-    manualSyncUnavailable,
-    manualSyncLabel,
-    gitStatusForDisplay,
-    gitAutosyncCountdownTime,
-    transientGitStatus,
-    currentGitBranchLoading,
-    gitStatusLoading,
-    currentGitDetachedHead,
-    currentGitBranchError,
-    gitStatusError,
-    handleWindowCloseRequest,
-    closeSyncInProgress,
-  } = useAppGitSyncOrchestration({
-    vaultPath: vaultRoot,
-    saveSettledNonce,
-    notify: pushNotification,
-    desktopPlaybackRef,
-    flushInboxSave,
-  });
-
-  // Keep a ref to gitStatusForDisplay so keyboard effects can check preflight
-  // without re-registering the listener on every status update.
-  const gitStatusRef = useLiveRef(gitStatusForDisplay);
-
-  useAppMainWindowKeyboardEffects({
+    notifications: {
+      items: notificationItems,
+      dismissItem: dismissNotification,
+      clearAll: clearAllNotifications,
+      highlightId: notificationHighlightId,
+    },
+    gitSync: {
+      manualGitSync,
+      manualSyncUnavailable,
+      manualSyncLabel,
+      gitStatusForDisplay,
+      gitAutosyncCountdownTime,
+      transientGitStatus,
+      currentGitBranchLoading,
+      gitStatusLoading,
+      currentGitDetachedHead,
+      currentGitBranchError,
+      gitStatusError,
+      handleWindowCloseRequest,
+      closeSyncInProgress,
+    },
+  } = useAppMainWindowChromeSession({
     vaultRoot,
     busy,
     canReopenClosedEditorTab: tabsController.canReopenClosedEditorTab,
@@ -317,15 +283,20 @@ export default function App() {
     composingNewEntry,
     selectedUri,
     onCleanNoteInbox,
-    quickOpenOpen,
-    setQuickOpenOpen,
-    vaultSearchOpen,
-    setVaultSearchOpen,
+    quickOpenOpen: paletteLayer.quickOpenOpen,
+    setQuickOpenOpen: paletteLayer.setQuickOpenOpen,
+    vaultSearchOpen: paletteLayer.vaultSearchOpen,
+    setVaultSearchOpen: paletteLayer.setVaultSearchOpen,
     onAddEntry: openAddToInbox,
-    manualSyncDisabled: manualSyncUnavailable,
-    manualSyncRunning: manualGitSync.running,
-    onManualSync: manualGitSync.run,
-    gitStatusRef,
+    err,
+    diskConflict,
+    diskConflictSoft: diskConflictSoft as {uri: string} | null,
+    statusBarCenter,
+    renameLinkProgress,
+    saveSettledNonce,
+    desktopPlaybackRef,
+    flushInboxSave,
+    setPaneVisibility,
   });
 
   if (!vaultRoot) {
@@ -377,7 +348,7 @@ export default function App() {
       fs={fs}>
       <div ref={appRootRef} className={appRootClassName}>
         <ThemedChromeBackground />
-        <CloseSyncProgressOverlay visible={closeSyncInProgress} />
+        <AppChromeOverlays placement="closeSync" closeSyncInProgress={closeSyncInProgress} />
         <div className="app-root-chrome">
           <WindowTitleBar
             tiling={tiling}
@@ -387,58 +358,52 @@ export default function App() {
             onCloseRequest={handleWindowCloseRequest}
           />
 
-          <div className="app-body">
-            <div className="main-shell-stage panel-group fill">
-              <div className="main-column">
-                <main className="main-stage">
-                  {activePage === 'settings' && vaultSettings ? (
-                    <SettingsPage
-                      onClose={() => setActivePage('vault')}
-                      vaultRoot={vaultRoot}
-                      fs={fs}
-                      vaultSettings={vaultSettings}
-                      setVaultSettings={setVaultSettings}
-                      onChangeVaultFolder={pickFolder}
-                    />
-                  ) : (
-                    <MainWindowVaultTab
-                      key={vaultRoot}
-                      vaultRoot={vaultRoot}
-                      vaultSettings={vaultSettings}
-                      fs={fs}
-                      fsRefreshNonce={fsRefreshNonce}
-                      inboxEditorRef={inboxEditorRef}
-                      inboxEditorShellScrollRef={inboxEditorShellScrollRef}
-                      workspace={workspace}
-                      paneVisibility={paneVisibility}
-                      layouts={layouts}
-                      persistMainLeftWidthPx={persistMainLeftWidthPx}
-                      persistVaultEpisodesStackTopHeightPx={persistVaultEpisodesStackTopHeightPx}
-                      persistNotificationsInboxStackTopHeightPx={persistNotificationsInboxStackTopHeightPx}
-                      persistNotificationsWidthPx={persistNotificationsWidthPx}
-                      titleBarEditorTabsHost={titleBarEditorTabsHost}
-                      onAddEntry={openAddToInbox}
-                      busy={busy}
-                      notificationItems={notificationItems}
-                      notificationHighlightId={notificationHighlightId}
-                      dismissNotification={dismissNotification}
-                      clearAllNotifications={clearAllNotifications}
-                      playbackTransport={playbackTransport}
-                      toolbarNowPlaying={toolbarNowPlaying}
-                      podcastCatalog={podcastCatalog}
-                      desktopPlayback={desktopPlayback}
-                      handleEpisodesRssSync={handleEpisodesRssSync}
-                      rssSyncing={rssSyncing}
-                      rssSyncPercent={rssSyncPercent}
-                      onMuteLinkSnippetDomain={handleMuteLinkSnippetDomain}
-                    />
-                  )}
-                </main>
-              </div>
-            </div>
-          </div>
+          <AppMainStage
+            activePage={activePage}
+            onCloseSettings={() => setActivePage('vault')}
+            settingsPageProps={{
+              vaultRoot,
+              fs,
+              vaultSettings,
+              setVaultSettings,
+              onChangeVaultFolder: pickFolder,
+            }}
+          >
+            <MainWindowVaultTab
+              key={vaultRoot}
+              vaultRoot={vaultRoot}
+              vaultSettings={vaultSettings}
+              fs={fs}
+              fsRefreshNonce={fsRefreshNonce}
+              inboxEditorRef={inboxEditorRef}
+              inboxEditorShellScrollRef={inboxEditorShellScrollRef}
+              workspace={workspace}
+              paneVisibility={paneVisibility}
+              layouts={layouts}
+              persistMainLeftWidthPx={persistMainLeftWidthPx}
+              persistVaultEpisodesStackTopHeightPx={persistVaultEpisodesStackTopHeightPx}
+              persistNotificationsInboxStackTopHeightPx={persistNotificationsInboxStackTopHeightPx}
+              persistNotificationsWidthPx={persistNotificationsWidthPx}
+              titleBarEditorTabsHost={titleBarEditorTabsHost}
+              onAddEntry={openAddToInbox}
+              busy={busy}
+              notificationItems={notificationItems}
+              notificationHighlightId={notificationHighlightId}
+              dismissNotification={dismissNotification}
+              clearAllNotifications={clearAllNotifications}
+              playbackTransport={playbackTransport}
+              toolbarNowPlaying={toolbarNowPlaying}
+              podcastCatalog={podcastCatalog}
+              desktopPlayback={desktopPlayback}
+              handleEpisodesRssSync={handleEpisodesRssSync}
+              rssSyncing={rssSyncing}
+              rssSyncPercent={rssSyncPercent}
+              onMuteLinkSnippetDomain={handleMuteLinkSnippetDomain}
+            />
+          </AppMainStage>
 
-          <AppDiskConflictBanners
+          <AppChromeOverlays
+            placement="stage"
             err={err}
             diskConflict={diskConflict}
             diskConflictSoft={diskConflictSoft as {uri: string} | null}
@@ -448,9 +413,11 @@ export default function App() {
             resolveDiskConflictKeepLocal={resolveDiskConflictKeepLocal}
             elevateDiskConflictSoftToBlocking={elevateDiskConflictSoftToBlocking}
             dismissDiskConflictSoft={dismissDiskConflictSoft}
+            notificationItems={notificationItems}
+            onDismissNotification={dismissNotification}
           />
 
-          <AppStatusBar
+          <AppStatusBarSection
             onOpenSettings={() => setActivePage('settings')}
             onManualSync={() => {
               manualGitSync.run().catch(() => undefined);
@@ -458,33 +425,20 @@ export default function App() {
             manualSyncBusy={manualGitSync.running}
             manualSyncDisabled={manualSyncUnavailable}
             manualSyncLabel={manualSyncLabel}
-            statusIndicator={
-              <GitStatusChip
-                status={gitStatusForDisplay}
-                loading={currentGitBranchLoading || gitStatusLoading}
-                error={currentGitDetachedHead ? gitStatusError : currentGitBranchError ?? gitStatusError}
-                syncing={manualGitSync.running}
-                transient={transientGitStatus}
-                autosyncCountdownTime={gitAutosyncCountdownTime}
-              />
-            }
+            gitStatus={gitStatusForDisplay}
+            gitStatusLoading={gitStatusLoading}
+            currentGitBranchLoading={currentGitBranchLoading}
+            currentGitDetachedHead={currentGitDetachedHead}
+            gitStatusError={gitStatusError}
+            currentGitBranchError={currentGitBranchError}
+            transientGitStatus={transientGitStatus}
+            gitAutosyncCountdownTime={gitAutosyncCountdownTime}
           />
-          <ToastStack
-            items={notificationItems}
-            onDismiss={dismissNotification}
-          />
-          <QuickOpenNotePalette
-            open={quickOpenOpen}
-            onOpenChange={setQuickOpenOpen}
+          <AppPaletteLayer
             vaultRoot={vaultRoot}
-            refs={vaultMarkdownRefs}
+            vaultMarkdownRefs={vaultMarkdownRefs}
             onPickNote={selectNote}
-          />
-          <VaultSearchPalette
-            open={vaultSearchOpen}
-            onOpenChange={setVaultSearchOpen}
-            vaultRoot={vaultRoot}
-            onPickNote={selectNote}
+            {...paletteLayer}
           />
         </div>
       </div>

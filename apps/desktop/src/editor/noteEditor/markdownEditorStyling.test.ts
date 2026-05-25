@@ -6,7 +6,6 @@ import {
   LanguageDescription,
   syntaxTree,
 } from '@codemirror/language';
-import {languages} from '@codemirror/language-data';
 import {EditorState} from '@codemirror/state';
 import {EditorView, RectangleMarker, drawSelection} from '@codemirror/view';
 import {highlightTree} from '@lezer/highlight';
@@ -26,14 +25,45 @@ import {
   noteMarkdownNestedCodeHighlighter,
   noteMarkdownParserExtensions,
 } from './markdownEditorStyling';
+import {eskerraFenceLanguages} from './eskerraFenceLanguages';
 import {markdownEskerra} from './markdownEskerraLanguage';
 
 beforeAll(async () => {
-  const ts = LanguageDescription.matchLanguageName(languages, 'ts', true);
+  const ts = LanguageDescription.matchLanguageName(eskerraFenceLanguages, 'ts', true);
   if (!(ts instanceof LanguageDescription)) {
-    throw new Error('Expected TypeScript in @codemirror/language-data');
+    throw new Error('Expected TypeScript in eskerraFenceLanguages');
   }
   await ts.load();
+});
+
+describe('eskerraFenceLanguages', () => {
+  it('preserves full fenced-language coverage for common markdown fence labels', async () => {
+    const labels = ['java', 'cpp', 'php', 'vue', 'angular', 'liquid', 'wast'];
+    for (const label of labels) {
+      const language = LanguageDescription.matchLanguageName(eskerraFenceLanguages, label, true);
+      expect(language, `expected fence language for ${label}`).toBeInstanceOf(LanguageDescription);
+      await (language as LanguageDescription).load();
+    }
+  });
+
+  it('loads HTML fences with the dedicated HTML parser', async () => {
+    const html = LanguageDescription.matchLanguageName(eskerraFenceLanguages, 'html', true);
+    expect(html).toBeInstanceOf(LanguageDescription);
+    const support = await (html as LanguageDescription).load();
+    const state = EditorState.create({
+      doc: '<script>const x = 1</script>',
+      extensions: support,
+    });
+    let hasScriptNode = false;
+    syntaxTree(state).iterate({
+      enter: node => {
+        if (node.name === 'Script') {
+          hasScriptNode = true;
+        }
+      },
+    });
+    expect(hasScriptNode).toBe(true);
+  });
 });
 
 function classTokens(classStr: string | undefined): string[] {
@@ -51,7 +81,7 @@ function innermostHighlightAt(
     extensions: markdownEskerra({
       base: commonmarkLanguage,
       extensions: noteMarkdownParserExtensions,
-      ...(useCodeLanguages ? {codeLanguages: languages} : {}),
+      ...(useCodeLanguages ? {codeLanguages: eskerraFenceLanguages} : {}),
     }),
   });
   const tree = ensureSyntaxTree(state, state.doc.length, 20_000);
@@ -289,7 +319,7 @@ describe('markdownCodeBackgroundLayer markers', () => {
         markdownEskerra({
           base: commonmarkLanguage,
           extensions: noteMarkdownParserExtensions,
-          codeLanguages: languages,
+          codeLanguages: eskerraFenceLanguages,
         }),
         ...noteMarkdownEditorAppearance,
         drawSelection(),
@@ -465,5 +495,22 @@ describe('noteMarkdown code fence and inline code highlighting', () => {
       true,
     );
     expect(classTokens(clsDigit)).not.toContain('cm-md-code');
+  });
+
+  it('fenced Java also gets nested parsing/highlighting via the shared language registry', () => {
+    const doc = '```java\nclass Demo {}\n```';
+    const posClass = doc.indexOf('class');
+    const clsKeyword = innermostHighlightAt(
+      doc,
+      posClass,
+      [noteMarkdownHighlightStyle, noteMarkdownNestedCodeHighlighter],
+      true,
+    );
+    expect(
+      classTokens(clsKeyword).some(
+        c => c === 'cm-md-code-hl-keyword' || c === 'cm-md-code-hl-definition-keyword',
+      ),
+    ).toBe(true);
+    expect(classTokens(clsKeyword)).not.toContain('cm-md-code');
   });
 });

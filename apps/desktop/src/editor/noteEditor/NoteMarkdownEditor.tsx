@@ -5,7 +5,6 @@ import {
   unfoldAll,
 } from '@codemirror/language';
 import {commonmarkLanguage} from '@codemirror/lang-markdown';
-import {languages} from '@codemirror/language-data';
 import {searchKeymap} from '@codemirror/search';
 import {
   Compartment,
@@ -47,6 +46,7 @@ import {
   type NoteInboxAttachmentHost,
 } from '../../lib/noteInboxAttachmentHost';
 import {markdownCodeBackgroundLayer} from './markdownCodeBackgroundLayer';
+import {eskerraFenceLanguages} from './eskerraFenceLanguages';
 import {
   noteMarkdownEditorAppearance,
   noteMarkdownIndentUnit,
@@ -657,7 +657,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       markdownEskerra({
         base: commonmarkLanguage,
         extensions: noteMarkdownParserExtensions,
-        codeLanguages: languages,
+        codeLanguages: eskerraFenceLanguages,
       }),
       noteMarkdownListItemFoldService,
       ...noteMarkdownEditorAppearance,

@@ -6,6 +6,35 @@ import sonarjs from 'eslint-plugin-sonarjs'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+const mainWindowBarrelImportRestriction = {
+  selector:
+    'ImportDeclaration[source.type="Literal"][source.value=/\\/shell\\/mainWindow(?:\\/index(?:\\.[tj]sx?)?)?$/]',
+  message:
+    'Do not import shell/mainWindow as a directory barrel; use a direct file path (e.g. AppMainStage.tsx). Do not add shell/mainWindow/index.ts.',
+}
+
+const lazyUiTargetStaticImportRestriction = {
+  selector:
+    'ImportDeclaration[source.type="Literal"][source.value=/\\/components\\/(SettingsPage|QuickOpenNotePalette|VaultSearchPalette)(?:\\.[tj]sx?)?$/]',
+  message:
+    'Keep SettingsPage, QuickOpenNotePalette, and VaultSearchPalette on the AppLazyUi lazy boundary; do not eager-import these components.',
+}
+
+const lazyUiTargetImportRestrictions = [
+  lazyUiTargetStaticImportRestriction,
+  {
+    selector:
+      'ImportExpression[source.type="Literal"][source.value=/\\/components\\/(SettingsPage|QuickOpenNotePalette|VaultSearchPalette)(?:\\.[tj]sx?)?$/]',
+    message:
+      'Only AppLazyUi may lazy-import SettingsPage, QuickOpenNotePalette, and VaultSearchPalette.',
+  },
+]
+
+const mainWindowImportBoundaryRestrictions = [
+  mainWindowBarrelImportRestriction,
+  ...lazyUiTargetImportRestrictions,
+]
+
 export default defineConfig([
   globalIgnores(['dist', 'src-tauri/target']),
   {
@@ -56,6 +85,43 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/shell/mainWindow/AppLazyUi.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        mainWindowBarrelImportRestriction,
+        lazyUiTargetStaticImportRestriction,
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/shell/mainWindow/AppLazyUi.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...mainWindowImportBoundaryRestrictions,
+      ],
+    },
+  },
+  {
+    files: ['src/App.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: './shell/mainWindow/AppLazyUi',
+              message:
+                'Import lazy UI through AppMainStage or AppPaletteLayer, not AppLazyUi directly.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,
@@ -92,6 +158,7 @@ export default defineConfig([
     rules: {
       'no-restricted-syntax': [
         'error',
+        ...mainWindowImportBoundaryRestrictions,
         {
           selector:
             'AssignmentExpression[left.type="MemberExpression"][left.property.name="current"][left.object.property.name="lastPersistedRef"]',

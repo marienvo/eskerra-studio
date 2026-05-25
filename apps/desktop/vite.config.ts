@@ -44,9 +44,46 @@ export default defineConfig({
     __DESKTOP_APP_VERSION__: JSON.stringify(mobilePkg.version),
   },
   plugins: [react(), ...analyzePlugins, ...sentryPlugins],
-  /** Tauri loads assets from disk; the main chunk is ~1.7 MB minified (CodeMirror, Radix, remark, fonts). */
+  /**
+   * Tauri loads assets from disk. Baseline from `npm run build:analyze` on 2026-05-25:
+   * `index-BB8enYfY.js` was 2,434.01 kB in Vite output (2,376.97 KiB on disk),
+   * 728.44 KiB gzip and 578.65 KiB brotli. Top entry contributors in visualizer:
+   * `react-dom`, editor/CodeMirror, app hooks/components/lib, `@eskerra/core`, `yaml`,
+   * Sentry, and remark/micromark modules.
+   */
   build: {
     chunkSizeWarningLimit: 2048,
+    rolldownOptions: {
+      // Fence grammars for js/html/markdown are already in the editor graph; language-data
+      // still uses dynamic import() for them — harmless, but not splittable.
+      checks: {
+        ineffectiveDynamicImport: false,
+      },
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor-react',
+              test: /node_modules\/(react|react-dom)\//,
+              priority: 20,
+            },
+            {
+              name: 'vendor-cm',
+              // Core editor stack only. Fence languages load via dynamic import from
+              // language-data; grouping @codemirror/lang-* here merges every grammar
+              // into one multi-MB vendor-cm chunk on startup.
+              test: /node_modules\/@codemirror\/(?!lang-|legacy-modes)/,
+              priority: 15,
+            },
+            {
+              name: 'vendor-md',
+              test: /node_modules\/(remark|unified|mdast|micromark|turndown)/,
+              priority: 10,
+            },
+          ],
+        },
+      },
+    },
   },
   clearScreen: false,
   server: {
