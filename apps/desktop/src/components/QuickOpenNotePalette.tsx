@@ -5,6 +5,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {useQuickOpenSearch} from '../hooks/useQuickOpenSearch';
 import {quickOpenVaultRelativePath} from '../lib/quickOpenNoteFilter';
+import {recordQuickOpenNoteUsage} from '../lib/quickOpenUsageStore';
 
 export type QuickOpenNotePaletteProps = {
   open: boolean;
@@ -38,7 +39,7 @@ export function QuickOpenNotePalette({
     setSearch(value);
   }, []);
 
-  const {displayed, searchPending, searchTrimmed} = useQuickOpenSearch(
+  const {appliedQuery, displayed, searchPending, searchTrimmed} = useQuickOpenSearch(
     search,
     vaultRoot,
     refs,
@@ -61,10 +62,15 @@ export function QuickOpenNotePalette({
 
   const handlePick = useCallback(
     (uri: string) => {
+      if (appliedQuery.length > 0) {
+        recordQuickOpenNoteUsage(uri, appliedQuery);
+      } else {
+        recordQuickOpenNoteUsage(uri);
+      }
       onPickNote(uri);
       handleOpenChange(false);
     },
-    [handleOpenChange, onPickNote],
+    [appliedQuery, handleOpenChange, onPickNote],
   );
   let emptyLabel = 'No matching notes.';
   if (searchTrimmed.length === 0) {

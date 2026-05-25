@@ -2,6 +2,7 @@ import type {VaultMarkdownRef} from '@eskerra/core';
 import {useEffect, useMemo, useState} from 'react';
 
 import {filterVaultNotesForQuickOpen} from '../lib/quickOpenNoteFilter';
+import {buildQuickOpenUsageScoreLookup} from '../lib/quickOpenUsageStore';
 
 export const QUICK_OPEN_SEARCH_DEBOUNCE_MS = 300;
 
@@ -31,15 +32,18 @@ export function useQuickOpenSearch(
     return () => window.clearTimeout(t);
   }, [search, searchTrimmed]);
 
-  const filtered = useMemo(
-    () => filterVaultNotesForQuickOpen(appliedQuery, vaultRoot, refs),
-    [appliedQuery, refs, vaultRoot],
-  );
+  const filtered = useMemo(() => {
+    const getScores =
+      appliedQuery.length > 0
+        ? buildQuickOpenUsageScoreLookup(appliedQuery)
+        : undefined;
+    return filterVaultNotesForQuickOpen(appliedQuery, vaultRoot, refs, getScores);
+  }, [appliedQuery, refs, vaultRoot]);
 
   const searchPending =
     searchTrimmed.length > 0 && appliedQuery !== searchTrimmed;
 
   const displayed = filtered;
 
-  return {displayed, searchPending, searchTrimmed};
+  return {appliedQuery, displayed, searchPending, searchTrimmed};
 }

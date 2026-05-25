@@ -48,4 +48,38 @@ describe('filterVaultNotesForQuickOpen', () => {
       {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
     ]);
   });
+
+  it('ranks by query-specific score, then global score, then name', () => {
+    const manyRefs = [
+      {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
+      {name: 'Alpine', uri: 'file:///v/Inbox/Alpine.md'},
+      {name: 'Alpaca', uri: 'file:///v/Inbox/Alpaca.md'},
+    ];
+    const getScores = (uri: string) => {
+      if (uri === 'file:///v/Inbox/Alpaca.md') {
+        return {favScore: 2, globalScore: 1};
+      }
+      if (uri === 'file:///v/Inbox/Alpine.md') {
+        return {favScore: 2, globalScore: 5};
+      }
+      return {favScore: 0, globalScore: 10};
+    };
+    expect(filterVaultNotesForQuickOpen('alp', vault, manyRefs, getScores)).toEqual([
+      {name: 'Alpine', uri: 'file:///v/Inbox/Alpine.md'},
+      {name: 'Alpaca', uri: 'file:///v/Inbox/Alpaca.md'},
+      {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
+    ]);
+  });
+
+  it('falls back to alphabetical order when scores tie', () => {
+    const manyRefs = [
+      {name: 'Beta', uri: 'file:///v/Inbox/Beta.md'},
+      {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
+    ];
+    const getScores = () => ({favScore: 0, globalScore: 0});
+    expect(filterVaultNotesForQuickOpen('a', vault, manyRefs, getScores)).toEqual([
+      {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
+      {name: 'Beta', uri: 'file:///v/Inbox/Beta.md'},
+    ]);
+  });
 });

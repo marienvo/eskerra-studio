@@ -18,6 +18,7 @@ import {PLAYBACK_PERSIST_DRAIN_TIMEOUT_MS} from '../lib/podcasts/playbackPersist
 import type {SessionNotificationTone} from '../lib/sessionNotifications';
 import {handleOsCloseRequest} from '../lib/manualSyncClose';
 import {flushEmojiUsageToStore} from '../lib/emojiUsageStore';
+import {flushQuickOpenUsageToStore} from '../lib/quickOpenUsageStore';
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 
 type UseAppOsCloseSyncArgs = {
@@ -108,6 +109,7 @@ export function useAppOsCloseSync({
     }
     await flushInboxSave();
     await flushEmojiUsageToStore().catch(() => undefined);
+    await flushQuickOpenUsageToStore().catch(() => undefined);
     try {
       await saveWindowState(StateFlags.ALL);
     } catch (e) {
