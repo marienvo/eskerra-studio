@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 
 import {
   filterVaultNotesForQuickOpen,
+  quickOpenMatchTier,
   quickOpenVaultRelativePath,
 } from './quickOpenNoteFilter';
 
@@ -49,7 +50,7 @@ describe('filterVaultNotesForQuickOpen', () => {
     ]);
   });
 
-  it('ranks by query-specific score, then global score, then name', () => {
+  it('ranks by query-specific score within the same match tier', () => {
     const manyRefs = [
       {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
       {name: 'Alpine', uri: 'file:///v/Inbox/Alpine.md'},
@@ -71,6 +72,47 @@ describe('filterVaultNotesForQuickOpen', () => {
     ]);
   });
 
+  it('prefers better match tier over global popularity for non-favorites', () => {
+    const manyRefs = [
+      {name: 'Project', uri: 'file:///v/Inbox/Project.md'},
+      {name: 'Misc', uri: 'file:///v/Projects/idea.md'},
+    ];
+    const getScores = (uri: string) => ({
+      favScore: 0,
+      globalScore: uri.endsWith('idea.md') ? 100 : 0,
+    });
+    expect(filterVaultNotesForQuickOpen('proj', vault, manyRefs, getScores)).toEqual([
+      {name: 'Project', uri: 'file:///v/Inbox/Project.md'},
+      {name: 'Misc', uri: 'file:///v/Projects/idea.md'},
+    ]);
+  });
+
+  it('lets query favorites beat weaker match tiers', () => {
+    const manyRefs = [
+      {name: 'Project', uri: 'file:///v/Inbox/Project.md'},
+      {name: 'Misc', uri: 'file:///v/Projects/idea.md'},
+    ];
+    const getScores = (uri: string) => ({
+      favScore: uri.endsWith('idea.md') ? 1 : 0,
+      globalScore: 0,
+    });
+    expect(filterVaultNotesForQuickOpen('proj', vault, manyRefs, getScores)).toEqual([
+      {name: 'Misc', uri: 'file:///v/Projects/idea.md'},
+      {name: 'Project', uri: 'file:///v/Inbox/Project.md'},
+    ]);
+  });
+
+  it('sorts by match tier even without usage scores', () => {
+    const manyRefs = [
+      {name: 'Misc', uri: 'file:///v/Projects/idea.md'},
+      {name: 'Project', uri: 'file:///v/Inbox/Project.md'},
+    ];
+    expect(filterVaultNotesForQuickOpen('proj', vault, manyRefs)).toEqual([
+      {name: 'Project', uri: 'file:///v/Inbox/Project.md'},
+      {name: 'Misc', uri: 'file:///v/Projects/idea.md'},
+    ]);
+  });
+
   it('falls back to alphabetical order when scores tie', () => {
     const manyRefs = [
       {name: 'Beta', uri: 'file:///v/Inbox/Beta.md'},
@@ -81,5 +123,22 @@ describe('filterVaultNotesForQuickOpen', () => {
       {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
       {name: 'Beta', uri: 'file:///v/Inbox/Beta.md'},
     ]);
+  });
+});
+
+describe('quickOpenMatchTier', () => {
+  const vault = 'file:///v';
+
+  it('classifies name prefix before path substring', () => {
+    expect(
+      quickOpenMatchTier({name: 'Project', uri: 'file:///v/Inbox/Project.md'}, 'proj', vault),
+    ).toBe(0);
+    expect(
+      quickOpenMatchTier(
+        {name: 'Misc', uri: 'file:///v/Archive/old-project.md'},
+        'proj',
+        vault,
+      ),
+    ).toBe(3);
   });
 });

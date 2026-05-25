@@ -17,11 +17,14 @@ import {
   evictLowestCountKey,
   flushQuickOpenUsageToStore,
   getQuickOpenUsageScores,
+  getQuickOpenUsageRevision,
+  hydrateQuickOpenUsageFromStore,
   parseQuickOpenUsagePayloadV1,
   quickOpenUsageQueryRelationWeight,
   QUICK_OPEN_USAGE_DEBOUNCE_SAVE_MS,
   QUICK_OPEN_USAGE_PREFIX_QUERY_WEIGHT,
   recordQuickOpenNoteUsage,
+  subscribeQuickOpenUsageRevision,
   __resetForTests,
 } from './quickOpenUsageStore';
 
@@ -202,5 +205,26 @@ describe('evictLowestCountKey', () => {
     evictLowestCountKey(m, 3);
     expect(m.has('b')).toBe(false);
     expect(m.size).toBe(2);
+  });
+});
+
+describe('usage revision', () => {
+  test('record and hydrate bump revision and notify subscribers', async () => {
+    let revision = getQuickOpenUsageRevision();
+    const seen: number[] = [];
+    const unsubscribe = subscribeQuickOpenUsageRevision(() => {
+      revision = getQuickOpenUsageRevision();
+      seen.push(revision);
+    });
+
+    recordQuickOpenNoteUsage('file:///v/a.md', 'alp');
+    expect(revision).toBe(1);
+    expect(seen).toEqual([1]);
+
+    await hydrateQuickOpenUsageFromStore();
+    expect(revision).toBe(2);
+    expect(seen).toEqual([1, 2]);
+
+    unsubscribe();
   });
 });

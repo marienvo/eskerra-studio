@@ -30,6 +30,26 @@ const globalCounts = new Map<string, number>();
 const byQueryCounts = new Map<string, Map<string, number>>();
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let usageRevision = 0;
+const usageRevisionListeners = new Set<() => void>();
+
+function bumpQuickOpenUsageRevision(): void {
+  usageRevision += 1;
+  for (const listener of usageRevisionListeners) {
+    listener();
+  }
+}
+
+export function getQuickOpenUsageRevision(): number {
+  return usageRevision;
+}
+
+export function subscribeQuickOpenUsageRevision(listener: () => void): () => void {
+  usageRevisionListeners.add(listener);
+  return () => {
+    usageRevisionListeners.delete(listener);
+  };
+}
 
 /** Last `normalizeQueryKey` passed to `buildQuickOpenUsageScoreLookup` (one-entry memo). */
 let scoreLookupCacheQuery: string | null = null;
@@ -351,6 +371,7 @@ export function recordQuickOpenNoteUsage(uri: string, queryLower?: string): void
   }
 
   invalidateScoreLookupCache();
+  bumpQuickOpenUsageRevision();
   scheduleQuickOpenUsageSave();
 }
 
@@ -384,6 +405,7 @@ export async function hydrateQuickOpenUsageFromStore(): Promise<void> {
   } catch {
     /* Ignore corrupt or missing store. */
   }
+  bumpQuickOpenUsageRevision();
 }
 
 /** Vitest harness: clears in-memory counts and pending debounced save timer. */
@@ -392,4 +414,6 @@ export function __resetForTests(): void {
   invalidateScoreLookupCache();
   globalCounts.clear();
   byQueryCounts.clear();
+  usageRevision = 0;
+  usageRevisionListeners.clear();
 }

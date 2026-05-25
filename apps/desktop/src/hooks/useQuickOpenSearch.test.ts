@@ -3,7 +3,12 @@ import {act, renderHook} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {QUICK_OPEN_SEARCH_DEBOUNCE_MS, useQuickOpenSearch} from './useQuickOpenSearch';
-import {recordQuickOpenNoteUsage, __resetForTests} from '../lib/quickOpenUsageStore';
+import {
+  getQuickOpenUsageRevision,
+  hydrateQuickOpenUsageFromStore,
+  recordQuickOpenNoteUsage,
+  __resetForTests,
+} from '../lib/quickOpenUsageStore';
 
 vi.mock('@tauri-apps/plugin-store', () => ({
   load: vi.fn(async () => ({
@@ -128,5 +133,55 @@ describe('useQuickOpenSearch', () => {
       {name: 'Alpine', uri: 'file:///v/Inbox/Alpine.md'},
       {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
     ]);
+  });
+
+  it('re-sorts when usage hydration completes after the first query', async () => {
+    const {result} = renderHook(
+      ({search}) => useQuickOpenSearch(search, VAULT, ALP_REFS),
+      {initialProps: {search: 'alp'}},
+    );
+    act(() => {
+      vi.advanceTimersByTime(QUICK_OPEN_SEARCH_DEBOUNCE_MS);
+    });
+    expect(result.current.displayed.map(r => r.name)).toEqual(['Alpha', 'Alpine']);
+
+    recordQuickOpenNoteUsage('file:///v/Inbox/Alpine.md', 'alp');
+    recordQuickOpenNoteUsage('file:///v/Inbox/Alpine.md', 'alp');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.displayed.map(r => r.name)).toEqual(['Alpine', 'Alpha']);
+  });
+
+  it('re-sorts after hydrateQuickOpenUsageFromStore bumps usage revision', async () => {
+    const storeGet = vi.fn(async () =>
+      JSON.stringify({
+        v: 1,
+        global: {'file:///v/Inbox/Alpine.md': 2},
+        byQuery: {alp: {'file:///v/Inbox/Alpine.md': 2}},
+      }),
+    );
+    const {load} = await import('@tauri-apps/plugin-store');
+    vi.mocked(load).mockResolvedValueOnce({
+      get: storeGet,
+      set: vi.fn(async () => {}),
+      save: vi.fn(async () => {}),
+    } as never);
+
+    const {result} = renderHook(
+      ({search}) => useQuickOpenSearch(search, VAULT, ALP_REFS),
+      {initialProps: {search: 'alp'}},
+    );
+    act(() => {
+      vi.advanceTimersByTime(QUICK_OPEN_SEARCH_DEBOUNCE_MS);
+    });
+    expect(result.current.displayed.map(r => r.name)).toEqual(['Alpha', 'Alpine']);
+    expect(getQuickOpenUsageRevision()).toBe(0);
+
+    await act(async () => {
+      await hydrateQuickOpenUsageFromStore();
+    });
+    expect(getQuickOpenUsageRevision()).toBe(1);
+    expect(result.current.displayed.map(r => r.name)).toEqual(['Alpine', 'Alpha']);
   });
 });
