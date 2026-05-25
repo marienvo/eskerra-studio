@@ -6,8 +6,6 @@
 import {useCallback, useMemo, useState, useRef} from 'react';
 
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
-import {AppStatusBar} from './components/AppStatusBar';
-import {GitStatusChip} from './components/GitStatusChip';
 import {WindowTitleBar} from './components/WindowTitleBar';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
 import {useDesktopPlaylistR2EtagPollingForMainWindow} from './hooks/useDesktopPlaylistR2EtagPolling';
@@ -39,6 +37,7 @@ import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersist
 import {useAppPickFolder} from './shell/useAppPickFolder';
 import {usePaneVisibility} from './shell/usePaneVisibility';
 import {AppChromeOverlays} from './shell/mainWindow/AppChromeOverlays';
+import {AppStatusBarSection} from './shell/mainWindow/AppStatusBarSection';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
@@ -434,7 +433,7 @@ export default function App() {
             onDismissNotification={dismissNotification}
           />
 
-          <AppStatusBar
+          <AppStatusBarSection
             onOpenSettings={() => setActivePage('settings')}
             onManualSync={() => {
               manualGitSync.run().catch(() => undefined);
@@ -442,16 +441,14 @@ export default function App() {
             manualSyncBusy={manualGitSync.running}
             manualSyncDisabled={manualSyncUnavailable}
             manualSyncLabel={manualSyncLabel}
-            statusIndicator={
-              <GitStatusChip
-                status={gitStatusForDisplay}
-                loading={currentGitBranchLoading || gitStatusLoading}
-                error={currentGitDetachedHead ? gitStatusError : currentGitBranchError ?? gitStatusError}
-                syncing={manualGitSync.running}
-                transient={transientGitStatus}
-                autosyncCountdownLabel={gitAutosyncCountdownLabel}
-              />
-            }
+            gitStatus={gitStatusForDisplay}
+            gitStatusLoading={gitStatusLoading}
+            currentGitBranchLoading={currentGitBranchLoading}
+            currentGitDetachedHead={currentGitDetachedHead}
+            gitStatusError={gitStatusError}
+            currentGitBranchError={currentGitBranchError}
+            transientGitStatus={transientGitStatus}
+            gitAutosyncCountdownLabel={gitAutosyncCountdownLabel}
           />
           <AppPaletteLayer
             vaultRoot={vaultRoot}
