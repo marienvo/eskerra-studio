@@ -116,7 +116,7 @@ describe('createNoteMarkdownPasteHandlers', () => {
     view.destroy();
   });
 
-  it('runPasteFromDataTransfer returns false for plain text without html (default paste)', () => {
+  it('runPasteFromDataTransfer returns null for plain text without html (cell plain pipe paste)', () => {
     const view = minimalView('hi');
     const vaultRootRef = {current: '/vault'};
     const attachmentHostRef = {
@@ -140,7 +140,7 @@ describe('createNoteMarkdownPasteHandlers', () => {
         event as unknown as ClipboardEvent,
         view,
       ),
-    ).toBe(false);
+    ).toBeNull();
     view.destroy();
   });
 });

@@ -339,7 +339,10 @@ export function createNoteMarkdownPasteHandlers(ctx: NoteMarkdownPasteContext) {
     if (tryPasteRichHtmlFromDataTransfer(dt, event, view)) {
       return true;
     }
-    if (htmlRaw.trim() !== '' || plainForHtml.trim() !== '') {
+    if (plainForHtml.trim() !== '') {
+      return null;
+    }
+    if (htmlRaw.trim() !== '') {
       return false;
     }
     return null;
