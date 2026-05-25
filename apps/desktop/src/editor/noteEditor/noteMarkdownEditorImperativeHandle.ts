@@ -1,6 +1,5 @@
 import {EditorSelection} from '@codemirror/state';
 import {unfoldAll} from '@codemirror/language';
-import {EditorView} from '@codemirror/view';
 
 import {flushAllEskerraTableDrafts} from './eskerraTableV1/eskerraTableDraftFlush';
 import {markdownInlineLinkUrlAtPosition} from './markdownInlineLinkUrlAtPosition';
