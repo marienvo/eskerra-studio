@@ -98,7 +98,7 @@ describe('getQuickOpenUsageScores / recordQuickOpenNoteUsage', () => {
 });
 
 describe('usage revision', () => {
-  test('record and hydrate bump revision and notify subscribers', async () => {
+  test('record bumps revision and notify subscribers', () => {
     let revision = getQuickOpenUsageRevision();
     const seen: number[] = [];
     const unsubscribe = subscribeQuickOpenUsageRevision(() => {
@@ -110,10 +110,29 @@ describe('usage revision', () => {
     expect(revision).toBe(1);
     expect(seen).toEqual([1]);
 
-    await hydrateQuickOpenUsageFromStore();
-    expect(revision).toBe(2);
-    expect(seen).toEqual([1, 2]);
-
     unsubscribe();
+  });
+
+  test('hydrate does not bump revision when store key is missing', async () => {
+    await hydrateQuickOpenUsageFromStore();
+    expect(getQuickOpenUsageRevision()).toBe(0);
+  });
+
+  test('hydrate bumps revision when store data loads', async () => {
+    const {load} = await import('@tauri-apps/plugin-store');
+    vi.mocked(load).mockResolvedValueOnce({
+      get: vi.fn(async () =>
+        JSON.stringify({
+          v: 1,
+          global: {'file:///v/a.md': 1},
+          byQuery: {alp: {'file:///v/a.md': 1}},
+        }),
+      ),
+      set: vi.fn(async () => {}),
+      save: vi.fn(async () => {}),
+    } as never);
+
+    await hydrateQuickOpenUsageFromStore();
+    expect(getQuickOpenUsageRevision()).toBe(1);
   });
 });

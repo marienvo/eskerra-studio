@@ -1,6 +1,6 @@
 import {normalizeVaultBaseUri, trimTrailingSlashes} from '@eskerra/core';
 
-import type {QuickOpenUsageScores} from './quickOpenUsageStore';
+import type {UsageScores} from './usageCounts/types';
 
 function normSlashes(p: string): string {
   return p.trim().replace(/\\/g, '/');
@@ -25,7 +25,7 @@ export function quickOpenVaultRelativePath(vaultRoot: string, noteUri: string): 
 
 export type QuickOpenNoteRef = {name: string; uri: string};
 
-export type QuickOpenUsageScoreLookup = (uri: string) => QuickOpenUsageScores;
+export type QuickOpenUsageScoreLookup = (uri: string) => UsageScores;
 
 /** Lower tier = better textual match quality. */
 export type QuickOpenMatchTier = 0 | 1 | 2 | 3;

@@ -166,14 +166,16 @@ function parseQuickOpenUsageRaw(raw: string): ReturnType<typeof parseQuickOpenUs
 }
 
 export async function hydrateQuickOpenUsageFromStore(): Promise<void> {
-  await hydrateUsageCountsFromStoreKey({
+  const loaded = await hydrateUsageCountsFromStoreKey({
     storePath: QUICK_OPEN_USAGE_STORE_PATH,
     storeKey: QUICK_OPEN_USAGE_STORE_KEY,
     maps,
     memo: scoreMemo,
     parseRaw: parseQuickOpenUsageRaw,
   });
-  bumpQuickOpenUsageRevision();
+  if (loaded) {
+    bumpQuickOpenUsageRevision();
+  }
 }
 
 /** Vitest harness: clears in-memory counts and pending debounced save timer. */
