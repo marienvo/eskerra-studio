@@ -6,6 +6,33 @@ import sonarjs from 'eslint-plugin-sonarjs'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+const mainWindowBarrelImportRestriction = {
+  selector:
+    'ImportDeclaration[source.type="Literal"][source.value=/\\/shell\\/mainWindow(?:\\/index(?:\\.[tj]sx?)?)?$/]',
+  message:
+    'Do not import shell/mainWindow as a directory barrel; use a direct file path (e.g. AppMainStage.tsx). Do not add shell/mainWindow/index.ts.',
+}
+
+const lazyUiTargetImportRestrictions = [
+  {
+    selector:
+      'ImportDeclaration[source.type="Literal"][source.value=/\\/components\\/(SettingsPage|QuickOpenNotePalette|VaultSearchPalette)(?:\\.[tj]sx?)?$/]',
+    message:
+      'Keep SettingsPage, QuickOpenNotePalette, and VaultSearchPalette on the AppLazyUi lazy boundary; do not eager-import these components.',
+  },
+  {
+    selector:
+      'ImportExpression[source.type="Literal"][source.value=/\\/components\\/(SettingsPage|QuickOpenNotePalette|VaultSearchPalette)(?:\\.[tj]sx?)?$/]',
+    message:
+      'Only AppLazyUi may lazy-import SettingsPage, QuickOpenNotePalette, and VaultSearchPalette.',
+  },
+]
+
+const mainWindowImportBoundaryRestrictions = [
+  mainWindowBarrelImportRestriction,
+  ...lazyUiTargetImportRestrictions,
+]
+
 export default defineConfig([
   globalIgnores(['dist', 'src-tauri/target']),
   {
@@ -56,16 +83,21 @@ export default defineConfig([
     },
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/shell/mainWindow/AppLazyUi.tsx'],
     rules: {
       'no-restricted-syntax': [
         'error',
-        {
-          selector:
-            'ImportDeclaration[source.type="Literal"][source.value=/\\/shell\\/mainWindow$/]',
-          message:
-            'Do not import shell/mainWindow as a directory barrel; use a direct file path (e.g. AppMainStage.tsx). Do not add shell/mainWindow/index.ts.',
-        },
+        mainWindowBarrelImportRestriction,
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/shell/mainWindow/AppLazyUi.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...mainWindowImportBoundaryRestrictions,
       ],
     },
   },
@@ -76,21 +108,6 @@ export default defineConfig([
         'error',
         {
           paths: [
-            {
-              name: './components/SettingsPage',
-              message:
-                'Keep SettingsPage on the AppLazyUi lazy boundary (via AppMainStage).',
-            },
-            {
-              name: './components/QuickOpenNotePalette',
-              message:
-                'Keep QuickOpenNotePalette on the AppLazyUi lazy boundary (via AppPaletteLayer).',
-            },
-            {
-              name: './components/VaultSearchPalette',
-              message:
-                'Keep VaultSearchPalette on the AppLazyUi lazy boundary (via AppPaletteLayer).',
-            },
             {
               name: './shell/mainWindow/AppLazyUi',
               message:
@@ -138,6 +155,7 @@ export default defineConfig([
     rules: {
       'no-restricted-syntax': [
         'error',
+        ...mainWindowImportBoundaryRestrictions,
         {
           selector:
             'AssignmentExpression[left.type="MemberExpression"][left.property.name="current"][left.object.property.name="lastPersistedRef"]',

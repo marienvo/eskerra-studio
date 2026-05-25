@@ -37,7 +37,7 @@ Baseline build on 2026-05-25: **no warning** (largest chunk `index` at ~1.30 MB)
 
 - `index` must not grow materially without an explained import-boundary change.
 - `vendor-cm`, `vendor-react`, and `vendor-md` should stay stable unless dependencies or CodeMirror/editor imports change.
-- Lazy chunks must remain separate; do not eager-import `SettingsPage`, `QuickOpenNotePalette`, or `VaultSearchPalette` from `App.tsx` or barrel files.
+- Lazy chunks must remain separate; do not static-import `SettingsPage`, `QuickOpenNotePalette`, or `VaultSearchPalette` outside `AppLazyUi.tsx`.
 - Optional if `index` grows: `npm run build:analyze -w @eskerra/desktop` (if configured) and inspect the entry graph.
 
 ## Import boundaries (`shell/mainWindow`, no barrels)
@@ -54,7 +54,9 @@ After `App.tsx` orchestration extractions:
 
 Enforced in `apps/desktop/eslint.config.js`:
 
-- Any `import '…/shell/mainWindow'` (directory path) is an error.
-- `App.tsx` cannot import the three lazy target components or `AppLazyUi` directly.
+- Any `import '.../shell/mainWindow'` or `import '.../shell/mainWindow/index'` barrel path is an error.
+- Static imports to the three lazy target components are blocked across `src/`.
+- Dynamic imports to the three lazy target components are blocked across `src/`, except in `AppLazyUi.tsx`.
+- `App.tsx` cannot import `AppLazyUi` directly.
 
 `MainWindowVaultTab` stays eager on the vault path; do not re-lazy it from a barrel.
