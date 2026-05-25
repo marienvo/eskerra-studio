@@ -685,7 +685,6 @@ export function useMainWindowWorkspace(options: {
     inboxEditorRef,
     loadFullMarkdownIntoInboxEditor,
     editorBodyRef,
-    openTimeDiskBodyRef,
     setEditorBody,
     suppressEditorOnChangeRef,
     inboxYamlFrontmatterInnerRef,
