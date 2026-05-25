@@ -35,7 +35,6 @@ import {
   deriveTodayHubShowCanvas,
 } from './workspaceTodayHubDerived';
 import {useWorkspaceTodayHubSwitch} from './workspaceTodayHubSwitch';
-import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
 import type {ShellRestoreProjectionSyncArgs} from './workspaceInboxShellRestoreBridge';
 import {useTodayHubDefaultActiveHubEffect} from './todayHub/useTodayHubDefaultActiveHubEffect';
 import {useTodayHubHomeNavigation} from './todayHub/useTodayHubHomeNavigation';

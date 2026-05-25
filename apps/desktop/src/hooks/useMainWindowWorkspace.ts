@@ -42,7 +42,6 @@ import type {
   RestoredInboxState,
   TodayHubWorkspaceSnapshot,
 } from '../lib/mainWindowUiStore';
-import type {WorkspaceHomeState} from '../lib/workspaceHomeNavigation';
 import {removeUrisAction, normalizeWorkspaceUri, type WorkspaceModel} from '../lib/workspaceModel';
 import type {
   WorkspaceConflictController,

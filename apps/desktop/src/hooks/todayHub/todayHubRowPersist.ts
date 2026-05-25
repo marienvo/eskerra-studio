@@ -88,47 +88,67 @@ export async function persistTodayHubRowToVault(
     const toPersist = normalizeTodayHubRowForDisk(merged, columnCount);
     const sections = splitTodayRowIntoColumns(toPersist, columnCount);
     if (todayHubRowSectionsAllBlank(sections)) {
-      try {
-        if (await deps.fs.exists(norm)) {
-          await deleteVaultMarkdownNote(root, norm, deps.fs);
-          deps.markVaultWriteSettled();
-          deps.subtreeMarkdownCache.invalidateForMutation(root, norm, 'file');
-        }
-      } catch (e) {
-        deps.setErr(e instanceof Error ? e.message : String(e));
-        return;
-      }
-      deps.todayHubRowLastPersistedRef.current.delete(norm);
-      const rm = removeInboxNoteBodyFromCache(deps.inboxContentByUriRef.current, norm);
-      if (rm) {
-        deps.inboxContentByUriRef.current = rm;
-        deps.setInboxContentByUri(rm);
-      }
-      await deps.refreshNotes(root);
-      deps.setFsRefreshNonce(n => n + 1);
+      await deleteBlankTodayHubRow(root, norm, deps);
       return;
     }
-    const md = await persistTransientMarkdownImages(toPersist, root);
-    if (markdownContainsTransientImageUrls(md)) {
-      deps.setErr(
-        'Cannot save: some images are still temporary (blob or data URLs). Paste images again so they are stored under Assets/Attachments, or remove those image references.',
-      );
-      return;
-    }
-    await saveNoteMarkdown(norm, deps.fs, md);
-    deps.markVaultWriteSettled();
-    deps.subtreeMarkdownCache.invalidateForMutation(root, norm, 'file');
-    deps.todayHubRowLastPersistedRef.current.set(norm, md);
-    const nextCache = mergeInboxNoteBodyIntoCache(deps.inboxContentByUriRef.current, norm, md);
-    if (nextCache) {
-      deps.inboxContentByUriRef.current = nextCache;
-      deps.setInboxContentByUri(prev => mergeInboxNoteBodyIntoCache(prev, norm, md) ?? prev);
-    }
-    await deps.refreshNotes(root);
-    deps.setFsRefreshNonce(n => n + 1);
+    await savePopulatedTodayHubRow(root, norm, toPersist, deps);
   } catch (e) {
     deps.setErr(e instanceof Error ? e.message : String(e));
   }
+}
+
+async function deleteBlankTodayHubRow(
+  root: string,
+  norm: string,
+  deps: TodayHubRowPersistDeps,
+): Promise<void> {
+  try {
+    if (await deps.fs.exists(norm)) {
+      await deleteVaultMarkdownNote(root, norm, deps.fs);
+      deps.markVaultWriteSettled();
+      deps.subtreeMarkdownCache.invalidateForMutation(root, norm, 'file');
+    }
+  } catch (e) {
+    deps.setErr(e instanceof Error ? e.message : String(e));
+    return;
+  }
+
+  deps.todayHubRowLastPersistedRef.current.delete(norm);
+  const nextCache = removeInboxNoteBodyFromCache(deps.inboxContentByUriRef.current, norm);
+  if (nextCache) {
+    deps.inboxContentByUriRef.current = nextCache;
+    deps.setInboxContentByUri(nextCache);
+  }
+  await deps.refreshNotes(root);
+  deps.setFsRefreshNonce(n => n + 1);
+}
+
+async function savePopulatedTodayHubRow(
+  root: string,
+  norm: string,
+  toPersist: string,
+  deps: TodayHubRowPersistDeps,
+): Promise<void> {
+  const md = await persistTransientMarkdownImages(toPersist, root);
+  if (markdownContainsTransientImageUrls(md)) {
+    deps.setErr(
+      'Cannot save: some images are still temporary (blob or data URLs). Paste images again so they are stored under Assets/Attachments, or remove those image references.',
+    );
+    return;
+  }
+
+  await saveNoteMarkdown(norm, deps.fs, md);
+  deps.markVaultWriteSettled();
+  deps.subtreeMarkdownCache.invalidateForMutation(root, norm, 'file');
+  deps.todayHubRowLastPersistedRef.current.set(norm, md);
+
+  const nextCache = mergeInboxNoteBodyIntoCache(deps.inboxContentByUriRef.current, norm, md);
+  if (nextCache) {
+    deps.inboxContentByUriRef.current = nextCache;
+    deps.setInboxContentByUri(prev => mergeInboxNoteBodyIntoCache(prev, norm, md) ?? prev);
+  }
+  await deps.refreshNotes(root);
+  deps.setFsRefreshNonce(n => n + 1);
 }
 
 export function enqueuePersistTodayHubRowOnSaveChain(
