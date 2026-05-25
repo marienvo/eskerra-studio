@@ -51,12 +51,11 @@ import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScree
 import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
+import {LazySettingsPage, appLazyFallback} from './shell/mainWindow/AppLazyUi';
 import {
-  LazyQuickOpenNotePalette,
-  LazySettingsPage,
-  LazyVaultSearchPalette,
-  appLazyFallback,
-} from './shell/mainWindow/AppLazyUi';
+  AppPaletteLayer,
+  useAppPaletteLayerState,
+} from './shell/mainWindow/AppPaletteLayer';
 
 import './App.css';
 
@@ -188,8 +187,7 @@ export default function App() {
   });
   usePreventMiddleClickPaste();
 
-  const [quickOpenOpen, setQuickOpenOpen] = useState(false);
-  const [vaultSearchOpen, setVaultSearchOpen] = useState(false);
+  const paletteLayer = useAppPaletteLayerState();
 
   const [layouts, setLayouts] = useState<StoredLayouts>(DEFAULT_LAYOUTS);
 
@@ -321,10 +319,7 @@ export default function App() {
     composingNewEntry,
     selectedUri,
     onCleanNoteInbox,
-    quickOpenOpen,
-    setQuickOpenOpen,
-    vaultSearchOpen,
-    setVaultSearchOpen,
+    ...paletteLayer,
     onAddEntry: openAddToInbox,
     manualSyncDisabled: manualSyncUnavailable,
     manualSyncRunning: manualGitSync.running,
@@ -479,25 +474,12 @@ export default function App() {
             items={notificationItems}
             onDismiss={dismissNotification}
           />
-          <Suspense fallback={null}>
-            {quickOpenOpen ? (
-              <LazyQuickOpenNotePalette
-                open={quickOpenOpen}
-                onOpenChange={setQuickOpenOpen}
-                vaultRoot={vaultRoot}
-                refs={vaultMarkdownRefs}
-                onPickNote={selectNote}
-              />
-            ) : null}
-            {vaultSearchOpen ? (
-              <LazyVaultSearchPalette
-                open={vaultSearchOpen}
-                onOpenChange={setVaultSearchOpen}
-                vaultRoot={vaultRoot}
-                onPickNote={selectNote}
-              />
-            ) : null}
-          </Suspense>
+          <AppPaletteLayer
+            vaultRoot={vaultRoot}
+            vaultMarkdownRefs={vaultMarkdownRefs}
+            onPickNote={selectNote}
+            {...paletteLayer}
+          />
         </div>
       </div>
     </AppThemeShell>
