@@ -21,17 +21,13 @@ import {
 } from './lib/layout/layoutStore';
 import type {RestoredInboxState} from './lib/mainWindowUiStore';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
-import {useLiveRef} from './hooks/useLiveRef';
 import {AppThemeShell} from './shell/AppThemeShell';
 import {useAppLayoutWidthPersisters} from './shell/useAppLayoutWidthPersisters';
-import {useAppMainWindowKeyboardEffects} from './shell/useAppMainWindowKeyboardEffects';
 import {useAppMediaControlDesktopPlayback} from './shell/useAppMediaControlDesktopPlayback';
-import {useAppNotificationSession} from './shell/useAppNotificationSession';
 import {useAppOnMountLayoutHydration} from './shell/useAppOnMountLayoutHydration';
 import {useAppRootClassName} from './shell/useAppRootClassName';
 import {useAppTauriCloseAndFocusSave} from './shell/useAppTauriCloseAndFocusSave';
 import {useAppTauriDocumentChrome} from './shell/useAppTauriDocumentChrome';
-import {useAppGitSyncOrchestration} from './shell/useAppGitSyncOrchestration';
 import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect';
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 import {useAppPickFolder} from './shell/useAppPickFolder';
@@ -42,6 +38,7 @@ import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScree
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
 import {AppMainStage} from './shell/mainWindow/AppMainStage';
+import {useAppMainWindowChromeSession} from './shell/mainWindow/useAppMainWindowChromeSession';
 import {
   AppPaletteLayer,
   useAppPaletteLayerState,
@@ -223,7 +220,8 @@ export default function App() {
     setRestoredInboxState,
   });
 
-  const desktopPlaybackRef = useLiveRef(desktopPlayback);
+  const desktopPlaybackRef = useRef(desktopPlayback);
+  desktopPlaybackRef.current = desktopPlayback;
 
   useAppMediaControlDesktopPlayback(desktopPlaybackRef);
 
@@ -256,52 +254,29 @@ export default function App() {
 
   useAppTauriCloseAndFocusSave(flushInboxSave);
 
-  const openNotificationsPanel = useCallback(
-    () => setPaneVisibility({notifications: true}),
-    [setPaneVisibility],
-  );
   const {
-    items: notificationItems,
-    dismissItem: dismissNotification,
-    clearAll: clearAllNotifications,
-    highlightId: notificationHighlightId,
-    pushItem: pushNotification,
-  } = useAppNotificationSession({
-    err,
-    diskConflict,
-    diskConflictSoft: diskConflictSoft as {uri: string} | null,
-    selectedUri,
-    statusBarCenter,
-    renameLinkProgress,
-    openNotificationsPanel,
-  });
-  const {
-    manualGitSync,
-    manualSyncUnavailable,
-    manualSyncLabel,
-    gitStatusForDisplay,
-    gitAutosyncCountdownLabel,
-    transientGitStatus,
-    currentGitBranchLoading,
-    gitStatusLoading,
-    currentGitDetachedHead,
-    currentGitBranchError,
-    gitStatusError,
-    handleWindowCloseRequest,
-    closeSyncInProgress,
-  } = useAppGitSyncOrchestration({
-    vaultPath: vaultRoot,
-    saveSettledNonce,
-    notify: pushNotification,
-    desktopPlaybackRef,
-    flushInboxSave,
-  });
-
-  // Keep a ref to gitStatusForDisplay so keyboard effects can check preflight
-  // without re-registering the listener on every status update.
-  const gitStatusRef = useLiveRef(gitStatusForDisplay);
-
-  useAppMainWindowKeyboardEffects({
+    notifications: {
+      items: notificationItems,
+      dismissItem: dismissNotification,
+      clearAll: clearAllNotifications,
+      highlightId: notificationHighlightId,
+    },
+    gitSync: {
+      manualGitSync,
+      manualSyncUnavailable,
+      manualSyncLabel,
+      gitStatusForDisplay,
+      gitAutosyncCountdownLabel,
+      transientGitStatus,
+      currentGitBranchLoading,
+      gitStatusLoading,
+      currentGitDetachedHead,
+      currentGitBranchError,
+      gitStatusError,
+      handleWindowCloseRequest,
+      closeSyncInProgress,
+    },
+  } = useAppMainWindowChromeSession({
     vaultRoot,
     busy,
     canReopenClosedEditorTab: tabsController.canReopenClosedEditorTab,
@@ -309,12 +284,20 @@ export default function App() {
     composingNewEntry,
     selectedUri,
     onCleanNoteInbox,
-    ...paletteLayer,
+    quickOpenOpen: paletteLayer.quickOpenOpen,
+    setQuickOpenOpen: paletteLayer.setQuickOpenOpen,
+    vaultSearchOpen: paletteLayer.vaultSearchOpen,
+    setVaultSearchOpen: paletteLayer.setVaultSearchOpen,
     onAddEntry: openAddToInbox,
-    manualSyncDisabled: manualSyncUnavailable,
-    manualSyncRunning: manualGitSync.running,
-    onManualSync: manualGitSync.run,
-    gitStatusRef,
+    err,
+    diskConflict,
+    diskConflictSoft: diskConflictSoft as {uri: string} | null,
+    statusBarCenter,
+    renameLinkProgress,
+    saveSettledNonce,
+    desktopPlaybackRef,
+    flushInboxSave,
+    setPaneVisibility,
   });
 
   if (!vaultRoot) {
