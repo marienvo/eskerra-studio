@@ -63,8 +63,12 @@ These modules are composed by `useMainWindowWorkspace` today through **Phase 11*
 | `workspaceOpenMarkdownCommand.ts` | `runOpenMarkdownInEditorCommand` and the open pipeline sub-steps |
 | `workspaceTreeCommands.ts` | Vault tree mutations: delete/rename/move/bulk (+ internal commit helpers) via `TreeCommandContext` |
 | `workspaceVaultTreeMutations.ts` | Pure helpers: bulk-delete tab/scroll pruning predicates and path collection |
-| `workspacePersistence.ts` | Autosave chain, flush, enqueue persist, merge cache helpers after successful writes |
-| `workspaceVaultWatchEffects.ts` | Tauri `vault-files-changed` subscription, reconcile queueing, indexing touches, open-tab probe telemetry |
+| `workspacePersistence/` | Autosave chain, flush, enqueue persist, merge cache helpers (`ARCHITECTURE.md` index) |
+| `workspaceVaultWatch/` | Tauri `vault-files-changed` subscription, reconcile queue, indexing, open-tab probe (`ARCHITECTURE.md` index) |
+| `mainWindowWorkspace/ARCHITECTURE.md` | Orchestrator module map for `useMainWindowWorkspace` |
+| `workspace/useOpenMarkdownCommandContext.ts` | Open-note command context memo |
+| `workspace/useTabComposeTreeCommandContexts.ts` | Tab / compose / tree command context memos |
+| `workspace/useWorkspaceRefBridges.ts` | Imperative ref forwarding for async children |
 | `workspaceFsWatchReconcile.ts` | Open-tab inbox reconcile after vault FS events (tabs, cache, editor, disk conflicts) |
 
 ### Phase 0 invariants checklist
