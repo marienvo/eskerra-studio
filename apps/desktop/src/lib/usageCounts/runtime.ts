@@ -167,6 +167,8 @@ export async function hydrateUsageCountsFromStoreKey(opts: {
     if (typeof raw === 'string' && raw.trim()) {
       const parsed = opts.parseRaw(raw);
       if (parsed) {
+        // Hydration replaces byQueryCounts; invalidate so buildUsageScoreLookup does not
+        // reuse a pre-hydrate cached fn for the same query (e.g. Quick Open on startup).
         invalidateScoreLookupCache(opts.memo);
         loadUsageMapsFromParsed(parsed, opts.maps);
         return true;
