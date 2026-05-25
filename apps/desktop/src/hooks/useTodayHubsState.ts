@@ -36,6 +36,7 @@ import {deleteVaultMarkdownNote, saveNoteMarkdown} from '../lib/vaultBootstrap';
 import {
   createWorkspaceHomeState,
   homeCurrentUri,
+  homeHubUri,
   pushHomeNavigate,
   type WorkspaceHomeState,
 } from '../lib/workspaceHomeNavigation';
@@ -706,7 +707,7 @@ export function useTodayHubsState(
     }
     const home =
       homeStatesByHubRef.current[hub] ?? createWorkspaceHomeState(hub);
-    const uri = homeCurrentUri(home) ?? hub;
+    const uri = homeHubUri(home) ?? hub;
     openMarkdownInEditorRef
       .current(uri, {
         newTab: true,

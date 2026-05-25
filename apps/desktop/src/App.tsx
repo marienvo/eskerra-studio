@@ -131,6 +131,30 @@ export default function App() {
     startNewEntry(composeDraftMarkdown);
   }, [composeDraftMarkdown, startNewEntry]);
 
+  const paletteLayer = useAppPaletteLayerState();
+
+  const titleBarTabActionsDisabled = !vaultRoot || busy || composingNewEntry;
+
+  const handleTitleBarQuickOpen = useCallback(() => {
+    if (!vaultRoot || busy || composingNewEntry) {
+      return;
+    }
+    if (paletteLayer.quickOpenOpen || paletteLayer.vaultSearchOpen) {
+      return;
+    }
+    paletteLayer.setQuickOpenOpen(true);
+  }, [vaultRoot, busy, composingNewEntry, paletteLayer]);
+
+  const handleTitleBarAddToInbox = useCallback(() => {
+    if (!vaultRoot || busy || composingNewEntry) {
+      return;
+    }
+    if (paletteLayer.quickOpenOpen || paletteLayer.vaultSearchOpen) {
+      return;
+    }
+    openAddToInbox();
+  }, [vaultRoot, busy, composingNewEntry, paletteLayer, openAddToInbox]);
+
   const handleMuteLinkSnippetDomain = useLinkSnippetSettingsWriter({
     vaultRoot,
     vaultSettings,
@@ -173,8 +197,6 @@ export default function App() {
     editorHistoryGoForward: tabsController.editorHistoryGoForward,
   });
   usePreventMiddleClickPaste();
-
-  const paletteLayer = useAppPaletteLayerState();
 
   const [layouts, setLayouts] = useState<StoredLayouts>(DEFAULT_LAYOUTS);
 
@@ -384,6 +406,9 @@ export default function App() {
               persistNotificationsInboxStackTopHeightPx={persistNotificationsInboxStackTopHeightPx}
               persistNotificationsWidthPx={persistNotificationsWidthPx}
               titleBarEditorTabsHost={titleBarEditorTabsHost}
+              onTitleBarQuickOpen={handleTitleBarQuickOpen}
+              onTitleBarAddToInbox={handleTitleBarAddToInbox}
+              titleBarTabActionsDisabled={titleBarTabActionsDisabled}
               onAddEntry={openAddToInbox}
               busy={busy}
               notificationItems={notificationItems}

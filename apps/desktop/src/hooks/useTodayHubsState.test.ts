@@ -372,4 +372,41 @@ describe('useTodayHubsState', () => {
       dispatch.mock.calls.some(([reason]) => reason === 'today hub switch'),
     ).toBe(true);
   });
+
+  it('openWorkspaceHomeCurrentInBackgroundTab opens hub Today, not home history cursor', async () => {
+    const HUB = '/vault/Daily/Today.md';
+    const SUB = '/vault/Daily/Note.md';
+    const openMarkdownInEditor = vi.fn().mockResolvedValue(undefined);
+    const {result} = renderHook(() =>
+      useTodayHubsState(
+        makeArgs({
+          vaultRoot: '/vault',
+          vaultRootRef: ref('/vault'),
+          openMarkdownInEditorRef: ref(openMarkdownInEditor),
+        }),
+      ),
+    );
+
+    act(() => {
+      result.current.setActiveTodayHubUri(HUB);
+      result.current.pushHomeHistoryForHub(HUB, SUB);
+    });
+
+    await act(async () => {
+      result.current.openWorkspaceHomeCurrentInBackgroundTab();
+    });
+
+    expect(openMarkdownInEditor).toHaveBeenCalledWith(
+      HUB,
+      expect.objectContaining({
+        newTab: true,
+        activateNewTab: false,
+        insertAfterActive: true,
+      }),
+    );
+    expect(openMarkdownInEditor).not.toHaveBeenCalledWith(
+      SUB,
+      expect.anything(),
+    );
+  });
 });

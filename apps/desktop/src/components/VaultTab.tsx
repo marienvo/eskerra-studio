@@ -118,6 +118,9 @@ export function VaultTab({
     notificationsWidthPx,
     onNotificationsWidthPxChanged,
     titleBarEditorTabsHost = null,
+    onTitleBarQuickOpen,
+    onTitleBarAddToInbox,
+    titleBarTabActionsDisabled = false,
   } = layoutController;
   const {
     inboxEditorRef,
@@ -538,6 +541,9 @@ export function VaultTab({
             onCloseOtherTabs={onCloseOtherEditorTabs}
             inTitleBar
             onReorderTabs={onReorderEditorWorkspaceTabs}
+            onTitleBarQuickOpen={onTitleBarQuickOpen}
+            onTitleBarAddToInbox={onTitleBarAddToInbox}
+            titleBarActionsDisabled={titleBarTabActionsDisabled}
           />,
           titleBarEditorTabsHost,
         )

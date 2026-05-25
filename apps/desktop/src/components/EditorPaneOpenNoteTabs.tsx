@@ -1,6 +1,6 @@
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import {isDesktopTauriHost} from '../lib/desktopTauriWindow';
-import {Cross2Icon, DashboardIcon, ReaderIcon} from '@radix-ui/react-icons';
+import {Cross2Icon, DashboardIcon, PlusIcon, ReaderIcon} from '@radix-ui/react-icons';
 import {
   memo,
   useCallback,
@@ -36,6 +36,49 @@ function TitleBarTabStripDragFiller() {
       aria-hidden
       {...(tauri ? {'data-tauri-drag-region': true} : {})}
     />
+  );
+}
+
+type TitleBarTabStripAddButtonProps = {
+  disabled: boolean;
+  onQuickOpen?: () => void;
+  onAddToInbox?: () => void;
+};
+
+function TitleBarTabStripAddButton({
+  disabled,
+  onQuickOpen,
+  onAddToInbox,
+}: TitleBarTabStripAddButtonProps) {
+  const hasQuickOpen = onQuickOpen != null;
+  const hasAddToInbox = onAddToInbox != null;
+  if (!hasQuickOpen && !hasAddToInbox) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      className="editor-open-tab-add-btn icon-btn-ghost app-tooltip-trigger"
+      disabled={disabled}
+      aria-label="Open note or add to inbox"
+      data-tooltip="Open note (Shift Shift). Shift+click: Add to inbox."
+      data-tooltip-placement="bottom"
+      onClick={e => {
+        if (disabled) {
+          return;
+        }
+        if (e.shiftKey) {
+          onAddToInbox?.();
+        } else {
+          onQuickOpen?.();
+        }
+      }}
+    >
+      <span className="editor-open-tab-add-btn__glyph" aria-hidden>
+        <PlusIcon width={15} height={15} />
+      </span>
+    </button>
   );
 }
 
@@ -295,6 +338,11 @@ export type EditorPaneOpenNoteTabsProps = {
   inTitleBar?: boolean;
   /** Title bar only: reorder tabs after drag-drop; indices are pre-move order. */
   onReorderTabs?: (fromIndex: number, insertBeforeIndex: number) => void;
+  /** Title bar only: plain click opens Quick Open (Shift+Shift). */
+  onTitleBarQuickOpen?: () => void;
+  /** Title bar only: Shift+click opens Add to inbox (Ctrl+Ctrl). */
+  onTitleBarAddToInbox?: () => void;
+  titleBarActionsDisabled?: boolean;
 };
 
 export const EditorPaneOpenNoteTabs = memo(function EditorPaneOpenNoteTabs({
@@ -308,6 +356,9 @@ export const EditorPaneOpenNoteTabs = memo(function EditorPaneOpenNoteTabs({
   onCloseOtherTabs,
   inTitleBar = false,
   onReorderTabs,
+  onTitleBarQuickOpen,
+  onTitleBarAddToInbox,
+  titleBarActionsDisabled = false,
 }: EditorPaneOpenNoteTabsProps) {
   const stripRef = useRef<HTMLDivElement | null>(null);
   const workspaceTabsRef = useRef(workspaceTabs);
@@ -469,6 +520,11 @@ export const EditorPaneOpenNoteTabs = memo(function EditorPaneOpenNoteTabs({
     if (inTitleBar) {
       return (
         <div className="editor-open-tabs-scroll editor-open-tabs-scroll--titlebar editor-open-tabs-scroll--titlebar-empty">
+          <TitleBarTabStripAddButton
+            disabled={titleBarActionsDisabled}
+            onQuickOpen={onTitleBarQuickOpen}
+            onAddToInbox={onTitleBarAddToInbox}
+          />
           <TitleBarTabStripDragFiller />
         </div>
       );
@@ -522,6 +578,13 @@ export const EditorPaneOpenNoteTabs = memo(function EditorPaneOpenNoteTabs({
           />
         );
       })}
+      {inTitleBar ? (
+        <TitleBarTabStripAddButton
+          disabled={titleBarActionsDisabled}
+          onQuickOpen={onTitleBarQuickOpen}
+          onAddToInbox={onTitleBarAddToInbox}
+        />
+      ) : null}
       {inTitleBar ? <TitleBarTabStripDragFiller /> : null}
       {dragSurface ? (
         <div

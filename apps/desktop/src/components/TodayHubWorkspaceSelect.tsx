@@ -18,7 +18,7 @@ type TodayHubWorkspaceSelectProps = {
   onPickHub: (todayNoteUri: string) => void;
   /** Dropdown: middle-click opens that hub Today in a new editor tab. */
   onOpenHubInNewTab: (todayNoteUri: string) => void;
-  /** Main button: middle-click opens workspace Home current URI as a background tab. */
+  /** Main button: middle-click opens hub Today.md as a background tab (not home history cursor). */
   onOpenMainWorkspaceInNewTab: () => void;
 };
 

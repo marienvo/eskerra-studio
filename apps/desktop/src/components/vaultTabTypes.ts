@@ -84,6 +84,11 @@ export type VaultTabLayoutController = {
   onNotificationsWidthPxChanged: (px: number) => void;
   /** Mount node in `WindowTitleBar` for editor open-note tabs (portal). */
   titleBarEditorTabsHost?: HTMLElement | null;
+  /** Title bar tab strip: plain click opens Quick Open (Shift+Shift). */
+  onTitleBarQuickOpen?: () => void;
+  /** Title bar tab strip: Shift+click opens Add to inbox (Ctrl+Ctrl). */
+  onTitleBarAddToInbox?: () => void;
+  titleBarTabActionsDisabled?: boolean;
 };
 
 export type VaultTabEditorController = {

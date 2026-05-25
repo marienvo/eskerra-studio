@@ -24,6 +24,9 @@ type MainWindowVaultTabProps = {
   persistNotificationsInboxStackTopHeightPx: (px: number) => void;
   persistNotificationsWidthPx: (px: number) => void;
   titleBarEditorTabsHost: HTMLDivElement | null;
+  onTitleBarQuickOpen?: () => void;
+  onTitleBarAddToInbox?: () => void;
+  titleBarTabActionsDisabled?: boolean;
   onAddEntry: () => void;
   busy: boolean;
   notificationItems: readonly SessionNotification[];
@@ -64,6 +67,9 @@ export function MainWindowVaultTab({
   persistNotificationsInboxStackTopHeightPx,
   persistNotificationsWidthPx,
   titleBarEditorTabsHost,
+  onTitleBarQuickOpen,
+  onTitleBarAddToInbox,
+  titleBarTabActionsDisabled,
   onAddEntry,
   busy,
   notificationItems,
@@ -156,6 +162,9 @@ export function MainWindowVaultTab({
         notificationsWidthPx: layouts.notifications.widthPx,
         onNotificationsWidthPxChanged: persistNotificationsWidthPx,
         titleBarEditorTabsHost,
+        onTitleBarQuickOpen,
+        onTitleBarAddToInbox,
+        titleBarTabActionsDisabled,
       }}
       playbackController={{
         playbackTransport,
