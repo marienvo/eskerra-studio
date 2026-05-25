@@ -13,13 +13,15 @@ const mainWindowBarrelImportRestriction = {
     'Do not import shell/mainWindow as a directory barrel; use a direct file path (e.g. AppMainStage.tsx). Do not add shell/mainWindow/index.ts.',
 }
 
+const lazyUiTargetStaticImportRestriction = {
+  selector:
+    'ImportDeclaration[source.type="Literal"][source.value=/\\/components\\/(SettingsPage|QuickOpenNotePalette|VaultSearchPalette)(?:\\.[tj]sx?)?$/]',
+  message:
+    'Keep SettingsPage, QuickOpenNotePalette, and VaultSearchPalette on the AppLazyUi lazy boundary; do not eager-import these components.',
+}
+
 const lazyUiTargetImportRestrictions = [
-  {
-    selector:
-      'ImportDeclaration[source.type="Literal"][source.value=/\\/components\\/(SettingsPage|QuickOpenNotePalette|VaultSearchPalette)(?:\\.[tj]sx?)?$/]',
-    message:
-      'Keep SettingsPage, QuickOpenNotePalette, and VaultSearchPalette on the AppLazyUi lazy boundary; do not eager-import these components.',
-  },
+  lazyUiTargetStaticImportRestriction,
   {
     selector:
       'ImportExpression[source.type="Literal"][source.value=/\\/components\\/(SettingsPage|QuickOpenNotePalette|VaultSearchPalette)(?:\\.[tj]sx?)?$/]',
@@ -88,6 +90,7 @@ export default defineConfig([
       'no-restricted-syntax': [
         'error',
         mainWindowBarrelImportRestriction,
+        lazyUiTargetStaticImportRestriction,
       ],
     },
   },

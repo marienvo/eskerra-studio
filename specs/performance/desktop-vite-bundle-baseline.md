@@ -33,6 +33,18 @@ Lazy route chunks (on demand, not in initial `index` graph when palettes/setting
 
 Baseline build on 2026-05-25: **no warning** (largest chunk `index` at ~1.30 MB).
 
+`npm run build -w @eskerra/desktop` also runs `scripts/check-desktop-vite-bundle-budget.mjs` after Vite. That script fails when any JS chunk crosses the Vite warning limit, when expected lazy/vendor chunks disappear, or when these chunk budgets are exceeded:
+
+| Chunk | Budget |
+| --- | ---: |
+| `index-*.js` | 1400 kB |
+| `vendor-cm-*.js` | 900 kB |
+| `vendor-react-*.js` | 450 kB |
+| `vendor-md-*.js` | 160 kB |
+| `SettingsPage-*.js` | 50 kB |
+| `VaultSearchPalette-*.js` | 30 kB |
+| `QuickOpenNotePalette-*.js` | 20 kB |
+
 ## Regression checks during refactor
 
 - `index` must not grow materially without an explained import-boundary change.

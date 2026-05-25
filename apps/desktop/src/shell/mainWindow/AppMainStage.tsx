@@ -1,22 +1,20 @@
-import type {ComponentProps} from 'react';
+import type {ComponentProps, ReactNode} from 'react';
 import {Suspense} from 'react';
 
 import {LazySettingsPage} from './AppLazyUi';
 
 const settingsLazyFallback = <div aria-busy="true" />;
-import {MainWindowVaultTab} from './MainWindowVaultTab';
 
 export type AppMainStageProps = {
   activePage: 'vault' | 'settings';
   onCloseSettings: () => void;
-  settingsPageProps: {
-    vaultRoot: ComponentProps<typeof LazySettingsPage>['vaultRoot'];
-    fs: ComponentProps<typeof LazySettingsPage>['fs'];
-    vaultSettings: ComponentProps<typeof MainWindowVaultTab>['vaultSettings'];
-    setVaultSettings: ComponentProps<typeof LazySettingsPage>['setVaultSettings'];
-    onChangeVaultFolder: ComponentProps<typeof LazySettingsPage>['onChangeVaultFolder'];
+  settingsPageProps: Omit<
+    ComponentProps<typeof LazySettingsPage>,
+    'onClose' | 'vaultSettings'
+  > & {
+    vaultSettings: ComponentProps<typeof LazySettingsPage>['vaultSettings'] | null;
   };
-  vaultTabProps: ComponentProps<typeof MainWindowVaultTab>;
+  children: ReactNode;
 };
 
 export function AppMainStage({
@@ -29,7 +27,7 @@ export function AppMainStage({
     setVaultSettings,
     onChangeVaultFolder,
   },
-  vaultTabProps,
+  children,
 }: AppMainStageProps) {
   return (
     <div className="app-body">
@@ -48,7 +46,7 @@ export function AppMainStage({
                 />
               </Suspense>
             ) : (
-              <MainWindowVaultTab {...vaultTabProps} />
+              children
             )}
           </main>
         </div>

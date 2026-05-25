@@ -39,6 +39,7 @@ import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScree
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
 import {AppMainStage} from './shell/mainWindow/AppMainStage';
+import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
 import {useAppMainWindowChromeSession} from './shell/mainWindow/useAppMainWindowChromeSession';
 import {AppPaletteLayer} from './shell/mainWindow/AppPaletteLayer';
 import {useAppPaletteLayerState} from './shell/mainWindow/useAppPaletteLayerState';
@@ -367,37 +368,38 @@ export default function App() {
               setVaultSettings,
               onChangeVaultFolder: pickFolder,
             }}
-            vaultTabProps={{
-              vaultRoot,
-              vaultSettings,
-              fs,
-              fsRefreshNonce,
-              inboxEditorRef,
-              inboxEditorShellScrollRef,
-              workspace,
-              paneVisibility,
-              layouts,
-              persistMainLeftWidthPx,
-              persistVaultEpisodesStackTopHeightPx,
-              persistNotificationsInboxStackTopHeightPx,
-              persistNotificationsWidthPx,
-              titleBarEditorTabsHost,
-              onAddEntry: openAddToInbox,
-              busy,
-              notificationItems,
-              notificationHighlightId,
-              dismissNotification,
-              clearAllNotifications,
-              playbackTransport,
-              toolbarNowPlaying,
-              podcastCatalog,
-              desktopPlayback,
-              handleEpisodesRssSync,
-              rssSyncing,
-              rssSyncPercent,
-              onMuteLinkSnippetDomain: handleMuteLinkSnippetDomain,
-            }}
-          />
+          >
+            <MainWindowVaultTab
+              vaultRoot={vaultRoot}
+              vaultSettings={vaultSettings}
+              fs={fs}
+              fsRefreshNonce={fsRefreshNonce}
+              inboxEditorRef={inboxEditorRef}
+              inboxEditorShellScrollRef={inboxEditorShellScrollRef}
+              workspace={workspace}
+              paneVisibility={paneVisibility}
+              layouts={layouts}
+              persistMainLeftWidthPx={persistMainLeftWidthPx}
+              persistVaultEpisodesStackTopHeightPx={persistVaultEpisodesStackTopHeightPx}
+              persistNotificationsInboxStackTopHeightPx={persistNotificationsInboxStackTopHeightPx}
+              persistNotificationsWidthPx={persistNotificationsWidthPx}
+              titleBarEditorTabsHost={titleBarEditorTabsHost}
+              onAddEntry={openAddToInbox}
+              busy={busy}
+              notificationItems={notificationItems}
+              notificationHighlightId={notificationHighlightId}
+              dismissNotification={dismissNotification}
+              clearAllNotifications={clearAllNotifications}
+              playbackTransport={playbackTransport}
+              toolbarNowPlaying={toolbarNowPlaying}
+              podcastCatalog={podcastCatalog}
+              desktopPlayback={desktopPlayback}
+              handleEpisodesRssSync={handleEpisodesRssSync}
+              rssSyncing={rssSyncing}
+              rssSyncPercent={rssSyncPercent}
+              onMuteLinkSnippetDomain={handleMuteLinkSnippetDomain}
+            />
+          </AppMainStage>
 
           <AppChromeOverlays
             placement="stage"
