@@ -87,8 +87,8 @@ const eskerraFenceLanguageOverrides: readonly LanguageDescription[] = [
   }),
   LanguageDescription.of({
     name: 'HTML',
-    alias: ['xhtml'],
-    extensions: ['html', 'htm'],
+    alias: ['handlebars', 'hbs', 'xhtml'],
+    extensions: ['handlebars', 'hbs', 'html', 'htm'],
     load: () => Promise.resolve(html()),
   }),
   LanguageDescription.of({

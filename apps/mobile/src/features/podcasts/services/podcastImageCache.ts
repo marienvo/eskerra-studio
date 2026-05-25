@@ -91,6 +91,10 @@ function setArtworkUriCacheValue(
   schedulePersistArtworkUriCache(baseUri);
 }
 
+function isLocallyReadableArtworkUriCandidate(uri: string): boolean {
+  return uri.startsWith('content://') || uri.startsWith('file://');
+}
+
 function isRenderableUri(uri: string): boolean {
   if (!uri.startsWith('content://')) {
     // http/https and file:// URIs are always renderable.
@@ -379,7 +383,13 @@ export async function getPodcastArtworkUri(
 
   const memoryHit = peekCachedPodcastArtworkUriFromMemory(baseUri, normalizedRssFeedUrl);
   if (memoryHit) {
-    return memoryHit;
+    if (
+      !isLocallyReadableArtworkUriCandidate(memoryHit)
+      || (await isVaultArtworkUriStillReadable(memoryHit))
+    ) {
+      return memoryHit;
+    }
+    artworkUriMemoryCache.delete(getArtworkMemoryCacheKey(baseUri, normalizedRssFeedUrl));
   }
 
   const memoryCacheKey = getArtworkMemoryCacheKey(baseUri, normalizedRssFeedUrl);
@@ -449,6 +459,13 @@ export async function getPodcastArtworkUri(
 
 export function clearInFlightCachedArtworkRequestsForTesting(): void {
   inFlightCachedArtworkRequests.clear();
+}
+
+export function clearArtworkUriMemoryCacheForTesting(): void {
+  artworkUriMemoryCache.clear();
+  inFlightArtworkRequests.clear();
+  inFlightCachedArtworkRequests.clear();
+  persistentArtworkWriteChains.clear();
 }
 
 export function warmPodcastArtworkCache(
