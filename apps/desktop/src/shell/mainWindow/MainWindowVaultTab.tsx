@@ -99,7 +99,6 @@ export function MainWindowVaultTab({
   const {visibility, setVisibility, togglePane} = paneVisibility;
   return (
     <VaultTab
-      key={vaultRoot}
       environment={{
         vaultRoot,
         vaultSettings,

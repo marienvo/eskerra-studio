@@ -36,6 +36,36 @@ beforeAll(async () => {
   await ts.load();
 });
 
+describe('eskerraFenceLanguages', () => {
+  it('preserves full fenced-language coverage for common markdown fence labels', async () => {
+    const labels = ['java', 'cpp', 'php', 'vue', 'angular', 'liquid', 'wast'];
+    for (const label of labels) {
+      const language = LanguageDescription.matchLanguageName(eskerraFenceLanguages, label, true);
+      expect(language, `expected fence language for ${label}`).toBeInstanceOf(LanguageDescription);
+      await (language as LanguageDescription).load();
+    }
+  });
+
+  it('loads HTML fences with the dedicated HTML parser', async () => {
+    const html = LanguageDescription.matchLanguageName(eskerraFenceLanguages, 'html', true);
+    expect(html).toBeInstanceOf(LanguageDescription);
+    const support = await (html as LanguageDescription).load();
+    const state = EditorState.create({
+      doc: '<script>const x = 1</script>',
+      extensions: support,
+    });
+    let hasScriptNode = false;
+    syntaxTree(state).iterate({
+      enter: node => {
+        if (node.name === 'Script') {
+          hasScriptNode = true;
+        }
+      },
+    });
+    expect(hasScriptNode).toBe(true);
+  });
+});
+
 function classTokens(classStr: string | undefined): string[] {
   return classStr ? classStr.trim().split(/\s+/).filter(Boolean) : [];
 }
@@ -465,5 +495,22 @@ describe('noteMarkdown code fence and inline code highlighting', () => {
       true,
     );
     expect(classTokens(clsDigit)).not.toContain('cm-md-code');
+  });
+
+  it('fenced Java also gets nested parsing/highlighting via the shared language registry', () => {
+    const doc = '```java\nclass Demo {}\n```';
+    const posClass = doc.indexOf('class');
+    const clsKeyword = innermostHighlightAt(
+      doc,
+      posClass,
+      [noteMarkdownHighlightStyle, noteMarkdownNestedCodeHighlighter],
+      true,
+    );
+    expect(
+      classTokens(clsKeyword).some(
+        c => c === 'cm-md-code-hl-keyword' || c === 'cm-md-code-hl-definition-keyword',
+      ),
+    ).toBe(true);
+    expect(classTokens(clsKeyword)).not.toContain('cm-md-code');
   });
 });

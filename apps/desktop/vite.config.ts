@@ -54,6 +54,11 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 2048,
     rolldownOptions: {
+      // Fence grammars for js/html/markdown are already in the editor graph; language-data
+      // still uses dynamic import() for them — harmless, but not splittable.
+      checks: {
+        ineffectiveDynamicImport: false,
+      },
       output: {
         codeSplitting: {
           groups: [
@@ -64,7 +69,10 @@ export default defineConfig({
             },
             {
               name: 'vendor-cm',
-              test: /node_modules\/@codemirror\//,
+              // Core editor stack only. Fence languages load via dynamic import from
+              // language-data; grouping @codemirror/lang-* here merges every grammar
+              // into one multi-MB vendor-cm chunk on startup.
+              test: /node_modules\/@codemirror\/(?!lang-|legacy-modes)/,
               priority: 15,
             },
             {
