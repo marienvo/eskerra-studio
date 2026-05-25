@@ -254,6 +254,9 @@ export function VaultSearchPalette({
               inputRef.current?.select();
             });
           }}
+          onCloseAutoFocus={event => {
+            event.preventDefault();
+          }}
         >
           <Dialog.Title className="quick-open-a11y-title">Search in vault</Dialog.Title>
           <Command

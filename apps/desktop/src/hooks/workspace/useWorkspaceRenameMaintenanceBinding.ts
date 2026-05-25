@@ -4,11 +4,9 @@ import {type SubtreeMarkdownPresenceCache, type VaultFilesystem, type VaultMarkd
 
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
 import type {InboxAutosaveScheduler} from '../../lib/inboxAutosaveScheduler';
-import {
-  inboxEditorSliceToFullMarkdown,
-} from '../../lib/inboxYamlFrontmatterEditor';
 import {remapAllTabsUriPrefix, type EditorWorkspaceTab} from '../../lib/editorWorkspaceTabs';
 import {loadVaultMarkdownBodiesWithSeed} from '../inboxNoteBodyCache';
+import {persistableInboxEditorFullMarkdown} from '../openNotePersistence';
 import {
   useWorkspaceRenameMaintenance,
   type WorkspaceRenameMaintenanceCommitArgs,
@@ -30,6 +28,7 @@ type UseWorkspaceRenameMaintenanceBindingInput = {
   selectedUriRef: MutableRefObject<string | null>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   composingNewEntryRef: MutableRefObject<boolean>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
@@ -58,6 +57,7 @@ export function useWorkspaceRenameMaintenanceBinding({
   selectedUriRef,
   inboxEditorRef,
   editorBodyRef,
+  openTimeDiskBodyRef,
   composingNewEntryRef,
   inboxYamlFrontmatterInnerRef,
   inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -77,13 +77,15 @@ export function useWorkspaceRenameMaintenanceBinding({
       const activeUri = selectedUriRef.current;
       const activeBody =
         activeUri != null
-          ? inboxEditorSliceToFullMarkdown(
-              inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
-              activeUri,
-              composingNewEntryRef.current,
-              inboxYamlFrontmatterInnerRef.current,
-              inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-            )
+          ? persistableInboxEditorFullMarkdown({
+              editorBodySlice:
+                inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
+              diskBodyBaseline: openTimeDiskBodyRef.current || null,
+              selectedUri: activeUri,
+              composingNewEntry: composingNewEntryRef.current,
+              yamlInner: inboxYamlFrontmatterInnerRef.current,
+              yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+            })
           : '';
       const expandedContent = await loadVaultMarkdownBodiesWithSeed(
         fs,
@@ -99,6 +101,7 @@ export function useWorkspaceRenameMaintenanceBinding({
       selectedUriRef,
       inboxEditorRef,
       editorBodyRef,
+      openTimeDiskBodyRef,
       composingNewEntryRef,
       inboxYamlFrontmatterInnerRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,

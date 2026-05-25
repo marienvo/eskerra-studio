@@ -65,6 +65,7 @@ function createBaseContext() {
     }),
     inboxEditorRef: {current: null},
     editorBodyRef: {current: ''},
+    openTimeDiskBodyRef: {current: ''},
     inboxYamlFrontmatterInnerRef: {current: null as string | null},
     inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
     mergeInboxNoteBodyCacheRefAndState: vi.fn(),
@@ -129,6 +130,32 @@ describe('workspaceOpenMarkdownCommand', () => {
     expect(tabsState.value.length).toBe(1);
     expect(activeTabState.value).toBe(tabsState.value[0]!.id);
     expect(ctx.mirrorShadowActiveTab).toHaveBeenCalledTimes(1);
+  });
+
+  it('foreground open exits compose mode before loading and refocuses the editor', async () => {
+    const {ctx} = createBaseContext();
+    const focus = vi.fn();
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation(callback => {
+        callback(0);
+        return 1;
+      });
+    ctx.inboxEditorRef.current = {focus} as never;
+    ctx.composingNewEntryRef.current = true;
+    ctx.inboxContentByUriRef.current['/vault/Inbox/from-compose.md'] = '# cached';
+    ctx.loadFullMarkdownIntoInboxEditor = vi.fn(() => {
+      expect(ctx.composingNewEntryRef.current).toBe(false);
+    });
+
+    try {
+      await runOpenMarkdownInEditorCommand(ctx as never, '/vault/Inbox/from-compose.md');
+    } finally {
+      rafSpy.mockRestore();
+    }
+
+    expect(ctx.setComposingNewEntry).toHaveBeenCalledWith(false);
+    expect(focus).toHaveBeenCalledWith({scrollIntoView: false});
   });
 
   it('home open keeps Home surface and pushes hub history', async () => {
@@ -239,6 +266,27 @@ describe('workspaceOpenMarkdownCommand', () => {
     await runOpenMarkdownInEditorCommand(ctx as never, '/vault/Inbox/other.md');
 
     expect(ctx.mergeInboxNoteBodyCacheRefAndState).not.toHaveBeenCalled();
+    expect(ctx.enqueuePersistOutgoingNoteMarkdown).not.toHaveBeenCalled();
+  });
+
+  it('does not persist buffer-only open-note padding when switching notes after edit+undo', async () => {
+    const {ctx} = createBaseContext();
+    const current = '/vault/Inbox/current.md';
+    const other = '/vault/Inbox/other.md';
+    ctx.selectedUriRef.current = current;
+    ctx.lastPersistedRef.current = {uri: current, markdown: '# Title'};
+    ctx.openTimeDiskBodyRef.current = '# Title';
+    ctx.editorBodyRef.current = '# Title\n\n';
+    ctx.inboxEditorRef.current = {
+      getMarkdown: () => '# Title\n\n',
+      focus: vi.fn(),
+    } as never;
+    ctx.inboxContentByUriRef.current[current] = '# Title';
+    ctx.inboxContentByUriRef.current[other] = '# other';
+
+    await runOpenMarkdownInEditorCommand(ctx as never, other);
+
+    expect(ctx.mergeInboxNoteBodyCacheRefAndState).toHaveBeenCalledWith(current, '# Title');
     expect(ctx.enqueuePersistOutgoingNoteMarkdown).not.toHaveBeenCalled();
   });
 

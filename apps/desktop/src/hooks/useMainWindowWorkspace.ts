@@ -180,6 +180,7 @@ export function useMainWindowWorkspace(options: {
     editorBody,
     setEditorBody,
     editorBodyRef,
+    openTimeDiskBodyRef,
     guardedSetEditorBody,
     inboxEditorResetNonce,
     setInboxEditorResetNonce,
@@ -421,6 +422,7 @@ export function useMainWindowWorkspace(options: {
     diskConflictRef,
     inboxContentByUriRef,
     editorBodyRef,
+    openTimeDiskBodyRef,
     lastPersistedRef,
     setLastPersistedSnapshot,
     inboxYamlFrontmatterInnerRef,
@@ -559,6 +561,7 @@ export function useMainWindowWorkspace(options: {
     selectedUriRef,
     inboxEditorRef,
     editorBodyRef,
+    openTimeDiskBodyRef,
     composingNewEntryRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -601,6 +604,7 @@ export function useMainWindowWorkspace(options: {
       setSelectedUri,
       inboxEditorRef,
       editorBodyRef,
+      openTimeDiskBodyRef,
       inboxYamlFrontmatterInnerRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       mergeInboxNoteBodyCacheRefAndState,
@@ -638,6 +642,7 @@ export function useMainWindowWorkspace(options: {
       setSelectedUri,
       inboxEditorRef,
       setLastPersistedSnapshot,
+      openTimeDiskBodyRef,
     ],
   );
 
@@ -870,6 +875,7 @@ export function useMainWindowWorkspace(options: {
     writeLastPersistedSnapshotWithoutSeqBump,
     bumpLastPersistedExternalMutationSeq,
     editorBodyRef,
+    openTimeDiskBodyRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     editorShellScrollByUriRef,
@@ -923,6 +929,7 @@ export function useMainWindowWorkspace(options: {
     setBacklinksActiveBody,
     composingNewEntryRef,
     editorBodyRef,
+    openTimeDiskBodyRef,
     setErr,
   });
 

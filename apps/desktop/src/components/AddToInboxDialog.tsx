@@ -114,7 +114,12 @@ export function AddToInboxDialog({
     >
       <Dialog.Portal>
         <Dialog.Overlay className={styles.overlay} />
-        <Dialog.Content className={styles.content}>
+        <Dialog.Content
+          className={styles.content}
+          onCloseAutoFocus={event => {
+            event.preventDefault();
+          }}
+        >
           <Dialog.Title className={styles.title}>Add to inbox</Dialog.Title>
           <div
             className={styles.editorSurface}

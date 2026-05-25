@@ -20,7 +20,6 @@ import type {
 import type {VaultFilesystem} from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
-import {persistableInboxEditorBodySlice} from '../editor/noteEditor/openNoteCaretPlacement';
 import {
   collectDistinctUrisFromTabs,
   ensureActiveTabId,
@@ -34,7 +33,6 @@ import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
 import {
   clearInboxYamlFrontmatterEditorRefs,
-  inboxEditorSliceToFullMarkdown,
 } from '../lib/inboxYamlFrontmatterEditor';
 import {
   classifyNoteDiskReconcile,
@@ -42,6 +40,7 @@ import {
   normalizeVaultMarkdownDiskRead,
   removeInboxNoteBodyFromCache,
 } from './inboxNoteBodyCache';
+import {persistableInboxEditorFullMarkdown} from './openNotePersistence';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import {
   applyReloadFromDiskForFsWatch,
@@ -84,6 +83,7 @@ export type ReconcileFsOpenMarkdownEnv = {
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   editorShellScrollByUriRef: MutableRefObject<Map<string, {top: number; left: number}>>;
@@ -216,18 +216,16 @@ async function reconcileOneOpenMarkdownTabAfterDiskRead(
     return;
   }
 
-  const localSlice = persistableInboxEditorBodySlice(
-    open.inboxEditorRef.current?.getMarkdown() ?? open.editorBodyRef.current,
-    open.editorBodyRef.current,
-  );
-  const local = inboxEditorSliceToFullMarkdown(
-    localSlice,
-    normTab,
-    open.composingNewEntryRef.current,
-    open.inboxYamlFrontmatterInnerRef.current,
-    open.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-  );
   const lp = open.lastPersistedRef.current;
+  const local = persistableInboxEditorFullMarkdown({
+    editorBodySlice:
+      open.inboxEditorRef.current?.getMarkdown() ?? open.editorBodyRef.current,
+    diskBodyBaseline: open.openTimeDiskBodyRef.current || null,
+    selectedUri: normTab,
+    composingNewEntry: open.composingNewEntryRef.current,
+    yamlInner: open.inboxYamlFrontmatterInnerRef.current,
+    yamlLeading: open.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+  });
   const kind = classifyNoteDiskReconcile({
     noteUri: normTab,
     lastPersisted: lp,

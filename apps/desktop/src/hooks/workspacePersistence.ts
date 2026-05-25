@@ -15,7 +15,6 @@ import {
 } from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
-import {persistableInboxEditorBodySlice} from '../editor/noteEditor/openNoteCaretPlacement';
 import {
   createInboxAutosaveScheduler,
   INBOX_AUTOSAVE_DEBOUNCE_MS,
@@ -24,7 +23,6 @@ import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownIma
 import {saveNoteMarkdown} from '../lib/vaultBootstrap';
 import type {TodayHubWorkspaceBridge} from '../lib/todayHub';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
 import {reportCrash} from '../observability/reportCrash';
 
 import type {
@@ -37,6 +35,7 @@ import {
   shouldSkipOutgoingPersistAfterNoteLeave,
   shouldSkipOutgoingPersistBeforeWrite,
 } from './inboxNoteBodyCache';
+import {persistableInboxEditorFullMarkdown} from './openNotePersistence';
 
 export function shouldScheduleInboxAutosave(args: {
   vaultRoot: string | null;
@@ -83,6 +82,7 @@ export function useWorkspacePersistence(args: {
   diskConflictRef: MutableRefObject<DiskConflictState | null>;
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
   setLastPersistedSnapshot: (next: LastPersisted) => void;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
@@ -128,6 +128,7 @@ export function useWorkspacePersistence(args: {
     diskConflictRef,
     inboxContentByUriRef,
     editorBodyRef,
+    openTimeDiskBodyRef,
     lastPersistedRef,
     setLastPersistedSnapshot,
     inboxYamlFrontmatterInnerRef,
@@ -259,18 +260,16 @@ export function useWorkspacePersistence(args: {
       if (dc && normalizeEditorDocUri(dc.uri) === normalizeEditorDocUri(uri)) {
         return;
       }
-      const rawSlice = persistableInboxEditorBodySlice(
-        inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
-        editorBodyRef.current,
-      );
-      const raw = inboxEditorSliceToFullMarkdown(
-        rawSlice,
-        selectedUriRef.current,
-        composingNewEntryRef.current,
-        inboxYamlFrontmatterInnerRef.current,
-        inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-      );
       const prev = lastPersistedRef.current;
+      const raw = persistableInboxEditorFullMarkdown({
+        editorBodySlice:
+          inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
+        diskBodyBaseline: openTimeDiskBodyRef.current || null,
+        selectedUri: selectedUriRef.current,
+        composingNewEntry: composingNewEntryRef.current,
+        yamlInner: inboxYamlFrontmatterInnerRef.current,
+        yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+      });
       if (prev && prev.uri === uri && prev.markdown === raw) {
         return;
       }
@@ -327,6 +326,7 @@ export function useWorkspacePersistence(args: {
     composingNewEntryRef,
     diskConflictRef,
     editorBodyRef,
+    openTimeDiskBodyRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     lastPersistedRef,
@@ -382,13 +382,14 @@ export function useWorkspacePersistence(args: {
       autosaveSchedulerRef.current.cancel();
       return;
     }
-    const liveFull = inboxEditorSliceToFullMarkdown(
-      editorBody,
+    const liveFull = persistableInboxEditorFullMarkdown({
+      editorBodySlice: editorBody,
+      diskBodyBaseline: openTimeDiskBodyRef.current || null,
       selectedUri,
       composingNewEntry,
-      inboxYamlFrontmatterInnerRef.current,
-      inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-    );
+      yamlInner: inboxYamlFrontmatterInnerRef.current,
+      yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+    });
     if (
       !shouldScheduleInboxAutosave({
         vaultRoot,
@@ -418,6 +419,7 @@ export function useWorkspacePersistence(args: {
     diskConflict,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
+    openTimeDiskBodyRef,
     lastPersistedRef,
   ]);
 

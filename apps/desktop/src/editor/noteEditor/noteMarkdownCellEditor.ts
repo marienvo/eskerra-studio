@@ -8,7 +8,6 @@ import {commonmarkLanguage} from '@codemirror/lang-markdown';
 import {openSearchPanel, search, searchKeymap} from '@codemirror/search';
 import {
   Compartment,
-  EditorSelection,
   EditorState,
   Prec,
   type Extension,
@@ -22,12 +21,13 @@ import {
   type InboxWikiLinkCompletionCandidate,
 } from '@eskerra/core';
 
-import {MIDDLE_CLICK_BLOCK_PASTE_WINDOW_MS} from '../../hooks/middleClickPasteBlock';
-import {clipboardDataProbablyHasVaultImage} from '../../lib/clipboard/clipboardImageFiles';
-import {formatVaultImageMarkdownForInsert} from '../../lib/clipboard/formatVaultImageMarkdown';
-import {cleanPastedMarkdownFragment} from '../../lib/markdown/cleanNote';
-import {tryClipboardHtmlToMarkdownInsert} from '../../lib/clipboard/htmlClipboardToMarkdown';
 import type {NoteInboxAttachmentHost} from '../../lib/noteInboxAttachmentHost';
+import {cleanPastedMarkdownFragment} from '../../lib/markdown/cleanNote';
+import {
+  createNoteMarkdownPasteHandlers,
+  pasteBlockImageWhenImportUnavailable,
+  pasteBlockWhileBusy,
+} from './noteMarkdownEditorPaste';
 import {isActivatableRelativeMarkdownHref} from './markdownActivatableRelativeHref';
 import {markdownCodeBackgroundLayer} from './markdownCodeBackgroundLayer';
 import {eskerraFenceLanguages} from './eskerraFenceLanguages';
@@ -65,10 +65,7 @@ import {
   markdownSelectionAllowMultipleRanges,
   markdownSelectionSurroundKeymap,
 } from './markdownSelectionSurround';
-import {
-  markdownCaretInOpaquePasteBlock,
-  markdownSmartExpandExtension,
-} from './markdownSmartExpandSelection';
+import {markdownSmartExpandExtension} from './markdownSmartExpandSelection';
 import {markdownCaseToggleKeymap} from './markdownCaseToggle';
 import type {
   VaultRelativeMarkdownLinkActivatePayload,
@@ -91,97 +88,6 @@ function eskerraCellCharFilter(): Extension {
 /** Exported for table cell context menu paste (strip pipe / newlines). */
 export function sanitizeCellInsert(s: string): string {
   return s.replace(/[\r\n|]+/g, ' ').trim();
-}
-
-function cellPasteBlockWhileBusy(
-  event: ClipboardEvent,
-  busyRef: MutableRefObject<boolean>,
-  onReportError: (message: string) => void,
-): boolean {
-  if (!busyRef.current) {
-    return false;
-  }
-  if (
-    event.clipboardData
-    && clipboardDataProbablyHasVaultImage(event.clipboardData)
-  ) {
-    event.preventDefault();
-    onReportError(
-      'Please wait until the current operation finishes before pasting an image.',
-    );
-    return true;
-  }
-  return false;
-}
-
-function cellPasteBlockImageWhenImportUnavailable(
-  event: ClipboardEvent,
-  attachmentHostRef: MutableRefObject<NoteInboxAttachmentHost>,
-  onReportError: (message: string) => void,
-): boolean {
-  const host = attachmentHostRef.current;
-  if (host.isVaultImageImportAvailable) {
-    return false;
-  }
-  if (
-    event.clipboardData
-    && clipboardDataProbablyHasVaultImage(event.clipboardData)
-  ) {
-    event.preventDefault();
-    onReportError(
-      'Pasting images into the vault requires the Eskerra desktop app.',
-    );
-    return true;
-  }
-  return false;
-}
-
-function cellEditorDispatchPastedCleaned(
-  event: ClipboardEvent,
-  view: EditorView,
-  cleaned: string,
-): true {
-  event.preventDefault();
-  const sel = view.state.selection.main;
-  const f = Math.min(sel.anchor, sel.head);
-  const t = Math.max(sel.anchor, sel.head);
-  view.dispatch({
-    changes: {from: f, to: t, insert: cleaned},
-    selection: {anchor: f + cleaned.length},
-    userEvent: MARKDOWN_INPUT_PASTE_USER_EVENT,
-  });
-  return true;
-}
-
-function tryCellEditorPasteFromHtmlDataTransfer(
-  htmlRaw: string,
-  plainForHtml: string,
-  event: ClipboardEvent,
-  view: EditorView,
-  activeNotePath: string | null,
-): boolean {
-  if (htmlRaw.trim() === '') {
-    return false;
-  }
-  if (
-    markdownCaretInOpaquePasteBlock(
-      view.state,
-      view.state.selection.main.head,
-    )
-  ) {
-    return false;
-  }
-  const md = tryClipboardHtmlToMarkdownInsert(htmlRaw, plainForHtml);
-  if (md == null) {
-    return false;
-  }
-  const cleaned = sanitizeCellInsert(
-    cleanPastedMarkdownFragment(md, activeNotePath),
-  );
-  if (cleaned.length === 0) {
-    return false;
-  }
-  return cellEditorDispatchPastedCleaned(event, view, cleaned);
 }
 
 export type TableCellContextMenuOpen = (detail: {
@@ -374,139 +280,21 @@ export function buildNoteMarkdownCellExtensions(
     return false;
   };
 
-  const pasteOk = () => args.pasteSessionRef.current === args.pasteSessionId;
-
-  const runVaultImagePasteFromDataTransfer = (
-    dt: DataTransfer,
-    viewForPaste: EditorView,
-  ): boolean => {
-    if (!clipboardDataProbablyHasVaultImage(dt)) {
-      return false;
-    }
-    const sel = viewForPaste.state.selection.main;
-    const insertFrom = Math.min(sel.anchor, sel.head);
-    const insertTo = Math.max(sel.anchor, sel.head);
-    void (async () => {
-      const vr = vaultRootRef.current;
-      const host = attachmentHostRef.current;
-      try {
-        const relPaths = await host.importPastedImages(dt, vr);
-        if (relPaths.length === 0) {
-          onReportError('Could not import the pasted content as a vault image.');
-          return;
-        }
-        let insert = formatVaultImageMarkdownForInsert(relPaths);
-        insert = insert.replace(/\s+/g, ' ').trim();
-        if (!pasteOk()) {
-          return;
-        }
-        viewForPaste.dispatch({
-          changes: {from: insertFrom, to: insertTo, insert},
-          selection: EditorSelection.cursor(insertFrom + insert.length),
-          scrollIntoView: true,
-          userEvent: MARKDOWN_INPUT_PASTE_USER_EVENT,
-        });
-      } catch (err) {
-        onReportError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-    return true;
-  };
-
-  const runNativeClipboardPasteWhenWebDataEmpty = (
-    viewForPaste: EditorView,
-  ): boolean => {
-    const sel = viewForPaste.state.selection.main;
-    const insertFrom = Math.min(sel.anchor, sel.head);
-    const insertTo = Math.max(sel.anchor, sel.head);
-    void (async () => {
-      const vr = vaultRootRef.current;
-      const host = attachmentHostRef.current;
-      const result = await host.readNativeClipboardPaste(vr);
-      if (result.kind === 'text') {
-        const text = sanitizeCellInsert(result.text);
-        if (pasteOk() && text.length > 0) {
-          viewForPaste.dispatch({
-            changes: {from: insertFrom, to: insertTo, insert: text},
-            selection: EditorSelection.cursor(insertFrom + text.length),
-            scrollIntoView: true,
-            userEvent: MARKDOWN_INPUT_PASTE_USER_EVENT,
-          });
-        }
-        return;
-      }
-      if (result.kind === 'fail') {
-        onReportError(result.message);
-        return;
-      }
-      try {
-        let insert = formatVaultImageMarkdownForInsert(result.paths);
-        insert = insert.replace(/\s+/g, ' ').trim();
-        if (!pasteOk()) {
-          return;
-        }
-        viewForPaste.dispatch({
-          changes: {from: insertFrom, to: insertTo, insert},
-          selection: EditorSelection.cursor(insertFrom + insert.length),
-          scrollIntoView: true,
-          userEvent: MARKDOWN_INPUT_PASTE_USER_EVENT,
-        });
-      } catch (pipeErr) {
-        onReportError(
-          pipeErr instanceof Error ? pipeErr.message : String(pipeErr),
-        );
-      }
-    })();
-    return true;
-  };
-
-  // X11/WebKitGTK: middle-click fires a synthetic `paste` with primary selection; block briefly.
-  let middleClickBlockPasteUntil = 0;
-
-  const runCellEditorPasteDataTransfer = (
-    dt: DataTransfer,
-    event: ClipboardEvent,
-    view: EditorView,
-  ): boolean | null => {
-    const probablyImage = clipboardDataProbablyHasVaultImage(dt);
-    if (probablyImage) {
-      event.preventDefault();
-      event.stopPropagation();
-      return runVaultImagePasteFromDataTransfer(dt, view);
-    }
-    const plainTrimmed = (dt.getData('text/plain') ?? '').trim();
-    if (plainTrimmed === '' && !probablyImage) {
-      const htmlWhenPlainEmpty = dt.getData('text/html') ?? '';
-      if (
-        tryCellEditorPasteFromHtmlDataTransfer(
-          htmlWhenPlainEmpty,
-          '',
-          event,
-          view,
-          activeNotePathRef.current,
-        )
-      ) {
-        return true;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      return runNativeClipboardPasteWhenWebDataEmpty(view);
-    }
-    const htmlRaw = dt.getData('text/html') ?? '';
-    const plainForHtml = dt.getData('text/plain') ?? '';
-    if (
-      tryCellEditorPasteFromHtmlDataTransfer(
-        htmlRaw,
-        plainForHtml,
-        event,
-        view,
-        activeNotePathRef.current,
-      )
-    ) {
-      return true;
-    }
-    return null;
-  };
+  const sharedPaste = createNoteMarkdownPasteHandlers({
+    vaultRootRef,
+    attachmentHostRef,
+    activeNotePathRef,
+    busyRef,
+    reportError: onReportError,
+    isStaleView: () => args.pasteSessionRef.current !== args.pasteSessionId,
+    normalizePastedMarkdown: md =>
+      sanitizeCellInsert(
+        cleanPastedMarkdownFragment(md, activeNotePathRef.current),
+      ),
+    normalizeImageMarkdownInsert: insert =>
+      insert.replace(/\s+/g, ' ').trim(),
+    consumeEmptyHtmlPaste: false,
+  });
 
   const runCellEditorPastePlainPipes = (
     event: ClipboardEvent,
@@ -537,8 +325,7 @@ export function buildNoteMarkdownCellExtensions(
       if (event.button !== 1) {
         return false;
       }
-      middleClickBlockPasteUntil =
-        Date.now() + MIDDLE_CLICK_BLOCK_PASTE_WINDOW_MS;
+      sharedPaste.armMiddleClickPasteBlock();
       if (onEditorMiddleClick(event, view)) {
         return true;
       }
@@ -546,19 +333,25 @@ export function buildNoteMarkdownCellExtensions(
       return true;
     },
     paste(event, view) {
-      if (Date.now() < middleClickBlockPasteUntil) {
+      if (sharedPaste.isMiddleClickPasteBlocked()) {
         event.preventDefault();
         return true;
       }
-      if (cellPasteBlockWhileBusy(event, busyRef, onReportError)) {
+      if (pasteBlockWhileBusy(event, busyRef, onReportError)) {
         return true;
       }
-      if (cellPasteBlockImageWhenImportUnavailable(event, attachmentHostRef, onReportError)) {
+      if (
+        pasteBlockImageWhenImportUnavailable(
+          event,
+          attachmentHostRef,
+          onReportError,
+        )
+      ) {
         return true;
       }
       const dt = event.clipboardData;
       if (dt) {
-        const r = runCellEditorPasteDataTransfer(dt, event, view);
+        const r = sharedPaste.runPasteFromDataTransfer(dt, event, view);
         if (r != null) {
           return r;
         }

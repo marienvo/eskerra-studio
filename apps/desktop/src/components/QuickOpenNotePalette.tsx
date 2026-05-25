@@ -87,6 +87,9 @@ export function QuickOpenNotePalette({
               inputRef.current?.select();
             });
           }}
+          onCloseAutoFocus={event => {
+            event.preventDefault();
+          }}
         >
           <Dialog.Title className="quick-open-a11y-title">Open note</Dialog.Title>
           <Command
