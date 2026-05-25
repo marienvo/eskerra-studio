@@ -109,15 +109,12 @@ import {
   endProgrammaticMarkdownLoad,
 } from './caretJumpDetector';
 import {MARKDOWN_INPUT_PASTE_USER_EVENT} from './markdownEditorUserEvents';
+import {computeMinimalEditorChanges} from './noteMarkdownDiffChanges';
 import {
-  computeMinimalEditorChanges,
-  mapPositionThroughDiff,
-} from './noteMarkdownDiffChanges';
-import {computeOpenNoteCaretPlacement} from './openNoteCaretPlacement';
-import {
-  explicitCursorForMarkdownLoadDispatch,
-  explicitCursorForMarkdownLoadSetState,
+  cursorForMarkdownLoadSetState,
+  forcedCursorForMarkdownLoadDispatch,
   type NoteMarkdownLoadOptions,
+  resolveMarkdownLoadDocument,
   selectionIsPreserve,
   selMatchesForcedCursor,
   shouldUseMergedReplaceForMarkdownLoad,
@@ -948,38 +945,24 @@ const NoteMarkdownEditorImpl = forwardRef<
       }
       beginProgrammaticMarkdownLoad(v);
       try {
-        const openNotePlacement =
-          options?.selection === 'openNote'
-            ? computeOpenNoteCaretPlacement(markdown)
-            : undefined;
-        const effectiveMarkdown = openNotePlacement?.doc ?? markdown;
+        const resolved = resolveMarkdownLoadDocument(markdown, options);
+        const {effectiveMarkdown} = resolved;
         const hadFoldedRanges = foldedRangesPresent(v.state);
         const curLen = v.state.doc.length;
         const curText = v.state.doc.toString();
         const preserve = selectionIsPreserve(options);
-        const forced =
-          openNotePlacement !== undefined
-            ? openNotePlacement.caret
-            : explicitCursorForMarkdownLoadDispatch(
-                options,
-                effectiveMarkdown.length,
-              );
+        const forced = forcedCursorForMarkdownLoadDispatch(options, resolved);
         const selMatchesForced =
           forced !== undefined && selMatchesForcedCursor(v.state, forced);
-        const mergedReplace = shouldUseMergedReplaceForMarkdownLoad({
+        const branchInput = {
           hadFoldedRanges,
           curText,
           markdown: effectiveMarkdown,
           preserve,
           selMatchesForcedCursor: selMatchesForced,
-        });
-        const useSetState = shouldUseSetStateBranchForMarkdownLoad({
-          hadFoldedRanges,
-          curText,
-          markdown: effectiveMarkdown,
-          preserve,
-          selMatchesForcedCursor: selMatchesForced,
-        });
+        };
+        const mergedReplace = shouldUseMergedReplaceForMarkdownLoad(branchInput);
+        const useSetState = shouldUseSetStateBranchForMarkdownLoad(branchInput);
         const wikiEff = wc.reconfigure(
           wikiLinkResolvedHighlightExtensions(
             wikiLinkTargetIsResolvedRef.current,
@@ -1014,19 +997,13 @@ const NoteMarkdownEditorImpl = forwardRef<
           v.dispatch(spec);
           clearEskerraTableNestedCellRegistrations(v);
         } else if (useSetState) {
-          const cursorAt = preserve
-            ? mapPositionThroughDiff(
-                v.state.selection.main.head,
-                curText,
-                effectiveMarkdown,
-              )
-            : openNotePlacement !== undefined
-              ? openNotePlacement.caret
-              : explicitCursorForMarkdownLoadSetState(
-                  options,
-                  effectiveMarkdown.length,
-                  v.state.selection.main.head,
-                );
+          const cursorAt = cursorForMarkdownLoadSetState(
+            options,
+            resolved,
+            preserve,
+            v.state.selection.main.head,
+            curText,
+          );
           const nextState = EditorState.create({
             doc: effectiveMarkdown,
             selection: EditorSelection.cursor(cursorAt),
