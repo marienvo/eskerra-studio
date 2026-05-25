@@ -33,7 +33,6 @@ export async function persistActiveInboxNote(args: {
     refs,
     refs.editorBodyRef.current,
     uri,
-    refs.composingNewEntryRef.current,
   );
   if (prev && prev.uri === uri && prev.markdown === raw) {
     return;

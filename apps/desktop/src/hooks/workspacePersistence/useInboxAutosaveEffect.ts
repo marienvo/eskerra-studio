@@ -36,12 +36,7 @@ export function useInboxAutosaveEffect(
       autosaveSchedulerRef.current.cancel();
       return;
     }
-    const liveFull = readLiveInboxFullMarkdownFromRefs(
-      refs,
-      editorBody,
-      selectedUri,
-      composingNewEntry,
-    );
+    const liveFull = readLiveInboxFullMarkdownFromRefs(refs, editorBody, selectedUri);
     if (
       !shouldScheduleInboxAutosave({
         vaultRoot,

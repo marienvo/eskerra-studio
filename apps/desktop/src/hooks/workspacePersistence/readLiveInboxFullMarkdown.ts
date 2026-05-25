@@ -17,14 +17,13 @@ export function readLiveInboxFullMarkdownFromRefs(
   refs: LiveInboxMarkdownRefs,
   editorBodyFallback: string,
   selectedUri: string | null,
-  composingNewEntry: boolean,
 ): string {
   return persistableInboxEditorFullMarkdown({
     editorBodySlice:
       refs.inboxEditorRef.current?.getMarkdown() ?? editorBodyFallback,
     diskBodyBaseline: refs.openTimeDiskBodyRef.current || null,
     selectedUri: refs.selectedUriRef.current ?? selectedUri,
-    composingNewEntry: refs.composingNewEntryRef.current ?? composingNewEntry,
+    composingNewEntry: refs.composingNewEntryRef.current,
     yamlInner: refs.inboxYamlFrontmatterInnerRef.current,
     yamlLeading: refs.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
   });
