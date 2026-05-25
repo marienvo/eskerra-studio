@@ -5,7 +5,6 @@
  */
 import {
   Suspense,
-  lazy,
   useCallback,
   useMemo,
   useState,
@@ -52,26 +51,16 @@ import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScree
 import {MainWindowVaultTab} from './shell/mainWindow/MainWindowVaultTab';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
+import {
+  LazyQuickOpenNotePalette,
+  LazySettingsPage,
+  LazyVaultSearchPalette,
+  appLazyFallback,
+} from './shell/mainWindow/AppLazyUi';
 
 import './App.css';
 
 type AppPage = 'vault' | 'settings';
-
-const SettingsPage = lazy(() =>
-  import('./components/SettingsPage').then(m => ({default: m.SettingsPage})),
-);
-const QuickOpenNotePalette = lazy(() =>
-  import('./components/QuickOpenNotePalette').then(m => ({
-    default: m.QuickOpenNotePalette,
-  })),
-);
-const VaultSearchPalette = lazy(() =>
-  import('./components/VaultSearchPalette').then(m => ({
-    default: m.VaultSearchPalette,
-  })),
-);
-
-const appLazyFallback = <div aria-busy="true" />;
 
 export default function App() {
   const {maximized} = useTauriWindowMaximized();
@@ -408,7 +397,7 @@ export default function App() {
                 <main className="main-stage">
                   {activePage === 'settings' && vaultSettings ? (
                     <Suspense fallback={appLazyFallback}>
-                      <SettingsPage
+                      <LazySettingsPage
                         onClose={() => setActivePage('vault')}
                         vaultRoot={vaultRoot}
                         fs={fs}
@@ -492,7 +481,7 @@ export default function App() {
           />
           <Suspense fallback={null}>
             {quickOpenOpen ? (
-              <QuickOpenNotePalette
+              <LazyQuickOpenNotePalette
                 open={quickOpenOpen}
                 onOpenChange={setQuickOpenOpen}
                 vaultRoot={vaultRoot}
@@ -501,7 +490,7 @@ export default function App() {
               />
             ) : null}
             {vaultSearchOpen ? (
-              <VaultSearchPalette
+              <LazyVaultSearchPalette
                 open={vaultSearchOpen}
                 onOpenChange={setVaultSearchOpen}
                 vaultRoot={vaultRoot}
