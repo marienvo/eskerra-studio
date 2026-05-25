@@ -153,12 +153,8 @@ export function useInboxEditorState(
         suppressEditorOnChangeRef.current = true;
         inboxEditorRef.current?.loadMarkdown(full, {selection});
         suppressEditorOnChangeRef.current = false;
-        const loadedBody =
-          selection === 'openNote'
-            ? (inboxEditorRef.current?.getMarkdown() ?? full)
-            : full;
-        setEditorBody(loadedBody);
-        editorBodyRef.current = loadedBody;
+        setEditorBody(full);
+        editorBodyRef.current = full;
         return;
       }
       const {frontmatter, body, leadingBeforeFrontmatter} = splitYamlFrontmatter(full);
@@ -172,12 +168,8 @@ export function useInboxEditorState(
       suppressEditorOnChangeRef.current = true;
       inboxEditorRef.current?.loadMarkdown(body, {selection});
       suppressEditorOnChangeRef.current = false;
-      const loadedBody =
-        selection === 'openNote'
-          ? (inboxEditorRef.current?.getMarkdown() ?? body)
-          : body;
-      setEditorBody(loadedBody);
-      editorBodyRef.current = loadedBody;
+      setEditorBody(body);
+      editorBodyRef.current = body;
     },
     [inboxEditorRef, syncFrontmatterStateFromDisk],
   );

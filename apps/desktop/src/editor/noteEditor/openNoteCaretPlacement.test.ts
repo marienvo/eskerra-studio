@@ -2,7 +2,9 @@ import {describe, expect, it} from 'vitest';
 
 import {
   computeOpenNoteCaretPlacement,
+  editorSliceOnlyAddsOpenNoteBufferPadding,
   offsetAtEndOfLine,
+  persistableInboxEditorBodySlice,
 } from './openNoteCaretPlacement';
 
 describe('offsetAtEndOfLine', () => {
@@ -81,5 +83,20 @@ describe('computeOpenNoteCaretPlacement', () => {
     const result = computeOpenNoteCaretPlacement('# \n');
     expect(result.doc).toBe('# \n\n');
     expect(result.caret).toBe(result.doc.length);
+  });
+});
+
+describe('persistableInboxEditorBodySlice', () => {
+  it('returns disk slice when editor only has open-note buffer padding', () => {
+    const disk = '# Title';
+    const padded = computeOpenNoteCaretPlacement(disk).doc;
+    expect(editorSliceOnlyAddsOpenNoteBufferPadding(padded, disk)).toBe(true);
+    expect(persistableInboxEditorBodySlice(padded, disk)).toBe(disk);
+  });
+
+  it('returns editor slice when the user changed body text', () => {
+    const disk = '# Title';
+    const edited = '# Title\n\nnotes';
+    expect(persistableInboxEditorBodySlice(edited, disk)).toBe(edited);
   });
 });

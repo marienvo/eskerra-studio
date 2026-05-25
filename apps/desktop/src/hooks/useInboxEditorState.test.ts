@@ -52,6 +52,30 @@ describe('useInboxEditorState', () => {
     expect(result.current.editorBodyRef.current).toBe('# Title\n\n');
   });
 
+  it('openNote load keeps editorBody on disk body, not padded getMarkdown', () => {
+    const diskBody = '# Title';
+    const paddedBody = '# Title\n\n';
+    const loadMarkdown = vi.fn();
+    const getMarkdown = vi.fn(() => paddedBody);
+    const {result} = renderHook(() =>
+      useInboxEditorState({
+        inboxEditorRef: {current: {loadMarkdown, getMarkdown} as never},
+      }),
+    );
+
+    act(() => {
+      result.current.setSelectedUri('/note.md');
+      result.current.setComposingNewEntry(false);
+    });
+    act(() => {
+      result.current.loadFullMarkdownIntoInboxEditor(diskBody, '/note.md', 'openNote');
+    });
+
+    expect(loadMarkdown).toHaveBeenCalledWith(diskBody, {selection: 'openNote'});
+    expect(getMarkdown).not.toHaveBeenCalled();
+    expect(result.current.editorBody).toBe(diskBody);
+  });
+
   it('guardedSetEditorBody updates activity timestamp unless suppressed', () => {
     const {result} = renderHook(() =>
       useInboxEditorState({

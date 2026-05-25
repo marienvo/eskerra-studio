@@ -9,6 +9,7 @@ import {
 } from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import type {NoteMarkdownLoadSelection} from '../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {cleanNoteMarkdownBody} from '../lib/markdown/cleanNote';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownImages';
@@ -55,7 +56,7 @@ export type ComposeCommandsContext = {
   loadFullMarkdownIntoInboxEditor: (
     markdown: string,
     uri: string | null,
-    selection?: import('../editor/noteEditor/noteMarkdownLoadMarkdown').NoteMarkdownLoadSelection,
+    selection?: NoteMarkdownLoadSelection,
   ) => void;
   resetInboxEditorComposeState: () => void;
   todayHubCleanRowBlocked: (rowUri: string) => boolean;
