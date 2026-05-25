@@ -18,7 +18,7 @@ This logbook tracks **where time is spent** when a Today Hub canvas cell switche
 - **Activation:** `openCell` in `apps/desktop/src/components/TodayHubCanvas.tsx` (click / keyboard on read-only cell).
 - **Before UI flip:** `openCell` calls `flushScheduledPersist().then(...)` and only then runs `setLocalRowSections`, `setActive`, `setCellSessionNonce`.
 - **Persist flush:** `flushScheduledPersist` may `await persistTodayHubRow(...)` when `pendingPersistRef` is set (debounced row save after edits).
-- **Row persist:** `persistTodayHubRow` in `apps/desktop/src/hooks/useMainWindowWorkspace.ts` chains on `saveChainRef` (global inbox save serialization), then may run `persistTransientMarkdownImages`, `saveNoteMarkdown`, `refreshNotes`, etc.
+- **Row persist:** `persistTodayHubRow` in `apps/desktop/src/hooks/useTodayHubsState.ts` (implementation in `apps/desktop/src/hooks/todayHub/todayHubRowPersist.ts`) chains on `saveChainRef` (global inbox save serialization), then may run `persistTransientMarkdownImages`, `saveNoteMarkdown`, `refreshNotes`, etc.
 - **Focus:** `useLayoutEffect` on `active`: **no click caret** → sync `focus()` plus one `rAF` if ref missing (fast path). **Click caret offset** → nested `rAF` (plus one retry if needed) before `focus({anchor})` so CodeMirror layout/`scrollIntoView` matches the static hit-test offset (post-2026-04-08 regression fix).
 - **Editor mount:** Active cell renders `NoteMarkdownEditor` with a new `sessionKey` (`cellSessionNonce`), so the cell editor is recreated when opening a cell.
 
@@ -151,7 +151,7 @@ User confirmed caret matches click again. **~270–310 ms** from gesture start t
 ### Code touched (this session)
 
 - **Shipped:** `apps/desktop/src/components/TodayHubCanvas.tsx` — click-caret path uses **one** `requestAnimationFrame` before `focus({anchor})` (plus existing retry frame if the ref was not ready); removed **nested** double-`rAF` that previously matched ~200ms extra delay under main-thread load in NDJSON captures.
-- **Removed after verification:** temporary ingest `fetch` probes in `TodayHubCanvas`, `useMainWindowWorkspace` (`persistTodayHubRow`), and `NoteMarkdownEditor`. `todayHubWorkspaceBridge` stayed `flushPendingEdits: () => Promise<void>` (no API change shipped).
+- **Removed after verification:** temporary ingest `fetch` probes in `TodayHubCanvas`, `useTodayHubsState` / `todayHubRowPersist` (`persistTodayHubRow`), and `NoteMarkdownEditor`. `todayHubWorkspaceBridge` stayed `flushPendingEdits: () => Promise<void>` (no API change shipped).
 
 ### Interpretation cheat sheet
 
@@ -259,7 +259,7 @@ Source: `.cursor/debug-16e50d.log` with `runId: "rAF-restored"` (2026-04-08).
 - **Path:** All sampled click opens logged `via: "rAF-caret"` on `todayHubOpenCell_focusRun` (e.g. lines 7–8, 15–16, 23–24); **no** `stage: "inner"` lines in this file ⇒ first outer rAF always obtained the editor handle and applied anchor focus.
 - **Timing (same structural bucket as earlier):** `focusRunMs` **~74–105 ms** on clicks; `todayHubOpenCell_rAF` **outer** `msSinceOpen` **~72–94 ms** vs `layoutActiveMs` **~21–33 ms** ⇒ post-layout wait still dominated by one animation frame / main-thread scheduling (`TH3`).
 - **`syncOpenSkipAwait`:** Present on idle flush (e.g. lines 2, 10).
-- **After this capture:** debug **ingest `fetch` probes removed** from `TodayHubCanvas.tsx`, `useMainWindowWorkspace.ts` (`persistTodayHubRow`), and `NoteMarkdownEditor.tsx`. **Kept behavior:** `openCell` still calls `finishOpen` synchronously when no hub debounce timer and no pending row save (avoids an unnecessary `flushScheduledPersist().then` microtask when idle).
+- **After this capture:** debug **ingest `fetch` probes removed** from `TodayHubCanvas.tsx`, `useTodayHubsState.ts` / `todayHubRowPersist.ts` (`persistTodayHubRow`), and `NoteMarkdownEditor.tsx`. **Kept behavior:** `openCell` still calls `finishOpen` synchronously when no hub debounce timer and no pending row save (avoids an unnecessary `flushScheduledPersist().then` microtask when idle).
 
 ## Session `375636` (2026-04-08) — active: ingest + workspace NDJSON
 
