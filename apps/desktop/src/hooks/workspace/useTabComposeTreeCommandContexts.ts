@@ -1,15 +1,11 @@
-import {
-  useMemo,
-  type Dispatch,
-  type MutableRefObject,
-  type RefObject,
-  type SetStateAction,
-} from 'react';
+import {useMemo, type MutableRefObject, type RefObject} from 'react';
 
 import type {SubtreeMarkdownPresenceCache, VaultFilesystem} from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
+import type {ClosedEditorTabRecord} from '../../lib/editorClosedTabStack';
 import type {EditorWorkspaceTab} from '../../lib/editorWorkspaceTabs';
+import type {InboxAutosaveScheduler} from '../../lib/inboxAutosaveScheduler';
 import type {TodayHubWorkspaceBridge} from '../../lib/todayHub';
 import type {TabCommandContext} from '../workspaceTabCommands';
 import type {TreeCommandContext} from '../workspaceTreeCommands';
@@ -27,7 +23,7 @@ export function useTabCommandContext(args: {
   saveChainRef: MutableRefObject<Promise<void>>;
   vaultRootRef: MutableRefObject<string | null>;
   notesRef: RefObject<readonly {uri: string}[]>;
-  editorClosedTabsStackRef: MutableRefObject<unknown[]>;
+  editorClosedTabsStackRef: MutableRefObject<ClosedEditorTabRecord[]>;
   editorShellScrollByUriRef: MutableRefObject<Map<string, {top: number; left: number}>>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
@@ -154,37 +150,33 @@ export function useComposeCommandsContext(args: {
   refreshNotes: (root: string) => Promise<void>;
   flushInboxSaveRef: MutableRefObject<() => Promise<void>>;
   scheduleBacklinksDeferOneFrameAfterLoad: () => void;
-  loadFullMarkdownIntoInboxEditor: (
-    markdown: string,
-    uri: string,
-    selection: 'preserve' | 'start',
-  ) => void;
+  loadFullMarkdownIntoInboxEditor: ComposeCommandsContext['loadFullMarkdownIntoInboxEditor'];
   resetInboxEditorComposeState: () => void;
   todayHubCleanRowBlocked: (rowUri: string) => boolean;
   showTodayHubCanvasRef: MutableRefObject<boolean>;
   todayHubBridgeRef: MutableRefObject<TodayHubWorkspaceBridge>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
-  selectedUriRef: MutableRefObject<string | null>;
-  composingNewEntryRef: MutableRefObject<boolean>;
-  inboxEditorShellScrollDirectiveRef: MutableRefObject<unknown>;
-  diskConflictRef: MutableRefObject<unknown>;
-  diskConflictSoftRef: MutableRefObject<unknown>;
-  lastPersistedRef: MutableRefObject<unknown>;
-  editorBodyRef: MutableRefObject<string>;
-  inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
-  inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
-  inboxContentByUriRef: MutableRefObject<Record<string, string>>;
-  setBusy: (busy: boolean) => void;
-  setErr: (value: string | null) => void;
-  setFsRefreshNonce: Dispatch<SetStateAction<number>>;
-  setEditorBody: (body: string) => void;
-  setComposeDraftMarkdown: (md: string) => void;
-  setComposeDraftResetNonce: Dispatch<SetStateAction<number>>;
-  setComposingNewEntry: (v: boolean) => void;
-  setSelectedUri: (uri: string | null) => void;
-  setDiskConflict: (v: unknown) => void;
-  setDiskConflictSoft: (v: unknown) => void;
-  setInboxContentByUri: Dispatch<SetStateAction<Record<string, string>>>;
+  selectedUriRef: ComposeCommandsContext['refs']['selectedUriRef'];
+  composingNewEntryRef: ComposeCommandsContext['refs']['composingNewEntryRef'];
+  inboxEditorShellScrollDirectiveRef: ComposeCommandsContext['refs']['inboxEditorShellScrollDirectiveRef'];
+  diskConflictRef: ComposeCommandsContext['refs']['diskConflictRef'];
+  diskConflictSoftRef: ComposeCommandsContext['refs']['diskConflictSoftRef'];
+  lastPersistedRef: ComposeCommandsContext['refs']['lastPersistedRef'];
+  editorBodyRef: ComposeCommandsContext['refs']['editorBodyRef'];
+  inboxYamlFrontmatterInnerRef: ComposeCommandsContext['refs']['inboxYamlFrontmatterInnerRef'];
+  inboxEditorYamlLeadingBeforeFrontmatterRef: ComposeCommandsContext['refs']['inboxEditorYamlLeadingBeforeFrontmatterRef'];
+  inboxContentByUriRef: ComposeCommandsContext['refs']['inboxContentByUriRef'];
+  setBusy: ComposeCommandsContext['setters']['setBusy'];
+  setErr: ComposeCommandsContext['setters']['setErr'];
+  setFsRefreshNonce: ComposeCommandsContext['setters']['setFsRefreshNonce'];
+  setEditorBody: ComposeCommandsContext['setters']['setEditorBody'];
+  setComposeDraftMarkdown: ComposeCommandsContext['setters']['setComposeDraftMarkdown'];
+  setComposeDraftResetNonce: ComposeCommandsContext['setters']['setComposeDraftResetNonce'];
+  setComposingNewEntry: ComposeCommandsContext['setters']['setComposingNewEntry'];
+  setSelectedUri: ComposeCommandsContext['setters']['setSelectedUri'];
+  setDiskConflict: ComposeCommandsContext['setters']['setDiskConflict'];
+  setDiskConflictSoft: ComposeCommandsContext['setters']['setDiskConflictSoft'];
+  setInboxContentByUri: ComposeCommandsContext['setters']['setInboxContentByUri'];
   clearLastPersistedSnapshot: () => void;
   openMarkdownInEditor: (
     uri: string,
@@ -281,7 +273,7 @@ export function useTreeCommandContext(args: {
   vaultRoot: string | null;
   fs: VaultFilesystem;
   subtreeMarkdownCache: SubtreeMarkdownPresenceCache;
-  autosaveSchedulerRef: MutableRefObject<{cancel: () => void}>;
+  autosaveSchedulerRef: MutableRefObject<InboxAutosaveScheduler>;
   saveChainRef: MutableRefObject<Promise<void>>;
   editorWorkspaceTabsRef: MutableRefObject<EditorWorkspaceTab[]>;
   activeEditorTabIdRef: MutableRefObject<string | null>;

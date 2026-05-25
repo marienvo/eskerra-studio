@@ -10,6 +10,7 @@ import type {WorkspaceModel} from '../../lib/workspaceModel';
 
 import type {OpenMarkdownCommandContext} from '../workspaceOpenMarkdownCommand';
 import type {LastPersisted} from '../workspaceFsWatchReconcile';
+import type {InboxEditorShellScrollDirective} from '../workspaceEditorScrollMap';
 
 export function useOpenMarkdownCommandContext(args: {
   fs: VaultFilesystem;
@@ -22,8 +23,8 @@ export function useOpenMarkdownCommandContext(args: {
   selectedUriRef: MutableRefObject<string | null>;
   composingNewEntryRef: MutableRefObject<boolean>;
   editorShellScrollByUriRef: MutableRefObject<Map<string, {top: number; left: number}>>;
-  inboxEditorShellScrollDirectiveRef: MutableRefObject<unknown>;
-  clearStaleDiskConflictsForOpen: () => void;
+  inboxEditorShellScrollDirectiveRef: MutableRefObject<InboxEditorShellScrollDirective | null>;
+  clearStaleDiskConflictsForOpen: (targetNorm: string) => void;
   vaultRootRef: MutableRefObject<string | null>;
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
@@ -33,7 +34,7 @@ export function useOpenMarkdownCommandContext(args: {
   loadFullMarkdownIntoInboxEditor: OpenMarkdownCommandContext['loadFullMarkdownIntoInboxEditor'];
   scheduleBacklinksDeferOneFrameAfterLoad: () => void;
   setInboxContentByUri: OpenMarkdownCommandContext['setInboxContentByUri'];
-  setBacklinksActiveBody: (body: string) => void;
+  setBacklinksActiveBody: OpenMarkdownCommandContext['setBacklinksActiveBody'];
   setComposingNewEntry: OpenMarkdownCommandContext['setComposingNewEntry'];
   setSelectedUri: OpenMarkdownCommandContext['setSelectedUri'];
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
@@ -43,7 +44,7 @@ export function useOpenMarkdownCommandContext(args: {
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   mergeInboxNoteBodyCacheRefAndState: (norm: string, body: string) => void;
   enqueuePersistOutgoingNoteMarkdown: (uri: string, markdown: string) => void;
-  setErr: (value: string | null) => void;
+  setErr: OpenMarkdownCommandContext['setErr'];
   dispatchWorkspaceActionSync: (
     reason: string,
     reduce: (model: WorkspaceModel) => WorkspaceModel,

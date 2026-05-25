@@ -12,7 +12,6 @@
     "apps/desktop/src/hooks/useMainWindowWorkspace.hydrateVault.test.ts": 1683,
     "apps/desktop/src/hooks/useMainWindowWorkspace.ts": 1282,
     "apps/desktop/src/hooks/useTodayHubsState.ts": 459,
-    "apps/desktop/src/hooks/workspace/useTabComposeTreeCommandContexts.ts": 407,
     "apps/desktop/src/hooks/workspaceLinkRouting.ts": 467,
     "apps/desktop/src/hooks/workspaceRuntimeProjection.test.ts": 840,
     "apps/desktop/src/hooks/workspaceTabCommands.ts": 424,
