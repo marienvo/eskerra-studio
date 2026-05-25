@@ -15,6 +15,7 @@ import {
 } from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import {persistableInboxEditorBodySlice} from '../editor/noteEditor/openNoteCaretPlacement';
 import {
   createInboxAutosaveScheduler,
   INBOX_AUTOSAVE_DEBOUNCE_MS,
@@ -258,8 +259,12 @@ export function useWorkspacePersistence(args: {
       if (dc && normalizeEditorDocUri(dc.uri) === normalizeEditorDocUri(uri)) {
         return;
       }
-      const raw = inboxEditorSliceToFullMarkdown(
+      const rawSlice = persistableInboxEditorBodySlice(
         inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
+        editorBodyRef.current,
+      );
+      const raw = inboxEditorSliceToFullMarkdown(
+        rawSlice,
         selectedUriRef.current,
         composingNewEntryRef.current,
         inboxYamlFrontmatterInnerRef.current,

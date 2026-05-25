@@ -59,3 +59,24 @@ export function computeOpenNoteCaretPlacement(body: string): OpenNoteCaretPlacem
   }
   return {doc: body, caret: offsetAtEndOfLine(body, 1)};
 }
+
+/** True when `editorSlice` differs from `diskSlice` only by open-note buffer blank lines. */
+export function editorSliceOnlyAddsOpenNoteBufferPadding(
+  editorSlice: string,
+  diskSlice: string,
+): boolean {
+  return computeOpenNoteCaretPlacement(diskSlice).doc === editorSlice;
+}
+
+/**
+ * Body slice for cache, autosave, and leave snapshots: keep disk-known text when the
+ * editor still has only buffer-only padding from `openNote` load.
+ */
+export function persistableInboxEditorBodySlice(
+  editorSlice: string,
+  diskBaselineSlice: string,
+): string {
+  return editorSliceOnlyAddsOpenNoteBufferPadding(editorSlice, diskBaselineSlice)
+    ? diskBaselineSlice
+    : editorSlice;
+}

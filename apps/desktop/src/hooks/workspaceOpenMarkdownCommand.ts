@@ -3,6 +3,7 @@ import type {Dispatch, MutableRefObject, RefObject, SetStateAction} from 'react'
 import type {VaultFilesystem} from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import {persistableInboxEditorBodySlice} from '../editor/noteEditor/openNoteCaretPlacement';
 import type {NoteMarkdownLoadSelection} from '../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {
@@ -120,7 +121,11 @@ function snapshotAndPersistCurrentNoteBeforeOpen(ctx: OpenMarkdownCommandContext
   if (curUri == null || ctx.composingNewEntryRef.current) {
     return;
   }
-  const snapMdForSlice = ctx.inboxEditorRef.current?.getMarkdown() ?? ctx.editorBodyRef.current;
+  const rawSlice = ctx.inboxEditorRef.current?.getMarkdown() ?? ctx.editorBodyRef.current;
+  const snapMdForSlice = persistableInboxEditorBodySlice(
+    rawSlice,
+    ctx.editorBodyRef.current,
+  );
   const snapshot = inboxEditorSliceToFullMarkdown(
     snapMdForSlice,
     curUri,
