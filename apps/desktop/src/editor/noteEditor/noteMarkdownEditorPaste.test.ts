@@ -106,7 +106,6 @@ describe('createNoteMarkdownPasteHandlers', () => {
       isStaleView: () => false,
       normalizePastedMarkdown,
     });
-    const dt = mockDataTransfer({'text/plain': ''});
     const event = {preventDefault: vi.fn(), stopPropagation: vi.fn()};
     handlers.onEditorPaste(event as unknown as ClipboardEvent, view);
     await vi.waitFor(() => {
