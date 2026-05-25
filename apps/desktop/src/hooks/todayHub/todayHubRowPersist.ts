@@ -117,7 +117,7 @@ async function deleteBlankTodayHubRow(
   const nextCache = removeInboxNoteBodyFromCache(deps.inboxContentByUriRef.current, norm);
   if (nextCache) {
     deps.inboxContentByUriRef.current = nextCache;
-    deps.setInboxContentByUri(nextCache);
+    deps.setInboxContentByUri(prev => removeInboxNoteBodyFromCache(prev, norm) ?? prev);
   }
   await deps.refreshNotes(root);
   deps.setFsRefreshNonce(n => n + 1);

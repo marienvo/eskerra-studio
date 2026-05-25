@@ -191,6 +191,7 @@ export function AppVaultReadyRoot({
             }}
           >
             <MainWindowVaultTab
+              key={vaultRoot}
               vaultRoot={vaultRoot}
               vaultSettings={vaultSettings}
               fs={fs}
