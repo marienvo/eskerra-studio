@@ -1,7 +1,9 @@
 import type {ComponentProps} from 'react';
 import {Suspense} from 'react';
 
-import {LazySettingsPage, appLazyFallback} from './AppLazyUi';
+import {LazySettingsPage} from './AppLazyUi';
+
+const settingsLazyFallback = <div aria-busy="true" />;
 import {MainWindowVaultTab} from './MainWindowVaultTab';
 
 export type AppMainStageProps = {
@@ -35,7 +37,7 @@ export function AppMainStage({
         <div className="main-column">
           <main className="main-stage">
             {activePage === 'settings' && vaultSettings ? (
-              <Suspense fallback={appLazyFallback}>
+              <Suspense fallback={settingsLazyFallback}>
                 <LazySettingsPage
                   onClose={onCloseSettings}
                   vaultRoot={vaultRoot}

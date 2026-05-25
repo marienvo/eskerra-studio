@@ -1,4 +1,4 @@
-import {Suspense, useState} from 'react';
+import {Suspense} from 'react';
 
 import type {VaultMarkdownRef} from '@eskerra/core';
 
@@ -6,17 +6,6 @@ import {
   LazyQuickOpenNotePalette,
   LazyVaultSearchPalette,
 } from './AppLazyUi';
-
-export function useAppPaletteLayerState() {
-  const [quickOpenOpen, setQuickOpenOpen] = useState(false);
-  const [vaultSearchOpen, setVaultSearchOpen] = useState(false);
-  return {
-    quickOpenOpen,
-    setQuickOpenOpen,
-    vaultSearchOpen,
-    setVaultSearchOpen,
-  };
-}
 
 export type AppPaletteLayerProps = {
   vaultRoot: string;

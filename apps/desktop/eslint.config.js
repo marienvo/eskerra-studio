@@ -56,6 +56,52 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ImportDeclaration[source.type="Literal"][source.value=/\\/shell\\/mainWindow$/]',
+          message:
+            'Do not import shell/mainWindow as a directory barrel; use a direct file path (e.g. AppMainStage.tsx). Do not add shell/mainWindow/index.ts.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/App.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: './components/SettingsPage',
+              message:
+                'Keep SettingsPage on the AppLazyUi lazy boundary (via AppMainStage).',
+            },
+            {
+              name: './components/QuickOpenNotePalette',
+              message:
+                'Keep QuickOpenNotePalette on the AppLazyUi lazy boundary (via AppPaletteLayer).',
+            },
+            {
+              name: './components/VaultSearchPalette',
+              message:
+                'Keep VaultSearchPalette on the AppLazyUi lazy boundary (via AppPaletteLayer).',
+            },
+            {
+              name: './shell/mainWindow/AppLazyUi',
+              message:
+                'Import lazy UI through AppMainStage or AppPaletteLayer, not AppLazyUi directly.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,

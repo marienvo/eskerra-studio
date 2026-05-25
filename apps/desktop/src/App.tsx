@@ -20,6 +20,7 @@ import {
   type StoredLayouts,
 } from './lib/layout/layoutStore';
 import type {RestoredInboxState} from './lib/mainWindowUiStore';
+import {useLiveRef} from './hooks/useLiveRef';
 import {createTauriVaultFilesystem} from './lib/tauriVault';
 import {AppThemeShell} from './shell/AppThemeShell';
 import {useAppLayoutWidthPersisters} from './shell/useAppLayoutWidthPersisters';
@@ -39,10 +40,8 @@ import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSettingsWriter';
 import {AppMainStage} from './shell/mainWindow/AppMainStage';
 import {useAppMainWindowChromeSession} from './shell/mainWindow/useAppMainWindowChromeSession';
-import {
-  AppPaletteLayer,
-  useAppPaletteLayerState,
-} from './shell/mainWindow/AppPaletteLayer';
+import {AppPaletteLayer} from './shell/mainWindow/AppPaletteLayer';
+import {useAppPaletteLayerState} from './shell/mainWindow/useAppPaletteLayerState';
 
 import './App.css';
 
@@ -220,8 +219,7 @@ export default function App() {
     setRestoredInboxState,
   });
 
-  const desktopPlaybackRef = useRef(desktopPlayback);
-  desktopPlaybackRef.current = desktopPlayback;
+  const desktopPlaybackRef = useLiveRef(desktopPlayback);
 
   useAppMediaControlDesktopPlayback(desktopPlaybackRef);
 

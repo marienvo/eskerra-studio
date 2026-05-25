@@ -1,6 +1,9 @@
 /**
- * Lazy-loaded main-window UI (settings + palettes). Keep eager imports out of App.tsx
- * and avoid barrel re-exports so these chunks stay on-demand.
+ * Lazy-loaded main-window UI (settings + palettes).
+ *
+ * - Only this file may `lazy(() => import(...))` the three components below.
+ * - Do not add `shell/mainWindow/index.ts` or re-export lazy modules from a barrel.
+ * - Consumers: `AppMainStage` (settings), `AppPaletteLayer` (palettes). Not `App.tsx`.
  */
 import {lazy} from 'react';
 
@@ -19,5 +22,3 @@ export const LazyVaultSearchPalette = lazy(() =>
     default: m.VaultSearchPalette,
   })),
 );
-
-export const appLazyFallback = <div aria-busy="true" />;

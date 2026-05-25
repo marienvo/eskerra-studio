@@ -39,3 +39,22 @@ Baseline build on 2026-05-25: **no warning** (largest chunk `index` at ~1.30 MB)
 - `vendor-cm`, `vendor-react`, and `vendor-md` should stay stable unless dependencies or CodeMirror/editor imports change.
 - Lazy chunks must remain separate; do not eager-import `SettingsPage`, `QuickOpenNotePalette`, or `VaultSearchPalette` from `App.tsx` or barrel files.
 - Optional if `index` grows: `npm run build:analyze -w @eskerra/desktop` (if configured) and inspect the entry graph.
+
+## Import boundaries (`shell/mainWindow`, no barrels)
+
+After `App.tsx` orchestration extractions:
+
+| Module | Role |
+| --- | --- |
+| `AppLazyUi.tsx` | **Only** place that `lazy(() => import(...))` targets `SettingsPage`, `QuickOpenNotePalette`, and `VaultSearchPalette`. |
+| `AppMainStage.tsx` | Eager `MainWindowVaultTab`; lazy settings via `AppLazyUi`. |
+| `AppPaletteLayer.tsx` | Lazy palettes via `AppLazyUi`; conditional render when open. |
+| `useAppPaletteLayerState.ts` | Palette open state only (no barrel; hook separate from component file). |
+| `App.tsx` | Direct imports per file under `shell/mainWindow/` — **no** `shell/mainWindow/index.ts` barrel. |
+
+Enforced in `apps/desktop/eslint.config.js`:
+
+- Any `import '…/shell/mainWindow'` (directory path) is an error.
+- `App.tsx` cannot import the three lazy target components or `AppLazyUi` directly.
+
+`MainWindowVaultTab` stays eager on the vault path; do not re-lazy it from a barrel.
