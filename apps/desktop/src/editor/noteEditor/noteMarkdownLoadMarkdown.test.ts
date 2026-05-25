@@ -1,8 +1,11 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  cursorForMarkdownLoadSetState,
   explicitCursorForMarkdownLoadDispatch,
   explicitCursorForMarkdownLoadSetState,
+  forcedCursorForMarkdownLoadDispatch,
+  resolveMarkdownLoadDocument,
   selectionIsPreserve,
   shouldUseMergedReplaceForMarkdownLoad,
   shouldUseSetStateBranchForMarkdownLoad,
@@ -107,6 +110,32 @@ describe('noteMarkdownLoadMarkdown', () => {
         selMatchesForcedCursor: false,
       }),
     ).toBe(false);
+  });
+
+  it('resolveMarkdownLoadDocument pads body for openNote', () => {
+    const resolved = resolveMarkdownLoadDocument('# Title', {selection: 'openNote'});
+    expect(resolved.effectiveMarkdown).toBe('# Title\n\n');
+    expect(resolved.openNotePlacement?.caret).toBe(9);
+  });
+
+  it('forcedCursorForMarkdownLoadDispatch uses openNote caret', () => {
+    const resolved = resolveMarkdownLoadDocument('# Title', {selection: 'openNote'});
+    expect(forcedCursorForMarkdownLoadDispatch({selection: 'openNote'}, resolved)).toBe(
+      9,
+    );
+  });
+
+  it('cursorForMarkdownLoadSetState uses openNote caret when not preserve', () => {
+    const resolved = resolveMarkdownLoadDocument('# Title', {selection: 'openNote'});
+    expect(
+      cursorForMarkdownLoadSetState(
+        {selection: 'openNote'},
+        resolved,
+        false,
+        0,
+        '',
+      ),
+    ).toBe(9);
   });
 
   it('shouldUseSetStateBranchForMarkdownLoad: preserve same text with folds is true', () => {

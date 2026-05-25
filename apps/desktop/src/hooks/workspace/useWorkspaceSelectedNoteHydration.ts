@@ -10,6 +10,7 @@ import {
 import type {VaultFilesystem} from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
+import type {NoteMarkdownLoadSelection} from '../../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {
   clearInboxYamlFrontmatterEditorRefs,
   inboxEditorSliceToFullMarkdown,
@@ -40,7 +41,7 @@ type UseWorkspaceSelectedNoteHydrationInput = {
   loadFullMarkdownIntoInboxEditor: (
     markdown: string,
     uri: string,
-    selection?: 'start' | 'end',
+    selection?: NoteMarkdownLoadSelection,
   ) => void;
   scheduleBacklinksDeferOneFrameAfterLoad: () => void;
   clearInboxBacklinksDeferAfterLoad: () => void;
@@ -114,7 +115,7 @@ export function useWorkspaceSelectedNoteHydration({
         }
       }
       setLastPersistedSnapshot({uri: selectedUri, markdown: body});
-      loadFullMarkdownIntoInboxEditor(body, selectedUri, 'start');
+      loadFullMarkdownIntoInboxEditor(body, selectedUri, 'openNote');
       scheduleBacklinksDeferOneFrameAfterLoad();
     } else {
       clearInboxBacklinksDeferAfterLoad();
@@ -243,7 +244,7 @@ export function useWorkspaceSelectedNoteHydration({
             inboxEditorYamlLeadingBeforeFrontmatterRef.current,
           );
           if (normalized !== currentFull) {
-            loadFullMarkdownIntoInboxEditor(normalized, selectedUri, 'start');
+            loadFullMarkdownIntoInboxEditor(normalized, selectedUri, 'openNote');
             scheduleBacklinksDeferOneFrameAfterLoad();
           }
         }

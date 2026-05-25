@@ -20,6 +20,7 @@ import type {
 import type {VaultFilesystem} from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import {persistableInboxEditorBodySlice} from '../editor/noteEditor/openNoteCaretPlacement';
 import {
   collectDistinctUrisFromTabs,
   ensureActiveTabId,
@@ -215,8 +216,12 @@ async function reconcileOneOpenMarkdownTabAfterDiskRead(
     return;
   }
 
-  const local = inboxEditorSliceToFullMarkdown(
+  const localSlice = persistableInboxEditorBodySlice(
     open.inboxEditorRef.current?.getMarkdown() ?? open.editorBodyRef.current,
+    open.editorBodyRef.current,
+  );
+  const local = inboxEditorSliceToFullMarkdown(
+    localSlice,
     normTab,
     open.composingNewEntryRef.current,
     open.inboxYamlFrontmatterInnerRef.current,

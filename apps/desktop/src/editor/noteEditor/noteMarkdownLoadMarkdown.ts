@@ -1,6 +1,69 @@
 import type {EditorState} from '@codemirror/state';
 
-export type NoteMarkdownLoadSelection = 'start' | 'end' | 'preserve';
+import {mapPositionThroughDiff} from './noteMarkdownDiffChanges';
+import {
+  computeOpenNoteCaretPlacement,
+  type OpenNoteCaretPlacement,
+} from './openNoteCaretPlacement';
+
+export type NoteMarkdownLoadSelection = 'start' | 'end' | 'preserve' | 'openNote';
+
+export type ResolvedMarkdownLoad = {
+  effectiveMarkdown: string;
+  openNotePlacement: OpenNoteCaretPlacement | undefined;
+};
+
+/** Disk body plus optional open-note buffer padding and caret target. */
+export function resolveMarkdownLoadDocument(
+  markdown: string,
+  options: NoteMarkdownLoadOptions | undefined,
+): ResolvedMarkdownLoad {
+  const openNotePlacement =
+    options?.selection === 'openNote'
+      ? computeOpenNoteCaretPlacement(markdown)
+      : undefined;
+  return {
+    effectiveMarkdown: openNotePlacement?.doc ?? markdown,
+    openNotePlacement,
+  };
+}
+
+export function forcedCursorForMarkdownLoadDispatch(
+  options: NoteMarkdownLoadOptions | undefined,
+  resolved: ResolvedMarkdownLoad,
+): number | undefined {
+  if (resolved.openNotePlacement !== undefined) {
+    return resolved.openNotePlacement.caret;
+  }
+  return explicitCursorForMarkdownLoadDispatch(
+    options,
+    resolved.effectiveMarkdown.length,
+  );
+}
+
+export function cursorForMarkdownLoadSetState(
+  options: NoteMarkdownLoadOptions | undefined,
+  resolved: ResolvedMarkdownLoad,
+  preserve: boolean,
+  currentHead: number,
+  curText: string,
+): number {
+  if (preserve) {
+    return mapPositionThroughDiff(
+      currentHead,
+      curText,
+      resolved.effectiveMarkdown,
+    );
+  }
+  if (resolved.openNotePlacement !== undefined) {
+    return resolved.openNotePlacement.caret;
+  }
+  return explicitCursorForMarkdownLoadSetState(
+    options,
+    resolved.effectiveMarkdown.length,
+    currentHead,
+  );
+}
 
 /**
  * How to place the caret after a full-document `loadMarkdown` replace.

@@ -15,6 +15,7 @@ import {
 } from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import type {NoteMarkdownLoadSelection} from '../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
 import type {InboxEditorShellScrollDirective} from './workspaceEditorScrollMap';
 
@@ -56,7 +57,7 @@ export type UseInboxEditorStateResult = {
   loadFullMarkdownIntoInboxEditor: (
     full: string,
     uri: string | null,
-    selection?: 'start' | 'end' | 'preserve',
+    selection?: NoteMarkdownLoadSelection,
   ) => void;
   resetInboxEditorComposeState: () => void;
   clearInboxSelection: () => void;
@@ -140,7 +141,7 @@ export function useInboxEditorState(
     (
       full: string,
       uri: string | null,
-      selection: 'start' | 'end' | 'preserve' = 'start',
+      selection: NoteMarkdownLoadSelection = 'start',
     ) => {
       const composing = composingNewEntryRef.current;
       if (!uri || composing) {
