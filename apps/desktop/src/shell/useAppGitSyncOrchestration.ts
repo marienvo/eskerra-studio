@@ -51,8 +51,8 @@ export type UseAppGitSyncOrchestrationResult = {
   currentGitDetachedHead: boolean;
   currentGitBranchError: string | null;
   gitStatusError: string | null;
-  /** Live "Syncs in M:SS" when autosync is pending and chip would show Local changes; otherwise null. */
-  gitAutosyncCountdownLabel: string | null;
+  /** Live "M:SS" when autosync is pending and chip would show Local changes; otherwise null. */
+  gitAutosyncCountdownTime: string | null;
   handleWindowCloseRequest: (input: {instant: boolean}) => void;
   /** True while an OS-close-triggered sync is in flight. Used for the close progress overlay. */
   closeSyncInProgress: boolean;
@@ -298,6 +298,7 @@ export function useAppGitSyncOrchestration({
     manualSyncRunning,
     runManualSync: flushThenRunManualSync,
     notify,
+    localWriteNonce: saveSettledNonce,
   });
 
   const autosyncSchedulerState = useVaultGitAutosyncScheduler({
@@ -312,7 +313,7 @@ export function useAppGitSyncOrchestration({
     runManualSync: flushThenRunManualSync,
     gitOperationBusyRef: backgroundGitOperationBusyRef,
   });
-  const gitAutosyncCountdownLabel = useVaultGitAutosyncCountdown({
+  const gitAutosyncCountdownTime = useVaultGitAutosyncCountdown({
     ...autosyncSchedulerState,
     gitStatus: gitStatusForDisplay,
     gitStatusLoading: currentGitBranchLoading || gitStatusLoading,
@@ -338,7 +339,7 @@ export function useAppGitSyncOrchestration({
     currentGitDetachedHead,
     currentGitBranchError,
     gitStatusError,
-    gitAutosyncCountdownLabel,
+    gitAutosyncCountdownTime,
     handleWindowCloseRequest,
     closeSyncInProgress,
   };

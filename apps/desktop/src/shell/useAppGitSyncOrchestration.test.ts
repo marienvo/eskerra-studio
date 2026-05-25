@@ -265,6 +265,12 @@ describe('useAppGitSyncOrchestration close handling', () => {
     expect(order).toEqual(['flush', 'sync']);
   });
 
+  it('passes saveSettledNonce to startup sync so recent app writes do not startup-sync immediately', () => {
+    renderOrchestration({saveSettledNonce: 3});
+
+    expect(mockUseVaultGitStartupSync.mock.calls[0][0].localWriteNonce).toBe(3);
+  });
+
   it('flushes and uses fresh status before title-bar close preflight', async () => {
     const order: string[] = [];
     const flushInboxSave = vi.fn(async () => {

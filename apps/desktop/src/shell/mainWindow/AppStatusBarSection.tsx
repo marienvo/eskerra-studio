@@ -16,7 +16,7 @@ export type AppStatusBarSectionProps = {
   gitStatusError: string | null;
   currentGitBranchError: string | null;
   transientGitStatus: TransientGitStatus | null;
-  gitAutosyncCountdownLabel: string | null;
+  gitAutosyncCountdownTime: string | null;
 };
 
 export function AppStatusBarSection({
@@ -32,7 +32,7 @@ export function AppStatusBarSection({
   gitStatusError,
   currentGitBranchError,
   transientGitStatus,
-  gitAutosyncCountdownLabel,
+  gitAutosyncCountdownTime,
 }: AppStatusBarSectionProps) {
   return (
     <AppStatusBar
@@ -48,7 +48,7 @@ export function AppStatusBarSection({
           error={currentGitDetachedHead ? gitStatusError : currentGitBranchError ?? gitStatusError}
           syncing={manualSyncBusy}
           transient={transientGitStatus}
-          autosyncCountdownLabel={gitAutosyncCountdownLabel}
+          autosyncCountdownTime={gitAutosyncCountdownTime}
         />
       }
     />

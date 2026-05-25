@@ -265,7 +265,7 @@ export default function App() {
       manualSyncUnavailable,
       manualSyncLabel,
       gitStatusForDisplay,
-      gitAutosyncCountdownLabel,
+      gitAutosyncCountdownTime,
       transientGitStatus,
       currentGitBranchLoading,
       gitStatusLoading,
@@ -431,7 +431,7 @@ export default function App() {
             gitStatusError={gitStatusError}
             currentGitBranchError={currentGitBranchError}
             transientGitStatus={transientGitStatus}
-            gitAutosyncCountdownLabel={gitAutosyncCountdownLabel}
+            gitAutosyncCountdownTime={gitAutosyncCountdownTime}
           />
           <AppPaletteLayer
             vaultRoot={vaultRoot}
