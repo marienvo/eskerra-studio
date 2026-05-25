@@ -15,6 +15,7 @@ import {
 } from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import type {NoteMarkdownLoadSelection} from '../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {clearInboxYamlFrontmatterEditorRefs} from '../lib/inboxYamlFrontmatterEditor';
 import type {InboxEditorShellScrollDirective} from './workspaceEditorScrollMap';
 
@@ -56,7 +57,7 @@ export type UseInboxEditorStateResult = {
   loadFullMarkdownIntoInboxEditor: (
     full: string,
     uri: string | null,
-    selection?: 'start' | 'end' | 'preserve',
+    selection?: NoteMarkdownLoadSelection,
   ) => void;
   resetInboxEditorComposeState: () => void;
   clearInboxSelection: () => void;
@@ -140,7 +141,7 @@ export function useInboxEditorState(
     (
       full: string,
       uri: string | null,
-      selection: 'start' | 'end' | 'preserve' = 'start',
+      selection: NoteMarkdownLoadSelection = 'start',
     ) => {
       const composing = composingNewEntryRef.current;
       if (!uri || composing) {
@@ -148,8 +149,12 @@ export function useInboxEditorState(
         suppressEditorOnChangeRef.current = true;
         inboxEditorRef.current?.loadMarkdown(full, {selection});
         suppressEditorOnChangeRef.current = false;
-        setEditorBody(full);
-        editorBodyRef.current = full;
+        const loadedBody =
+          selection === 'openNote'
+            ? (inboxEditorRef.current?.getMarkdown() ?? full)
+            : full;
+        setEditorBody(loadedBody);
+        editorBodyRef.current = loadedBody;
         return;
       }
       const {frontmatter, body, leadingBeforeFrontmatter} = splitYamlFrontmatter(full);
@@ -162,8 +167,12 @@ export function useInboxEditorState(
       suppressEditorOnChangeRef.current = true;
       inboxEditorRef.current?.loadMarkdown(body, {selection});
       suppressEditorOnChangeRef.current = false;
-      setEditorBody(body);
-      editorBodyRef.current = body;
+      const loadedBody =
+        selection === 'openNote'
+          ? (inboxEditorRef.current?.getMarkdown() ?? body)
+          : body;
+      setEditorBody(loadedBody);
+      editorBodyRef.current = loadedBody;
     },
     [inboxEditorRef, syncFrontmatterStateFromDisk],
   );

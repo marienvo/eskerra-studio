@@ -1,6 +1,6 @@
 import type {EditorState} from '@codemirror/state';
 
-export type NoteMarkdownLoadSelection = 'start' | 'end' | 'preserve';
+export type NoteMarkdownLoadSelection = 'start' | 'end' | 'preserve' | 'openNote';
 
 /**
  * How to place the caret after a full-document `loadMarkdown` replace.

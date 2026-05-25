@@ -114,7 +114,7 @@ export function useWorkspaceSelectedNoteHydration({
         }
       }
       setLastPersistedSnapshot({uri: selectedUri, markdown: body});
-      loadFullMarkdownIntoInboxEditor(body, selectedUri, 'start');
+      loadFullMarkdownIntoInboxEditor(body, selectedUri, 'openNote');
       scheduleBacklinksDeferOneFrameAfterLoad();
     } else {
       clearInboxBacklinksDeferAfterLoad();
@@ -243,7 +243,7 @@ export function useWorkspaceSelectedNoteHydration({
             inboxEditorYamlLeadingBeforeFrontmatterRef.current,
           );
           if (normalized !== currentFull) {
-            loadFullMarkdownIntoInboxEditor(normalized, selectedUri, 'start');
+            loadFullMarkdownIntoInboxEditor(normalized, selectedUri, 'openNote');
             scheduleBacklinksDeferOneFrameAfterLoad();
           }
         }

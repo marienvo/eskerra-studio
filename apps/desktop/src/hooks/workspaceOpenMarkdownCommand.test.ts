@@ -123,7 +123,7 @@ describe('workspaceOpenMarkdownCommand', () => {
     expect(ctx.loadFullMarkdownIntoInboxEditor).toHaveBeenCalledWith(
       '# cached',
       '/vault/Inbox/a.md',
-      'start',
+      'openNote',
     );
     expect(selectedState.value).toBe('/vault/Inbox/a.md');
     expect(tabsState.value.length).toBe(1);
@@ -187,6 +187,24 @@ describe('workspaceOpenMarkdownCommand', () => {
     }
   });
 
+  it('open uses openNote selection while cache keeps disk-known body (no buffer padding in cache)', async () => {
+    const {ctx} = createBaseContext();
+    const target = '/vault/Inbox/title-only.md';
+    const diskBody = '# Title';
+    ctx.inboxContentByUriRef.current = {};
+    ctx.fs.readFile = vi.fn(async () => diskBody);
+
+    await runOpenMarkdownInEditorCommand(ctx as never, target);
+
+    expect(ctx.inboxContentByUriRef.current[target]).toBe(diskBody);
+    expect(ctx.lastPersistedRef.current).toEqual({uri: target, markdown: diskBody});
+    expect(ctx.loadFullMarkdownIntoInboxEditor).toHaveBeenCalledWith(
+      diskBody,
+      target,
+      'openNote',
+    );
+  });
+
   it('prefetch success updates inbox cache, last persisted snapshot, and external mutation seq before editor load runs', async () => {
     const {ctx} = createBaseContext();
     const target = '/vault/Inbox/prefetch.md';
@@ -206,7 +224,7 @@ describe('workspaceOpenMarkdownCommand', () => {
     expect(ctx.loadFullMarkdownIntoInboxEditor).toHaveBeenCalledWith(
       '# from disk',
       target,
-      'start',
+      'openNote',
     );
     expect(ctx.lastPersistedExternalMutationSeqRef.current).toBe(2);
   });
@@ -312,7 +330,7 @@ describe('workspaceOpenMarkdownCommand', () => {
     expect(ctx.loadFullMarkdownIntoInboxEditor).toHaveBeenCalledWith(
       '# B',
       '/vault/Inbox/b.md',
-      'start',
+      'openNote',
     );
     expect(ctx.selectedUriRef.current).toBe('/vault/Inbox/b.md');
   });

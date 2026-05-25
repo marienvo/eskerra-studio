@@ -3,6 +3,7 @@ import type {Dispatch, MutableRefObject, RefObject, SetStateAction} from 'react'
 import type {VaultFilesystem} from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import type {NoteMarkdownLoadSelection} from '../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {
   createEditorWorkspaceTab,
@@ -62,7 +63,7 @@ export type OpenMarkdownCommandContext = {
   loadFullMarkdownIntoInboxEditor: (
     full: string,
     uri: string | null,
-    selection?: 'start' | 'end' | 'preserve',
+    selection?: NoteMarkdownLoadSelection,
   ) => void;
   scheduleBacklinksDeferOneFrameAfterLoad: () => void;
   setInboxContentByUri: Dispatch<SetStateAction<Record<string, string>>>;
@@ -173,7 +174,7 @@ function loadOpenedNoteBodyAndApplySelection(
     ctx.setLastPersistedSnapshot({uri: targetNorm, markdown: resolvedEditorBody});
     ctx.eagerEditorLoadUriRef.current = targetNorm;
     ctx.backlinksActiveBodyRef.current = resolvedEditorBody;
-    ctx.loadFullMarkdownIntoInboxEditor(resolvedEditorBody, targetNorm, 'start');
+    ctx.loadFullMarkdownIntoInboxEditor(resolvedEditorBody, targetNorm, 'openNote');
     ctx.scheduleBacklinksDeferOneFrameAfterLoad();
   }
   ctx.selectedUriRef.current = targetNorm;

@@ -55,7 +55,7 @@ export type ComposeCommandsContext = {
   loadFullMarkdownIntoInboxEditor: (
     markdown: string,
     uri: string | null,
-    selection?: 'start' | 'end' | 'preserve',
+    selection?: import('../editor/noteEditor/noteMarkdownLoadMarkdown').NoteMarkdownLoadSelection,
   ) => void;
   resetInboxEditorComposeState: () => void;
   todayHubCleanRowBlocked: (rowUri: string) => boolean;

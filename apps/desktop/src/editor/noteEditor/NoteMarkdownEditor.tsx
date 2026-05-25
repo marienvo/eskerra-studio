@@ -113,9 +113,11 @@ import {
   computeMinimalEditorChanges,
   mapPositionThroughDiff,
 } from './noteMarkdownDiffChanges';
+import {computeOpenNoteCaretPlacement} from './openNoteCaretPlacement';
 import {
   explicitCursorForMarkdownLoadDispatch,
   explicitCursorForMarkdownLoadSetState,
+  type NoteMarkdownLoadOptions,
   selectionIsPreserve,
   selMatchesForcedCursor,
   shouldUseMergedReplaceForMarkdownLoad,
@@ -198,10 +200,7 @@ export type NoteMarkdownEditorProps = {
 
 export type NoteMarkdownEditorHandle = {
   getMarkdown: () => string;
-  loadMarkdown: (
-    markdown: string,
-    options?: {selection?: 'start' | 'end' | 'preserve'},
-  ) => void;
+  loadMarkdown: (markdown: string, options?: NoteMarkdownLoadOptions) => void;
   /** Unfolds every folded range in the editor (fold gutter, lists, etc.). */
   unfoldAllFolds: () => boolean;
   /**
@@ -939,7 +938,7 @@ const NoteMarkdownEditorImpl = forwardRef<
    * or user interaction (WebKit/GTK).
    */
   const applyMarkdownLoadNow = useCallback(
-    (markdown: string, options?: {selection?: 'start' | 'end' | 'preserve'}) => {
+    (markdown: string, options?: NoteMarkdownLoadOptions) => {
       const v = viewRef.current;
       const be = codemirrorBootExtensionsRef.current;
       const wc = wikiLinkCompartmentRef.current;
@@ -949,27 +948,35 @@ const NoteMarkdownEditorImpl = forwardRef<
       }
       beginProgrammaticMarkdownLoad(v);
       try {
+        const openNotePlacement =
+          options?.selection === 'openNote'
+            ? computeOpenNoteCaretPlacement(markdown)
+            : undefined;
+        const effectiveMarkdown = openNotePlacement?.doc ?? markdown;
         const hadFoldedRanges = foldedRangesPresent(v.state);
         const curLen = v.state.doc.length;
         const curText = v.state.doc.toString();
         const preserve = selectionIsPreserve(options);
-        const forced = explicitCursorForMarkdownLoadDispatch(
-          options,
-          markdown.length,
-        );
+        const forced =
+          openNotePlacement !== undefined
+            ? openNotePlacement.caret
+            : explicitCursorForMarkdownLoadDispatch(
+                options,
+                effectiveMarkdown.length,
+              );
         const selMatchesForced =
           forced !== undefined && selMatchesForcedCursor(v.state, forced);
         const mergedReplace = shouldUseMergedReplaceForMarkdownLoad({
           hadFoldedRanges,
           curText,
-          markdown,
+          markdown: effectiveMarkdown,
           preserve,
           selMatchesForcedCursor: selMatchesForced,
         });
         const useSetState = shouldUseSetStateBranchForMarkdownLoad({
           hadFoldedRanges,
           curText,
-          markdown,
+          markdown: effectiveMarkdown,
           preserve,
           selMatchesForcedCursor: selMatchesForced,
         });
@@ -996,8 +1003,8 @@ const NoteMarkdownEditorImpl = forwardRef<
         if (mergedReplace) {
           const spec: Parameters<EditorView['dispatch']>[0] = {
             changes: preserve
-              ? computeMinimalEditorChanges(curText, markdown)
-              : {from: 0, to: curLen, insert: markdown},
+              ? computeMinimalEditorChanges(curText, effectiveMarkdown)
+              : {from: 0, to: curLen, insert: effectiveMarkdown},
             annotations: Transaction.addToHistory.of(false),
             effects,
           };
@@ -1011,15 +1018,17 @@ const NoteMarkdownEditorImpl = forwardRef<
             ? mapPositionThroughDiff(
                 v.state.selection.main.head,
                 curText,
-                markdown,
+                effectiveMarkdown,
               )
-            : explicitCursorForMarkdownLoadSetState(
-                options,
-                markdown.length,
-                v.state.selection.main.head,
-              );
+            : openNotePlacement !== undefined
+              ? openNotePlacement.caret
+              : explicitCursorForMarkdownLoadSetState(
+                  options,
+                  effectiveMarkdown.length,
+                  v.state.selection.main.head,
+                );
           const nextState = EditorState.create({
-            doc: markdown,
+            doc: effectiveMarkdown,
             selection: EditorSelection.cursor(cursorAt),
             extensions: be,
           });
@@ -1051,10 +1060,7 @@ const NoteMarkdownEditorImpl = forwardRef<
         }
         return view?.state.doc.toString() ?? initialMarkdownRef.current;
       },
-      loadMarkdown: (
-        markdown: string,
-        options?: {selection?: 'start' | 'end' | 'preserve'},
-      ) => {
+      loadMarkdown: (markdown: string, options?: NoteMarkdownLoadOptions) => {
         const view = viewRef.current;
         const bootExtensions = codemirrorBootExtensionsRef.current;
         const wikiCompartment = wikiLinkCompartmentRef.current;
