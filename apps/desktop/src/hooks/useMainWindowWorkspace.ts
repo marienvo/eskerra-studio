@@ -967,7 +967,7 @@ export function useMainWindowWorkspace(options: {
         setInboxContentByUri,
         clearLastPersistedSnapshot,
       },
-      openMarkdownInEditor: (uri: string) => openMarkdownInEditor(uri),
+      openMarkdownInEditor,
     }),
     [
       fs,

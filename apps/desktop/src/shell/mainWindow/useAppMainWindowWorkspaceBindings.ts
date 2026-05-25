@@ -14,6 +14,7 @@ export type AppMainWindowWorkspaceBindings = {
   composeDraftMarkdown: string;
   composingNewEntry: boolean;
   selectNote: (uri: string) => void;
+  selectNoteInNewActiveTab: UseMainWindowWorkspaceResult['selectionController']['selectNoteInNewActiveTab'];
   vaultMarkdownRefs: UseMainWindowWorkspaceResult['selectionController']['vaultMarkdownRefs'];
   flushInboxSave: () => Promise<void>;
   err: string | null;
@@ -49,6 +50,7 @@ export function getAppMainWindowWorkspaceBindings(
       composeDraftMarkdown,
       composingNewEntry,
       selectNote,
+      selectNoteInNewActiveTab,
       vaultMarkdownRefs,
     },
     persistenceController: {flushInboxSave},
@@ -77,6 +79,7 @@ export function getAppMainWindowWorkspaceBindings(
     composeDraftMarkdown,
     composingNewEntry,
     selectNote,
+    selectNoteInNewActiveTab,
     vaultMarkdownRefs,
     flushInboxSave,
     err,
