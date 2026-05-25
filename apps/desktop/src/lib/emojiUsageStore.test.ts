@@ -1,11 +1,24 @@
-import {describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+
+const storeSave = vi.hoisted(() => vi.fn(async () => {}));
+
+vi.mock('@tauri-apps/plugin-store', () => ({
+  load: vi.fn(async () => ({
+    get: vi.fn(async () => undefined),
+    set: vi.fn(async () => {}),
+    save: storeSave,
+  })),
+}));
 
 import {
+  buildEmojiUsageScoreLookup,
   capEmojiUsageByQuery,
   capEmojiUsageCounts,
   emojiUsageQueryRelationWeight,
+  EMOJI_USAGE_DEBOUNCE_SAVE_MS,
   EMOJI_USAGE_PREFIX_QUERY_WEIGHT,
   evictLowestCountKey,
+  flushEmojiUsageToStore,
   getEmojiUsageScores,
   parseEmojiUsagePayload,
   parseEmojiUsagePayloadV1,
@@ -13,6 +26,16 @@ import {
   recordEmojiUsage,
   __resetForTests,
 } from './emojiUsageStore';
+
+beforeEach(() => {
+  storeSave.mockClear();
+  __resetForTests();
+});
+
+afterEach(() => {
+  __resetForTests();
+  vi.useRealTimers();
+});
 
 describe('capEmojiUsageCounts', () => {
   test('keeps all when under cap', () => {
@@ -90,6 +113,36 @@ describe('capEmojiUsageByQuery', () => {
     const capped = capEmojiUsageByQuery(raw, 5, 3);
     expect(Object.keys(capped.q).length).toBe(3);
   });
+
+  test('merges sibling keys that normalize to the same query', () => {
+    const capped = capEmojiUsageByQuery(
+      {
+        CH: {smile: 5},
+        ch: {grin: 3},
+      },
+      10,
+      50,
+    );
+    expect(capped).toEqual({
+      ch: {smile: 5, grin: 3},
+    });
+  });
+});
+
+describe('buildEmojiUsageScoreLookup', () => {
+  test('returns the same lookup function for repeated calls with the same query', () => {
+    const fn1 = buildEmojiUsageScoreLookup('ch');
+    const fn2 = buildEmojiUsageScoreLookup('ch');
+    expect(fn1).toBe(fn2);
+  });
+
+  test('invalidates cache after recording a new pick', () => {
+    const before = buildEmojiUsageScoreLookup('ch');
+    recordEmojiUsage('smile', 'ch');
+    const after = buildEmojiUsageScoreLookup('ch');
+    expect(after).not.toBe(before);
+    expect(after('smile').favScore).toBe(1);
+  });
 });
 
 describe('emojiUsageQueryRelationWeight', () => {
@@ -111,40 +164,45 @@ describe('emojiUsageQueryRelationWeight', () => {
   });
 });
 
+describe('flushEmojiUsageToStore', () => {
+  test('explicit flush cancels a pending debounced save', async () => {
+    vi.useFakeTimers();
+    recordEmojiUsage('smile', 'ch');
+    expect(storeSave).not.toHaveBeenCalled();
+    await flushEmojiUsageToStore();
+    expect(storeSave).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(EMOJI_USAGE_DEBOUNCE_SAVE_MS);
+    expect(storeSave).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('getEmojiUsageScores / recordEmojiUsage', () => {
   test('exact query pick gives favScore 1', () => {
-    __resetForTests();
     recordEmojiUsage('heavy_check_mark', 'ch');
     expect(getEmojiUsageScores('heavy_check_mark', 'ch')).toEqual({
       favScore: 1,
       globalScore: 1,
     });
-    __resetForTests();
   });
 
   test('prefix-related stored query gives half weight', () => {
-    __resetForTests();
     recordEmojiUsage('heavy_check_mark', 'check');
     expect(getEmojiUsageScores('heavy_check_mark', 'ch')).toEqual({
       favScore: EMOJI_USAGE_PREFIX_QUERY_WEIGHT,
       globalScore: 1,
     });
-    __resetForTests();
   });
 
   test('sums exact and prefix-related query picks', () => {
-    __resetForTests();
     recordEmojiUsage('heavy_check_mark', 'checkmark');
     recordEmojiUsage('heavy_check_mark', 'ch');
     expect(getEmojiUsageScores('heavy_check_mark', 'ch')).toEqual({
       favScore: 1 + EMOJI_USAGE_PREFIX_QUERY_WEIGHT,
       globalScore: 2,
     });
-    __resetForTests();
   });
 
   test('unrelated query has zero favScore but keeps global', () => {
-    __resetForTests();
     recordEmojiUsage('smile_a', 'heart');
     expect(getEmojiUsageScores('smile_a', 'other')).toEqual({
       favScore: 0,

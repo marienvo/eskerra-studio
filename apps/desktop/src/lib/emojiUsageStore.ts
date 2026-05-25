@@ -37,6 +37,15 @@ const byQueryCounts = new Map<string, Map<string, number>>();
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Last `normalizeQueryKey` passed to `buildEmojiUsageScoreLookup` (one-entry memo). */
+let scoreLookupCacheQuery: string | null = null;
+let scoreLookupCacheFn: ((shortcode: string) => EmojiUsageScores) | null = null;
+
+function invalidateScoreLookupCache(): void {
+  scoreLookupCacheQuery = null;
+  scoreLookupCacheFn = null;
+}
+
 function normalizeShortcodeKey(shortcode: string): string {
   return shortcode.trim().toLowerCase();
 }
@@ -78,6 +87,28 @@ export function capEmojiUsageCounts(
   return out;
 }
 
+function mergeEmojiUsageCountRecords(
+  into: Record<string, number>,
+  from: Readonly<Record<string, number>>,
+): void {
+  for (const [k, n] of Object.entries(from)) {
+    if (
+      typeof k !== 'string'
+      || k.length === 0
+      || typeof n !== 'number'
+      || !Number.isFinite(n)
+      || n <= 0
+    ) {
+      continue;
+    }
+    const nk = normalizeShortcodeKey(k);
+    into[nk] = Math.min(
+      Number.MAX_SAFE_INTEGER,
+      (into[nk] ?? 0) + Math.floor(n),
+    );
+  }
+}
+
 export function capEmojiUsageByQuery(
   raw: EmojiUsageByQuery,
   maxQueries: number,
@@ -91,9 +122,16 @@ export function capEmojiUsageByQuery(
       && typeof counts === 'object'
       && !Array.isArray(counts),
   );
-  const cappedPerQuery = queryEntries.map(([q, counts]) => [
-    normalizeQueryKey(q),
-    capEmojiUsageCounts(counts as Record<string, number>, maxShortcodesPerQuery),
+  const mergedByQuery = new Map<string, Record<string, number>>();
+  for (const [q, counts] of queryEntries) {
+    const nq = normalizeQueryKey(q);
+    const acc = mergedByQuery.get(nq) ?? {};
+    mergeEmojiUsageCountRecords(acc, counts as Record<string, number>);
+    mergedByQuery.set(nq, acc);
+  }
+  const cappedPerQuery = [...mergedByQuery.entries()].map(([q, counts]) => [
+    q,
+    capEmojiUsageCounts(counts, maxShortcodesPerQuery),
   ] as const);
   if (cappedPerQuery.length <= maxQueries) {
     return Object.fromEntries(cappedPerQuery);
@@ -231,6 +269,9 @@ export function buildEmojiUsageScoreLookup(
   queryLower: string,
 ): (shortcode: string) => EmojiUsageScores {
   const Q = normalizeQueryKey(queryLower);
+  if (scoreLookupCacheQuery === Q && scoreLookupCacheFn !== null) {
+    return scoreLookupCacheFn;
+  }
   const favByShortcode = new Map<string, number>();
   if (Q.length > 0) {
     for (const [storedQ, counts] of byQueryCounts) {
@@ -244,13 +285,16 @@ export function buildEmojiUsageScoreLookup(
       }
     }
   }
-  return (shortcode: string): EmojiUsageScores => {
+  const fn = (shortcode: string): EmojiUsageScores => {
     const key = normalizeShortcodeKey(shortcode);
     return {
       favScore: favByShortcode.get(key) ?? 0,
       globalScore: globalCounts.get(key) ?? 0,
     };
   };
+  scoreLookupCacheQuery = Q;
+  scoreLookupCacheFn = fn;
+  return fn;
 }
 
 export function getEmojiUsageScores(
@@ -264,7 +308,15 @@ export function getEmojiUsageScores(
   return buildEmojiUsageScoreLookup(queryLower)(shortcode);
 }
 
+function cancelPendingEmojiUsageSave(): void {
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+}
+
 export async function flushEmojiUsageToStore(): Promise<void> {
+  cancelPendingEmojiUsageSave();
   try {
     const store = await load(EMOJI_USAGE_STORE_PATH);
     const byQuery: Record<string, Record<string, number>> = {};
@@ -290,9 +342,7 @@ export async function flushEmojiUsageToStore(): Promise<void> {
 }
 
 function scheduleEmojiUsageSave(): void {
-  if (saveTimer !== null) {
-    clearTimeout(saveTimer);
-  }
+  cancelPendingEmojiUsageSave();
   saveTimer = setTimeout(() => {
     saveTimer = null;
     void flushEmojiUsageToStore();
@@ -325,6 +375,7 @@ export function recordEmojiUsage(shortcode: string, queryLower?: string): void {
     qMap.set(k, Math.min(Number.MAX_SAFE_INTEGER, (qMap.get(k) ?? 0) + 1));
   }
 
+  invalidateScoreLookupCache();
   scheduleEmojiUsageSave();
 }
 
@@ -332,6 +383,7 @@ async function loadEmojiUsageFromRaw(raw: string): Promise<void> {
   const parsed: unknown = JSON.parse(raw);
   const v2 = parseEmojiUsagePayloadV2(parsed);
   if (v2) {
+    invalidateScoreLookupCache();
     globalCounts.clear();
     byQueryCounts.clear();
     for (const [k, n] of Object.entries(v2.global)) {
@@ -348,6 +400,7 @@ async function loadEmojiUsageFromRaw(raw: string): Promise<void> {
   }
   const v1 = parseEmojiUsagePayloadV1(parsed);
   if (v1) {
+    invalidateScoreLookupCache();
     globalCounts.clear();
     byQueryCounts.clear();
     for (const [k, n] of Object.entries(v1)) {
@@ -375,10 +428,8 @@ export async function hydrateEmojiUsageFromStore(): Promise<void> {
 
 /** Vitest harness: clears in-memory counts and pending debounced save timer. */
 export function __resetForTests(): void {
-  if (saveTimer !== null) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
+  cancelPendingEmojiUsageSave();
+  invalidateScoreLookupCache();
   globalCounts.clear();
   byQueryCounts.clear();
 }
