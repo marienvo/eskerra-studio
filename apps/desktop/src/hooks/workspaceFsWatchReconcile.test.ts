@@ -164,6 +164,59 @@ describe('applyExternalOpenNoteDeletedForFsWatch', () => {
   });
 });
 
+describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — open-note padding', () => {
+  function minimalTodayEnv(): ReconcileFsTodayHubEnv {
+    return {
+      todayHubRowLastPersistedRef: {current: new Map()},
+      todayHubSettingsRef: {current: null},
+      todayHubBridgeRef: {
+        current: {
+          getLiveRowUri: () => null,
+          hasPendingHubFlush: () => false,
+          flushPendingEdits: vi.fn(),
+        },
+      },
+    };
+  }
+
+  it('reloads from disk instead of conflict when editor only has buffer-only padding', async () => {
+    const diskBody = '# Title\nedited on disk';
+    const fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn().mockResolvedValue(`${diskBody}\n`),
+    } as unknown as ReconcileFsOpenMarkdownEnv['fs'];
+
+    const setDiskConflict = vi.fn();
+    const loadFullMarkdownIntoInboxEditor = vi.fn();
+    const tab = {id: 't1', history: {entries: [NOTE], index: 0}};
+
+    const env = minimalEnv({
+      editorWorkspaceTabsRef: {current: [tab]},
+      activeEditorTabIdRef: {current: 't1'},
+      selectedUriRef: {current: NOTE},
+      syncWorkspaceModelRemoveOpenTabUri: vi.fn(),
+      fs,
+      vaultRootRef: {current: '/vault'},
+      lastPersistedRef: {current: {uri: NOTE, markdown: '# Title'}},
+      editorBodyRef: {current: '# Title\n\n'},
+      openTimeDiskBodyRef: {current: '# Title'},
+      inboxEditorRef: {current: {getMarkdown: () => '# Title\n\n'} as never},
+      loadFullMarkdownIntoInboxEditor,
+      setDiskConflict,
+    });
+
+    await reconcileOpenNotesAfterFsChangeFromVaultWatch(
+      env,
+      minimalTodayEnv(),
+      [NOTE],
+      vi.fn(),
+    );
+
+    expect(setDiskConflict).not.toHaveBeenCalled();
+    expect(loadFullMarkdownIntoInboxEditor).toHaveBeenCalledWith(diskBody, NOTE, 'preserve');
+  });
+});
+
 describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — home-navigated page', () => {
   function minimalTodayEnv(): ReconcileFsTodayHubEnv {
     return {

@@ -269,6 +269,27 @@ describe('workspaceOpenMarkdownCommand', () => {
     expect(ctx.enqueuePersistOutgoingNoteMarkdown).not.toHaveBeenCalled();
   });
 
+  it('does not persist buffer-only open-note padding when switching notes after edit+undo', async () => {
+    const {ctx} = createBaseContext();
+    const current = '/vault/Inbox/current.md';
+    const other = '/vault/Inbox/other.md';
+    ctx.selectedUriRef.current = current;
+    ctx.lastPersistedRef.current = {uri: current, markdown: '# Title'};
+    ctx.openTimeDiskBodyRef.current = '# Title';
+    ctx.editorBodyRef.current = '# Title\n\n';
+    ctx.inboxEditorRef.current = {
+      getMarkdown: () => '# Title\n\n',
+      focus: vi.fn(),
+    } as never;
+    ctx.inboxContentByUriRef.current[current] = '# Title';
+    ctx.inboxContentByUriRef.current[other] = '# other';
+
+    await runOpenMarkdownInEditorCommand(ctx as never, other);
+
+    expect(ctx.mergeInboxNoteBodyCacheRefAndState).toHaveBeenCalledWith(current, '# Title');
+    expect(ctx.enqueuePersistOutgoingNoteMarkdown).not.toHaveBeenCalled();
+  });
+
   it('background new tab insertAtIndex vs insertAfterActive produce distinct tab order (three tabs)', async () => {
     const resolveSpy = vi
       .spyOn(workspaceRuntimeProjection, 'resolveModelBackedLegacyTabStrip')
