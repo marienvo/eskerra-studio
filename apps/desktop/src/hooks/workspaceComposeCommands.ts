@@ -117,7 +117,11 @@ export async function runAddNote(
     subtreeMarkdownCache.invalidateForMutation(vaultRoot, created.uri, 'file');
     await refreshNotes(vaultRoot);
     ctx.setters.setFsRefreshNonce(n => n + 1);
-    await ctx.openMarkdownInEditor(created.uri);
+    await ctx.openMarkdownInEditor(created.uri, {
+      newTab: true,
+      activateNewTab: true,
+      insertAfterActive: true,
+    });
     return true;
   } catch (e) {
     ctx.setters.setErr(e instanceof Error ? e.message : String(e));

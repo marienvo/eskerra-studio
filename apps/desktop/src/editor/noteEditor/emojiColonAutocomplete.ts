@@ -36,11 +36,12 @@ function buildEmojiCompletions(
   rows: readonly EmojiCompletionRow[],
   queryLower: string,
 ): Completion[] {
+  const usageForQuery = (shortcode: string) => getEmojiUsageCount(shortcode, queryLower);
   const picked = filterSortAndCapEmojiRows(
     rows,
     queryLower,
     EMOJI_COMPLETION_MAX_OPTIONS,
-    getEmojiUsageCount,
+    usageForQuery,
   );
   return picked.map(
     (row): Completion => ({
@@ -52,7 +53,7 @@ function buildEmojiCompletions(
           ...insertCompletionText(view.state, row.e, from, to),
           annotations: pickedCompletion.of(completion),
         });
-        recordEmojiUsage(row.p);
+        recordEmojiUsage(row.p, queryLower);
       },
     }),
   );

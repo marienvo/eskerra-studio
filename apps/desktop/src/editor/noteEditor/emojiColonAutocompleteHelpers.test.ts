@@ -120,4 +120,19 @@ describe('filterSortAndCapEmojiRows', () => {
     );
     expect(got.map(x => x.p)).toEqual(['smile_b', 'smile_a']);
   });
+
+  test('query-specific usage can reorder within tier', () => {
+    const boost = 1000;
+    const r: EmojiCompletionRow[] = [
+      {e: 'a', p: 'heart', b: 'heart red'},
+      {e: 'b', p: 'heartbeat', b: 'heartbeat pulse'},
+    ];
+    const got = filterSortAndCapEmojiRows(
+      r,
+      'heart',
+      10,
+      p => (p === 'heart' ? boost + 3 : boost + 1),
+    );
+    expect(got.map(x => x.p)).toEqual(['heart', 'heartbeat']);
+  });
 });

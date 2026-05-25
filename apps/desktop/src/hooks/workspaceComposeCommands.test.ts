@@ -245,7 +245,11 @@ describe('workspaceComposeCommands', () => {
       'My note title',
       '# My note title\nBody here\n',
     );
-    expect(ctx.openMarkdownInEditor).toHaveBeenCalledWith('/vault/Inbox/new.md');
+    expect(ctx.openMarkdownInEditor).toHaveBeenCalledWith('/vault/Inbox/new.md', {
+      newTab: true,
+      activateNewTab: true,
+      insertAfterActive: true,
+    });
     expect(ctx.setters.setComposingNewEntry).toHaveBeenCalledWith(false);
     expect(ctx.setters.setComposeDraftMarkdown).toHaveBeenCalledWith('');
     expect(ctx.setters.setComposeDraftResetNonce).toHaveBeenCalledTimes(1);

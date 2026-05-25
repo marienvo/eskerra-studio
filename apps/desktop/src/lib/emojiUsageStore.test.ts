@@ -1,9 +1,16 @@
 import {describe, expect, test} from 'vitest';
 
 import {
+  capEmojiUsageByQuery,
   capEmojiUsageCounts,
+  EMOJI_USAGE_QUERY_BOOST,
   evictLowestCountKey,
+  getEmojiUsageCount,
   parseEmojiUsagePayload,
+  parseEmojiUsagePayloadV1,
+  parseEmojiUsagePayloadV2,
+  recordEmojiUsage,
+  __resetForTests,
 } from './emojiUsageStore';
 
 describe('capEmojiUsageCounts', () => {
@@ -33,19 +40,67 @@ describe('capEmojiUsageCounts', () => {
   });
 });
 
-describe('parseEmojiUsagePayload', () => {
+describe('parseEmojiUsagePayloadV1', () => {
   test('accepts v1 payload', () => {
-    expect(parseEmojiUsagePayload({v: 1, counts: {smile: 2}})).toEqual({smile: 2});
+    expect(parseEmojiUsagePayloadV1({v: 1, counts: {smile: 2}})).toEqual({smile: 2});
   });
 
   test('rejects wrong version', () => {
-    expect(parseEmojiUsagePayload({v: 2, counts: {}})).toBeNull();
+    expect(parseEmojiUsagePayloadV1({v: 2, counts: {}})).toBeNull();
   });
 
   test('rejects invalid shape', () => {
-    expect(parseEmojiUsagePayload(null)).toBeNull();
-    expect(parseEmojiUsagePayload({v: 1})).toBeNull();
-    expect(parseEmojiUsagePayload({v: 1, counts: []})).toBeNull();
+    expect(parseEmojiUsagePayloadV1(null)).toBeNull();
+    expect(parseEmojiUsagePayloadV1({v: 1})).toBeNull();
+    expect(parseEmojiUsagePayloadV1({v: 1, counts: []})).toBeNull();
+  });
+});
+
+describe('parseEmojiUsagePayload (deprecated alias)', () => {
+  test('delegates to v1', () => {
+    expect(parseEmojiUsagePayload({v: 1, counts: {grin: 1}})).toEqual({grin: 1});
+  });
+});
+
+describe('parseEmojiUsagePayloadV2', () => {
+  test('accepts v2 payload', () => {
+    expect(
+      parseEmojiUsagePayloadV2({
+        v: 2,
+        global: {smile: 2},
+        byQuery: {heart: {heart: 5}},
+      }),
+    ).toEqual({
+      global: {smile: 2},
+      byQuery: {heart: {heart: 5}},
+    });
+  });
+
+  test('rejects v1 shape', () => {
+    expect(parseEmojiUsagePayloadV2({v: 1, counts: {a: 1}})).toBeNull();
+  });
+});
+
+describe('capEmojiUsageByQuery', () => {
+  test('caps shortcodes per query', () => {
+    const raw = {
+      q: Object.fromEntries(Array.from({length: 10}, (_, i) => [`s${i}`, i + 1])),
+    };
+    const capped = capEmojiUsageByQuery(raw, 5, 3);
+    expect(Object.keys(capped.q).length).toBe(3);
+  });
+});
+
+describe('getEmojiUsageCount / recordEmojiUsage', () => {
+  test('query-specific count boosts sort score', () => {
+    __resetForTests();
+    recordEmojiUsage('smile_a', 'heart');
+    recordEmojiUsage('smile_b', 'heart');
+    recordEmojiUsage('smile_b', 'heart');
+    expect(getEmojiUsageCount('smile_a', 'heart')).toBe(EMOJI_USAGE_QUERY_BOOST + 1);
+    expect(getEmojiUsageCount('smile_b', 'heart')).toBe(EMOJI_USAGE_QUERY_BOOST * 2 + 2);
+    expect(getEmojiUsageCount('smile_a', 'other')).toBe(1);
+    __resetForTests();
   });
 });
 

@@ -314,7 +314,10 @@ export default function App() {
       podcastPlayback={podcastPlayback}
       paletteLayer={paletteLayer}
       vaultMarkdownRefs={ws.vaultMarkdownRefs}
-      selectNote={ws.selectNote}
+      onPickNoteQuickOpen={uri =>
+        ws.selectNoteInNewActiveTab(uri, {insertAfterActive: true})
+      }
+      onPickNoteVaultSearch={ws.selectNote}
       selectedUri={ws.selectedUri}
       err={ws.err}
       diskConflict={ws.diskConflict}

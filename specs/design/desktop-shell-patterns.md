@@ -47,6 +47,8 @@ Implementation pointers: tree load **`apps/desktop/src/lib/vaultTreeLoadChildren
 
 ### Quick Open (Shift-Shift) and shared palette typography
 
+**Quick Open** and **Add to inbox** (after a successful create) open the chosen or new note in a **new editor tab** (inserted after the active tab). If that note URI is already open in the tab strip, the shell **activates that existing tab** instead of opening a duplicate. **Vault search** (Ctrl+Shift+F) still uses the active-tab navigation path (`selectNote`).
+
 **`QuickOpenNotePalette`** and **`VaultSearchPalette`** share **`Dialog.Content`** styling via **`.quick-open-content`** and the **`cmdk`** row classes (**`.quick-open-command__item-title`** / **`__item-path`**). On **WebKitGTK**, path and snippet lines must use the same **UI sans + smoothing** rules as the shell container, or secondary text looks **jagged** next to titles. **Authoritative checklist:** **Command palettes** section in [`desktop-text-rendering.md`](desktop-text-rendering.md). **Do not** put smoothing rules only on **`.vault-search-content`** (that class is for **layout** overrides such as **`max-height`**, not an alternate typography stack).
 
 ### Vault tree vs. open note (manual reveal)
