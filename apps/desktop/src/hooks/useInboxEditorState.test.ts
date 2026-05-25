@@ -31,7 +31,7 @@ describe('useInboxEditorState', () => {
     expect(result.current.openTimeDiskBodyRef.current).toBe('# Body');
   });
 
-  it('records open-time disk body separately from open-note buffer padding', () => {
+  it('records open-time disk body on load; React body stays disk-known (padding is CodeMirror-only)', () => {
     const loadMarkdown = vi.fn();
     const getMarkdown = vi.fn(() => '# Title\n\n');
     const {result} = renderHook(() =>
@@ -49,7 +49,8 @@ describe('useInboxEditorState', () => {
     });
 
     expect(result.current.openTimeDiskBodyRef.current).toBe('# Title');
-    expect(result.current.editorBodyRef.current).toBe('# Title\n\n');
+    expect(result.current.editorBodyRef.current).toBe('# Title');
+    expect(getMarkdown).not.toHaveBeenCalled();
   });
 
   it('openNote load keeps editorBody on disk body, not padded getMarkdown', () => {
