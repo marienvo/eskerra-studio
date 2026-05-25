@@ -32,6 +32,11 @@ export function homeCurrentUri(state: WorkspaceHomeState): string | null {
   return entries[index] ?? null;
 }
 
+/** Hub root Today.md (`history.entries[0]`), not the home history cursor. */
+export function homeHubUri(state: WorkspaceHomeState): string | null {
+  return state.history.entries[0] ?? null;
+}
+
 export function homeIsAtHub(state: WorkspaceHomeState): boolean {
   return state.history.index === 0;
 }

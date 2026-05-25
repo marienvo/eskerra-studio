@@ -7,7 +7,7 @@
  * `useDiskConflictState`, `useMergeViewState`, `useWorkspacePersistence`, `useInboxBodyCache`, `useNotesListing`,
  * `useInboxShellRestore`, `workspaceInboxShellRestoreBridge`, `workspaceShadowBridge`).
  *
- * Remaining split candidate: final orchestration cleanup.
+ * Orchestration hook: composes vault session, editor, Today hub, tabs, and command facades.
  */
 import {
   useCallback,
@@ -42,10 +42,6 @@ import type {
   RestoredInboxState,
   TodayHubWorkspaceSnapshot,
 } from '../lib/mainWindowUiStore';
-import {
-  createWorkspaceHomeState,
-  type WorkspaceHomeState,
-} from '../lib/workspaceHomeNavigation';
 import {removeUrisAction, normalizeWorkspaceUri, type WorkspaceModel} from '../lib/workspaceModel';
 import type {
   WorkspaceConflictController,
@@ -58,15 +54,6 @@ import type {
   WorkspaceTodayHubController,
   WorkspaceTreeController,
 } from './workspaceReturnShape';
-import {
-  computeEditorHistoryCanGoBack,
-  computeEditorHistoryCanGoForward,
-  deriveActiveTabHistorySnapshot,
-  moveHomeHistoryBridge,
-  openCurrentHomeAfterComposingBridge,
-  runEditorHistoryGoBack,
-  runEditorHistoryGoForward,
-} from './workspaceEditorHistoryNavigation';
 import {
   runBulkDeleteVaultTreeItems,
   runBulkMoveVaultTreeItems,
@@ -123,6 +110,7 @@ import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import {
   clearInboxYamlFrontmatterEditorRefs,
 } from '../lib/inboxYamlFrontmatterEditor';
+import {useWorkspaceEditorHistoryNavigation} from './workspace/useWorkspaceEditorHistoryNavigation';
 import {useWorkspaceVaultMarkdownRefsScan} from './workspace/useWorkspaceVaultMarkdownRefsScan';
 import {useWorkspaceSelectedNoteHydration} from './workspace/useWorkspaceSelectedNoteHydration';
 import {useWorkspaceRenameMaintenanceBinding} from './workspace/useWorkspaceRenameMaintenanceBinding';
@@ -495,51 +483,57 @@ export function useMainWindowWorkspace(options: {
     vaultMarkdownRefs,
     vaultMarkdownRefsReady,
     inboxShellRestored,
-    workspaceShadowModel,
-    dispatchWorkspaceActionSync,
-    replaceShadowHomeStateForHub,
-    mirrorShadowActiveHub,
-    mirrorShadowHomeSurface,
-    mirrorShadowActiveTab,
-    mirrorShadowActiveWorkspaceTabs,
-    vaultRootRef,
-    showTodayHubCanvasRef,
-    todayHubBridgeRef,
-    todayHubWikiNavParentRef,
-    todayHubCellEditorRef,
-    todayHubRowLastPersistedRef,
-    todayHubSettingsRef,
-    vaultMarkdownRefsRef,
-    selectedUriRef,
-    composingNewEntryRef,
-    inboxYamlFrontmatterInnerRef,
-    inboxEditorYamlLeadingBeforeFrontmatterRef,
-    editorWorkspaceTabs,
-    activeEditorTabId,
-    editorWorkspaceTabsRef,
-    activeEditorTabIdRef,
-    replaceEditorWorkspaceTabs,
-    setEditorWorkspaceTabs,
-    setActiveEditorTabId,
-    setComposingNewEntry,
-    setInboxYamlFrontmatterInner,
-    setInboxEditorYamlLeadingBeforeFrontmatter,
-    setEditorBody,
-    setInboxEditorResetNonce,
-    flushInboxSaveRef,
-    saveChainRef,
-    saveActiveRef,
-    inboxContentByUriRef,
-    setInboxContentByUri,
+    workspace: {
+      workspaceShadowModel,
+      dispatchWorkspaceActionSync,
+      mirror: {
+        replaceShadowHomeStateForHub,
+        mirrorShadowActiveHub,
+        mirrorShadowHomeSurface,
+        mirrorShadowActiveTab,
+        mirrorShadowActiveWorkspaceTabs,
+      },
+    },
+    editorTabs: {
+      editorWorkspaceTabs,
+      activeEditorTabId,
+      replaceEditorWorkspaceTabs,
+      setEditorWorkspaceTabs,
+      setActiveEditorTabId,
+      setComposingNewEntry,
+      setInboxYamlFrontmatterInner,
+      setInboxEditorYamlLeadingBeforeFrontmatter,
+      setEditorBody,
+      setInboxEditorResetNonce,
+      setInboxContentByUri,
+      vaultRootRef,
+      showTodayHubCanvasRef,
+      todayHubBridgeRef,
+      todayHubWikiNavParentRef,
+      todayHubCellEditorRef,
+      todayHubRowLastPersistedRef,
+      todayHubSettingsRef,
+      vaultMarkdownRefsRef,
+      selectedUriRef,
+      composingNewEntryRef,
+      inboxYamlFrontmatterInnerRef,
+      inboxEditorYamlLeadingBeforeFrontmatterRef,
+      editorWorkspaceTabsRef,
+      activeEditorTabIdRef,
+      flushInboxSaveRef,
+      saveChainRef,
+      saveActiveRef,
+      inboxContentByUriRef,
+      diskConflictRef,
+      openMarkdownInEditorRef,
+      activateOpenTabRef,
+      selectNoteRef,
+    },
     refreshNotes,
     setFsRefreshNonce,
     setErr,
     markVaultWriteSettled,
     subtreeMarkdownCache,
-    diskConflictRef,
-    openMarkdownInEditorRef,
-    activateOpenTabRef,
-    selectNoteRef,
   });
 
   const {
@@ -1202,136 +1196,36 @@ export function useMainWindowWorkspace(options: {
     [treeCommandContext],
   );
 
-  const activeTabHistory = useMemo(
-    () =>
-      deriveActiveTabHistorySnapshot({
-        editorWorkspaceTabs: tabsControllerSurface[0],
-        activeEditorTabId: tabsControllerSurface[1],
-      }),
-    [tabsControllerSurface],
-  );
-
-  const activeHomeState = useMemo(
-    () => {
-      if (modelActiveEditorTabId != null || modelActiveTodayHubUri == null) {
-        return null;
-      }
-      return (
-        modelHomeStatesByHub[modelActiveTodayHubUri] ??
-        createWorkspaceHomeState(modelActiveTodayHubUri)
-      );
-    },
-    [modelActiveEditorTabId, modelActiveTodayHubUri, modelHomeStatesByHub],
-  );
-
-  const editorHistoryCanGoBack = useMemo(
-    () =>
-      computeEditorHistoryCanGoBack({
-        composingNewEntry,
-        activeHomeState,
-        activeTabHistory,
-      }),
-    [composingNewEntry, activeHomeState, activeTabHistory],
-  );
-
-  const editorHistoryCanGoForward = useMemo(
-    () =>
-      computeEditorHistoryCanGoForward({
-        busy,
-        composingNewEntry,
-        activeHomeState,
-        activeTabHistory,
-      }),
-    [busy, composingNewEntry, activeHomeState, activeTabHistory],
-  );
-
-  const openCurrentHomeAfterComposing = useCallback(
-    async (state: WorkspaceHomeState): Promise<boolean> =>
-      openCurrentHomeAfterComposingBridge(
-        {
-          setComposingNewEntry,
-          clearFrontmatterRefs: () =>
-            clearInboxYamlFrontmatterEditorRefs({
-              inner: inboxYamlFrontmatterInnerRef,
-              leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-              setInner: setInboxYamlFrontmatterInner,
-              setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-            }),
-          setEditorBody,
-          setInboxEditorResetNonce,
-          openMarkdownInEditor,
-        },
-        state,
-      ),
-    [openMarkdownInEditor],
-  );
-
-  const moveHomeHistory = useCallback(
-    async (
-      hubUri: string,
-      state: WorkspaceHomeState,
-      move: (state: WorkspaceHomeState) => WorkspaceHomeState,
-    ): Promise<boolean> =>
-      moveHomeHistoryBridge(
-        {setHomeStateForHub, openMarkdownInEditor},
-        hubUri,
-        state,
-        move,
-      ),
-    [openMarkdownInEditor, setHomeStateForHub],
-  );
-
-  const editorHistoryGoBack = useCallback(() => {
-    void runEditorHistoryGoBack({
-      activeTodayHubUriRef,
-      activeEditorTabIdRef,
-      homeStatesByHubRef,
-      editorWorkspaceTabsRef,
-      composingNewEntryRef,
-      flushInboxSave: () => flushInboxSaveRef.current(),
-      dispatchWorkspaceActionSync,
-      openMarkdownInEditor,
-      openCurrentHomeAfterComposing,
-      moveHomeHistory,
-      setComposingNewEntry,
-      setEditorBody,
-      setInboxEditorResetNonce,
-      setEditorWorkspaceTabs,
-      clearFrontmatterRefs: () =>
-        clearInboxYamlFrontmatterEditorRefs({
-          inner: inboxYamlFrontmatterInnerRef,
-          leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
-          setInner: setInboxYamlFrontmatterInner,
-          setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
-        }),
-    });
-  }, [
-    dispatchWorkspaceActionSync,
+  const {
+    editorHistoryCanGoBack,
+    editorHistoryCanGoForward,
+    editorHistoryGoBack,
+    editorHistoryGoForward,
+  } = useWorkspaceEditorHistoryNavigation({
+    busy,
+    composingNewEntry,
+    tabsControllerSurface,
+    modelActiveEditorTabId,
+    modelActiveTodayHubUri,
+    modelHomeStatesByHub,
+    activeTodayHubUriRef,
+    activeEditorTabIdRef,
+    homeStatesByHubRef,
+    editorWorkspaceTabsRef,
+    composingNewEntryRef,
     flushInboxSaveRef,
-    openMarkdownInEditor,
-    openCurrentHomeAfterComposing,
-    moveHomeHistory,
-  ]);
-
-  const editorHistoryGoForward = useCallback(() => {
-    void runEditorHistoryGoForward({
-      activeTodayHubUriRef,
-      activeEditorTabIdRef,
-      homeStatesByHubRef,
-      editorWorkspaceTabsRef,
-      composingNewEntryRef,
-      flushInboxSave: () => flushInboxSaveRef.current(),
-      dispatchWorkspaceActionSync,
-      openMarkdownInEditor,
-      moveHomeHistory,
-      setEditorWorkspaceTabs,
-    });
-  }, [
     dispatchWorkspaceActionSync,
-    flushInboxSaveRef,
     openMarkdownInEditor,
-    moveHomeHistory,
-  ]);
+    setHomeStateForHub,
+    setComposingNewEntry,
+    setEditorBody,
+    setInboxEditorResetNonce,
+    setEditorWorkspaceTabs,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    setInboxYamlFrontmatterInner,
+    setInboxEditorYamlLeadingBeforeFrontmatter,
+  });
 
   useInboxShellRestore({
     vaultRoot,

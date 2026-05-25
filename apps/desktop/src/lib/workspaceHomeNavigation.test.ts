@@ -5,6 +5,7 @@ import {
   homeCanGoBack,
   homeCanGoForward,
   homeCurrentUri,
+  homeHubUri,
   homeGoBack,
   homeGoForward,
   homeIsAtHub,
@@ -18,6 +19,7 @@ describe('workspaceHomeNavigation', () => {
     const state = createWorkspaceHomeState('/vault/Daily/Today.md');
 
     expect(homeCurrentUri(state)).toBe('/vault/Daily/Today.md');
+    expect(homeHubUri(state)).toBe('/vault/Daily/Today.md');
     expect(homeIsAtHub(state)).toBe(true);
     expect(homeCanGoBack(state)).toBe(false);
     expect(homeCanGoForward(state)).toBe(false);
@@ -30,6 +32,7 @@ describe('workspaceHomeNavigation', () => {
     );
 
     expect(homeCurrentUri(state)).toBe('/vault/B.md');
+    expect(homeHubUri(state)).toBe('/vault/Daily/Today.md');
     expect(homeCanGoBack(state)).toBe(true);
     expect(homeCanGoForward(state)).toBe(false);
 

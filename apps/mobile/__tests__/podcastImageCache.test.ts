@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  clearArtworkUriMemoryCacheForTesting,
   clearInFlightCachedArtworkRequestsForTesting,
   getCachedPodcastArtworkUri,
   getPodcastArtworkUri,
@@ -84,7 +85,8 @@ describe('podcastImageCache', () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    clearArtworkUriMemoryCacheForTesting();
     clearInFlightCachedArtworkRequestsForTesting();
     (globalThis as unknown as {fetch: typeof fetch}).fetch =
       globalFetchMock as unknown as typeof fetch;
@@ -137,6 +139,53 @@ describe('podcastImageCache', () => {
     expect(fetchRssArtworkUrlMock).not.toHaveBeenCalled();
     expect(globalFetchMock).not.toHaveBeenCalled();
     expect(writeCacheMock).not.toHaveBeenCalled();
+  });
+
+  test('revalidates stale in-memory local artwork URI before falling back to repaired cache state', async () => {
+    const baseUri = nextBaseUri();
+    const rssFeedUrl = nextRssFeedUrl();
+
+    const fetchedAt = new Date(Date.now() - 60_000).toISOString();
+    const localUri = 'file:///data/user/0/app/files/podcast-artwork-files/abc/repaired.png';
+    const remoteUri = 'https://cdn.example.com/repaired.png';
+
+    readCacheMock
+      .mockResolvedValueOnce({
+        fetchedAt,
+        imageUrl: remoteUri,
+        localImageUri: localUri,
+      })
+      .mockResolvedValueOnce({
+        fetchedAt,
+        imageUrl: remoteUri,
+        localImageUri: localUri,
+      })
+      .mockResolvedValueOnce({
+        fetchedAt,
+        imageUrl: remoteUri,
+      });
+    podcastArtworkFileExistsMock.mockResolvedValue(false).mockResolvedValueOnce(true);
+    globalFetchMock.mockResolvedValueOnce({
+      arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+      headers: {get: () => 'image/png'},
+      ok: true,
+    });
+
+    await expect(getPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(
+      localUri,
+    );
+    await expect(getPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(
+      remoteUri,
+    );
+
+    expect(podcastArtworkFileExistsMock).toHaveBeenCalledWith(localUri);
+    expect(writeCacheMock).toHaveBeenCalledWith(baseUri, getPodcastImageCacheKey(rssFeedUrl), {
+      fetchedAt,
+      imageUrl: remoteUri,
+      mimeType: undefined,
+    });
+    expect(fetchRssArtworkUrlMock).not.toHaveBeenCalled();
+    expect(writeImageFileMock).not.toHaveBeenCalled();
   });
 
   test('returns only fresh entries in cached-only lookup', async () => {
