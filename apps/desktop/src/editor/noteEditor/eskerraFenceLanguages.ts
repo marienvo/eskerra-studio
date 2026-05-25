@@ -89,7 +89,7 @@ const eskerraFenceLanguageOverrides: readonly LanguageDescription[] = [
     name: 'HTML',
     alias: ['xhtml'],
     extensions: ['html', 'htm'],
-    load: () => import('@codemirror/lang-xml').then(m => m.xml()),
+    load: () => import('@codemirror/lang-html').then(m => m.html()),
   }),
   LanguageDescription.of({
     name: 'XML',
