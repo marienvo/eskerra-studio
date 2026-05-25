@@ -91,7 +91,9 @@ const NoteMarkdownEditorImpl = forwardRef<
   );
 
   const {hostClassName} = useNoteMarkdownEditorImageDrop(
-    shell,
+    shell.hostRef,
+    shell.viewRef,
+    shell.reportEditorError,
     attachmentHost,
     vaultRoot,
     busy,

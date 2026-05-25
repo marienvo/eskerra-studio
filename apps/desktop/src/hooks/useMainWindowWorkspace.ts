@@ -4,8 +4,9 @@
  * Ownership: wire platform I/O and React state here; prefer extracted modules for focused logic
  * (`useTodayHubsState`, `workspaceComposeCommands`, `workspaceTabCommands`, `workspaceOpenMarkdownCommand`,
  * `workspaceTreeCommands`, `workspaceEditorHistoryNavigation`, `workspaceFsWatchReconcile`, `useVaultBootstrap`,
- * `useDiskConflictState`, `useMergeViewState`, `useWorkspacePersistence`, `useInboxBodyCache`, `useNotesListing`,
- * `useInboxShellRestore`, `workspaceInboxShellRestoreBridge`, `workspaceShadowBridge`).
+ * `useDiskConflictState`, `useMergeViewState`, `workspacePersistence/`, `workspaceVaultWatch/`, `useInboxBodyCache`,
+ * `useNotesListing`, `useInboxShellRestore`, `workspaceInboxShellRestoreBridge`, `workspaceShadowBridge`).
+ * Navigation index: [`mainWindowWorkspace/ARCHITECTURE.md`](./mainWindowWorkspace/ARCHITECTURE.md).
  *
  * Orchestration hook: composes vault session, editor, Today hub, tabs, and command facades.
  */
@@ -61,7 +62,6 @@ import {
   runDeleteNote,
   runMoveVaultTreeItem,
   runRenameFolder,
-  type TreeCommandContext,
 } from './workspaceTreeCommands';
 import {
   replaceRuntimeActiveHub,
@@ -75,7 +75,6 @@ import {
   runRefocusAfterActiveTabRemoved,
   runSelectNote,
   runSelectNoteInNewActiveTab,
-  type TabCommandContext,
 } from './workspaceTabCommands';
 import {useWorkspaceBacklinks} from './workspaceBacklinks';
 import {useWorkspaceLinkRouting} from './workspaceLinkRouting';
@@ -114,6 +113,13 @@ import {useWorkspaceEditorHistoryNavigation} from './workspace/useWorkspaceEdito
 import {useWorkspaceVaultMarkdownRefsScan} from './workspace/useWorkspaceVaultMarkdownRefsScan';
 import {useWorkspaceSelectedNoteHydration} from './workspace/useWorkspaceSelectedNoteHydration';
 import {useWorkspaceRenameMaintenanceBinding} from './workspace/useWorkspaceRenameMaintenanceBinding';
+import {useOpenMarkdownCommandContext} from './workspace/useOpenMarkdownCommandContext';
+import {
+  useComposeCommandsContext,
+  useTabCommandContext,
+  useTreeCommandContext,
+} from './workspace/useTabComposeTreeCommandContexts';
+import {useWorkspaceRefBridges} from './workspace/useWorkspaceRefBridges';
 
 export type UseMainWindowWorkspaceResult = {
   vaultRoot: string | null;
@@ -319,9 +325,10 @@ export function useMainWindowWorkspace(options: {
     [editorWorkspaceTabsRef, setEditorWorkspaceTabs],
   );
 
-  useLayoutEffect(() => {
-    vaultRootRef.current = vaultRoot;
-  }, [vaultRoot]);
+  useWorkspaceRefBridges(
+    [{target: vaultRootRef, value: vaultRoot}],
+    [vaultRoot],
+  );
 
   const {
     vaultMarkdownRefs,
@@ -353,9 +360,10 @@ export function useMainWindowWorkspace(options: {
     inboxContentByUriRef,
   });
 
-  useLayoutEffect(() => {
-    clearBacklinkDiskBodyCacheForHydrateRef.current = clearBacklinkDiskBodyCache;
-  }, [clearBacklinkDiskBodyCache]);
+  useWorkspaceRefBridges(
+    [{target: clearBacklinkDiskBodyCacheForHydrateRef, value: clearBacklinkDiskBodyCache}],
+    [clearBacklinkDiskBodyCache],
+  );
 
   /** Filled in layout after {@link useWorkspacePersistence}; stable identity for sub-hooks' `useCallback` deps. */
   const autosaveSchedulerTargetRef = useRef<MutableRefObject<InboxAutosaveScheduler> | null>(null);
@@ -390,9 +398,10 @@ export function useMainWindowWorkspace(options: {
     setErr,
   });
 
-  useLayoutEffect(() => {
-    clearDiskConflictUiForHydrateRef.current = clearDiskConflictUiForHydrate;
-  }, [clearDiskConflictUiForHydrate]);
+  useWorkspaceRefBridges(
+    [{target: clearDiskConflictUiForHydrateRef, value: clearDiskConflictUiForHydrate}],
+    [clearDiskConflictUiForHydrate],
+  );
 
   const [vaultWriteSettledNonce, setVaultWriteSettledNonce] = useState(0);
   const markVaultWriteSettled = useCallback(() => {
@@ -576,75 +585,50 @@ export function useMainWindowWorkspace(options: {
     remapHomeStatesPrefix,
   });
 
-  const openMarkdownCommandContext = useMemo(
-    () => ({
-      fs,
-      openMarkdownGenerationRef,
-      clearMergeViewForOpenRef,
-      autosaveSchedulerRef,
-      todayHubBridgeRef,
-      diskConflictDeferTimerRef,
-      inboxEditorShellScrollRef,
-      selectedUriRef,
-      composingNewEntryRef,
-      editorShellScrollByUriRef,
-      inboxEditorShellScrollDirectiveRef,
-      clearStaleDiskConflictsForOpen,
-      vaultRootRef,
-      inboxContentByUriRef,
-      lastPersistedRef,
-      setLastPersistedSnapshot,
-      eagerEditorLoadUriRef,
-      backlinksActiveBodyRef,
-      loadFullMarkdownIntoInboxEditor,
-      scheduleBacklinksDeferOneFrameAfterLoad,
-      setInboxContentByUri,
-      setBacklinksActiveBody,
-      setComposingNewEntry,
-      setSelectedUri,
-      inboxEditorRef,
-      editorBodyRef,
-      openTimeDiskBodyRef,
-      inboxYamlFrontmatterInnerRef,
-      inboxEditorYamlLeadingBeforeFrontmatterRef,
-      mergeInboxNoteBodyCacheRefAndState,
-      enqueuePersistOutgoingNoteMarkdown,
-      setErr,
-      dispatchWorkspaceActionSync,
-      mirrorShadowActiveWorkspaceTabs,
-      mirrorShadowHomeSurface,
-      mirrorShadowActiveTab,
-      editorWorkspaceTabsRef,
-      activeEditorTabIdRef,
-      activeTodayHubUriRef,
-      setEditorWorkspaceTabs,
-      setActiveEditorTabId,
-      pushHomeHistoryForHub,
-    }),
-    [
-      fs,
-      autosaveSchedulerRef,
-      clearStaleDiskConflictsForOpen,
-      loadFullMarkdownIntoInboxEditor,
-      scheduleBacklinksDeferOneFrameAfterLoad,
-      setBacklinksActiveBody,
-      setErr,
-      dispatchWorkspaceActionSync,
-      mirrorShadowActiveWorkspaceTabs,
-      mirrorShadowHomeSurface,
-      mirrorShadowActiveTab,
-      setEditorWorkspaceTabs,
-      setActiveEditorTabId,
-      pushHomeHistoryForHub,
-      mergeInboxNoteBodyCacheRefAndState,
-      enqueuePersistOutgoingNoteMarkdown,
-      setComposingNewEntry,
-      setSelectedUri,
-      inboxEditorRef,
-      setLastPersistedSnapshot,
-      openTimeDiskBodyRef,
-    ],
-  );
+  const openMarkdownCommandContext = useOpenMarkdownCommandContext({
+    fs,
+    openMarkdownGenerationRef,
+    clearMergeViewForOpenRef,
+    autosaveSchedulerRef,
+    todayHubBridgeRef,
+    diskConflictDeferTimerRef,
+    inboxEditorShellScrollRef,
+    selectedUriRef,
+    composingNewEntryRef,
+    editorShellScrollByUriRef,
+    inboxEditorShellScrollDirectiveRef,
+    clearStaleDiskConflictsForOpen,
+    vaultRootRef,
+    inboxContentByUriRef,
+    lastPersistedRef,
+    setLastPersistedSnapshot,
+    eagerEditorLoadUriRef,
+    backlinksActiveBodyRef,
+    loadFullMarkdownIntoInboxEditor,
+    scheduleBacklinksDeferOneFrameAfterLoad,
+    setInboxContentByUri,
+    setBacklinksActiveBody,
+    setComposingNewEntry,
+    setSelectedUri,
+    inboxEditorRef,
+    editorBodyRef,
+    openTimeDiskBodyRef,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    mergeInboxNoteBodyCacheRefAndState,
+    enqueuePersistOutgoingNoteMarkdown,
+    setErr,
+    dispatchWorkspaceActionSync,
+    mirrorShadowActiveWorkspaceTabs,
+    mirrorShadowHomeSurface,
+    mirrorShadowActiveTab,
+    editorWorkspaceTabsRef,
+    activeEditorTabIdRef,
+    activeTodayHubUriRef,
+    setEditorWorkspaceTabs,
+    setActiveEditorTabId,
+    pushHomeHistoryForHub,
+  });
 
   const openMarkdownInEditor = useCallback(
     async (
@@ -656,9 +640,10 @@ export function useMainWindowWorkspace(options: {
     [openMarkdownCommandContext],
   );
 
-  useLayoutEffect(() => {
-    openMarkdownInEditorRef.current = openMarkdownInEditor;
-  }, [openMarkdownInEditor]);
+  useWorkspaceRefBridges(
+    [{target: openMarkdownInEditorRef, value: openMarkdownInEditor}],
+    [openMarkdownInEditor],
+  );
 
   const {
     mergeView,
@@ -697,69 +682,43 @@ export function useMainWindowWorkspace(options: {
     scheduleBacklinksDeferOneFrameAfterLoad,
   });
 
-  useLayoutEffect(() => {
-    clearMergeViewForOpenRef.current = closeMergeView;
-  }, [closeMergeView]);
-
-  const tabCommandContext: TabCommandContext = useMemo(
-    () => ({
-      busy,
-      refs: {
-        editorWorkspaceTabsRef,
-        activeEditorTabIdRef,
-        selectedUriRef,
-        composingNewEntryRef,
-        activeTodayHubUriRef,
-        flushInboxSaveRef,
-        saveChainRef,
-        vaultRootRef,
-        notesRef,
-        editorClosedTabsStackRef,
-        editorShellScrollByUriRef,
-        inboxYamlFrontmatterInnerRef,
-        inboxEditorYamlLeadingBeforeFrontmatterRef,
-      },
-      callbacks: {
-        bumpEditorClosedStack,
-        dispatchWorkspaceActionSync,
-        replaceEditorWorkspaceTabs,
-        mirrorShadowActiveTab,
-        mirrorShadowHomeSurface,
-        openMarkdownInEditor,
-        selectHomeCurrentNote,
-        clearInboxSelection,
-      },
-      setters: {
-        setActiveEditorTabId,
-        setSelectedUri,
-        setComposingNewEntry,
-        setEditorBody,
-        setInboxYamlFrontmatterInner,
-        setInboxEditorYamlLeadingBeforeFrontmatter,
-        setInboxEditorResetNonce,
-        clearLastPersistedSnapshot,
-      },
-    }),
-    [
-      busy,
-      bumpEditorClosedStack,
-      dispatchWorkspaceActionSync,
-      replaceEditorWorkspaceTabs,
-      mirrorShadowActiveTab,
-      mirrorShadowHomeSurface,
-      openMarkdownInEditor,
-      selectHomeCurrentNote,
-      clearInboxSelection,
-      setActiveEditorTabId,
-      setSelectedUri,
-      setComposingNewEntry,
-      setEditorBody,
-      setInboxYamlFrontmatterInner,
-      setInboxEditorYamlLeadingBeforeFrontmatter,
-      setInboxEditorResetNonce,
-      clearLastPersistedSnapshot,
-    ],
+  useWorkspaceRefBridges(
+    [{target: clearMergeViewForOpenRef, value: closeMergeView}],
+    [closeMergeView],
   );
+
+  const tabCommandContext = useTabCommandContext({
+    busy,
+    editorWorkspaceTabsRef,
+    activeEditorTabIdRef,
+    selectedUriRef,
+    composingNewEntryRef,
+    activeTodayHubUriRef,
+    flushInboxSaveRef,
+    saveChainRef,
+    vaultRootRef,
+    notesRef,
+    editorClosedTabsStackRef,
+    editorShellScrollByUriRef,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    bumpEditorClosedStack,
+    dispatchWorkspaceActionSync,
+    replaceEditorWorkspaceTabs,
+    mirrorShadowActiveTab,
+    mirrorShadowHomeSurface,
+    openMarkdownInEditor,
+    selectHomeCurrentNote,
+    clearInboxSelection,
+    setActiveEditorTabId,
+    setSelectedUri,
+    setComposingNewEntry,
+    setEditorBody,
+    setInboxYamlFrontmatterInner,
+    setInboxEditorYamlLeadingBeforeFrontmatter,
+    setInboxEditorResetNonce,
+    clearLastPersistedSnapshot,
+  });
 
   const activateOpenTab = useCallback(
     (tabId: string) => {
@@ -768,9 +727,10 @@ export function useMainWindowWorkspace(options: {
     [tabCommandContext],
   );
 
-  useLayoutEffect(() => {
-    activateOpenTabRef.current = activateOpenTab;
-  }, [activateOpenTab]);
+  useWorkspaceRefBridges(
+    [{target: activateOpenTabRef, value: activateOpenTab}],
+    [activateOpenTab],
+  );
 
   const reorderEditorWorkspaceTabs = useCallback(
     (fromIndex: number, insertBeforeIndex: number) => {
@@ -832,13 +792,13 @@ export function useMainWindowWorkspace(options: {
     setInboxEditorResetNonce(n => n + 1);
   }, [bumpEditorClosedStack, clearLastPersistedSnapshot, closeMergeView, mirrorShadowActiveHub]);
 
-  useLayoutEffect(() => {
-    resetWorkspaceStateForHydrateRef.current = resetWorkspaceStateForHydrate;
-  }, [resetWorkspaceStateForHydrate]);
-
-  useLayoutEffect(() => {
-    resetRenameMaintenanceStateRef.current = resetRenameMaintenanceState;
-  }, [resetRenameMaintenanceState]);
+  useWorkspaceRefBridges(
+    [
+      {target: resetWorkspaceStateForHydrateRef, value: resetWorkspaceStateForHydrate},
+      {target: resetRenameMaintenanceStateRef, value: resetRenameMaintenanceState},
+    ],
+    [resetWorkspaceStateForHydrate, resetRenameMaintenanceState],
+  );
 
   const syncWorkspaceModelRemoveOpenTabUri = useCallback(
     (markdownUri: string) => {
@@ -933,88 +893,44 @@ export function useMainWindowWorkspace(options: {
     setErr,
   });
 
-  const composeCommandsContext = useMemo(
-    () => ({
-      fs,
-      vaultRoot,
-      subtreeMarkdownCache,
-      markVaultWriteSettled,
-      refreshNotes,
-      flushInboxSave: () => flushInboxSaveRef.current(),
-      scheduleBacklinksDeferOneFrameAfterLoad,
-      loadFullMarkdownIntoInboxEditor,
-      resetInboxEditorComposeState,
-      todayHubCleanRowBlocked,
-      showTodayHubCanvasRef,
-      todayHubBridgeRef,
-      inboxEditorRef,
-      refs: {
-        selectedUriRef,
-        composingNewEntryRef,
-        inboxEditorShellScrollDirectiveRef,
-        diskConflictRef,
-        diskConflictSoftRef,
-        lastPersistedRef,
-        editorBodyRef,
-        inboxYamlFrontmatterInnerRef,
-        inboxEditorYamlLeadingBeforeFrontmatterRef,
-        inboxContentByUriRef,
-      },
-      setters: {
-        setBusy,
-        setErr,
-        setFsRefreshNonce,
-        setEditorBody,
-        setComposeDraftMarkdown,
-        setComposeDraftResetNonce,
-        setComposingNewEntry,
-        setSelectedUri,
-        setDiskConflict,
-        setDiskConflictSoft,
-        setInboxContentByUri,
-        clearLastPersistedSnapshot,
-      },
-      openMarkdownInEditor,
-    }),
-    [
-      fs,
-      vaultRoot,
-      subtreeMarkdownCache,
-      markVaultWriteSettled,
-      refreshNotes,
-      flushInboxSaveRef,
-      scheduleBacklinksDeferOneFrameAfterLoad,
-      loadFullMarkdownIntoInboxEditor,
-      resetInboxEditorComposeState,
-      todayHubCleanRowBlocked,
-      showTodayHubCanvasRef,
-      todayHubBridgeRef,
-      inboxEditorRef,
-      selectedUriRef,
-      composingNewEntryRef,
-      inboxEditorShellScrollDirectiveRef,
-      diskConflictRef,
-      diskConflictSoftRef,
-      lastPersistedRef,
-      editorBodyRef,
-      inboxYamlFrontmatterInnerRef,
-      inboxEditorYamlLeadingBeforeFrontmatterRef,
-      inboxContentByUriRef,
-      setBusy,
-      setErr,
-      setFsRefreshNonce,
-      setEditorBody,
-      setComposeDraftMarkdown,
-      setComposeDraftResetNonce,
-      setComposingNewEntry,
-      setSelectedUri,
-      setDiskConflict,
-      setDiskConflictSoft,
-      setInboxContentByUri,
-      clearLastPersistedSnapshot,
-      openMarkdownInEditor,
-    ],
-  );
+  const composeCommandsContext = useComposeCommandsContext({
+    fs,
+    vaultRoot,
+    subtreeMarkdownCache,
+    markVaultWriteSettled,
+    refreshNotes,
+    flushInboxSaveRef,
+    scheduleBacklinksDeferOneFrameAfterLoad,
+    loadFullMarkdownIntoInboxEditor,
+    resetInboxEditorComposeState,
+    todayHubCleanRowBlocked,
+    showTodayHubCanvasRef,
+    todayHubBridgeRef,
+    inboxEditorRef,
+    selectedUriRef,
+    composingNewEntryRef,
+    inboxEditorShellScrollDirectiveRef,
+    diskConflictRef,
+    diskConflictSoftRef,
+    lastPersistedRef,
+    editorBodyRef,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    inboxContentByUriRef,
+    setBusy,
+    setErr,
+    setFsRefreshNonce,
+    setEditorBody,
+    setComposeDraftMarkdown,
+    setComposeDraftResetNonce,
+    setComposingNewEntry,
+    setSelectedUri,
+    setDiskConflict,
+    setDiskConflictSoft,
+    setInboxContentByUri,
+    clearLastPersistedSnapshot,
+    openMarkdownInEditor,
+  });
 
   const startNewEntry = useCallback((draftMarkdown?: string) => {
     runStartNewEntry(composeCommandsContext, draftMarkdown);
@@ -1036,57 +952,20 @@ export function useMainWindowWorkspace(options: {
     [tabCommandContext],
   );
 
-  const treeCommandContext = useMemo((): TreeCommandContext => {
-    return {
-      vaultRoot,
-      fs,
-      subtreeMarkdownCache,
-      refs: {
-        autosaveSchedulerRef,
-        saveChainRef,
-        editorWorkspaceTabsRef,
-        activeEditorTabIdRef,
-        selectedUriRef,
-        composingNewEntryRef,
-        editorShellScrollByUriRef,
-        inboxYamlFrontmatterInnerRef,
-        inboxEditorYamlLeadingBeforeFrontmatterRef,
-        lastPersistedRef,
-      },
-      setters: {
-        setEditorWorkspaceTabs,
-        setActiveEditorTabId,
-        setInboxContentByUri,
-        setBusy,
-        setErr,
-        setFsRefreshNonce,
-        setSelectedUri,
-        setComposingNewEntry,
-        setEditorBody,
-        setInboxYamlFrontmatterInner,
-        setInboxEditorYamlLeadingBeforeFrontmatter,
-        setInboxEditorResetNonce,
-        setLastPersistedSnapshot,
-        clearLastPersistedSnapshot,
-      },
-      mirrorShadowHomeSurface,
-      mirrorShadowActiveTab,
-      removeHomeHistoryUris,
-      markVaultWriteSettled,
-      refreshNotes,
-      refocusAfterActiveTabRemoved,
-      openMarkdownInEditor,
-      flushInboxSaveRef,
-      clearRenameNotice,
-      replaceEditorWorkspaceTabs,
-      remapHomeStatesPrefix,
-      clearInboxSelection,
-      setVaultTreeSelectionClearNonce,
-    };
-  }, [
+  const treeCommandContext = useTreeCommandContext({
     vaultRoot,
     fs,
     subtreeMarkdownCache,
+    autosaveSchedulerRef,
+    saveChainRef,
+    editorWorkspaceTabsRef,
+    activeEditorTabIdRef,
+    selectedUriRef,
+    composingNewEntryRef,
+    editorShellScrollByUriRef,
+    inboxYamlFrontmatterInnerRef,
+    inboxEditorYamlLeadingBeforeFrontmatterRef,
+    lastPersistedRef,
     setEditorWorkspaceTabs,
     setActiveEditorTabId,
     setInboxContentByUri,
@@ -1114,7 +993,7 @@ export function useMainWindowWorkspace(options: {
     remapHomeStatesPrefix,
     clearInboxSelection,
     setVaultTreeSelectionClearNonce,
-  ]);
+  });
 
   const selectNote = useCallback(
     (uri: string) => {
@@ -1123,9 +1002,10 @@ export function useMainWindowWorkspace(options: {
     [tabCommandContext],
   );
 
-  useLayoutEffect(() => {
-    selectNoteRef.current = selectNote;
-  }, [selectNote]);
+  useWorkspaceRefBridges(
+    [{target: selectNoteRef, value: selectNote}],
+    [selectNote],
+  );
 
   const selectNoteInNewActiveTab = useCallback(
     (uri: string, opts?: {insertAfterActive?: boolean}) => {
@@ -1138,9 +1018,10 @@ export function useMainWindowWorkspace(options: {
     runSubmitNewEntry(composeCommandsContext, composeDraftMarkdown, liveComposeMarkdown),
   [composeCommandsContext, composeDraftMarkdown]);
 
-  useLayoutEffect(() => {
-    submitNewEntryRef.current = submitNewEntry;
-  }, [submitNewEntry]);
+  useWorkspaceRefBridges(
+    [{target: submitNewEntryRef, value: submitNewEntry}],
+    [submitNewEntry],
+  );
 
   const onCleanNoteInbox = useCallback(() => {
     runCleanNoteInbox(composeCommandsContext);

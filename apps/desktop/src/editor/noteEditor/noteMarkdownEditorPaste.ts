@@ -21,6 +21,12 @@ export type NoteMarkdownPasteContext = {
   isStaleView: (viewForPaste: EditorView) => boolean;
   /** Final insert text after HTML→MD and remark clean (and cell sanitize when applicable). */
   normalizePastedMarkdown: (markdown: string) => string;
+  /**
+   * Plain text from `readNativeClipboardPaste` when the web clipboard is empty
+   * (Linux/WebKitGTK). Not remark-cleaned; main editor uses raw text, cells may
+   * apply `sanitizeCellInsert` only.
+   */
+  normalizeNativeClipboardText?: (text: string) => string;
   /** Post-process vault image markdown lines (cell: collapse whitespace). */
   normalizeImageMarkdownInsert?: (insert: string) => string;
   /**
@@ -109,6 +115,8 @@ export function createNoteMarkdownPasteHandlers(ctx: NoteMarkdownPasteContext) {
     isStaleView,
     normalizePastedMarkdown,
   } = ctx;
+  const normalizeNativeClipboardText =
+    ctx.normalizeNativeClipboardText ?? ((text: string) => text);
   const normalizeImageInsert =
     ctx.normalizeImageMarkdownInsert ?? ((insert: string) => insert);
 
@@ -164,7 +172,7 @@ export function createNoteMarkdownPasteHandlers(ctx: NoteMarkdownPasteContext) {
       const result = await host.readNativeClipboardPaste(vr);
 
       if (result.kind === 'text') {
-        const text = normalizePastedMarkdown(result.text);
+        const text = normalizeNativeClipboardText(result.text);
         if (!isStaleView(viewForPaste) && text.length > 0) {
           dispatchPasteInsert(viewForPaste, insertFrom, insertTo, text);
         }
@@ -331,7 +339,10 @@ export function createNoteMarkdownPasteHandlers(ctx: NoteMarkdownPasteContext) {
     if (tryPasteRichHtmlFromDataTransfer(dt, event, view)) {
       return true;
     }
-    if (htmlRaw.trim() !== '' || plainForHtml.trim() !== '') {
+    if (plainForHtml.trim() !== '') {
+      return null;
+    }
+    if (htmlRaw.trim() !== '') {
       return false;
     }
     return null;

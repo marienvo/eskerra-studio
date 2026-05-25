@@ -12,6 +12,7 @@ import {
 import type {Dispatch, MutableRefObject, SetStateAction} from 'react';
 
 import {normalizeEditorDocUri} from '../../lib/editorDocumentHistory';
+import {INBOX_TRANSIENT_IMAGE_SAVE_ERROR} from '../../lib/inboxPersistErrors';
 import {
   mergeInboxNoteBodyIntoCache,
   normalizeVaultMarkdownDiskRead,
@@ -132,7 +133,7 @@ async function savePopulatedTodayHubRow(
   const md = await persistTransientMarkdownImages(toPersist, root);
   if (markdownContainsTransientImageUrls(md)) {
     deps.setErr(
-      'Cannot save: some images are still temporary (blob or data URLs). Paste images again so they are stored under Assets/Attachments, or remove those image references.',
+      INBOX_TRANSIENT_IMAGE_SAVE_ERROR,
     );
     return;
   }
