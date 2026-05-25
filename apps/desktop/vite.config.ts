@@ -76,6 +76,23 @@ export default defineConfig({
               priority: 15,
             },
             {
+              name: 'vendor-sentry',
+              test: /node_modules\/(@sentry|@sentry-internal)\//,
+              priority: 14,
+            },
+            {
+              name: 'vendor-yaml',
+              // YAML parsing and XML/feed helpers are only needed from note/settings flows;
+              // splitting them keeps the app entry chunk under budget.
+              test: /node_modules\/(yaml|fast-xml-parser|aws4fetch)\//,
+              priority: 13,
+            },
+            {
+              name: 'vendor-state',
+              test: /node_modules\/xstate\//,
+              priority: 12,
+            },
+            {
               name: 'vendor-md',
               test: /node_modules\/(remark|unified|mdast|micromark|turndown)/,
               priority: 10,

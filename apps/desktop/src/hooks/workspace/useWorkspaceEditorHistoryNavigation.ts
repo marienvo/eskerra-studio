@@ -52,7 +52,7 @@ export type UseWorkspaceEditorHistoryNavigationArgs = {
   setComposingNewEntry: (value: boolean) => void;
   setEditorBody: (value: string) => void;
   setInboxEditorResetNonce: Dispatch<SetStateAction<number>>;
-  setEditorWorkspaceTabs: (tabs: EditorWorkspaceTab[]) => void;
+  setEditorWorkspaceTabs: Dispatch<SetStateAction<EditorWorkspaceTab[]>>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   setInboxYamlFrontmatterInner: (value: string | null) => void;

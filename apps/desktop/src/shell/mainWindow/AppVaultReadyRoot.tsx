@@ -1,7 +1,7 @@
 /**
  * Main window chrome when vault is open and layouts are hydrated.
  */
-import type {RefObject} from 'react';
+import type {RefObject, SetStateAction} from 'react';
 
 import type {EskerraSettings, VaultFilesystem} from '@eskerra/core';
 
@@ -9,6 +9,7 @@ import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdow
 import {WindowTitleBar} from '../../components/WindowTitleBar';
 import type {StoredLayouts} from '../../lib/layout/layoutStore';
 import type {UseMainWindowWorkspaceResult} from '../../hooks/useMainWindowWorkspace';
+import type {WindowTilingState} from '../../lib/windowTiling';
 import {ThemedChromeBackground} from '../../theme/ThemedChromeBackground';
 import {AppThemeShell} from '../AppThemeShell';
 import type {PaneVisibilityController} from '../usePaneVisibility';
@@ -29,7 +30,7 @@ export type AppVaultReadyRootProps = {
   appRootClassName: string;
   vaultRoot: string;
   vaultSettings: EskerraSettings | null;
-  setVaultSettings: (value: EskerraSettings | null) => void;
+  setVaultSettings: (value: SetStateAction<EskerraSettings | null>) => void;
   fs: VaultFilesystem;
   fsRefreshNonce: number;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
@@ -43,8 +44,8 @@ export type AppVaultReadyRootProps = {
   persistNotificationsWidthPx: (px: number) => void;
   activePage: AppPage;
   setActivePage: (page: AppPage) => void;
-  pickFolder: () => void;
-  tiling: boolean;
+  pickFolder: () => Promise<void>;
+  tiling: WindowTilingState;
   titleBarTodayHubSelect: ReturnType<typeof useAppTitleBarTodayHubSelect>;
   titleBarEditorTabsHost: HTMLDivElement | null;
   setTitleBarEditorTabsHost: (el: HTMLDivElement | null) => void;

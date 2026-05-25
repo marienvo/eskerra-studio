@@ -7,7 +7,7 @@ import {
   MIN_RESIZABLE_PANE_PX,
   NOTIFICATIONS_PANEL,
 } from '../../lib/layout/layoutStore';
-import type {VaultFrontmatterIndex} from '../../hooks/useVaultFrontmatterIndex';
+import type {VaultFrontmatterIndexApi} from '../../editor/frontmatterEditor/FrontmatterEditor';
 import {AddToInboxDialog} from '../AddToInboxDialog';
 import {DesktopHorizontalSplitEnd} from '../DesktopHorizontalSplitEnd';
 import {EditorWorkspaceToolbar} from '../EditorWorkspaceToolbar';
@@ -53,7 +53,7 @@ export type VaultTabCaptureLayoutProps = {
   inboxHasItems: boolean;
   notificationsHasItems: boolean;
   inboxAttachmentHost: NoteInboxAttachmentHost;
-  vaultFrontmatterIndex: VaultFrontmatterIndex;
+  vaultFrontmatterIndex: VaultFrontmatterIndexApi;
   composeEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   vaultTabDialogsProps: Omit<
     VaultTabDialogsProps,

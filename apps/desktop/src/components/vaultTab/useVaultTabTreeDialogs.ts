@@ -50,7 +50,11 @@ export type UseVaultTabTreeDialogsResult = {
   composeEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   vaultTabDialogsProps: Omit<
     VaultTabDialogsProps,
-    'busy' | 'vaultRoot' | 'wikiLinkAmbiguityRenamePrompt' | 'onConfirmWikiLinkAmbiguityRename'
+    | 'busy'
+    | 'vaultRoot'
+    | 'wikiLinkAmbiguityRenamePrompt'
+    | 'onConfirmWikiLinkAmbiguityRename'
+    | 'onWikiLinkAmbiguityRenameDialogOpenChange'
   >;
   wikiLinkAmbiguityRenameDialogProps: Pick<
     VaultTabDialogsProps,
