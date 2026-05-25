@@ -64,7 +64,10 @@ export default defineConfig({
             },
             {
               name: 'vendor-cm',
-              test: /node_modules\/@codemirror\//,
+              // Core editor stack only. Fence languages load via dynamic import from
+              // language-data; grouping @codemirror/lang-* here merges every grammar
+              // into one multi-MB vendor-cm chunk on startup.
+              test: /node_modules\/@codemirror\/(?!lang-|legacy-modes)/,
               priority: 15,
             },
             {

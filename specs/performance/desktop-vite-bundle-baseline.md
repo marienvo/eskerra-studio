@@ -12,8 +12,8 @@ npm run build -w @eskerra/desktop
 
 | Chunk | Size (minified) | gzip |
 | --- | ---: | ---: |
-| `index-*.js` | **1,299.56 kB** | 385.51 kB |
-| `vendor-cm-*.js` | **818.32 kB** | 292.98 kB |
+| `index-*.js` | **~1,020 kB** | ~298 kB |
+| `vendor-cm-*.js` | **~388 kB** (core `@codemirror/*` only; `lang-*` / `legacy-modes` are separate async chunks) | ~124 kB gzip |
 | `vendor-react-*.js` | 377.39 kB | 116.37 kB |
 | `vendor-md-*.js` | 128.83 kB | 37.66 kB |
 
@@ -48,7 +48,7 @@ Baseline build on 2026-05-25: **no warning** (largest chunk `index` at ~1.30 MB)
 ## Regression checks during refactor
 
 - `index` must not grow materially without an explained import-boundary change.
-- `vendor-cm`, `vendor-react`, and `vendor-md` should stay stable unless dependencies or CodeMirror/editor imports change.
+- `vendor-cm` is only the core CodeMirror stack (`vite.config.ts` excludes `@codemirror/lang-*` and `legacy-modes` from that group). Fence grammars stay in hashed async chunks loaded on demand. `vendor-cm`, `vendor-react`, and `vendor-md` should stay stable unless core editor dependencies change.
 - Lazy chunks must remain separate; do not static-import `SettingsPage`, `QuickOpenNotePalette`, or `VaultSearchPalette` outside `AppLazyUi.tsx`.
 - Optional if `index` grows: `npm run build:analyze -w @eskerra/desktop` (if configured) and inspect the entry graph.
 

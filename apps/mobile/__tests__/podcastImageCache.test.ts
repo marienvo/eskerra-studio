@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  clearInFlightCachedArtworkRequestsForTesting,
   getCachedPodcastArtworkUri,
   getPodcastArtworkUri,
   getPodcastImageCacheKey,
@@ -84,6 +85,7 @@ describe('podcastImageCache', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    clearInFlightCachedArtworkRequestsForTesting();
     (globalThis as unknown as {fetch: typeof fetch}).fetch =
       globalFetchMock as unknown as typeof fetch;
     asyncStorageGetItemMock.mockResolvedValue(null);
@@ -92,6 +94,32 @@ describe('podcastImageCache', () => {
     safUriExistsMock.mockResolvedValue(true);
     podcastArtworkFileExistsMock.mockResolvedValue(true);
     clearPodcastImageCacheEntryMock.mockResolvedValue();
+  });
+
+  test('deduplicates parallel getCachedPodcastArtworkUri disk work for the same feed', async () => {
+    const baseUri = nextBaseUri();
+    const rssFeedUrl = nextRssFeedUrl();
+    let readCount = 0;
+    readCacheMock.mockImplementation(async () => {
+      readCount += 1;
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 5);
+      });
+      return {
+        fetchedAt: new Date().toISOString(),
+        imageUrl: 'https://cdn.example.com/dedup.jpg',
+        localImageUri: 'file:///data/app/dedup.jpg',
+      };
+    });
+
+    const [first, second] = await Promise.all([
+      getCachedPodcastArtworkUri(baseUri, rssFeedUrl),
+      getCachedPodcastArtworkUri(baseUri, rssFeedUrl),
+    ]);
+
+    expect(first).toBe('file:///data/app/dedup.jpg');
+    expect(second).toBe('file:///data/app/dedup.jpg');
+    expect(readCount).toBe(1);
   });
 
   test('returns fresh local cache entry without fetching RSS', async () => {

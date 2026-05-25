@@ -14,6 +14,7 @@ export const PODCAST_IMAGE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS = 60 * 60 * 1000;
 const ARTWORK_DOWNLOAD_TIMEOUT_MS = 10000;
 const inFlightArtworkRequests = new Map<string, Promise<string | null>>();
+const inFlightCachedArtworkRequests = new Map<string, Promise<string | null>>();
 const artworkUriMemoryCache = new Map<string, string | null>();
 const persistentArtworkWriteChains = new Map<string, Promise<void>>();
 const PERSISTENT_ARTWORK_CACHE_KEY_PREFIX = 'eskerra:artworkUriCache:';
@@ -325,32 +326,46 @@ export async function getCachedPodcastArtworkUri(
   const memoryCacheKey = getArtworkMemoryCacheKey(baseUri, normalizedRssFeedUrl);
   const memoryHit = peekCachedPodcastArtworkUriFromMemory(baseUri, normalizedRssFeedUrl);
   if (memoryHit) {
-    if (await isVaultArtworkUriStillReadable(memoryHit)) {
-      return memoryHit;
+    // Trust in-session / loadPersistentArtworkUriCache-validated URIs; avoid per-row native
+    // fileUriExists / SAF round-trips that stagger list paints. Stale locals are repaired on
+    // next full resolve or refresh validation.
+    return memoryHit;
+  }
+
+  const pending = inFlightCachedArtworkRequests.get(memoryCacheKey);
+  if (pending) {
+    return pending;
+  }
+
+  const work = (async (): Promise<string | null> => {
+    try {
+      const cacheKey = getPodcastImageCacheKey(normalizedRssFeedUrl);
+      const cachedEntry = await readPodcastImageCacheEntry(baseUri, cacheKey);
+      if (!cachedEntry || !isEntryFresh(cachedEntry)) {
+        artworkUriMemoryCache.delete(memoryCacheKey);
+        return null;
+      }
+
+      const renderableUri = await resolveRenderableUriAfterDiskHit(
+        baseUri,
+        normalizedRssFeedUrl,
+        cacheKey,
+        cachedEntry,
+      );
+      if (!renderableUri) {
+        artworkUriMemoryCache.delete(memoryCacheKey);
+        return null;
+      }
+
+      setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, renderableUri);
+      return renderableUri;
+    } finally {
+      inFlightCachedArtworkRequests.delete(memoryCacheKey);
     }
-    setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, null);
-  }
+  })();
 
-  const cacheKey = getPodcastImageCacheKey(normalizedRssFeedUrl);
-  const cachedEntry = await readPodcastImageCacheEntry(baseUri, cacheKey);
-  if (!cachedEntry || !isEntryFresh(cachedEntry)) {
-    artworkUriMemoryCache.delete(memoryCacheKey);
-    return null;
-  }
-
-  const renderableUri = await resolveRenderableUriAfterDiskHit(
-    baseUri,
-    normalizedRssFeedUrl,
-    cacheKey,
-    cachedEntry,
-  );
-  if (!renderableUri) {
-    artworkUriMemoryCache.delete(memoryCacheKey);
-    return null;
-  }
-
-  setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, renderableUri);
-  return renderableUri;
+  inFlightCachedArtworkRequests.set(memoryCacheKey, work);
+  return work;
 }
 
 export async function getPodcastArtworkUri(
@@ -364,14 +379,12 @@ export async function getPodcastArtworkUri(
 
   const memoryHit = peekCachedPodcastArtworkUriFromMemory(baseUri, normalizedRssFeedUrl);
   if (memoryHit) {
-    if (await isVaultArtworkUriStillReadable(memoryHit)) {
-      return memoryHit;
-    }
-    setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, null);
+    return memoryHit;
   }
 
+  const memoryCacheKey = getArtworkMemoryCacheKey(baseUri, normalizedRssFeedUrl);
   const cacheKey = getPodcastImageCacheKey(normalizedRssFeedUrl);
-  const activeRequest = inFlightArtworkRequests.get(cacheKey);
+  const activeRequest = inFlightArtworkRequests.get(memoryCacheKey);
   if (activeRequest) {
     return activeRequest;
   }
@@ -426,12 +439,16 @@ export async function getPodcastArtworkUri(
     return imageUrl;
   })();
 
-  inFlightArtworkRequests.set(cacheKey, request);
+  inFlightArtworkRequests.set(memoryCacheKey, request);
   try {
     return await request;
   } finally {
-    inFlightArtworkRequests.delete(cacheKey);
+    inFlightArtworkRequests.delete(memoryCacheKey);
   }
+}
+
+export function clearInFlightCachedArtworkRequestsForTesting(): void {
+  inFlightCachedArtworkRequests.clear();
 }
 
 export function warmPodcastArtworkCache(

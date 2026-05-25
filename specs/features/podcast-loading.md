@@ -82,6 +82,7 @@ Optional **user-triggered** job (not on the startup path): Kotlin module `Eskerr
 - Lifetime: JS runtime session.
 - Purpose: avoid repeated artwork resolution work during row renders.
 - `peekCachedPodcastArtworkUriFromMemory` allows list rows to show a known URI on the **first paint** when the in-memory map was warmed by `loadPersistentArtworkUriCache` or earlier resolution (see `usePodcastArtwork`).
+- During the session, `getCachedPodcastArtworkUri` **trusts** memory hits without re-running `fileUriExists` / SAF checks per row (stale `file://` entries are dropped on the next `loadPersistentArtworkUriCache`, metadata refresh, or full `getPodcastArtworkUri` path).
 
 ### Persistent Artwork URI Cache
 
@@ -111,7 +112,7 @@ Optional **user-triggered** job (not on the startup path): Kotlin module `Eskerr
 4. Read and parse legacy podcast markdown bodies (SAF `readFile` per file).
 5. Enrich episodes with RSS URLs from `rssFeedUrlCache` (including entries restored from persistent storage), using `seriesName` then `sectionTitle` as lookup keys.
 6. Build sections and commit state.
-7. Fire-and-forget `primeArtworkCacheFromDisk` for every RSS URL found on episodes or sections (so `AsyncStorage` metadata can populate memory **without** waiting for phase 2 `📻` reads when there are no RSS files or phase 2 is slow).
+7. Fire-and-forget `primeArtworkCacheFromDisk` for every RSS URL found on episodes or sections (so `AsyncStorage` metadata can populate memory **without** waiting on `📻` reads when those run after first paint).
 8. Set `isLoading=false` in `finally`.
 
 Spinner target: disappears after steps 1–6 complete (step 7 does not block the spinner). When a persisted podcast markdown index exists, step 2 avoids a full `listFiles` on `General` on the critical path; a full listing may still run afterward in the background.
@@ -124,7 +125,7 @@ When phase 1 used a persisted snapshot (no full listing in the `try` block), `re
 
 After phase 1 state is rendered:
 
-1. Read RSS markdown files (`📻 ... .md`).
+1. Read RSS markdown files (`📻 ... .md`) when not already read on the critical path (see `usePodcasts` `runRssEnrichment`).
 2. Extract RSS feed URL + section title.
 3. Persist RSS URL mappings via `persistRssFeedUrl` (memory + `AsyncStorage` write-through).
 4. Re-enrich episodes and sections if new URLs changed visible data.
