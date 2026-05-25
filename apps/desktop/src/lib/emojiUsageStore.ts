@@ -9,10 +9,15 @@ export const EMOJI_USAGE_MAX_SHORTCODES = 300;
 export const EMOJI_USAGE_MAX_QUERIES = 200;
 export const EMOJI_USAGE_MAX_SHORTCODES_PER_QUERY = 50;
 
-/** Per-query counts dominate within-tier ordering over global picks. */
-export const EMOJI_USAGE_QUERY_BOOST = 1000;
+/** Weight when a stored query key shares a prefix with the active query (not exact). */
+export const EMOJI_USAGE_PREFIX_QUERY_WEIGHT = 0.5;
 
 export const EMOJI_USAGE_DEBOUNCE_SAVE_MS = 1500;
+
+export type EmojiUsageScores = {
+  readonly favScore: number;
+  readonly globalScore: number;
+};
 
 type EmojiUsagePayloadV1 = {
   readonly v: 1;
@@ -199,15 +204,64 @@ function evictLowestQueryKey(): void {
   }
 }
 
-export function getEmojiUsageCount(shortcode: string, queryLower?: string): number {
-  const key = normalizeShortcodeKey(shortcode);
-  const global = globalCounts.get(key) ?? 0;
-  if (queryLower === undefined || queryLower.length === 0) {
-    return global;
+/**
+ * Weight for picks recorded under `storedQ` when the user is typing query `Q`.
+ * Returns null when the queries are unrelated.
+ */
+export function emojiUsageQueryRelationWeight(
+  activeQuery: string,
+  storedQuery: string,
+): number | null {
+  const Q = normalizeQueryKey(activeQuery);
+  const stored = normalizeQueryKey(storedQuery);
+  if (Q.length === 0 || stored.length === 0) {
+    return null;
   }
-  const qKey = normalizeQueryKey(queryLower);
-  const perQuery = byQueryCounts.get(qKey)?.get(key) ?? 0;
-  return perQuery * EMOJI_USAGE_QUERY_BOOST + global;
+  if (Q === stored) {
+    return 1;
+  }
+  if (stored.startsWith(Q) || Q.startsWith(stored)) {
+    return EMOJI_USAGE_PREFIX_QUERY_WEIGHT;
+  }
+  return null;
+}
+
+/** Build once per `:query` completion refresh; sums exact + prefix-related query keys. */
+export function buildEmojiUsageScoreLookup(
+  queryLower: string,
+): (shortcode: string) => EmojiUsageScores {
+  const Q = normalizeQueryKey(queryLower);
+  const favByShortcode = new Map<string, number>();
+  if (Q.length > 0) {
+    for (const [storedQ, counts] of byQueryCounts) {
+      const weight = emojiUsageQueryRelationWeight(Q, storedQ);
+      if (weight === null) {
+        continue;
+      }
+      for (const [k, n] of counts) {
+        const add = n * weight;
+        favByShortcode.set(k, (favByShortcode.get(k) ?? 0) + add);
+      }
+    }
+  }
+  return (shortcode: string): EmojiUsageScores => {
+    const key = normalizeShortcodeKey(shortcode);
+    return {
+      favScore: favByShortcode.get(key) ?? 0,
+      globalScore: globalCounts.get(key) ?? 0,
+    };
+  };
+}
+
+export function getEmojiUsageScores(
+  shortcode: string,
+  queryLower?: string,
+): EmojiUsageScores {
+  if (queryLower === undefined || queryLower.length === 0) {
+    const key = normalizeShortcodeKey(shortcode);
+    return {favScore: 0, globalScore: globalCounts.get(key) ?? 0};
+  }
+  return buildEmojiUsageScoreLookup(queryLower)(shortcode);
 }
 
 export async function flushEmojiUsageToStore(): Promise<void> {

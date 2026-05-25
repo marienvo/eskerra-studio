@@ -3,9 +3,10 @@ import {describe, expect, test} from 'vitest';
 import {
   capEmojiUsageByQuery,
   capEmojiUsageCounts,
-  EMOJI_USAGE_QUERY_BOOST,
+  emojiUsageQueryRelationWeight,
+  EMOJI_USAGE_PREFIX_QUERY_WEIGHT,
   evictLowestCountKey,
-  getEmojiUsageCount,
+  getEmojiUsageScores,
   parseEmojiUsagePayload,
   parseEmojiUsagePayloadV1,
   parseEmojiUsagePayloadV2,
@@ -91,15 +92,64 @@ describe('capEmojiUsageByQuery', () => {
   });
 });
 
-describe('getEmojiUsageCount / recordEmojiUsage', () => {
-  test('query-specific count boosts sort score', () => {
+describe('emojiUsageQueryRelationWeight', () => {
+  test('exact match is weight 1', () => {
+    expect(emojiUsageQueryRelationWeight('ch', 'ch')).toBe(1);
+  });
+
+  test('prefix relation is half weight', () => {
+    expect(emojiUsageQueryRelationWeight('ch', 'check')).toBe(
+      EMOJI_USAGE_PREFIX_QUERY_WEIGHT,
+    );
+    expect(emojiUsageQueryRelationWeight('check', 'ch')).toBe(
+      EMOJI_USAGE_PREFIX_QUERY_WEIGHT,
+    );
+  });
+
+  test('unrelated queries return null', () => {
+    expect(emojiUsageQueryRelationWeight('ch', 'smile')).toBeNull();
+  });
+});
+
+describe('getEmojiUsageScores / recordEmojiUsage', () => {
+  test('exact query pick gives favScore 1', () => {
+    __resetForTests();
+    recordEmojiUsage('heavy_check_mark', 'ch');
+    expect(getEmojiUsageScores('heavy_check_mark', 'ch')).toEqual({
+      favScore: 1,
+      globalScore: 1,
+    });
+    __resetForTests();
+  });
+
+  test('prefix-related stored query gives half weight', () => {
+    __resetForTests();
+    recordEmojiUsage('heavy_check_mark', 'check');
+    expect(getEmojiUsageScores('heavy_check_mark', 'ch')).toEqual({
+      favScore: EMOJI_USAGE_PREFIX_QUERY_WEIGHT,
+      globalScore: 1,
+    });
+    __resetForTests();
+  });
+
+  test('sums exact and prefix-related query picks', () => {
+    __resetForTests();
+    recordEmojiUsage('heavy_check_mark', 'checkmark');
+    recordEmojiUsage('heavy_check_mark', 'ch');
+    expect(getEmojiUsageScores('heavy_check_mark', 'ch')).toEqual({
+      favScore: 1 + EMOJI_USAGE_PREFIX_QUERY_WEIGHT,
+      globalScore: 2,
+    });
+    __resetForTests();
+  });
+
+  test('unrelated query has zero favScore but keeps global', () => {
     __resetForTests();
     recordEmojiUsage('smile_a', 'heart');
-    recordEmojiUsage('smile_b', 'heart');
-    recordEmojiUsage('smile_b', 'heart');
-    expect(getEmojiUsageCount('smile_a', 'heart')).toBe(EMOJI_USAGE_QUERY_BOOST + 1);
-    expect(getEmojiUsageCount('smile_b', 'heart')).toBe(EMOJI_USAGE_QUERY_BOOST * 2 + 2);
-    expect(getEmojiUsageCount('smile_a', 'other')).toBe(1);
+    expect(getEmojiUsageScores('smile_a', 'other')).toEqual({
+      favScore: 0,
+      globalScore: 1,
+    });
     __resetForTests();
   });
 });

@@ -87,11 +87,19 @@ export function emojiMatchTier(
   return null;
 }
 
+export type EmojiUsageScoresForSort = {
+  readonly favScore: number;
+  readonly globalScore: number;
+};
+
 export function filterSortAndCapEmojiRows(
   rows: readonly EmojiCompletionRow[],
   queryLower: string,
   maxOptions: number,
-  getCount: (shortcode: string) => number = () => 0,
+  getScores: (shortcode: string) => EmojiUsageScoresForSort = () => ({
+    favScore: 0,
+    globalScore: 0,
+  }),
 ): EmojiCompletionRow[] {
   const scored: {readonly row: EmojiCompletionRow; readonly tier: EmojiMatchTier}[] =
     [];
@@ -102,13 +110,27 @@ export function filterSortAndCapEmojiRows(
     }
   }
   scored.sort((a, b) => {
+    const sa = getScores(a.row.p);
+    const sb = getScores(b.row.p);
+    const aFav = sa.favScore > 0;
+    const bFav = sb.favScore > 0;
+    if (aFav !== bFav) {
+      return aFav ? -1 : 1;
+    }
+    if (aFav && bFav) {
+      if (sb.favScore !== sa.favScore) {
+        return sb.favScore - sa.favScore;
+      }
+      if (sb.globalScore !== sa.globalScore) {
+        return sb.globalScore - sa.globalScore;
+      }
+      return a.row.p.localeCompare(b.row.p);
+    }
     if (a.tier !== b.tier) {
       return a.tier - b.tier;
     }
-    const ca = getCount(a.row.p);
-    const cb = getCount(b.row.p);
-    if (cb !== ca) {
-      return cb - ca;
+    if (sb.globalScore !== sa.globalScore) {
+      return sb.globalScore - sa.globalScore;
     }
     return a.row.p.localeCompare(b.row.p);
   });

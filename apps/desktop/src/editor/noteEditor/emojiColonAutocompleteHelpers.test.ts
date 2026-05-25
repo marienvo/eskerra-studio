@@ -107,32 +107,40 @@ describe('filterSortAndCapEmojiRows', () => {
     expect(filterSortAndCapEmojiRows(rows, 'qqq', 10)).toEqual([]);
   });
 
-  test('within the same tier, higher usage count sorts first', () => {
+  test('favorite with tier 2 ranks above non-favorite tier 0', () => {
+    const r: EmojiCompletionRow[] = [
+      {e: '📊', p: 'chart', b: 'chart graph'},
+      {e: '✅', p: 'heavy_check_mark', b: 'check mark heavy'},
+    ];
+    const got = filterSortAndCapEmojiRows(r, 'ch', 10, p =>
+      p === 'heavy_check_mark' ? {favScore: 1, globalScore: 0} : {favScore: 0, globalScore: 0},
+    );
+    expect(got.map(x => x.p)).toEqual(['heavy_check_mark', 'chart']);
+  });
+
+  test('two favorites sort by favScore descending', () => {
     const r: EmojiCompletionRow[] = [
       {e: 'a', p: 'smile_a', b: 'smile_a test'},
       {e: 'b', p: 'smile_b', b: 'smile_b test'},
     ];
-    const got = filterSortAndCapEmojiRows(
-      r,
-      'smile',
-      10,
-      p => (p === 'smile_b' ? 99 : 1),
+    const got = filterSortAndCapEmojiRows(r, 'smile', 10, p =>
+      p === 'smile_b'
+        ? {favScore: 3, globalScore: 0}
+        : {favScore: 1, globalScore: 0},
     );
     expect(got.map(x => x.p)).toEqual(['smile_b', 'smile_a']);
   });
 
-  test('query-specific usage can reorder within tier', () => {
-    const boost = 1000;
+  test('within non-favorite bucket, tier orders before globalScore', () => {
     const r: EmojiCompletionRow[] = [
-      {e: 'a', p: 'heart', b: 'heart red'},
-      {e: 'b', p: 'heartbeat', b: 'heartbeat pulse'},
+      {e: '😁', p: 'grin', b: 'grin teeth'},
+      {e: '🪨', p: 'rocks', b: 'rocks gray stone'},
     ];
-    const got = filterSortAndCapEmojiRows(
-      r,
-      'heart',
-      10,
-      p => (p === 'heart' ? boost + 3 : boost + 1),
+    const got = filterSortAndCapEmojiRows(r, 'gr', 10, p =>
+      p === 'rocks'
+        ? {favScore: 0, globalScore: 99}
+        : {favScore: 0, globalScore: 1},
     );
-    expect(got.map(x => x.p)).toEqual(['heart', 'heartbeat']);
+    expect(got.map(x => x.p)).toEqual(['grin', 'rocks']);
   });
 });
