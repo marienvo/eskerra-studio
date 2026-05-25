@@ -4,12 +4,13 @@ import {
   StreamLanguage,
   type StreamParser,
 } from '@codemirror/language';
+import {languages as codeMirrorLanguages} from '@codemirror/language-data';
 
 function legacy(parser: StreamParser<unknown>): LanguageSupport {
   return new LanguageSupport(StreamLanguage.define(parser));
 }
 
-export const eskerraFenceLanguages: readonly LanguageDescription[] = [
+const eskerraFenceLanguageOverrides: readonly LanguageDescription[] = [
   LanguageDescription.of({
     name: 'JavaScript',
     alias: ['ecmascript', 'js', 'node'],
@@ -97,6 +98,17 @@ export const eskerraFenceLanguages: readonly LanguageDescription[] = [
     load: () => import('@codemirror/lang-xml').then(m => m.xml()),
   }),
   LanguageDescription.of({
+    name: 'Angular Template',
+    alias: ['angular', 'angular template'],
+    load: () => import('@codemirror/lang-angular').then(m => m.angular()),
+  }),
+  LanguageDescription.of({
+    name: 'WebAssembly',
+    alias: ['webassembly', 'wast', 'wat'],
+    extensions: ['wat', 'wast'],
+    load: () => import('@codemirror/lang-wast').then(m => m.wast()),
+  }),
+  LanguageDescription.of({
     name: 'Shell',
     alias: ['bash', 'sh', 'zsh'],
     extensions: ['sh', 'ksh', 'bash'],
@@ -120,3 +132,27 @@ export const eskerraFenceLanguages: readonly LanguageDescription[] = [
       import('@codemirror/legacy-modes/mode/dockerfile').then(m => legacy(m.dockerFile)),
   }),
 ];
+
+function mergeLanguageDescriptions(
+  base: readonly LanguageDescription[],
+  overrides: readonly LanguageDescription[],
+): readonly LanguageDescription[] {
+  const byName = new Map<string, LanguageDescription>();
+  for (const language of base) {
+    byName.set(language.name.toLowerCase(), language);
+  }
+  for (const language of overrides) {
+    byName.set(language.name.toLowerCase(), language);
+  }
+  return [...byName.values()];
+}
+
+/**
+ * Full fenced-code registry for markdown editors.
+ *
+ * We keep CodeMirror's broad language-data coverage so existing vault notes continue to resolve
+ * common fence labels lazily, and only override a few entries where Eskerra wants explicit aliases
+ * or loaders.
+ */
+export const eskerraFenceLanguages: readonly LanguageDescription[] =
+  mergeLanguageDescriptions(codeMirrorLanguages, eskerraFenceLanguageOverrides);
