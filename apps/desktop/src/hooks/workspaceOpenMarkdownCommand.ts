@@ -11,7 +11,6 @@ import {
   insertTabAtIndex,
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
-import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
 import {
   openTabBackgroundAction,
   type OpenTabBackgroundOptions,
@@ -23,6 +22,7 @@ import {
   applyForegroundOpenTabPlacement,
   decideHomeOpenMode,
 } from './workspaceEditorTabs';
+import {persistableInboxEditorFullMarkdown} from './openNotePersistence';
 import {snapshotEditorShellScrollForOpenNote} from './workspaceEditorScrollMap';
 import {resolveModelBackedLegacyTabStrip} from './workspaceRuntimeProjection';
 
@@ -120,20 +120,36 @@ function snapshotAndPersistCurrentNoteBeforeOpen(ctx: OpenMarkdownCommandContext
   if (curUri == null || ctx.composingNewEntryRef.current) {
     return;
   }
-  const snapMdForSlice = ctx.inboxEditorRef.current?.getMarkdown() ?? ctx.editorBodyRef.current;
-  const snapshot = inboxEditorSliceToFullMarkdown(
-    snapMdForSlice,
-    curUri,
-    false,
-    ctx.inboxYamlFrontmatterInnerRef.current,
-    ctx.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-  );
-  ctx.mergeInboxNoteBodyCacheRefAndState(curUri, snapshot);
   const prev = ctx.lastPersistedRef.current;
+  const snapshot = persistableInboxEditorFullMarkdown({
+    editorBodySlice:
+      ctx.inboxEditorRef.current?.getMarkdown() ?? ctx.editorBodyRef.current,
+    selectedUri: curUri,
+    composingNewEntry: false,
+    yamlInner: ctx.inboxYamlFrontmatterInnerRef.current,
+    yamlLeading: ctx.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+    persistedFullMarkdown:
+      prev != null && prev.uri === curUri ? prev.markdown : null,
+  });
+  ctx.mergeInboxNoteBodyCacheRefAndState(curUri, snapshot);
   const needsPersist = root != null && !(prev && prev.uri === curUri && prev.markdown === snapshot);
   if (needsPersist) {
     ctx.enqueuePersistOutgoingNoteMarkdown(curUri, snapshot);
   }
+}
+
+function scheduleFocusAfterForegroundOpen(
+  inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>,
+): void {
+  if (typeof window === 'undefined') {
+    inboxEditorRef.current?.focus({scrollIntoView: false});
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      inboxEditorRef.current?.focus({scrollIntoView: false});
+    });
+  });
 }
 
 async function tryPrefetchTargetBody(
@@ -170,6 +186,8 @@ function loadOpenedNoteBodyAndApplySelection(
   }
   const resolvedEditorBody =
     prefetchBody !== undefined ? prefetchBody : ctx.inboxContentByUriRef.current[targetNorm];
+  ctx.composingNewEntryRef.current = false;
+  ctx.setComposingNewEntry(false);
   if (resolvedEditorBody !== undefined) {
     ctx.setLastPersistedSnapshot({uri: targetNorm, markdown: resolvedEditorBody});
     ctx.eagerEditorLoadUriRef.current = targetNorm;
@@ -178,7 +196,6 @@ function loadOpenedNoteBodyAndApplySelection(
     ctx.scheduleBacklinksDeferOneFrameAfterLoad();
   }
   ctx.selectedUriRef.current = targetNorm;
-  ctx.composingNewEntryRef.current = false;
   if (prefetchBody !== undefined) {
     ctx.setInboxContentByUri(prev => {
       if (prev[targetNorm] === prefetchBody) {
@@ -190,8 +207,8 @@ function loadOpenedNoteBodyAndApplySelection(
   if (resolvedEditorBody !== undefined) {
     ctx.setBacklinksActiveBody(resolvedEditorBody);
   }
-  ctx.setComposingNewEntry(false);
   ctx.setSelectedUri(targetNorm);
+  scheduleFocusAfterForegroundOpen(ctx.inboxEditorRef);
 }
 
 function applyBackgroundNewTabOpen(

@@ -13,13 +13,13 @@ import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdow
 import type {NoteMarkdownLoadSelection} from '../../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {
   clearInboxYamlFrontmatterEditorRefs,
-  inboxEditorSliceToFullMarkdown,
 } from '../../lib/inboxYamlFrontmatterEditor';
 import {
   mergeInboxNoteBodyIntoCache,
   normalizeVaultMarkdownDiskRead,
   resolveInboxCachedBodyForEditor,
 } from '../inboxNoteBodyCache';
+import {persistableInboxEditorFullMarkdown} from '../openNotePersistence';
 
 /** Debounce scan of the active note body for backlinks (full vault scan is too heavy per keystroke). */
 const INBOX_BACKLINK_BODY_DEBOUNCE_MS = 200;
@@ -194,13 +194,17 @@ export function useWorkspaceSelectedNoteHydration({
       return;
     }
     const id = window.setTimeout(() => {
-      const liveFull = inboxEditorSliceToFullMarkdown(
-        editorBody,
+      const liveFull = persistableInboxEditorFullMarkdown({
+        editorBodySlice: editorBody,
         selectedUri,
         composingNewEntry,
-        inboxYamlFrontmatterInnerRef.current,
-        inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-      );
+        yamlInner: inboxYamlFrontmatterInnerRef.current,
+        yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+        persistedFullMarkdown:
+          lastPersistedRef.current?.uri === selectedUri
+            ? lastPersistedRef.current.markdown
+            : null,
+      });
       if (backlinksActiveBodyRef.current === liveFull) {
         return;
       }
@@ -236,13 +240,14 @@ export function useWorkspaceSelectedNoteHydration({
             }
             return {...prev, [selectedUri]: normalized};
           });
-          const currentFull = inboxEditorSliceToFullMarkdown(
-            editorBodyRef.current,
+          const currentFull = persistableInboxEditorFullMarkdown({
+            editorBodySlice: editorBodyRef.current,
             selectedUri,
-            composingNewEntryRef.current,
-            inboxYamlFrontmatterInnerRef.current,
-            inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-          );
+            composingNewEntry: composingNewEntryRef.current,
+            yamlInner: inboxYamlFrontmatterInnerRef.current,
+            yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+            persistedFullMarkdown: normalized,
+          });
           if (normalized !== currentFull) {
             loadFullMarkdownIntoInboxEditor(normalized, selectedUri, 'openNote');
             scheduleBacklinksDeferOneFrameAfterLoad();

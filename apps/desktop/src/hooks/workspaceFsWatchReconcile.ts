@@ -33,7 +33,6 @@ import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
 import {
   clearInboxYamlFrontmatterEditorRefs,
-  inboxEditorSliceToFullMarkdown,
 } from '../lib/inboxYamlFrontmatterEditor';
 import {
   classifyNoteDiskReconcile,
@@ -41,6 +40,7 @@ import {
   normalizeVaultMarkdownDiskRead,
   removeInboxNoteBodyFromCache,
 } from './inboxNoteBodyCache';
+import {persistableInboxEditorFullMarkdown} from './openNotePersistence';
 import type {InboxAutosaveScheduler} from '../lib/inboxAutosaveScheduler';
 import {
   applyReloadFromDiskForFsWatch,
@@ -215,14 +215,17 @@ async function reconcileOneOpenMarkdownTabAfterDiskRead(
     return;
   }
 
-  const local = inboxEditorSliceToFullMarkdown(
-    open.inboxEditorRef.current?.getMarkdown() ?? open.editorBodyRef.current,
-    normTab,
-    open.composingNewEntryRef.current,
-    open.inboxYamlFrontmatterInnerRef.current,
-    open.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-  );
   const lp = open.lastPersistedRef.current;
+  const local = persistableInboxEditorFullMarkdown({
+    editorBodySlice:
+      open.inboxEditorRef.current?.getMarkdown() ?? open.editorBodyRef.current,
+    selectedUri: normTab,
+    composingNewEntry: open.composingNewEntryRef.current,
+    yamlInner: open.inboxYamlFrontmatterInnerRef.current,
+    yamlLeading: open.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+    persistedFullMarkdown:
+      lp != null && lp.uri === normTab ? lp.markdown : null,
+  });
   const kind = classifyNoteDiskReconcile({
     noteUri: normTab,
     lastPersisted: lp,

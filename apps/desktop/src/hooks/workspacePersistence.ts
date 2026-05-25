@@ -23,7 +23,6 @@ import {persistTransientMarkdownImages} from '../lib/persistTransientMarkdownIma
 import {saveNoteMarkdown} from '../lib/vaultBootstrap';
 import type {TodayHubWorkspaceBridge} from '../lib/todayHub';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
 import {reportCrash} from '../observability/reportCrash';
 
 import type {
@@ -36,6 +35,7 @@ import {
   shouldSkipOutgoingPersistAfterNoteLeave,
   shouldSkipOutgoingPersistBeforeWrite,
 } from './inboxNoteBodyCache';
+import {persistableInboxEditorFullMarkdown} from './openNotePersistence';
 
 export function shouldScheduleInboxAutosave(args: {
   vaultRoot: string | null;
@@ -258,14 +258,17 @@ export function useWorkspacePersistence(args: {
       if (dc && normalizeEditorDocUri(dc.uri) === normalizeEditorDocUri(uri)) {
         return;
       }
-      const raw = inboxEditorSliceToFullMarkdown(
-        inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
-        selectedUriRef.current,
-        composingNewEntryRef.current,
-        inboxYamlFrontmatterInnerRef.current,
-        inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-      );
       const prev = lastPersistedRef.current;
+      const raw = persistableInboxEditorFullMarkdown({
+        editorBodySlice:
+          inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
+        selectedUri: selectedUriRef.current,
+        composingNewEntry: composingNewEntryRef.current,
+        yamlInner: inboxYamlFrontmatterInnerRef.current,
+        yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+        persistedFullMarkdown:
+          prev != null && prev.uri === uri ? prev.markdown : null,
+      });
       if (prev && prev.uri === uri && prev.markdown === raw) {
         return;
       }
@@ -377,13 +380,14 @@ export function useWorkspacePersistence(args: {
       autosaveSchedulerRef.current.cancel();
       return;
     }
-    const liveFull = inboxEditorSliceToFullMarkdown(
-      editorBody,
+    const liveFull = persistableInboxEditorFullMarkdown({
+      editorBodySlice: editorBody,
       selectedUri,
       composingNewEntry,
-      inboxYamlFrontmatterInnerRef.current,
-      inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-    );
+      yamlInner: inboxYamlFrontmatterInnerRef.current,
+      yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
+      persistedFullMarkdown: lastPersistedRef.current?.markdown ?? null,
+    });
     if (
       !shouldScheduleInboxAutosave({
         vaultRoot,

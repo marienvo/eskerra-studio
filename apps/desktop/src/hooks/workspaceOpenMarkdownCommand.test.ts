@@ -131,6 +131,32 @@ describe('workspaceOpenMarkdownCommand', () => {
     expect(ctx.mirrorShadowActiveTab).toHaveBeenCalledTimes(1);
   });
 
+  it('foreground open exits compose mode before loading and refocuses the editor', async () => {
+    const {ctx} = createBaseContext();
+    const focus = vi.fn();
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation(callback => {
+        callback(0);
+        return 1;
+      });
+    ctx.inboxEditorRef.current = {focus} as never;
+    ctx.composingNewEntryRef.current = true;
+    ctx.inboxContentByUriRef.current['/vault/Inbox/from-compose.md'] = '# cached';
+    ctx.loadFullMarkdownIntoInboxEditor = vi.fn(() => {
+      expect(ctx.composingNewEntryRef.current).toBe(false);
+    });
+
+    try {
+      await runOpenMarkdownInEditorCommand(ctx as never, '/vault/Inbox/from-compose.md');
+    } finally {
+      rafSpy.mockRestore();
+    }
+
+    expect(ctx.setComposingNewEntry).toHaveBeenCalledWith(false);
+    expect(focus).toHaveBeenCalledWith({scrollIntoView: false});
+  });
+
   it('home open keeps Home surface and pushes hub history', async () => {
     const {ctx, tabsState, activeTabState} = createBaseContext();
     ctx.inboxContentByUriRef.current['/vault/A/Today.md'] = 'today';
