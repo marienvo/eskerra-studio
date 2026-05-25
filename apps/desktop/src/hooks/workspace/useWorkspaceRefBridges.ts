@@ -14,11 +14,9 @@ export function useWorkspaceRefBridges<T extends readonly RefBridge<unknown>[]>(
 ): void {
   useLayoutEffect(() => {
     for (const bridge of bridges) {
-      // Ref assignment is intentional; bridge list is ephemeral per render.
-      // eslint-disable-next-line react-hooks/immutability
+      // eslint-disable-next-line react-hooks/immutability -- imperative ref bridge for async children
       bridge.target.current = bridge.value;
     }
-    // bridges identity is intentional each render; values tracked via deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bridges list is ephemeral; values tracked via deps
   }, deps);
 }

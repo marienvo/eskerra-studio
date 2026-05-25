@@ -61,8 +61,7 @@ export function useInboxAutosaveEffect(
     return () => {
       scheduler.cancel();
     };
-    // Individual refs match legacy deps; `refs` object is unstable per render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- flat deps match legacy hook; `refs` object is unstable per render
   }, [
     vaultRoot,
     selectedUri,

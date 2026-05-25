@@ -148,7 +148,7 @@ export function useOpenMarkdownCommandContext(args: {
       setActiveEditorTabId,
       pushHomeHistoryForHub,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs omitted; deps mirror legacy open-markdown hook
     [
       fs,
       autosaveSchedulerRef,

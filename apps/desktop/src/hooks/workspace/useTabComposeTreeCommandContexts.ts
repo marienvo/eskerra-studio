@@ -123,7 +123,7 @@ export function useTabCommandContext(args: {
         clearLastPersistedSnapshot,
       },
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs omitted; deps mirror legacy tab command context
     [
       busy,
       bumpEditorClosedStack,
@@ -369,7 +369,7 @@ export function useTreeCommandContext(args: {
       clearInboxSelection: a.clearInboxSelection,
       setVaultTreeSelectionClearNonce: a.setVaultTreeSelectionClearNonce,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs omitted; flat `a.*` deps mirror legacy tree context
     [
       a.vaultRoot,
       a.fs,

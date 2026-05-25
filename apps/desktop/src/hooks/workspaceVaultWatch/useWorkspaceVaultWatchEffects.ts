@@ -43,8 +43,7 @@ export function useWorkspaceVaultWatchEffects(
       disposeVaultWatchSession(session, deps.refs.diskConflictDeferTimerRef);
       unlisten?.();
     };
-    // Flat arg list mirrors pre-split hook; `args` object is not a stable dependency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- flat deps mirror pre-split hook; `args` object is unstable
   }, [
     vaultRoot,
     args.refreshNotes,
