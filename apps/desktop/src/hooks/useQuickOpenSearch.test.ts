@@ -28,6 +28,10 @@ const ALP_REFS: VaultMarkdownRef[] = [
   {name: 'Alpine', uri: 'file:///v/Inbox/Alpine.md'},
   {name: 'Beta', uri: 'file:///v/General/Beta.md'},
 ];
+const ALP_TIER_REFS: VaultMarkdownRef[] = [
+  {name: 'Alpha', uri: 'file:///v/Inbox/Alpha.md'},
+  {name: 'Salp', uri: 'file:///v/Inbox/Salp.md'},
+];
 
 describe('useQuickOpenSearch', () => {
   beforeEach(() => {
@@ -183,5 +187,35 @@ describe('useQuickOpenSearch', () => {
     });
     expect(getQuickOpenUsageRevision()).toBe(1);
     expect(result.current.displayed.map(r => r.name)).toEqual(['Alpine', 'Alpha']);
+  });
+
+  it('re-sorts by hydrated query favorite over a better match tier', async () => {
+    const storeGet = vi.fn(async () =>
+      JSON.stringify({
+        v: 1,
+        global: {},
+        byQuery: {alp: {'file:///v/Inbox/Salp.md': 1}},
+      }),
+    );
+    const {load} = await import('@tauri-apps/plugin-store');
+    vi.mocked(load).mockResolvedValueOnce({
+      get: storeGet,
+      set: vi.fn(async () => {}),
+      save: vi.fn(async () => {}),
+    } as never);
+
+    const {result} = renderHook(
+      ({search}) => useQuickOpenSearch(search, VAULT, ALP_TIER_REFS),
+      {initialProps: {search: 'alp'}},
+    );
+    act(() => {
+      vi.advanceTimersByTime(QUICK_OPEN_SEARCH_DEBOUNCE_MS);
+    });
+    expect(result.current.displayed.map(r => r.name)).toEqual(['Alpha', 'Salp']);
+
+    await act(async () => {
+      await hydrateQuickOpenUsageFromStore();
+    });
+    expect(result.current.displayed.map(r => r.name)).toEqual(['Salp', 'Alpha']);
   });
 });

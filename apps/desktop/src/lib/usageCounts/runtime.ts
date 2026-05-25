@@ -1,5 +1,6 @@
 import {load} from '@tauri-apps/plugin-store';
 
+import {invalidateScoreLookupCache} from './buildScoreLookup';
 import {evictLowestCountKey} from './evictLowestCountKey';
 import {normalizeQueryKey} from './normalizeQueryKey';
 import type {UsageCountLimits, UsageCountMaps, UsageScores, ScoreLookupMemo} from './types';
@@ -166,6 +167,7 @@ export async function hydrateUsageCountsFromStoreKey(opts: {
     if (typeof raw === 'string' && raw.trim()) {
       const parsed = opts.parseRaw(raw);
       if (parsed) {
+        invalidateScoreLookupCache(opts.memo);
         loadUsageMapsFromParsed(parsed, opts.maps);
         return true;
       }
