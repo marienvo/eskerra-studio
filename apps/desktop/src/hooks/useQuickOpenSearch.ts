@@ -1,5 +1,5 @@
 import type {VaultMarkdownRef} from '@eskerra/core';
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useState, useSyncExternalStore} from 'react';
 
 import {filterVaultNotesForQuickOpen} from '../lib/quickOpenNoteFilter';
 import {
@@ -21,14 +21,12 @@ export function useQuickOpenSearch(
   refs: readonly VaultMarkdownRef[],
 ) {
   const [appliedQuery, setAppliedQuery] = useState('');
-  const [usageRevision, setUsageRevision] = useState(getQuickOpenUsageRevision);
+  const usageRevision = useSyncExternalStore(
+    subscribeQuickOpenUsageRevision,
+    getQuickOpenUsageRevision,
+    getQuickOpenUsageRevision,
+  );
   const searchTrimmed = search.trim();
-
-  useEffect(() => {
-    return subscribeQuickOpenUsageRevision(() => {
-      setUsageRevision(getQuickOpenUsageRevision());
-    });
-  }, []);
 
   useEffect(() => {
     if (!searchTrimmed) {

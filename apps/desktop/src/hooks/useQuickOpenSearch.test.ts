@@ -3,6 +3,7 @@ import {act, renderHook} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {QUICK_OPEN_SEARCH_DEBOUNCE_MS, useQuickOpenSearch} from './useQuickOpenSearch';
+import * as quickOpenUsageStore from '../lib/quickOpenUsageStore';
 import {
   getQuickOpenUsageRevision,
   hydrateQuickOpenUsageFromStore,
@@ -217,5 +218,41 @@ describe('useQuickOpenSearch', () => {
       await hydrateQuickOpenUsageFromStore();
     });
     expect(result.current.displayed.map(r => r.name)).toEqual(['Salp', 'Alpha']);
+  });
+
+  it('re-reads usage revision on render after hydrate without subscribe notify', async () => {
+    const storeGet = vi.fn(async () =>
+      JSON.stringify({
+        v: 1,
+        global: {'file:///v/Inbox/Alpine.md': 2},
+        byQuery: {alp: {'file:///v/Inbox/Alpine.md': 2}},
+      }),
+    );
+    const {load} = await import('@tauri-apps/plugin-store');
+    vi.mocked(load).mockResolvedValueOnce({
+      get: storeGet,
+      set: vi.fn(async () => {}),
+      save: vi.fn(async () => {}),
+    } as never);
+    vi.spyOn(quickOpenUsageStore, 'subscribeQuickOpenUsageRevision').mockImplementation(
+      () => () => {},
+    );
+
+    const {result, rerender} = renderHook(
+      ({search}) => useQuickOpenSearch(search, VAULT, ALP_REFS),
+      {initialProps: {search: 'alp'}},
+    );
+    act(() => {
+      vi.advanceTimersByTime(QUICK_OPEN_SEARCH_DEBOUNCE_MS);
+    });
+    expect(result.current.displayed.map(r => r.name)).toEqual(['Alpha', 'Alpine']);
+
+    await act(async () => {
+      await hydrateQuickOpenUsageFromStore();
+    });
+    expect(getQuickOpenUsageRevision()).toBe(1);
+
+    rerender({search: 'alp'});
+    expect(result.current.displayed.map(r => r.name)).toEqual(['Alpine', 'Alpha']);
   });
 });
