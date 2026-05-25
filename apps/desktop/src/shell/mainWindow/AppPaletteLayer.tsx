@@ -10,7 +10,8 @@ import {
 export type AppPaletteLayerProps = {
   vaultRoot: string;
   vaultMarkdownRefs: readonly VaultMarkdownRef[];
-  onPickNote: (uri: string) => void;
+  onPickNoteQuickOpen: (uri: string) => void;
+  onPickNoteVaultSearch: (uri: string) => void;
   quickOpenOpen: boolean;
   setQuickOpenOpen: (open: boolean) => void;
   vaultSearchOpen: boolean;
@@ -20,7 +21,8 @@ export type AppPaletteLayerProps = {
 export function AppPaletteLayer({
   vaultRoot,
   vaultMarkdownRefs,
-  onPickNote,
+  onPickNoteQuickOpen,
+  onPickNoteVaultSearch,
   quickOpenOpen,
   setQuickOpenOpen,
   vaultSearchOpen,
@@ -34,7 +36,7 @@ export function AppPaletteLayer({
           onOpenChange={setQuickOpenOpen}
           vaultRoot={vaultRoot}
           refs={vaultMarkdownRefs}
-          onPickNote={onPickNote}
+          onPickNote={onPickNoteQuickOpen}
         />
       ) : null}
       {vaultSearchOpen ? (
@@ -42,7 +44,7 @@ export function AppPaletteLayer({
           open={vaultSearchOpen}
           onOpenChange={setVaultSearchOpen}
           vaultRoot={vaultRoot}
-          onPickNote={onPickNote}
+          onPickNote={onPickNoteVaultSearch}
         />
       ) : null}
     </Suspense>

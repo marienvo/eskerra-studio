@@ -19,6 +19,7 @@ import {
 } from './inboxNoteBodyCache';
 import type {DiskConflictSoftState, DiskConflictState} from './workspaceFsWatchReconcile';
 import type {InboxEditorShellScrollDirective} from './workspaceEditorScrollMap';
+import type {OpenMarkdownInEditorOptions} from './workspaceOpenMarkdownCommand';
 
 export const DEFAULT_ADD_TO_INBOX_DRAFT_MARKDOWN = '# ';
 
@@ -90,7 +91,10 @@ export type ComposeCommandsContext = {
     setInboxContentByUri: Dispatch<SetStateAction<Record<string, string>>>;
     clearLastPersistedSnapshot: () => void;
   };
-  openMarkdownInEditor: (uri: string) => Promise<void>;
+  openMarkdownInEditor: (
+    uri: string,
+    options?: OpenMarkdownInEditorOptions,
+  ) => Promise<void>;
 };
 
 export type SubmitNewEntryResult = {
@@ -117,7 +121,11 @@ export async function runAddNote(
     subtreeMarkdownCache.invalidateForMutation(vaultRoot, created.uri, 'file');
     await refreshNotes(vaultRoot);
     ctx.setters.setFsRefreshNonce(n => n + 1);
-    await ctx.openMarkdownInEditor(created.uri);
+    await ctx.openMarkdownInEditor(created.uri, {
+      newTab: true,
+      activateNewTab: true,
+      insertAfterActive: true,
+    });
     return true;
   } catch (e) {
     ctx.setters.setErr(e instanceof Error ? e.message : String(e));

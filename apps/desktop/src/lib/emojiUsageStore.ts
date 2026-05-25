@@ -2,23 +2,56 @@ import {load} from '@tauri-apps/plugin-store';
 
 /** Same file as layout / main window UI — not the vault. */
 export const EMOJI_USAGE_STORE_PATH = 'eskerra-desktop.json';
-export const EMOJI_USAGE_STORE_KEY = 'emojiUsageV1';
+export const EMOJI_USAGE_STORE_KEY_V1 = 'emojiUsageV1';
+export const EMOJI_USAGE_STORE_KEY = 'emojiUsageV2';
 
 export const EMOJI_USAGE_MAX_SHORTCODES = 300;
+export const EMOJI_USAGE_MAX_QUERIES = 200;
+export const EMOJI_USAGE_MAX_SHORTCODES_PER_QUERY = 50;
+
+/** Weight when a stored query key shares a prefix with the active query (not exact). */
+export const EMOJI_USAGE_PREFIX_QUERY_WEIGHT = 0.5;
 
 export const EMOJI_USAGE_DEBOUNCE_SAVE_MS = 1500;
+
+export type EmojiUsageScores = {
+  readonly favScore: number;
+  readonly globalScore: number;
+};
 
 type EmojiUsagePayloadV1 = {
   readonly v: 1;
   readonly counts: Readonly<Record<string, number>>;
 };
 
-const counts = new Map<string, number>();
+type EmojiUsageByQuery = Record<string, Record<string, number>>;
+
+type EmojiUsagePayloadV2 = {
+  readonly v: 2;
+  readonly global: Readonly<Record<string, number>>;
+  readonly byQuery: EmojiUsageByQuery;
+};
+
+const globalCounts = new Map<string, number>();
+const byQueryCounts = new Map<string, Map<string, number>>();
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Last `normalizeQueryKey` passed to `buildEmojiUsageScoreLookup` (one-entry memo). */
+let scoreLookupCacheQuery: string | null = null;
+let scoreLookupCacheFn: ((shortcode: string) => EmojiUsageScores) | null = null;
+
+function invalidateScoreLookupCache(): void {
+  scoreLookupCacheQuery = null;
+  scoreLookupCacheFn = null;
+}
+
 function normalizeShortcodeKey(shortcode: string): string {
   return shortcode.trim().toLowerCase();
+}
+
+function normalizeQueryKey(query: string): string {
+  return query.trim().toLowerCase();
 }
 
 /** Keep top `maxKeys` entries by count (then key) when trimming loaded data. */
@@ -54,11 +87,71 @@ export function capEmojiUsageCounts(
   return out;
 }
 
-export function parseEmojiUsagePayload(parsed: unknown): Record<string, number> | null {
+function mergeEmojiUsageCountRecords(
+  into: Record<string, number>,
+  from: Readonly<Record<string, number>>,
+): void {
+  for (const [k, n] of Object.entries(from)) {
+    if (
+      typeof k !== 'string'
+      || k.length === 0
+      || typeof n !== 'number'
+      || !Number.isFinite(n)
+      || n <= 0
+    ) {
+      continue;
+    }
+    const nk = normalizeShortcodeKey(k);
+    into[nk] = Math.min(
+      Number.MAX_SAFE_INTEGER,
+      (into[nk] ?? 0) + Math.floor(n),
+    );
+  }
+}
+
+export function capEmojiUsageByQuery(
+  raw: EmojiUsageByQuery,
+  maxQueries: number,
+  maxShortcodesPerQuery: number,
+): Record<string, Record<string, number>> {
+  const queryEntries = Object.entries(raw).filter(
+    ([q, counts]) =>
+      typeof q === 'string'
+      && q.length > 0
+      && counts !== null
+      && typeof counts === 'object'
+      && !Array.isArray(counts),
+  );
+  const mergedByQuery = new Map<string, Record<string, number>>();
+  for (const [q, counts] of queryEntries) {
+    const nq = normalizeQueryKey(q);
+    const acc = mergedByQuery.get(nq) ?? {};
+    mergeEmojiUsageCountRecords(acc, counts as Record<string, number>);
+    mergedByQuery.set(nq, acc);
+  }
+  const cappedPerQuery = [...mergedByQuery.entries()].map(([q, counts]) => [
+    q,
+    capEmojiUsageCounts(counts, maxShortcodesPerQuery),
+  ] as const);
+  if (cappedPerQuery.length <= maxQueries) {
+    return Object.fromEntries(cappedPerQuery);
+  }
+  cappedPerQuery.sort((a, b) => {
+    const sumA = Object.values(a[1]).reduce((s, n) => s + n, 0);
+    const sumB = Object.values(b[1]).reduce((s, n) => s + n, 0);
+    if (sumB !== sumA) {
+      return sumB - sumA;
+    }
+    return a[0].localeCompare(b[0]);
+  });
+  return Object.fromEntries(cappedPerQuery.slice(0, maxQueries));
+}
+
+export function parseEmojiUsagePayloadV1(parsed: unknown): Record<string, number> | null {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return null;
   }
-  const o = parsed as Record<string, unknown>;
+  const o = parsed as EmojiUsagePayloadV1;
   if (o.v !== 1) {
     return null;
   }
@@ -66,6 +159,40 @@ export function parseEmojiUsagePayload(parsed: unknown): Record<string, number> 
     return null;
   }
   return capEmojiUsageCounts(o.counts as Record<string, number>, EMOJI_USAGE_MAX_SHORTCODES);
+}
+
+export function parseEmojiUsagePayloadV2(
+  parsed: unknown,
+): {global: Record<string, number>; byQuery: Record<string, Record<string, number>>} | null {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  const o = parsed as Record<string, unknown>;
+  if (o.v !== 2) {
+    return null;
+  }
+  if (o.global === null || typeof o.global !== 'object' || Array.isArray(o.global)) {
+    return null;
+  }
+  if (o.byQuery === null || typeof o.byQuery !== 'object' || Array.isArray(o.byQuery)) {
+    return null;
+  }
+  return {
+    global: capEmojiUsageCounts(
+      o.global as Record<string, number>,
+      EMOJI_USAGE_MAX_SHORTCODES,
+    ),
+    byQuery: capEmojiUsageByQuery(
+      o.byQuery as Record<string, Record<string, number>>,
+      EMOJI_USAGE_MAX_QUERIES,
+      EMOJI_USAGE_MAX_SHORTCODES_PER_QUERY,
+    ),
+  };
+}
+
+/** @deprecated Use parseEmojiUsagePayloadV1 — kept for tests. */
+export function parseEmojiUsagePayload(parsed: unknown): Record<string, number> | null {
+  return parseEmojiUsagePayloadV1(parsed);
 }
 
 /**
@@ -93,18 +220,119 @@ export function evictLowestCountKey(map: Map<string, number>, maxKeys: number): 
   }
 }
 
-export function getEmojiUsageCount(shortcode: string): number {
-  return counts.get(normalizeShortcodeKey(shortcode)) ?? 0;
+function evictLowestQueryKey(): void {
+  if (byQueryCounts.size < EMOJI_USAGE_MAX_QUERIES) {
+    return;
+  }
+  let victim: string | null = null;
+  let victimSum = Number.POSITIVE_INFINITY;
+  for (const [q, counts] of byQueryCounts) {
+    const sum = [...counts.values()].reduce((s, n) => s + n, 0);
+    if (
+      victim === null
+      || sum < victimSum
+      || (sum === victimSum && q.localeCompare(victim) < 0)
+    ) {
+      victim = q;
+      victimSum = sum;
+    }
+  }
+  if (victim !== null) {
+    byQueryCounts.delete(victim);
+  }
 }
 
-async function flushEmojiUsageToStore(): Promise<void> {
+/**
+ * Weight for picks recorded under `storedQ` when the user is typing query `Q`.
+ * Returns null when the queries are unrelated.
+ */
+export function emojiUsageQueryRelationWeight(
+  activeQuery: string,
+  storedQuery: string,
+): number | null {
+  const Q = normalizeQueryKey(activeQuery);
+  const stored = normalizeQueryKey(storedQuery);
+  if (Q.length === 0 || stored.length === 0) {
+    return null;
+  }
+  if (Q === stored) {
+    return 1;
+  }
+  if (stored.startsWith(Q) || Q.startsWith(stored)) {
+    return EMOJI_USAGE_PREFIX_QUERY_WEIGHT;
+  }
+  return null;
+}
+
+/** Build once per `:query` completion refresh; sums exact + prefix-related query keys. */
+export function buildEmojiUsageScoreLookup(
+  queryLower: string,
+): (shortcode: string) => EmojiUsageScores {
+  const Q = normalizeQueryKey(queryLower);
+  if (scoreLookupCacheQuery === Q && scoreLookupCacheFn !== null) {
+    return scoreLookupCacheFn;
+  }
+  const favByShortcode = new Map<string, number>();
+  if (Q.length > 0) {
+    for (const [storedQ, counts] of byQueryCounts) {
+      const weight = emojiUsageQueryRelationWeight(Q, storedQ);
+      if (weight === null) {
+        continue;
+      }
+      for (const [k, n] of counts) {
+        const add = n * weight;
+        favByShortcode.set(k, (favByShortcode.get(k) ?? 0) + add);
+      }
+    }
+  }
+  const fn = (shortcode: string): EmojiUsageScores => {
+    const key = normalizeShortcodeKey(shortcode);
+    return {
+      favScore: favByShortcode.get(key) ?? 0,
+      globalScore: globalCounts.get(key) ?? 0,
+    };
+  };
+  scoreLookupCacheQuery = Q;
+  scoreLookupCacheFn = fn;
+  return fn;
+}
+
+export function getEmojiUsageScores(
+  shortcode: string,
+  queryLower?: string,
+): EmojiUsageScores {
+  if (queryLower === undefined || queryLower.length === 0) {
+    const key = normalizeShortcodeKey(shortcode);
+    return {favScore: 0, globalScore: globalCounts.get(key) ?? 0};
+  }
+  return buildEmojiUsageScoreLookup(queryLower)(shortcode);
+}
+
+function cancelPendingEmojiUsageSave(): void {
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+}
+
+export async function flushEmojiUsageToStore(): Promise<void> {
+  cancelPendingEmojiUsageSave();
   try {
     const store = await load(EMOJI_USAGE_STORE_PATH);
-    const payload: EmojiUsagePayloadV1 = {
-      v: 1,
-      counts: Object.fromEntries(
+    const byQuery: Record<string, Record<string, number>> = {};
+    for (const [q, counts] of [...byQueryCounts.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    )) {
+      byQuery[q] = Object.fromEntries(
         [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+      );
+    }
+    const payload: EmojiUsagePayloadV2 = {
+      v: 2,
+      global: Object.fromEntries(
+        [...globalCounts.entries()].sort((a, b) => a[0].localeCompare(b[0])),
       ),
+      byQuery,
     };
     await store.set(EMOJI_USAGE_STORE_KEY, JSON.stringify(payload));
     await store.save();
@@ -114,42 +342,84 @@ async function flushEmojiUsageToStore(): Promise<void> {
 }
 
 function scheduleEmojiUsageSave(): void {
-  if (saveTimer !== null) {
-    clearTimeout(saveTimer);
-  }
+  cancelPendingEmojiUsageSave();
   saveTimer = setTimeout(() => {
     saveTimer = null;
     void flushEmojiUsageToStore();
   }, EMOJI_USAGE_DEBOUNCE_SAVE_MS);
 }
 
-export function recordEmojiUsage(shortcode: string): void {
+export function recordEmojiUsage(shortcode: string, queryLower?: string): void {
   const k = normalizeShortcodeKey(shortcode);
   if (k.length === 0) {
     return;
   }
-  if (!counts.has(k) && counts.size >= EMOJI_USAGE_MAX_SHORTCODES) {
-    evictLowestCountKey(counts, EMOJI_USAGE_MAX_SHORTCODES);
+  if (!globalCounts.has(k) && globalCounts.size >= EMOJI_USAGE_MAX_SHORTCODES) {
+    evictLowestCountKey(globalCounts, EMOJI_USAGE_MAX_SHORTCODES);
   }
-  counts.set(k, Math.min(Number.MAX_SAFE_INTEGER, (counts.get(k) ?? 0) + 1));
+  globalCounts.set(k, Math.min(Number.MAX_SAFE_INTEGER, (globalCounts.get(k) ?? 0) + 1));
+
+  if (queryLower !== undefined && queryLower.length > 0) {
+    const qKey = normalizeQueryKey(queryLower);
+    let qMap = byQueryCounts.get(qKey);
+    if (!qMap) {
+      if (byQueryCounts.size >= EMOJI_USAGE_MAX_QUERIES) {
+        evictLowestQueryKey();
+      }
+      qMap = new Map();
+      byQueryCounts.set(qKey, qMap);
+    }
+    if (!qMap.has(k) && qMap.size >= EMOJI_USAGE_MAX_SHORTCODES_PER_QUERY) {
+      evictLowestCountKey(qMap, EMOJI_USAGE_MAX_SHORTCODES_PER_QUERY);
+    }
+    qMap.set(k, Math.min(Number.MAX_SAFE_INTEGER, (qMap.get(k) ?? 0) + 1));
+  }
+
+  invalidateScoreLookupCache();
   scheduleEmojiUsageSave();
+}
+
+async function loadEmojiUsageFromRaw(raw: string): Promise<void> {
+  const parsed: unknown = JSON.parse(raw);
+  const v2 = parseEmojiUsagePayloadV2(parsed);
+  if (v2) {
+    invalidateScoreLookupCache();
+    globalCounts.clear();
+    byQueryCounts.clear();
+    for (const [k, n] of Object.entries(v2.global)) {
+      globalCounts.set(k, n);
+    }
+    for (const [q, counts] of Object.entries(v2.byQuery)) {
+      const qMap = new Map<string, number>();
+      for (const [k, n] of Object.entries(counts)) {
+        qMap.set(k, n);
+      }
+      byQueryCounts.set(q, qMap);
+    }
+    return;
+  }
+  const v1 = parseEmojiUsagePayloadV1(parsed);
+  if (v1) {
+    invalidateScoreLookupCache();
+    globalCounts.clear();
+    byQueryCounts.clear();
+    for (const [k, n] of Object.entries(v1)) {
+      globalCounts.set(k, n);
+    }
+  }
 }
 
 export async function hydrateEmojiUsageFromStore(): Promise<void> {
   try {
     const store = await load(EMOJI_USAGE_STORE_PATH);
-    const raw = await store.get<string>(EMOJI_USAGE_STORE_KEY);
-    if (typeof raw !== 'string' || !raw.trim()) {
+    const rawV2 = await store.get<string>(EMOJI_USAGE_STORE_KEY);
+    if (typeof rawV2 === 'string' && rawV2.trim()) {
+      await loadEmojiUsageFromRaw(rawV2);
       return;
     }
-    const parsed: unknown = JSON.parse(raw);
-    const capped = parseEmojiUsagePayload(parsed);
-    if (!capped) {
-      return;
-    }
-    counts.clear();
-    for (const [k, n] of Object.entries(capped)) {
-      counts.set(k, n);
+    const rawV1 = await store.get<string>(EMOJI_USAGE_STORE_KEY_V1);
+    if (typeof rawV1 === 'string' && rawV1.trim()) {
+      await loadEmojiUsageFromRaw(rawV1);
     }
   } catch {
     /* Ignore corrupt or missing store. */
@@ -158,9 +428,8 @@ export async function hydrateEmojiUsageFromStore(): Promise<void> {
 
 /** Vitest harness: clears in-memory counts and pending debounced save timer. */
 export function __resetForTests(): void {
-  if (saveTimer !== null) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-  }
-  counts.clear();
+  cancelPendingEmojiUsageSave();
+  invalidateScoreLookupCache();
+  globalCounts.clear();
+  byQueryCounts.clear();
 }

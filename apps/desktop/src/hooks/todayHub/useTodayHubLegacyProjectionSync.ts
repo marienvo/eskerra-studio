@@ -106,6 +106,7 @@ export function useTodayHubLegacyProjectionSync(
     ) {
       replaceHomeStatesByHub(modelHomeStatesByHub);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- homeStatesByHubRef is a stable ref; .current is read intentionally without listing the ref object
   }, [
     inboxShellRestored,
     modelActiveTodayHubUri,

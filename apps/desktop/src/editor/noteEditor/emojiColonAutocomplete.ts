@@ -17,7 +17,10 @@ import {
 import {Prec, type Extension} from '@codemirror/state';
 import {EditorView, keymap} from '@codemirror/view';
 
-import {getEmojiUsageCount, recordEmojiUsage} from '../../lib/emojiUsageStore';
+import {
+  buildEmojiUsageScoreLookup,
+  recordEmojiUsage,
+} from '../../lib/emojiUsageStore';
 import emojiRows from './data/emojiColonCompletionData.json';
 import {
   colonQueryFromEmojiPrefixMatch,
@@ -36,11 +39,12 @@ function buildEmojiCompletions(
   rows: readonly EmojiCompletionRow[],
   queryLower: string,
 ): Completion[] {
+  const getScores = buildEmojiUsageScoreLookup(queryLower);
   const picked = filterSortAndCapEmojiRows(
     rows,
     queryLower,
     EMOJI_COMPLETION_MAX_OPTIONS,
-    getEmojiUsageCount,
+    getScores,
   );
   return picked.map(
     (row): Completion => ({
@@ -52,7 +56,7 @@ function buildEmojiCompletions(
           ...insertCompletionText(view.state, row.e, from, to),
           annotations: pickedCompletion.of(completion),
         });
-        recordEmojiUsage(row.p);
+        recordEmojiUsage(row.p, queryLower);
       },
     }),
   );

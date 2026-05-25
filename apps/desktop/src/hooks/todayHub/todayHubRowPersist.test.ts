@@ -163,4 +163,41 @@ describe('todayHubRowPersist', () => {
 
     expect(setErr).toHaveBeenCalledWith('disk');
   });
+
+  it('blank row delete updates inbox cache via functional setInboxContentByUri', async () => {
+    const rowUri = '/vault/Hub/Row.md';
+    const norm = normalizeEditorDocUri(rowUri)!;
+    const otherUri = '/vault/Other.md';
+    const fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn(),
+    } as unknown as VaultFilesystem;
+    const inboxContentByUriRef = ref<Record<string, string>>({
+      [norm]: '| stale |',
+      [otherUri]: '# keep',
+    });
+    const setInboxContentByUri = vi.fn();
+    const saveActiveRef = ref(false);
+    const saveChainRef = ref(Promise.resolve());
+    await enqueuePersistTodayHubRowOnSaveChain(rowUri, '  \n', 1, {
+      ...makeDeps({
+        fs,
+        vaultRootRef: ref('/vault'),
+        inboxContentByUriRef,
+        setInboxContentByUri,
+      }),
+      saveActiveRef,
+      saveChainRef,
+    });
+
+    expect(vaultBootstrap.deleteVaultMarkdownNote).toHaveBeenCalled();
+    expect(vaultBootstrap.saveNoteMarkdown).not.toHaveBeenCalled();
+    expect(setInboxContentByUri).toHaveBeenCalled();
+    const updater = setInboxContentByUri.mock.calls[0]![0];
+    expect(typeof updater).toBe('function');
+    const pendingPrev = {[norm]: '| pending |', [otherUri]: '# keep'};
+    expect(updater(pendingPrev)).toEqual({[otherUri]: '# keep'});
+    expect(inboxContentByUriRef.current[norm]).toBeUndefined();
+    expect(inboxContentByUriRef.current[otherUri]).toBe('# keep');
+  });
 });

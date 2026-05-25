@@ -67,7 +67,8 @@ export type AppVaultReadyRootProps = {
   >;
   paletteLayer: ReturnType<typeof useAppPaletteLayerState>;
   vaultMarkdownRefs: UseMainWindowWorkspaceResult['selectionController']['vaultMarkdownRefs'];
-  selectNote: (uri: string) => void;
+  onPickNoteQuickOpen: (uri: string) => void;
+  onPickNoteVaultSearch: (uri: string) => void;
   selectedUri: string | null;
   err: string | null;
   diskConflict: UseMainWindowWorkspaceResult['conflictController']['diskConflict'];
@@ -113,7 +114,8 @@ export function AppVaultReadyRoot({
   podcastPlayback,
   paletteLayer,
   vaultMarkdownRefs,
-  selectNote,
+  onPickNoteQuickOpen,
+  onPickNoteVaultSearch,
   selectedUri,
   err,
   diskConflict,
@@ -189,6 +191,7 @@ export function AppVaultReadyRoot({
             }}
           >
             <MainWindowVaultTab
+              key={vaultRoot}
               vaultRoot={vaultRoot}
               vaultSettings={vaultSettings}
               fs={fs}
@@ -260,7 +263,8 @@ export function AppVaultReadyRoot({
           <AppPaletteLayer
             vaultRoot={vaultRoot}
             vaultMarkdownRefs={vaultMarkdownRefs}
-            onPickNote={selectNote}
+            onPickNoteQuickOpen={onPickNoteQuickOpen}
+            onPickNoteVaultSearch={onPickNoteVaultSearch}
             {...paletteLayer}
           />
         </div>
