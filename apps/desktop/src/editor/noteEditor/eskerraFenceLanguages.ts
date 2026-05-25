@@ -1,3 +1,6 @@
+import {html} from '@codemirror/lang-html';
+import {javascript} from '@codemirror/lang-javascript';
+import {markdown} from '@codemirror/lang-markdown';
 import {
   LanguageDescription,
   LanguageSupport,
@@ -15,26 +18,23 @@ const eskerraFenceLanguageOverrides: readonly LanguageDescription[] = [
     name: 'JavaScript',
     alias: ['ecmascript', 'js', 'node'],
     extensions: ['js', 'mjs', 'cjs'],
-    load: () => import('@codemirror/lang-javascript').then(m => m.javascript()),
+    load: () => Promise.resolve(javascript()),
   }),
   LanguageDescription.of({
     name: 'JSX',
     extensions: ['jsx'],
-    load: () => import('@codemirror/lang-javascript').then(m => m.javascript({jsx: true})),
+    load: () => Promise.resolve(javascript({jsx: true})),
   }),
   LanguageDescription.of({
     name: 'TypeScript',
     alias: ['ts'],
     extensions: ['ts', 'mts', 'cts'],
-    load: () => import('@codemirror/lang-javascript').then(m => m.javascript({typescript: true})),
+    load: () => Promise.resolve(javascript({typescript: true})),
   }),
   LanguageDescription.of({
     name: 'TSX',
     extensions: ['tsx'],
-    load: () =>
-      import('@codemirror/lang-javascript').then(m =>
-        m.javascript({jsx: true, typescript: true}),
-      ),
+    load: () => Promise.resolve(javascript({jsx: true, typescript: true})),
   }),
   LanguageDescription.of({
     name: 'JSON',
@@ -89,7 +89,7 @@ const eskerraFenceLanguageOverrides: readonly LanguageDescription[] = [
     name: 'HTML',
     alias: ['xhtml'],
     extensions: ['html', 'htm'],
-    load: () => import('@codemirror/lang-html').then(m => m.html()),
+    load: () => Promise.resolve(html()),
   }),
   LanguageDescription.of({
     name: 'XML',
@@ -118,7 +118,7 @@ const eskerraFenceLanguageOverrides: readonly LanguageDescription[] = [
   LanguageDescription.of({
     name: 'Markdown',
     extensions: ['md', 'markdown', 'mkd'],
-    load: () => import('@codemirror/lang-markdown').then(m => m.markdown()),
+    load: () => Promise.resolve(markdown()),
   }),
   LanguageDescription.of({
     name: 'diff',
@@ -153,6 +153,11 @@ function mergeLanguageDescriptions(
  * We keep CodeMirror's broad language-data coverage so existing vault notes continue to resolve
  * common fence labels lazily, and only override a few entries where Eskerra wants explicit aliases
  * or loaders.
+ *
+ * JavaScript, HTML, and Markdown fence grammars use static imports with `Promise.resolve` loaders
+ * because the capture editor already pulls those packages in eagerly; dynamic `import()` would not
+ * split them (Rolldown `INEFFECTIVE_DYNAMIC_IMPORT`). The same eager loaders are patched into
+ * `@codemirror/language-data` via `patches/@codemirror+language-data+6.5.2.patch`.
  */
 export const eskerraFenceLanguages: readonly LanguageDescription[] =
   mergeLanguageDescriptions(codeMirrorLanguages, eskerraFenceLanguageOverrides);
