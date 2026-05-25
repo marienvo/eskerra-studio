@@ -6,7 +6,6 @@ import {
   LanguageDescription,
   syntaxTree,
 } from '@codemirror/language';
-import {languages} from '@codemirror/language-data';
 import {EditorState} from '@codemirror/state';
 import {EditorView, RectangleMarker, drawSelection} from '@codemirror/view';
 import {highlightTree} from '@lezer/highlight';
@@ -26,12 +25,13 @@ import {
   noteMarkdownNestedCodeHighlighter,
   noteMarkdownParserExtensions,
 } from './markdownEditorStyling';
+import {eskerraFenceLanguages} from './eskerraFenceLanguages';
 import {markdownEskerra} from './markdownEskerraLanguage';
 
 beforeAll(async () => {
-  const ts = LanguageDescription.matchLanguageName(languages, 'ts', true);
+  const ts = LanguageDescription.matchLanguageName(eskerraFenceLanguages, 'ts', true);
   if (!(ts instanceof LanguageDescription)) {
-    throw new Error('Expected TypeScript in @codemirror/language-data');
+    throw new Error('Expected TypeScript in eskerraFenceLanguages');
   }
   await ts.load();
 });
@@ -51,7 +51,7 @@ function innermostHighlightAt(
     extensions: markdownEskerra({
       base: commonmarkLanguage,
       extensions: noteMarkdownParserExtensions,
-      ...(useCodeLanguages ? {codeLanguages: languages} : {}),
+      ...(useCodeLanguages ? {codeLanguages: eskerraFenceLanguages} : {}),
     }),
   });
   const tree = ensureSyntaxTree(state, state.doc.length, 20_000);
@@ -289,7 +289,7 @@ describe('markdownCodeBackgroundLayer markers', () => {
         markdownEskerra({
           base: commonmarkLanguage,
           extensions: noteMarkdownParserExtensions,
-          codeLanguages: languages,
+          codeLanguages: eskerraFenceLanguages,
         }),
         ...noteMarkdownEditorAppearance,
         drawSelection(),

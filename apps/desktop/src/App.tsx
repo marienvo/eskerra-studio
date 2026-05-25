@@ -4,15 +4,14 @@
  * Ownership: app-level orchestration and Tauri window integration; vault editing behavior is in `VaultTab` / workspace hook.
  */
 import {
+  Suspense,
+  lazy,
   useCallback,
   useMemo,
   useState,
   useRef,
 } from 'react';
 
-import {SettingsPage} from './components/SettingsPage';
-import {QuickOpenNotePalette} from './components/QuickOpenNotePalette';
-import {VaultSearchPalette} from './components/VaultSearchPalette';
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
 import {AppStatusBar} from './components/AppStatusBar';
 import {GitStatusChip} from './components/GitStatusChip';
@@ -57,6 +56,22 @@ import {useLinkSnippetSettingsWriter} from './shell/mainWindow/useLinkSnippetSet
 import './App.css';
 
 type AppPage = 'vault' | 'settings';
+
+const SettingsPage = lazy(() =>
+  import('./components/SettingsPage').then(m => ({default: m.SettingsPage})),
+);
+const QuickOpenNotePalette = lazy(() =>
+  import('./components/QuickOpenNotePalette').then(m => ({
+    default: m.QuickOpenNotePalette,
+  })),
+);
+const VaultSearchPalette = lazy(() =>
+  import('./components/VaultSearchPalette').then(m => ({
+    default: m.VaultSearchPalette,
+  })),
+);
+
+const appLazyFallback = <div aria-busy="true" />;
 
 export default function App() {
   const {maximized} = useTauriWindowMaximized();
@@ -392,14 +407,16 @@ export default function App() {
               <div className="main-column">
                 <main className="main-stage">
                   {activePage === 'settings' && vaultSettings ? (
-                    <SettingsPage
-                      onClose={() => setActivePage('vault')}
-                      vaultRoot={vaultRoot}
-                      fs={fs}
-                      vaultSettings={vaultSettings}
-                      setVaultSettings={setVaultSettings}
-                      onChangeVaultFolder={pickFolder}
-                    />
+                    <Suspense fallback={appLazyFallback}>
+                      <SettingsPage
+                        onClose={() => setActivePage('vault')}
+                        vaultRoot={vaultRoot}
+                        fs={fs}
+                        vaultSettings={vaultSettings}
+                        setVaultSettings={setVaultSettings}
+                        onChangeVaultFolder={pickFolder}
+                      />
+                    </Suspense>
                   ) : (
                     <MainWindowVaultTab
                       key={vaultRoot}
@@ -473,19 +490,25 @@ export default function App() {
             items={notificationItems}
             onDismiss={dismissNotification}
           />
-          <QuickOpenNotePalette
-            open={quickOpenOpen}
-            onOpenChange={setQuickOpenOpen}
-            vaultRoot={vaultRoot}
-            refs={vaultMarkdownRefs}
-            onPickNote={selectNote}
-          />
-          <VaultSearchPalette
-            open={vaultSearchOpen}
-            onOpenChange={setVaultSearchOpen}
-            vaultRoot={vaultRoot}
-            onPickNote={selectNote}
-          />
+          <Suspense fallback={null}>
+            {quickOpenOpen ? (
+              <QuickOpenNotePalette
+                open={quickOpenOpen}
+                onOpenChange={setQuickOpenOpen}
+                vaultRoot={vaultRoot}
+                refs={vaultMarkdownRefs}
+                onPickNote={selectNote}
+              />
+            ) : null}
+            {vaultSearchOpen ? (
+              <VaultSearchPalette
+                open={vaultSearchOpen}
+                onOpenChange={setVaultSearchOpen}
+                vaultRoot={vaultRoot}
+                onPickNote={selectNote}
+              />
+            ) : null}
+          </Suspense>
         </div>
       </div>
     </AppThemeShell>
