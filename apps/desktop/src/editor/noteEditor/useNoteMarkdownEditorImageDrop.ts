@@ -1,17 +1,17 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useState, type RefObject} from 'react';
+
+import type {EditorView} from '@codemirror/view';
 
 import {
   isNoteAttachmentImageFilePath,
   type NoteInboxAttachmentHost,
 } from '../../lib/noteInboxAttachmentHost';
 import {formatVaultImageMarkdownForInsert} from '../../lib/clipboard/formatVaultImageMarkdown';
-import type {NoteMarkdownEditorShellRefs} from './useNoteMarkdownEditorShellRefs';
 
 export function useNoteMarkdownEditorImageDrop(
-  shell: Pick<
-    NoteMarkdownEditorShellRefs,
-    'hostRef' | 'viewRef' | 'reportEditorError'
-  >,
+  hostRef: RefObject<HTMLDivElement | null>,
+  viewRef: RefObject<EditorView | null>,
+  reportEditorError: (message: string) => void,
   attachmentHost: NoteInboxAttachmentHost,
   vaultRoot: string,
   busy: boolean,
@@ -19,16 +19,16 @@ export function useNoteMarkdownEditorImageDrop(
   const [dropActive, setDropActive] = useState(false);
 
   const insertRelativePaths = useCallback((paths: readonly string[]) => {
-    const view = shell.viewRef.current;
+    const view = viewRef.current;
     if (!view || paths.length === 0) {
       return;
     }
     const insert = formatVaultImageMarkdownForInsert(paths);
     view.dispatch(view.state.update(view.state.replaceSelection(insert)));
-  }, [shell.viewRef]);
+  }, [viewRef]);
 
   useEffect(() => {
-    const el = shell.hostRef.current;
+    const el = hostRef.current;
     if (!el || !attachmentHost.isVaultImageImportAvailable) {
       return;
     }
@@ -79,7 +79,7 @@ export function useNoteMarkdownEditorImageDrop(
           }
           insertRelativePaths(markdownPaths);
         } catch (err) {
-          shell.reportEditorError(
+          reportEditorError(
             err instanceof Error ? err.message : String(err),
           );
         }
@@ -96,7 +96,7 @@ export function useNoteMarkdownEditorImageDrop(
     attachmentHost,
     busy,
     insertRelativePaths,
-    shell,
+    reportEditorError,
     vaultRoot,
   ]);
 
@@ -126,7 +126,7 @@ export function useNoteMarkdownEditorImageDrop(
                 await attachmentHost.importDroppedAbsolutePaths(paths);
               insertRelativePaths(relPaths);
             } catch (err) {
-              shell.reportEditorError(
+              reportEditorError(
                 err instanceof Error ? err.message : String(err),
               );
             }
@@ -145,7 +145,7 @@ export function useNoteMarkdownEditorImageDrop(
       cancelled = true;
       unlisten?.();
     };
-  }, [attachmentHost, busy, insertRelativePaths, shell]);
+  }, [attachmentHost, busy, insertRelativePaths, reportEditorError]);
 
   const hostClassName = dropActive
     ? 'note-markdown-editor-host note-markdown-editor-host--drop-target'

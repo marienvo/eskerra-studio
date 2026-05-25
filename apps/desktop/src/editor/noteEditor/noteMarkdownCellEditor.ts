@@ -291,6 +291,7 @@ export function buildNoteMarkdownCellExtensions(
       sanitizeCellInsert(
         cleanPastedMarkdownFragment(md, activeNotePathRef.current),
       ),
+    normalizeNativeClipboardText: sanitizeCellInsert,
     normalizeImageMarkdownInsert: insert =>
       insert.replace(/\s+/g, ' ').trim(),
     consumeEmptyHtmlPaste: false,

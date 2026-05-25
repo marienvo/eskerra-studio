@@ -85,6 +85,37 @@ describe('createNoteMarkdownPasteHandlers', () => {
     expect(handlers.isMiddleClickPasteBlocked()).toBe(true);
   });
 
+  it('native clipboard text bypasses remark normalizePastedMarkdown', async () => {
+    const view = minimalView('');
+    const vaultRootRef = {current: '/vault'};
+    const normalizePastedMarkdown = vi.fn(() => 'SHOULD_NOT_RUN');
+    const attachmentHostRef = {
+      current: attachmentHostStub({
+        readNativeClipboardPaste: vi.fn(async () => ({
+          kind: 'text' as const,
+          text: 'plain url https://example.com',
+        })),
+      }),
+    };
+    const handlers = createNoteMarkdownPasteHandlers({
+      vaultRootRef,
+      attachmentHostRef,
+      activeNotePathRef: {current: '/vault/Inbox/a.md'},
+      busyRef: {current: false},
+      reportError: vi.fn(),
+      isStaleView: () => false,
+      normalizePastedMarkdown,
+    });
+    const dt = mockDataTransfer({'text/plain': ''});
+    const event = {preventDefault: vi.fn(), stopPropagation: vi.fn()};
+    handlers.onEditorPaste(event as unknown as ClipboardEvent, view);
+    await vi.waitFor(() => {
+      expect(view.state.doc.toString()).toBe('plain url https://example.com');
+    });
+    expect(normalizePastedMarkdown).not.toHaveBeenCalled();
+    view.destroy();
+  });
+
   it('runPasteFromDataTransfer returns false for plain text without html (default paste)', () => {
     const view = minimalView('hi');
     const vaultRootRef = {current: '/vault'};
