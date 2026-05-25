@@ -10,6 +10,7 @@ import {
 import type {VaultFilesystem} from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
+import type {NoteMarkdownLoadSelection} from '../../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {
   clearInboxYamlFrontmatterEditorRefs,
   inboxEditorSliceToFullMarkdown,
@@ -40,7 +41,7 @@ type UseWorkspaceSelectedNoteHydrationInput = {
   loadFullMarkdownIntoInboxEditor: (
     markdown: string,
     uri: string,
-    selection?: 'start' | 'end',
+    selection?: NoteMarkdownLoadSelection,
   ) => void;
   scheduleBacklinksDeferOneFrameAfterLoad: () => void;
   clearInboxBacklinksDeferAfterLoad: () => void;
