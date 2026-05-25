@@ -25,7 +25,7 @@ export function useInboxPersistCommands(deps: WorkspacePersistenceDeps): {
   flushInboxSave: () => Promise<void>;
   onInboxSaveShortcut: () => void;
 } {
-  const {fs, refs, actions} = deps;
+  const depsRef = useRef(deps);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   const saveActiveRef = useRef(false);
   const autosaveSchedulerRef = useRef(
@@ -33,21 +33,24 @@ export function useInboxPersistCommands(deps: WorkspacePersistenceDeps): {
   );
   const flushInboxSaveRef = useRef<() => Promise<void>>(async () => {});
 
-  const mergeCache = useCallback(
-    (norm: string, body: string) => {
-      mergeInboxNoteBodyCacheRefAndState(
-        refs.inboxContentByUriRef,
-        actions.setInboxContentByUri,
-        norm,
-        body,
-      );
-    },
-    [refs.inboxContentByUriRef, actions.setInboxContentByUri],
-  );
+  useLayoutEffect(() => {
+    depsRef.current = deps;
+  });
+
+  const mergeCache = useCallback((norm: string, body: string) => {
+    const {refs, actions} = depsRef.current;
+    mergeInboxNoteBodyCacheRefAndState(
+      refs.inboxContentByUriRef,
+      actions.setInboxContentByUri,
+      norm,
+      body,
+    );
+  }, []);
 
   const enqueuePersistOutgoingNoteMarkdown = useCallback(
     (uri: string, leaveSnapshotMarkdown: string): void => {
       const norm = normalizeEditorDocUri(uri);
+      const {fs, refs, actions} = depsRef.current;
       void enqueueOnSaveChain({
         saveChainRef,
         saveActiveRef,
@@ -66,10 +69,11 @@ export function useInboxPersistCommands(deps: WorkspacePersistenceDeps): {
         },
       });
     },
-    [fs, refs, actions],
+    [],
   );
 
   const enqueueInboxPersist = useCallback(async (): Promise<void> => {
+    const {fs, refs, actions} = depsRef.current;
     await enqueueOnSaveChain({
       saveChainRef,
       saveActiveRef,
@@ -82,9 +86,10 @@ export function useInboxPersistCommands(deps: WorkspacePersistenceDeps): {
         }
       },
     });
-  }, [fs, refs, actions]);
+  }, []);
 
   const flushInboxSave = useCallback(async () => {
+    const {refs, actions} = depsRef.current;
     autosaveSchedulerRef.current.cancel();
     await refs.todayHubBridgeRef.current.flushPendingEdits().catch(() => undefined);
     const uri = refs.selectedUriRef.current;
@@ -98,18 +103,19 @@ export function useInboxPersistCommands(deps: WorkspacePersistenceDeps): {
       return;
     }
     await enqueueInboxPersist();
-  }, [enqueueInboxPersist, refs.todayHubBridgeRef, refs.selectedUriRef, refs.diskConflictRef, actions]);
+  }, [enqueueInboxPersist]);
 
   useLayoutEffect(() => {
     flushInboxSaveRef.current = flushInboxSave;
   }, [flushInboxSave]);
 
   const onInboxSaveShortcut = useCallback(() => {
+    const {refs} = depsRef.current;
     const save = refs.composingNewEntryRef.current
       ? refs.submitNewEntryRef.current()
       : flushInboxSave();
     save.catch(e => reportCrash('unhandledrejection', e));
-  }, [refs.composingNewEntryRef, refs.submitNewEntryRef, flushInboxSave]);
+  }, [flushInboxSave]);
 
   return {
     saveChainRef,
