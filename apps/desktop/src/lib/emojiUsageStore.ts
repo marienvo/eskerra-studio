@@ -108,7 +108,7 @@ export function parseEmojiUsagePayloadV1(parsed: unknown): Record<string, number
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return null;
   }
-  const o = parsed as Record<string, unknown>;
+  const o = parsed as EmojiUsagePayloadV1;
   if (o.v !== 1) {
     return null;
   }
