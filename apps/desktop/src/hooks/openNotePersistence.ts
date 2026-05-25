@@ -1,5 +1,3 @@
-import {splitYamlFrontmatter} from '@eskerra/core';
-
 import {resolveMarkdownLoadDocument} from '../editor/noteEditor/noteMarkdownLoadMarkdown';
 import {inboxEditorSliceToFullMarkdown} from '../lib/inboxYamlFrontmatterEditor';
 
@@ -14,35 +12,33 @@ function normalizeToLf(markdown: string): string {
  */
 export function persistableInboxEditorBodySlice(
   editorBodySlice: string,
-  persistedFullMarkdown: string | null,
+  diskBodyBaseline: string | null,
 ): string {
   const normalizedSlice = normalizeToLf(editorBodySlice);
-  if (persistedFullMarkdown == null) {
+  if (diskBodyBaseline == null) {
     return normalizedSlice;
   }
-  const {body: persistedBody} = splitYamlFrontmatter(
-    normalizeToLf(persistedFullMarkdown),
-  );
-  const resolved = resolveMarkdownLoadDocument(persistedBody, {
+  const normalizedBaseline = normalizeToLf(diskBodyBaseline);
+  const resolved = resolveMarkdownLoadDocument(normalizedBaseline, {
     selection: 'openNote',
   });
   if (resolved.effectiveMarkdown === normalizedSlice) {
-    return persistedBody;
+    return normalizedBaseline;
   }
   return normalizedSlice;
 }
 
 export function persistableInboxEditorFullMarkdown(args: {
   editorBodySlice: string;
+  diskBodyBaseline: string | null;
   selectedUri: string | null;
   composingNewEntry: boolean;
   yamlInner: string | null;
   yamlLeading: string;
-  persistedFullMarkdown: string | null;
 }): string {
   const persistableSlice = persistableInboxEditorBodySlice(
     args.editorBodySlice,
-    args.persistedFullMarkdown,
+    args.diskBodyBaseline,
   );
   return inboxEditorSliceToFullMarkdown(
     persistableSlice,

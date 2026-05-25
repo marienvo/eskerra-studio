@@ -28,6 +28,7 @@ type UseWorkspaceRenameMaintenanceBindingInput = {
   selectedUriRef: MutableRefObject<string | null>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   composingNewEntryRef: MutableRefObject<boolean>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
@@ -56,6 +57,7 @@ export function useWorkspaceRenameMaintenanceBinding({
   selectedUriRef,
   inboxEditorRef,
   editorBodyRef,
+  openTimeDiskBodyRef,
   composingNewEntryRef,
   inboxYamlFrontmatterInnerRef,
   inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -78,14 +80,11 @@ export function useWorkspaceRenameMaintenanceBinding({
           ? persistableInboxEditorFullMarkdown({
               editorBodySlice:
                 inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
+              diskBodyBaseline: openTimeDiskBodyRef.current || null,
               selectedUri: activeUri,
               composingNewEntry: composingNewEntryRef.current,
               yamlInner: inboxYamlFrontmatterInnerRef.current,
               yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-              persistedFullMarkdown:
-                lastPersistedRef.current?.uri === activeUri
-                  ? lastPersistedRef.current.markdown
-                  : null,
             })
           : '';
       const expandedContent = await loadVaultMarkdownBodiesWithSeed(
@@ -102,6 +101,7 @@ export function useWorkspaceRenameMaintenanceBinding({
       selectedUriRef,
       inboxEditorRef,
       editorBodyRef,
+      openTimeDiskBodyRef,
       composingNewEntryRef,
       inboxYamlFrontmatterInnerRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,

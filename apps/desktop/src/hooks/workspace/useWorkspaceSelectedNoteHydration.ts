@@ -7,7 +7,7 @@ import {
   type SetStateAction,
 } from 'react';
 
-import type {VaultFilesystem} from '@eskerra/core';
+import {splitYamlFrontmatter, type VaultFilesystem} from '@eskerra/core';
 
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
 import type {NoteMarkdownLoadSelection} from '../../editor/noteEditor/noteMarkdownLoadMarkdown';
@@ -54,6 +54,7 @@ type UseWorkspaceSelectedNoteHydrationInput = {
   setBacklinksActiveBody: (value: string) => void;
   composingNewEntryRef: MutableRefObject<boolean>;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   setErr: (value: string) => void;
 };
 
@@ -83,6 +84,7 @@ export function useWorkspaceSelectedNoteHydration({
   setBacklinksActiveBody,
   composingNewEntryRef,
   editorBodyRef,
+  openTimeDiskBodyRef,
   setErr,
 }: UseWorkspaceSelectedNoteHydrationInput) {
   useLayoutEffect(() => {
@@ -126,6 +128,7 @@ export function useWorkspaceSelectedNoteHydration({
         setLeading: setInboxEditorYamlLeadingBeforeFrontmatter,
       });
       setEditorBody('');
+      openTimeDiskBodyRef.current = '';
       clearLastPersistedSnapshot();
     }
   }, [
@@ -137,6 +140,7 @@ export function useWorkspaceSelectedNoteHydration({
     loadFullMarkdownIntoInboxEditor,
     scheduleBacklinksDeferOneFrameAfterLoad,
     setLastPersistedSnapshot,
+    openTimeDiskBodyRef,
   ]);
 
   /**
@@ -196,14 +200,11 @@ export function useWorkspaceSelectedNoteHydration({
     const id = window.setTimeout(() => {
       const liveFull = persistableInboxEditorFullMarkdown({
         editorBodySlice: editorBody,
+        diskBodyBaseline: openTimeDiskBodyRef.current || null,
         selectedUri,
         composingNewEntry,
         yamlInner: inboxYamlFrontmatterInnerRef.current,
         yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-        persistedFullMarkdown:
-          lastPersistedRef.current?.uri === selectedUri
-            ? lastPersistedRef.current.markdown
-            : null,
       });
       if (backlinksActiveBodyRef.current === liveFull) {
         return;
@@ -240,13 +241,14 @@ export function useWorkspaceSelectedNoteHydration({
             }
             return {...prev, [selectedUri]: normalized};
           });
+          const {body: diskBody} = splitYamlFrontmatter(normalized);
           const currentFull = persistableInboxEditorFullMarkdown({
             editorBodySlice: editorBodyRef.current,
+            diskBodyBaseline: diskBody,
             selectedUri,
             composingNewEntry: composingNewEntryRef.current,
             yamlInner: inboxYamlFrontmatterInnerRef.current,
             yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-            persistedFullMarkdown: normalized,
           });
           if (normalized !== currentFull) {
             loadFullMarkdownIntoInboxEditor(normalized, selectedUri, 'openNote');

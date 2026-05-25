@@ -111,6 +111,7 @@ export function useWorkspaceVaultWatchEffects(args: {
   writeLastPersistedSnapshotWithoutSeqBump: (next: LastPersisted | null) => void;
   bumpLastPersistedExternalMutationSeq: () => void;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   editorShellScrollByUriRef: MutableRefObject<Map<string, {top: number; left: number}>>;
@@ -163,6 +164,7 @@ export function useWorkspaceVaultWatchEffects(args: {
     writeLastPersistedSnapshotWithoutSeqBump,
     bumpLastPersistedExternalMutationSeq,
     editorBodyRef,
+    openTimeDiskBodyRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     editorShellScrollByUriRef,
@@ -222,6 +224,7 @@ export function useWorkspaceVaultWatchEffects(args: {
       writeLastPersistedSnapshotWithoutSeqBump,
       bumpLastPersistedExternalMutationSeq,
       editorBodyRef,
+      openTimeDiskBodyRef,
       inboxYamlFrontmatterInnerRef,
       inboxEditorYamlLeadingBeforeFrontmatterRef,
       editorShellScrollByUriRef,
@@ -521,6 +524,7 @@ export function useWorkspaceVaultWatchEffects(args: {
     writeLastPersistedSnapshotWithoutSeqBump,
     bumpLastPersistedExternalMutationSeq,
     editorBodyRef,
+    openTimeDiskBodyRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     editorShellScrollByUriRef,

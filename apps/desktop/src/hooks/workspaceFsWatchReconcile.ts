@@ -83,6 +83,7 @@ export type ReconcileFsOpenMarkdownEnv = {
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   editorShellScrollByUriRef: MutableRefObject<Map<string, {top: number; left: number}>>;
@@ -219,12 +220,11 @@ async function reconcileOneOpenMarkdownTabAfterDiskRead(
   const local = persistableInboxEditorFullMarkdown({
     editorBodySlice:
       open.inboxEditorRef.current?.getMarkdown() ?? open.editorBodyRef.current,
+    diskBodyBaseline: open.openTimeDiskBodyRef.current || null,
     selectedUri: normTab,
     composingNewEntry: open.composingNewEntryRef.current,
     yamlInner: open.inboxYamlFrontmatterInnerRef.current,
     yamlLeading: open.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-    persistedFullMarkdown:
-      lp != null && lp.uri === normTab ? lp.markdown : null,
   });
   const kind = classifyNoteDiskReconcile({
     noteUri: normTab,

@@ -22,11 +22,11 @@ describe('openNotePersistence', () => {
     expect(
       persistableInboxEditorFullMarkdown({
         editorBodySlice: '# Title\n\n',
+        diskBodyBaseline: '# Title',
         selectedUri: '/vault/Inbox/title.md',
         composingNewEntry: false,
         yamlInner: 'tags: [a]',
         yamlLeading: '',
-        persistedFullMarkdown: '---\ntags: [a]\n---\n# Title',
       }),
     ).toBe('---\ntags: [a]\n---\n# Title');
   });

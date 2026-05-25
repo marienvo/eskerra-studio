@@ -82,6 +82,7 @@ export function useWorkspacePersistence(args: {
   diskConflictRef: MutableRefObject<DiskConflictState | null>;
   inboxContentByUriRef: MutableRefObject<Record<string, string>>;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   lastPersistedRef: MutableRefObject<LastPersisted | null>;
   setLastPersistedSnapshot: (next: LastPersisted) => void;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
@@ -127,6 +128,7 @@ export function useWorkspacePersistence(args: {
     diskConflictRef,
     inboxContentByUriRef,
     editorBodyRef,
+    openTimeDiskBodyRef,
     lastPersistedRef,
     setLastPersistedSnapshot,
     inboxYamlFrontmatterInnerRef,
@@ -262,12 +264,11 @@ export function useWorkspacePersistence(args: {
       const raw = persistableInboxEditorFullMarkdown({
         editorBodySlice:
           inboxEditorRef.current?.getMarkdown() ?? editorBodyRef.current,
+        diskBodyBaseline: openTimeDiskBodyRef.current || null,
         selectedUri: selectedUriRef.current,
         composingNewEntry: composingNewEntryRef.current,
         yamlInner: inboxYamlFrontmatterInnerRef.current,
         yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-        persistedFullMarkdown:
-          prev != null && prev.uri === uri ? prev.markdown : null,
       });
       if (prev && prev.uri === uri && prev.markdown === raw) {
         return;
@@ -325,6 +326,7 @@ export function useWorkspacePersistence(args: {
     composingNewEntryRef,
     diskConflictRef,
     editorBodyRef,
+    openTimeDiskBodyRef,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
     lastPersistedRef,
@@ -382,11 +384,11 @@ export function useWorkspacePersistence(args: {
     }
     const liveFull = persistableInboxEditorFullMarkdown({
       editorBodySlice: editorBody,
+      diskBodyBaseline: openTimeDiskBodyRef.current || null,
       selectedUri,
       composingNewEntry,
       yamlInner: inboxYamlFrontmatterInnerRef.current,
       yamlLeading: inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-      persistedFullMarkdown: lastPersistedRef.current?.markdown ?? null,
     });
     if (
       !shouldScheduleInboxAutosave({
@@ -417,6 +419,7 @@ export function useWorkspacePersistence(args: {
     diskConflict,
     inboxYamlFrontmatterInnerRef,
     inboxEditorYamlLeadingBeforeFrontmatterRef,
+    openTimeDiskBodyRef,
     lastPersistedRef,
   ]);
 

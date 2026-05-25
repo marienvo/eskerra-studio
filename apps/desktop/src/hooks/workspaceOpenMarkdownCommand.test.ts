@@ -65,6 +65,7 @@ function createBaseContext() {
     }),
     inboxEditorRef: {current: null},
     editorBodyRef: {current: ''},
+    openTimeDiskBodyRef: {current: ''},
     inboxYamlFrontmatterInnerRef: {current: null as string | null},
     inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
     mergeInboxNoteBodyCacheRefAndState: vi.fn(),

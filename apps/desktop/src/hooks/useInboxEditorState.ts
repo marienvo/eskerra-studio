@@ -30,6 +30,8 @@ export type UseInboxEditorStateResult = {
   editorBody: string;
   setEditorBody: Dispatch<SetStateAction<string>>;
   editorBodyRef: MutableRefObject<string>;
+  /** Disk body slice at last `loadFullMarkdownIntoInboxEditor`; not synced from live editor state. */
+  openTimeDiskBodyRef: MutableRefObject<string>;
   guardedSetEditorBody: Dispatch<SetStateAction<string>>;
   inboxEditorResetNonce: number;
   setInboxEditorResetNonce: Dispatch<SetStateAction<number>>;
@@ -79,6 +81,7 @@ export function useInboxEditorState(
   const selectedUriRef = useRef<string | null>(null);
   const composingNewEntryRef = useRef(false);
   const editorBodyRef = useRef('');
+  const openTimeDiskBodyRef = useRef('');
   const eagerEditorLoadUriRef = useRef<string | null>(null);
   const suppressEditorOnChangeRef = useRef(false);
   const [inboxYamlFrontmatterInner, setInboxYamlFrontmatterInner] = useState<string | null>(
@@ -146,6 +149,7 @@ export function useInboxEditorState(
       const composing = composingNewEntryRef.current;
       if (!uri || composing) {
         syncFrontmatterStateFromDisk(null, '');
+        openTimeDiskBodyRef.current = '';
         suppressEditorOnChangeRef.current = true;
         inboxEditorRef.current?.loadMarkdown(full, {selection});
         suppressEditorOnChangeRef.current = false;
@@ -158,6 +162,7 @@ export function useInboxEditorState(
         return;
       }
       const {frontmatter, body, leadingBeforeFrontmatter} = splitYamlFrontmatter(full);
+      openTimeDiskBodyRef.current = body;
       const inner =
         frontmatter !== null ? fencedFrontmatterBlockToInner(frontmatter) : null;
       syncFrontmatterStateFromDisk(
@@ -178,6 +183,7 @@ export function useInboxEditorState(
   );
 
   const resetInboxEditorComposeState = useCallback(() => {
+    openTimeDiskBodyRef.current = '';
     clearInboxYamlFrontmatterEditorRefs({
       inner: inboxYamlFrontmatterInnerRef,
       leading: inboxEditorYamlLeadingBeforeFrontmatterRef,
@@ -203,6 +209,7 @@ export function useInboxEditorState(
     editorBody,
     setEditorBody,
     editorBodyRef,
+    openTimeDiskBodyRef,
     guardedSetEditorBody,
     inboxEditorResetNonce,
     setInboxEditorResetNonce,

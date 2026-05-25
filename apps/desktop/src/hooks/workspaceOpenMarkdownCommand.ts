@@ -72,6 +72,7 @@ export type OpenMarkdownCommandContext = {
   setSelectedUri: Dispatch<SetStateAction<string | null>>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   editorBodyRef: MutableRefObject<string>;
+  openTimeDiskBodyRef: MutableRefObject<string>;
   inboxYamlFrontmatterInnerRef: MutableRefObject<string | null>;
   inboxEditorYamlLeadingBeforeFrontmatterRef: MutableRefObject<string>;
   mergeInboxNoteBodyCacheRefAndState: (uri: string, markdown: string) => void;
@@ -124,12 +125,11 @@ function snapshotAndPersistCurrentNoteBeforeOpen(ctx: OpenMarkdownCommandContext
   const snapshot = persistableInboxEditorFullMarkdown({
     editorBodySlice:
       ctx.inboxEditorRef.current?.getMarkdown() ?? ctx.editorBodyRef.current,
+    diskBodyBaseline: ctx.openTimeDiskBodyRef.current || null,
     selectedUri: curUri,
     composingNewEntry: false,
     yamlInner: ctx.inboxYamlFrontmatterInnerRef.current,
     yamlLeading: ctx.inboxEditorYamlLeadingBeforeFrontmatterRef.current,
-    persistedFullMarkdown:
-      prev != null && prev.uri === curUri ? prev.markdown : null,
   });
   ctx.mergeInboxNoteBodyCacheRefAndState(curUri, snapshot);
   const needsPersist = root != null && !(prev && prev.uri === curUri && prev.markdown === snapshot);

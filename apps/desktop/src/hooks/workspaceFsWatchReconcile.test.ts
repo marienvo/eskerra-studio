@@ -40,6 +40,7 @@ function minimalEnv(
     inboxContentByUriRef: {current: {}},
     lastPersistedRef: {current: null},
     editorBodyRef: {current: ''},
+    openTimeDiskBodyRef: {current: ''},
     inboxYamlFrontmatterInnerRef: {current: null},
     inboxEditorYamlLeadingBeforeFrontmatterRef: {current: ''},
     editorShellScrollByUriRef: {current: new Map()},
