@@ -24,10 +24,8 @@ import {
   shouldUseMergedReplaceForMarkdownLoad,
   shouldUseSetStateBranchForMarkdownLoad,
 } from './noteMarkdownLoadMarkdown';
-import {
-  foldableRangesPresent,
-  foldedRangesPresent,
-} from './noteMarkdownFoldStatus';
+import {foldedRangesPresent} from './noteMarkdownFoldStatus';
+import {foldableRangesPresent} from './nestedFoldAll';
 import type {NoteMarkdownEditorShellRefs} from './useNoteMarkdownEditorShellRefs';
 
 export function useNoteMarkdownEditorLoad(

@@ -24,10 +24,8 @@ import {
   normalizeMainEditorPastedMarkdown,
 } from './noteMarkdownEditorPaste';
 import {createNoteMarkdownPointerLinkHandlers} from './noteMarkdownPointerLinks';
-import {
-  foldableRangesPresent,
-  foldedRangesPresent,
-} from './noteMarkdownFoldStatus';
+import {foldedRangesPresent} from './noteMarkdownFoldStatus';
+import {foldableRangesPresent} from './nestedFoldAll';
 import type {
   NoteMarkdownEditorHandle,
   NoteMarkdownEditorProps,
