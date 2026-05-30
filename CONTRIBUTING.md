@@ -42,6 +42,14 @@ At minimum, mention whether you ran:
 
 If a check was not run, explain why.
 
+## Shared AI conventions (sibling repos)
+
+Generic agent rules, skills, and editor defaults for **eskerra-go** and other siblings are maintained here. See [`specs/rules/shared-conventions.md`](specs/rules/shared-conventions.md) and run:
+
+```bash
+./scripts/sync-shared-conventions.sh /path/to/sibling-repo
+```
+
 ## Security issues
 
 Do not open a public issue for security vulnerabilities.

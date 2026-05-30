@@ -1,0 +1,10 @@
+---
+description: Require clean tests, linting, and type checks after changes
+alwaysApply: true
+---
+
+# Quality Gate
+
+- After each change set, run the relevant test, lint, and type-check commands.
+- Resolve all errors before considering work complete.
+- Do not leave known failing quality checks in the branch.

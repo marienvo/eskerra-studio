@@ -1,0 +1,11 @@
+---
+description: Keep non-obvious decisions and constraints in specs
+alwaysApply: true
+---
+
+# Specification Discipline
+
+- Document facts that cannot be reliably inferred from the code itself in spec documents.
+- Capture concrete business rules, external constraints, assumptions, and architectural decisions.
+- Keep specs synchronized with implementation changes: add, update, or remove sections as needed.
+- Prefer specific, testable statements over vague descriptions.

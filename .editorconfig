@@ -1,0 +1,14 @@
+# Shared editor defaults (canonical copy in notebox; synced to sibling repos)
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{md,mdc}]
+trim_trailing_whitespace = false
+
+[*.bat]
+end_of_line = crlf

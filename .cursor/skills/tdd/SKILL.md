@@ -5,6 +5,7 @@ description: Test-driven development with red-green-refactor loop. Use when user
 
 # Test-Driven Development
 
+<!-- repo-specific:start -->
 ## This monorepo (Eskerra)
 
 From the repo root ([CLAUDE.md](../../../CLAUDE.md)):
@@ -16,6 +17,13 @@ From the repo root ([CLAUDE.md](../../../CLAUDE.md)):
 Use the same runner as existing tests in the package you are changing.
 
 - **Desktop Vitest:** when adding or changing desktop tests, follow the repo’s workspace rules (request them if needed): [testing.mdc](../../rules/testing.mdc) and [vitest-desktop-test-isolation.mdc](../../rules/vitest-desktop-test-isolation.mdc).
+<!-- repo-specific:end -->
+
+<!-- shared-fallback:start -->
+## Test commands in this repo
+
+Read [AGENTS.md](../../../AGENTS.md) for the canonical test, lint, and type-check commands. Use the same runner and patterns as existing tests in the module you are changing.
+<!-- shared-fallback:end -->
 
 ## Philosophy
 

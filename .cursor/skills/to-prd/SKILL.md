@@ -8,7 +8,13 @@ This skill takes the current conversation context and codebase understanding and
 ## Where to file the output
 
 - **Default (this repo):** open a **GitHub issue** in this repository with the PRD as the issue body (or ask the user for the target repo if work spans forks).
-- **Alternative:** if the user does not use issues or asks for a repo-only artifact, write a markdown file under `specs/prd/<short-slug>.md` and mention that path in the chat. Prefer `specs/` for durable product intent ([CLAUDE.md](../../../CLAUDE.md) spec discipline).
+- **Alternative:** if the user does not use issues or asks for a repo-only artifact, write a markdown file under `specs/prd/<short-slug>.md` and mention that path in the chat.
+<!-- repo-specific:start -->
+Prefer `specs/` for durable product intent ([CLAUDE.md](../../../CLAUDE.md) spec discipline).
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+Prefer `specs/` for durable product intent (see [AGENTS.md](../../../AGENTS.md) and the specs discipline rule).
+<!-- shared-fallback:end -->
 
 ## Process
 
@@ -36,9 +42,14 @@ A LONG, numbered list of user stories. Each user story should be in the format o
 
 1. As an <actor>, I want <feature>, so that <benefit>
 
-Example (adapt actor to this product, e.g. person taking notes or listening to podcasts):
+Example (adapt actor to this product):
 
+<!-- repo-specific:start -->
 1. As a note taker, I want new captures to land in Inbox, so that I can process them later on any device that syncs the vault.
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+1. As a user, I want to complete the core workflow, so that the stated problem is solved.
+<!-- shared-fallback:end -->
 
 This list of user stories should be extremely extensive and cover all aspects of the feature.
 

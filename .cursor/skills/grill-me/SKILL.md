@@ -9,4 +9,10 @@ Ask the questions one at a time.
 
 If a question can be answered by exploring the codebase, explore the codebase instead.
 
+<!-- repo-specific:start -->
 For product constraints and invariants, read [CLAUDE.md](../../../CLAUDE.md) and scan [specs/](../../../specs/) (including subfolders such as `specs/performance/`) for facts the user might assume you already know — do not ask the user to restate what is written there.
+<!-- repo-specific:end -->
+
+<!-- shared-fallback:start -->
+For product constraints and invariants, read [AGENTS.md](../../../AGENTS.md) and scan [specs/](../../../specs/) for facts the user might assume you already know — do not ask the user to restate what is written there.
+<!-- shared-fallback:end -->

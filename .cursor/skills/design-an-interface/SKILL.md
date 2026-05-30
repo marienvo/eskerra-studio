@@ -7,7 +7,12 @@ description: Generate multiple radically different interface designs for a modul
 
 Based on "Design It Twice" from "A Philosophy of Software Design": your first idea is unlikely to be the best. Generate multiple radically different designs, then compare.
 
+<!-- repo-specific:start -->
 **Eskerra UI and shared code:** respect the layer model in [CLAUDE.md](../../../CLAUDE.md) — L1 tokens, L2 design-system primitives (`@eskerra/ds-desktop` / `@eskerra/ds-mobile`), L3 app features. Platform-agnostic rules belong behind interfaces (e.g. `VaultFilesystem` from `@eskerra/core`); do not leak L3 details into L2.
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+**Layering:** read [AGENTS.md](../../../AGENTS.md) for this repo’s architecture. Put platform-agnostic rules behind small interfaces; do not leak app/feature details into shared libraries.
+<!-- shared-fallback:end -->
 
 ## Workflow
 
