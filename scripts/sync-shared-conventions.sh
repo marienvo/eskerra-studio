@@ -177,7 +177,6 @@ copy_file() {
   [[ -f "${src}" ]] || { echo "Missing source: ${src}" >&2; exit 1; }
 
   if [[ "${CHECK_MODE}" == true ]]; then
-    mkdir -p "$(dirname "${dest}")"
     local tmp
     tmp="$(mktemp "${TMPDIR:-/tmp}/sync-conventions.XXXXXX")"
     cp "${src}" "${tmp}"
