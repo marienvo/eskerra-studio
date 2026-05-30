@@ -93,11 +93,20 @@ inject_frontmatter_notice() {
   local file_path="$1"
   local rel_source="$2"
   awk -v marker="${HEADER_MARKER}" -v src="${rel_source}" '
+    function read_line() {
+      if ((getline) <= 0) {
+        print "sync-shared-conventions: unclosed frontmatter (missing closing ---) in " FILENAME > "/dev/stderr"
+        exit 1
+      }
+    }
     BEGIN { done = 0 }
     /^---$/ && !done {
       print
-      getline
-      while ($0 !~ /^---$/) { print; getline }
+      read_line()
+      while ($0 !~ /^---$/) {
+        print
+        read_line()
+      }
       print "---"
       print ""
       print "<!-- " marker " — do not edit here. Canonical: notebox/" src " -->"
@@ -180,7 +189,11 @@ copy_file() {
       return 0
     fi
     echo "Would update: ${dest_rel}"
-    diff -u "${dest}" "${tmp}" 2>/dev/null || true
+    if [[ -f "${dest}" ]]; then
+      diff -u "${dest}" "${tmp}" || true
+    else
+      diff -u /dev/null "${tmp}" || true
+    fi
     rm -f "${tmp}"
     return 1
   fi
@@ -202,23 +215,29 @@ copy_skill_dir() {
 
   local snapshot
   snapshot="$(mktemp -d "${TMPDIR:-/tmp}/sync-skill-snapshot.XXXXXX")"
+  trap 'rm -rf "${snapshot}"' RETURN
+
   build_skill_dir_snapshot "${src}" "${snapshot}" "${rel_prefix}"
 
   if [[ "${CHECK_MODE}" == true ]]; then
     if [[ -d "${dest}" ]] && diff -qr "${snapshot}" "${dest}" >/dev/null 2>&1; then
-      rm -rf "${snapshot}"
       return 0
     fi
     echo "Would update skill dir: .cursor/skills/${name}"
-    diff -qr "${dest}" "${snapshot}" 2>/dev/null || true
-    rm -rf "${snapshot}"
+    if [[ -d "${dest}" ]]; then
+      diff -qr "${dest}" "${snapshot}" || true
+    else
+      echo "(new skill dir)"
+      while IFS= read -r -d '' rel; do
+        echo "  + ${rel}"
+      done < <(cd "${snapshot}" && find . -type f -print0 | sort -z)
+    fi
     return 1
   fi
 
   mkdir -p "${TARGET_ROOT}/.cursor/skills"
   rm -rf "${dest}"
   cp -a "${snapshot}/." "${dest}/"
-  rm -rf "${snapshot}"
   echo "Synced skill: .cursor/skills/${name}"
 }
 
@@ -229,10 +248,17 @@ ensure_claude_skills_symlink() {
     if [[ -L "${link}" ]] && [[ "$(readlink "${link}")" == "${expected}" ]]; then
       return 0
     fi
-    echo "Would create symlink: .claude/skills -> ${expected}"
+    if [[ -e "${link}" ]] && [[ ! -L "${link}" ]]; then
+      echo "Would replace .claude/skills directory with symlink -> ${expected}"
+    else
+      echo "Would create symlink: .claude/skills -> ${expected}"
+    fi
     return 1
   fi
   mkdir -p "${TARGET_ROOT}/.claude"
+  if [[ -e "${link}" ]] && [[ ! -L "${link}" ]]; then
+    rm -rf "${link}"
+  fi
   ln -sfn "${expected}" "${link}"
   echo "Linked: .claude/skills -> ${expected}"
 }
