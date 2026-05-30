@@ -19,6 +19,44 @@ type TimerState = {
   remaining: number;
 };
 
+type RenameProgressInPlacePlan = {
+  bumpEpoch: boolean;
+  resurface: boolean;
+  nextLastText: string | null | undefined;
+};
+
+function planRenameProgressInPlaceUpdate(args: {
+  renameItem: SessionNotification | undefined;
+  lastRenameText: string | null;
+  liveIds: ReadonlySet<string>;
+  seenIds: ReadonlySet<string>;
+}): RenameProgressInPlacePlan {
+  const {renameItem, lastRenameText, liveIds, seenIds} = args;
+  if (renameItem == null) {
+    return {bumpEpoch: false, resurface: false, nextLastText: null};
+  }
+  if (renameItem.text === lastRenameText) {
+    return {bumpEpoch: false, resurface: false, nextLastText: undefined};
+  }
+
+  // First observation this mount: record text without treating backlog as an update.
+  if (lastRenameText == null) {
+    return {bumpEpoch: false, resurface: false, nextLastText: renameItem.text};
+  }
+
+  const renameId = SESSION_NOTIF_RENAME_PROGRESS_ID;
+  const isLive = liveIds.has(renameId);
+  if (!seenIds.has(renameId)) {
+    return {bumpEpoch: false, resurface: false, nextLastText: renameItem.text};
+  }
+
+  return {
+    bumpEpoch: true,
+    resurface: !isLive,
+    nextLastText: renameItem.text,
+  };
+}
+
 export function ToastStack({items, onDismiss}: ToastStackProps) {
   const [liveIds, setLiveIds] = useState<ReadonlySet<string>>(() => new Set());
   const [progressBarEpochById, setProgressBarEpochById] = useState<
@@ -31,14 +69,6 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
   const timersRef = useRef<Map<string, TimerState>>(new Map());
   // Tracks last seen text for rename-progress to detect in-place text changes.
   const lastRenameTextRef = useRef<string | null>(null);
-
-  const bumpProgressBarEpoch = useCallback((id: string) => {
-    setProgressBarEpochById(prev => {
-      const next = new Map(prev);
-      next.set(id, (prev.get(id) ?? 0) + 1);
-      return next;
-    });
-  }, []);
 
   const expireToast = useCallback((id: string) => {
     timersRef.current.delete(id);
@@ -70,22 +100,28 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
     const currentIds = items.map(i => i.id);
     const {appeared, removed} = diffToastIds({seenIds, liveIds, currentIds});
 
-    // Handle rename-progress in-place text change: if already live, restart timer.
+    // Handle rename-progress in-place text change: restart timer when live, or
+    // re-surface when the toast expired while the drawer row was upserted in place.
     const renameItem = items.find(i => i.id === SESSION_NOTIF_RENAME_PROGRESS_ID);
-    if (
-      renameItem != null &&
-      liveIds.has(SESSION_NOTIF_RENAME_PROGRESS_ID) &&
-      renameItem.text !== lastRenameTextRef.current
-    ) {
-      lastRenameTextRef.current = renameItem.text;
-      startTimer(SESSION_NOTIF_RENAME_PROGRESS_ID, TOAST_DURATION_MS);
-      bumpProgressBarEpoch(SESSION_NOTIF_RENAME_PROGRESS_ID);
+    const renamePlan = planRenameProgressInPlaceUpdate({
+      renameItem,
+      lastRenameText: lastRenameTextRef.current,
+      liveIds,
+      seenIds,
+    });
+    if (renamePlan.nextLastText !== undefined) {
+      lastRenameTextRef.current = renamePlan.nextLastText;
     }
-    if (renameItem == null) {
-      lastRenameTextRef.current = null;
+    if (renamePlan.bumpEpoch) {
+      startTimer(SESSION_NOTIF_RENAME_PROGRESS_ID, TOAST_DURATION_MS);
     }
 
-    if (appeared.length === 0 && removed.length === 0) {
+    if (
+      appeared.length === 0 &&
+      removed.length === 0 &&
+      !renamePlan.bumpEpoch &&
+      !renamePlan.resurface
+    ) {
       return;
     }
 
@@ -110,9 +146,21 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
       const next = new Set(prev);
       for (const id of appeared) next.add(id);
       for (const id of removed) next.delete(id);
+      if (renamePlan.resurface) {
+        next.add(SESSION_NOTIF_RENAME_PROGRESS_ID);
+      }
       return next;
     });
-  }, [bumpProgressBarEpoch, items, liveIds, startTimer]);
+
+    if (renamePlan.bumpEpoch) {
+      setProgressBarEpochById(prev => {
+        const next = new Map(prev);
+        const renameId = SESSION_NOTIF_RENAME_PROGRESS_ID;
+        next.set(renameId, (prev.get(renameId) ?? 0) + 1);
+        return next;
+      });
+    }
+  }, [items, liveIds, startTimer]);
 
   useEffect(() => {
     const timers = timersRef.current;
