@@ -62,6 +62,17 @@ strip_for_sibling() {
   '
 }
 
+commit_tmp_preserving_mode() {
+  local file_path="$1"
+  local tmp="${file_path}.tmp"
+  local mode="644"
+  if [[ -f "${file_path}" ]]; then
+    mode="$(stat -c '%a' "${file_path}")"
+  fi
+  mv "${tmp}" "${file_path}"
+  chmod "${mode}" "${file_path}"
+}
+
 transform_skill_md_to() {
   local src_file="$1"
   local dest_file="$2"
@@ -116,7 +127,7 @@ inject_frontmatter_notice() {
       next
     }
     { print }
-  ' "${file_path}" > "${file_path}.tmp" && mv "${file_path}.tmp" "${file_path}"
+  ' "${file_path}" > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
 }
 
 inject_sync_notice() {
@@ -138,7 +149,7 @@ inject_sync_notice() {
         echo "<!-- Re-run: notebox/scripts/sync-shared-conventions.sh -->"
         echo ""
         cat "${file_path}"
-      } > "${file_path}.tmp" && mv "${file_path}.tmp" "${file_path}"
+      } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
       ;;
     *.sh)
       if head -n 1 "${file_path}" | grep -q '^#!'; then
@@ -147,13 +158,13 @@ inject_sync_notice() {
           echo "# ${HEADER_MARKER} — do not edit here. Canonical: notebox/${rel_source}"
           echo "# Re-run: notebox/scripts/sync-shared-conventions.sh"
           tail -n +2 "${file_path}"
-        } > "${file_path}.tmp" && mv "${file_path}.tmp" "${file_path}"
+        } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
       else
         {
           echo "# ${HEADER_MARKER} — do not edit here. Canonical: notebox/${rel_source}"
           echo "# Re-run: notebox/scripts/sync-shared-conventions.sh"
           cat "${file_path}"
-        } > "${file_path}.tmp" && mv "${file_path}.tmp" "${file_path}"
+        } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
       fi
       ;;
     *)
@@ -162,7 +173,7 @@ inject_sync_notice() {
         echo "<!-- Re-run: notebox/scripts/sync-shared-conventions.sh -->"
         echo ""
         cat "${file_path}"
-      } > "${file_path}.tmp" && mv "${file_path}.tmp" "${file_path}"
+      } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
       ;;
   esac
 }
