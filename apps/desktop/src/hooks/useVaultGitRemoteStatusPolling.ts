@@ -1,4 +1,11 @@
-import {useEffect, useEffectEvent, useRef, useState, type MutableRefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react';
 
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 import {useVaultGitRemoteRefresh} from './useVaultGitRemoteRefresh';
@@ -37,19 +44,33 @@ export function useVaultGitRemoteStatusPolling({
   onRefreshed,
   gitOperationBusyRef,
 }: UseVaultGitRemoteStatusPollingInput): UseVaultGitRemoteStatusPollingResult {
-  const initialRefreshVaultRef = useRef<string | null>(null);
-  const initialRefreshCompletedRef = useRef(false);
-  const [initialRemoteStatusSettled, setInitialRemoteStatusSettled] = useState(true);
+  const noRemoteTarget = vaultPath == null || branch == null;
+  const [trackedVault, setTrackedVault] = useState<string | null>(
+    noRemoteTarget ? null : vaultPath,
+  );
+  const [initialRemoteStatusSettled, setInitialRemoteStatusSettled] =
+    useState(noRemoteTarget);
 
-  const markInitialRemoteSettled = useEffectEvent((settledVaultPath: string) => {
-    if (
-      initialRefreshVaultRef.current === settledVaultPath &&
-      !initialRefreshCompletedRef.current
-    ) {
-      initialRefreshCompletedRef.current = true;
+  if (noRemoteTarget) {
+    if (trackedVault !== null) {
+      setTrackedVault(null);
       setInitialRemoteStatusSettled(true);
     }
-  });
+  } else if (trackedVault !== vaultPath) {
+    setTrackedVault(vaultPath);
+    setInitialRemoteStatusSettled(false);
+  }
+
+  const trackedVaultRef = useRef(trackedVault);
+  useEffect(() => {
+    trackedVaultRef.current = trackedVault;
+  }, [trackedVault]);
+
+  const markInitialRemoteSettled = useCallback((settledVaultPath: string) => {
+    if (trackedVaultRef.current === settledVaultPath) {
+      setInitialRemoteStatusSettled(true);
+    }
+  }, []);
 
   const {refresh, loading: remoteRefreshLoading} = useVaultGitRemoteRefresh({
     vaultPath,
@@ -65,24 +86,10 @@ export function useVaultGitRemoteStatusPolling({
   const triggerRefresh = useEffectEvent(() => refresh());
 
   useEffect(() => {
-    if (vaultPath == null || branch == null) {
-      initialRefreshVaultRef.current = null;
-      initialRefreshCompletedRef.current = false;
-      setInitialRemoteStatusSettled(true);
-      return;
-    }
-    if (initialRefreshVaultRef.current !== vaultPath) {
-      initialRefreshVaultRef.current = vaultPath;
-      initialRefreshCompletedRef.current = false;
-      setInitialRemoteStatusSettled(false);
-    }
-  }, [vaultPath, branch]);
-
-  useEffect(() => {
     if (vaultPath == null || branch == null) return;
-    if (initialRefreshCompletedRef.current) return;
+    if (initialRemoteStatusSettled) return;
     triggerRefresh();
-  }, [vaultPath, branch, manualSyncRunning]);
+  }, [vaultPath, branch, manualSyncRunning, initialRemoteStatusSettled]);
 
   useEffect(() => {
     const id = window.setInterval(triggerRefresh, REMOTE_POLL_INTERVAL_MS);
