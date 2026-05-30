@@ -1,3 +1,5 @@
+import {createPortal} from 'react-dom';
+
 import type {SessionNotification} from '../lib/sessionNotifications';
 import {MaterialIcon} from './MaterialIcon';
 
@@ -10,7 +12,8 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
   if (items.length === 0) {
     return null;
   }
-  return (
+
+  return createPortal(
     <div className="toast-stack" aria-live="polite" aria-atomic="false">
       {items.map(item => (
         <div
@@ -35,6 +38,7 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
           </button>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }

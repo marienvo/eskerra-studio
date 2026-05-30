@@ -614,7 +614,7 @@ a:focus:not(:focus-visible) {
   white-space: nowrap;
 }
 
-/* Toast stack: fixed bottom-right floating notifications (see ToastStack). */
+/* Toast stack: portaled to document.body so toasts sit above modal overlays (e.g. Add to inbox z-index 301). */
 .toast-stack {
   position: fixed;
   bottom: 48px;
