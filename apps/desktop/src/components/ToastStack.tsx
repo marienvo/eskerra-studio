@@ -104,8 +104,7 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
       for (const id of removed) next.delete(id);
       return next;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, startTimer]);
+  }, [items, liveIds, startTimer]);
 
   useEffect(() => {
     const timers = timersRef.current;
