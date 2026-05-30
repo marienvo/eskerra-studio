@@ -1,0 +1,10 @@
+---
+description: Desktop Vitest harness and isolation requirements
+globs:
+  - apps/desktop/**
+alwaysApply: false
+---
+
+# Desktop Vitest
+
+- Desktop (`apps/desktop`) Vitest: harness, mock strategy, and Tauri-safe `vitest.setup.ts` imports are described in **`vitest-desktop-test-isolation`** and `specs/adrs/001-adr-vitest-desktop-test-isolation.md`.

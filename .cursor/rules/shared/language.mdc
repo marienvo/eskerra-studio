@@ -1,0 +1,10 @@
+---
+description: Use US English in all code, comments, and documentation
+alwaysApply: true
+---
+
+# US English Language Standard
+
+- Write all code identifiers, comments, commit-facing docs, and specs in US English.
+- Use US spelling consistently (for example: "color", "organization", "behavior").
+- If source material is in another language, translate it to clear US English when adding it to the repository.

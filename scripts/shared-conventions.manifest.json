@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "canonicalRepo": "notebox",
+  "description": "Allowlist of AI conventions synced from notebox to sibling repos (e.g. eskerra-go). Edit only in notebox; re-run sync-shared-conventions.sh on targets.",
+  "files": [
+    {
+      "source": ".cursor/rules/shared/language.mdc",
+      "dest": ".cursor/rules/language.mdc",
+      "injectHeader": true
+    },
+    {
+      "source": ".cursor/rules/shared/quality.mdc",
+      "dest": ".cursor/rules/quality.mdc",
+      "injectHeader": true
+    },
+    {
+      "source": ".cursor/rules/shared/specs.mdc",
+      "dest": ".cursor/rules/specs.mdc",
+      "injectHeader": true
+    },
+    {
+      "source": ".cursor/rules/shared/testing.mdc",
+      "dest": ".cursor/rules/testing.mdc",
+      "injectHeader": true
+    },
+    {
+      "source": "scripts/shared-conventions/claude-settings.json",
+      "dest": ".claude/settings.json",
+      "injectHeader": false
+    },
+    {
+      "source": ".claude/hooks/block-dangerous-git.sh",
+      "dest": ".claude/hooks/block-dangerous-git.sh",
+      "injectHeader": true
+    },
+    {
+      "source": "scripts/shared-conventions/editorconfig",
+      "dest": ".editorconfig",
+      "injectHeader": false
+    }
+  ],
+  "skillDirs": [
+    "tdd",
+    "to-prd",
+    "grill-me",
+    "zoom-out",
+    "improve-codebase-architecture",
+    "request-refactor-plan",
+    "design-an-interface",
+    "ubiquitous-language",
+    "git-guardrails-claude-code"
+  ],
+  "skillFiles": [
+    ".cursor/skills/mattpocock-skills-LICENSE"
+  ],
+  "generatedFiles": [
+    {
+      "source": "scripts/shared-conventions/skills-README.sibling.md",
+      "dest": ".cursor/skills/README.md",
+      "injectHeader": false
+    }
+  ]
+}

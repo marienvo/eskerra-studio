@@ -6,7 +6,13 @@ description: Create a detailed refactor plan with tiny commits via user intervie
 ## Where to file the output
 
 - **Default (this repo / team):** create a **GitHub issue** in this repository with the plan as the issue body, unless the user explicitly asks for a repo-only artifact.
-- **Alternative:** if the user does not use issues, write `specs/rfcs/<short-slug>.md` (or another path under [specs/](../../../specs/) that matches existing layout) and mention it in the chat. Keep durable decisions consistent with [CLAUDE.md](../../../CLAUDE.md) spec discipline.
+- **Alternative:** if the user does not use issues, write `specs/rfcs/<short-slug>.md` (or another path under [specs/](../../../specs/) that matches existing layout) and mention it in the chat.
+<!-- repo-specific:start -->
+Keep durable decisions consistent with [CLAUDE.md](../../../CLAUDE.md) spec discipline.
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+Keep durable decisions consistent with [AGENTS.md](../../../AGENTS.md) and the specs discipline rule.
+<!-- shared-fallback:end -->
 
 This skill will be invoked when the user wants to create a refactor request. You should go through the steps below. You may skip steps if you don't consider them necessary.
 

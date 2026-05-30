@@ -10,7 +10,14 @@ Extract and formalize domain terminology from the current conversation into a co
 
 **`specs/ubiquitous-language.md`**
 
-That keeps the glossary next to other non-obvious product facts (see [CLAUDE.md](../../../CLAUDE.md) and the specs rule). If the file already exists, update it in place; do not scatter `UBIQUITOUS_LANGUAGE.md` in the cwd.
+That keeps the glossary next to other non-obvious product facts (see the specs discipline rule).
+<!-- repo-specific:start -->
+See also [CLAUDE.md](../../../CLAUDE.md) for product vocabulary.
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+See also [AGENTS.md](../../../AGENTS.md) for product vocabulary.
+<!-- shared-fallback:end -->
+If the file already exists, update it in place; do not scatter `UBIQUITOUS_LANGUAGE.md` in the cwd.
 
 ## Process
 
@@ -19,7 +26,13 @@ That keeps the glossary next to other non-obvious product facts (see [CLAUDE.md]
    - Same word used for different concepts (ambiguity)
    - Different words used for the same concept (synonyms)
    - Vague or overloaded terms
-3. **Propose a canonical glossary** with opinionated term choices aligned with [CLAUDE.md](../../../CLAUDE.md) (Eskerra vault, notes, podcast feeds, playlist, etc.)
+3. **Propose a canonical glossary** with opinionated term choices aligned with this product’s domain.
+<!-- repo-specific:start -->
+Use vocabulary from [CLAUDE.md](../../../CLAUDE.md) (Eskerra vault, notes, podcast feeds, playlist, etc.) when applicable.
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+Use vocabulary from [AGENTS.md](../../../AGENTS.md) and existing `specs/` when applicable.
+<!-- shared-fallback:end -->
 4. **Write to `specs/ubiquitous-language.md`** using the format below (create the file or merge into it)
 5. **Output a summary** inline in the conversation
 
@@ -48,7 +61,10 @@ Use this structure in `specs/ubiquitous-language.md`:
 ## Relationships
 
 - A **Feed** has many **Episodes**
-- **Playlist** state merges across devices using `controlRevision` and timestamps per [CLAUDE.md]
+- **Playlist** state merges across devices using `controlRevision` and timestamps
+<!-- repo-specific:start -->
+ per [CLAUDE.md](../../../CLAUDE.md)
+<!-- repo-specific:end -->
 
 ## Example dialogue
 
@@ -62,7 +78,7 @@ Use this structure in `specs/ubiquitous-language.md`:
 - "note" was used for both a Markdown file in **Inbox** and an episode cache file — recommend **Episode** for podcast cache to avoid clashing with **Inbox** notes.
 ```
 
-(Replace section headings and terms with what the *current* conversation actually needs; the table above is only an Eskerra-shaped illustration.)
+(Replace section headings and terms with what the *current* conversation actually needs; the table above is only an illustration — adapt to your product domain.)
 
 ## Rules
 
@@ -73,7 +89,7 @@ Use this structure in `specs/ubiquitous-language.md`:
 - **Show relationships.** Use bold term names and express cardinality where obvious.
 - **Only include domain terms.** Skip generic programming concepts (array, function, endpoint) unless they have domain-specific meaning.
 - **Group terms into multiple tables** when natural clusters emerge. Each group gets its own heading and table.
-- **Write an example dialogue.** A short conversation (3-5 exchanges) that demonstrates how the terms interact. Align examples with this product (Markdown vault, optional R2, Android/desktop) when applicable.
+- **Write an example dialogue.** A short conversation (3-5 exchanges) that demonstrates how the terms interact. Align examples with this product’s domain when applicable.
 
 ## Re-running
 

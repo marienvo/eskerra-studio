@@ -1,6 +1,6 @@
 ---
 name: improve-codebase-architecture
-description: Find deepening opportunities in a codebase, informed by CLAUDE.md, specs, and optional CONTEXT/ADR. Use when the user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more testable and AI-navigable.
+description: Find deepening opportunities in a codebase, informed by agent instructions, specs, and optional CONTEXT/ADR. Use when the user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more testable and AI-navigable.
 ---
 
 # Improve Codebase Architecture
@@ -26,7 +26,12 @@ Key principles (see [LANGUAGE.md](LANGUAGE.md) for the full list):
 - **The interface is the test surface.**
 - **One adapter = hypothetical seam. Two adapters = real seam.**
 
+<!-- repo-specific:start -->
 In **this** repo, domain and invariants are anchored in [CLAUDE.md](../../../CLAUDE.md) and [specs/](../../../specs/). Optional extras: a repo-root `CONTEXT.md` and `docs/adr/` when the project adds them. For format notes see [CONTEXT-FORMAT.md](CONTEXT-FORMAT.md) and [ADR-FORMAT.md](ADR-FORMAT.md).
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+In **this** repo, domain and invariants are anchored in [AGENTS.md](../../../AGENTS.md) and [specs/](../../../specs/). Optional extras: a repo-root `CONTEXT.md` and `docs/adr/` when the project adds them. For format notes see [CONTEXT-FORMAT.md](CONTEXT-FORMAT.md) and [ADR-FORMAT.md](ADR-FORMAT.md).
+<!-- shared-fallback:end -->
 
 ## Process
 
@@ -34,7 +39,12 @@ In **this** repo, domain and invariants are anchored in [CLAUDE.md](../../../CLA
 
 Read existing documentation first, in this order:
 
+<!-- repo-specific:start -->
 1. [CLAUDE.md](../../../CLAUDE.md) (architecture, vault contract, platform targets)
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+1. [AGENTS.md](../../../AGENTS.md) (architecture, platform targets, project conventions)
+<!-- shared-fallback:end -->
 2. Relevant files under [specs/](../../../specs/) (business rules, performance notes, non-obvious decisions)
 3. If present: `CONTEXT.md` (or `CONTEXT-MAP.md` + per-area `CONTEXT.md` in a multi-context repo)
 4. If present: `docs/adr/`
@@ -60,7 +70,13 @@ Present a numbered list of deepening opportunities. For each candidate:
 - **Solution** — plain English description of what would change
 - **Benefits** — explained in terms of locality and leverage, and also in how tests would improve
 
-**Use [CLAUDE.md](../../../CLAUDE.md) / [specs/](../../../specs/) vocabulary for the product domain, and [LANGUAGE.md](LANGUAGE.md) vocabulary for the architecture.** If a `CONTEXT.md` exists and defines a term, prefer that for naming. If not, use vocabulary from `CLAUDE.md` — e.g. talk about "the vault filesystem seam" or "the playlist merge path," not opaque handler names. Example: if `CLAUDE.md` centers the **vault**, refer to "the module that mediates **vault** reads" rather than "the `FooService`."
+**Use agent instructions and [specs/](../../../specs/) vocabulary for the product domain, and [LANGUAGE.md](LANGUAGE.md) vocabulary for the architecture.** If a `CONTEXT.md` exists and defines a term, prefer that for naming.
+<!-- repo-specific:start -->
+If not, use vocabulary from `CLAUDE.md` — e.g. talk about "the vault filesystem seam" or "the playlist merge path," not opaque handler names. Example: if `CLAUDE.md` centers the **vault**, refer to "the module that mediates **vault** reads" rather than "the `FooService`."
+<!-- repo-specific:end -->
+<!-- shared-fallback:start -->
+If not, use vocabulary from `AGENTS.md` and `specs/` — name seams after domain concepts, not opaque handler names.
+<!-- shared-fallback:end -->
 
 **ADR conflicts**: if a candidate contradicts an existing ADR, only surface it when the friction is real enough to warrant revisiting the ADR. Mark it clearly (e.g. _"contradicts ADR-0007 — but worth reopening because…"_). Don't list every theoretical refactor an ADR forbids.
 
@@ -72,7 +88,10 @@ Once the user picks a candidate, drop into a grilling conversation. Walk the des
 
 Side effects happen inline as decisions crystallize:
 
-- **Naming a deepened module after a concept not in `CLAUDE.md` or specs?** Add the term to the most appropriate place: a relevant `specs/` doc, and optionally `CONTEXT.md` if the team maintains one (see [CONTEXT-FORMAT.md](CONTEXT-FORMAT.md)).
+- **Naming a deepened module after a concept not yet in specs?** Add the term to the most appropriate place: a relevant `specs/` doc, and optionally `CONTEXT.md` if the team maintains one (see [CONTEXT-FORMAT.md](CONTEXT-FORMAT.md)).
+<!-- repo-specific:start -->
+Also align new terms with [CLAUDE.md](../../../CLAUDE.md) when they are product-facing.
+<!-- repo-specific:end -->
 - **Sharpening a fuzzy term during the conversation?** Update that doc in the same pass.
 - **User rejects the candidate with a load-bearing reason?** Offer a durable record: either a short addition under `specs/` or, if the project uses `docs/adr/`, an ADR (see [ADR-FORMAT.md](ADR-FORMAT.md)). Only offer when the reason would help a future explorer avoid re-suggesting the same thing — skip ephemeral or self-evident reasons.
 - **Want to explore alternative interfaces for the deepened module?** See [INTERFACE-DESIGN.md](INTERFACE-DESIGN.md).
