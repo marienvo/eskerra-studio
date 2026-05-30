@@ -70,16 +70,28 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
     const currentIds = items.map(i => i.id);
     const {appeared, removed} = diffToastIds({seenIds, liveIds, currentIds});
 
-    // Handle rename-progress in-place text change: if already live, restart timer.
+    // Handle rename-progress in-place text change: restart timer when live, or
+    // re-surface when the toast expired while the drawer row was upserted in place.
     const renameItem = items.find(i => i.id === SESSION_NOTIF_RENAME_PROGRESS_ID);
     if (
       renameItem != null &&
-      liveIds.has(SESSION_NOTIF_RENAME_PROGRESS_ID) &&
       renameItem.text !== lastRenameTextRef.current
     ) {
       lastRenameTextRef.current = renameItem.text;
-      startTimer(SESSION_NOTIF_RENAME_PROGRESS_ID, TOAST_DURATION_MS);
-      bumpProgressBarEpoch(SESSION_NOTIF_RENAME_PROGRESS_ID);
+      const renameId = SESSION_NOTIF_RENAME_PROGRESS_ID;
+      const isLive = liveIds.has(renameId);
+      if (isLive) {
+        startTimer(renameId, TOAST_DURATION_MS);
+        bumpProgressBarEpoch(renameId);
+      } else if (seenIds.has(renameId)) {
+        startTimer(renameId, TOAST_DURATION_MS);
+        bumpProgressBarEpoch(renameId);
+        setLiveIds(prev => {
+          const next = new Set(prev);
+          next.add(renameId);
+          return next;
+        });
+      }
     }
     if (renameItem == null) {
       lastRenameTextRef.current = null;
