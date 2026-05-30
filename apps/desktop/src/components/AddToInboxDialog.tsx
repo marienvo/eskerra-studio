@@ -19,6 +19,7 @@ import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,
 } from '../editor/noteEditor/vaultLinkActivatePayload';
+import {modEnterSaveShortcutLabel} from '../lib/desktopShortcutLabels';
 
 import styles from './AddToInboxDialog.module.css';
 
@@ -133,7 +134,9 @@ export function AddToInboxDialog({
         >
           <Dialog.Title className={styles.title}>
             Add to inbox{' '}
-            <span className={styles.titleHint}>(Ctrl+Enter to save)</span>
+            <span className={styles.titleHint}>
+              ({modEnterSaveShortcutLabel()} to save)
+            </span>
           </Dialog.Title>
           <div
             className={`${styles.editorSurface} note-markdown-editor-wrap`}

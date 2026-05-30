@@ -21,6 +21,9 @@ type TimerState = {
 
 export function ToastStack({items, onDismiss}: ToastStackProps) {
   const [liveIds, setLiveIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [progressBarEpochById, setProgressBarEpochById] = useState<
+    ReadonlyMap<string, number>
+  >(() => new Map());
 
   // Seeded once on mount so a notification backlog does not flash as new toasts.
   const seenIdsRef = useRef<Set<string>>(new Set(items.map(i => i.id)));
@@ -28,6 +31,14 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
   const timersRef = useRef<Map<string, TimerState>>(new Map());
   // Tracks last seen text for rename-progress to detect in-place text changes.
   const lastRenameTextRef = useRef<string | null>(null);
+
+  const bumpProgressBarEpoch = useCallback((id: string) => {
+    setProgressBarEpochById(prev => {
+      const next = new Map(prev);
+      next.set(id, (prev.get(id) ?? 0) + 1);
+      return next;
+    });
+  }, []);
 
   const expireToast = useCallback((id: string) => {
     timersRef.current.delete(id);
@@ -68,6 +79,7 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
     ) {
       lastRenameTextRef.current = renameItem.text;
       startTimer(SESSION_NOTIF_RENAME_PROGRESS_ID, TOAST_DURATION_MS);
+      bumpProgressBarEpoch(SESSION_NOTIF_RENAME_PROGRESS_ID);
     }
     if (renameItem == null) {
       lastRenameTextRef.current = null;
@@ -100,7 +112,7 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
       for (const id of removed) next.delete(id);
       return next;
     });
-  }, [items, liveIds, startTimer]);
+  }, [bumpProgressBarEpoch, items, liveIds, startTimer]);
 
   useEffect(() => {
     const timers = timersRef.current;
@@ -173,7 +185,10 @@ export function ToastStack({items, onDismiss}: ToastStackProps) {
             <MaterialIcon name="close" size={12} aria-hidden />
           </button>
           <div className="toast__progress" aria-hidden>
-            <div className="toast__progress-bar" />
+            <div
+              key={progressBarEpochById.get(item.id) ?? 0}
+              className="toast__progress-bar"
+            />
           </div>
         </div>
       ))}

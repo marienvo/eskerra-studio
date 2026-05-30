@@ -3,6 +3,7 @@ import {forwardRef, useImperativeHandle} from 'react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {AddToInboxDialog} from './AddToInboxDialog';
+import {modEnterSaveShortcutLabel} from '../lib/desktopShortcutLabels';
 
 const editorHandleSpies = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -90,7 +91,7 @@ describe('AddToInboxDialog', () => {
     render(<AddToInboxDialog {...baseProps} />);
 
     expect(screen.getByText('Add to inbox')).not.toBeNull();
-    expect(screen.getByText('(Ctrl+Enter to save)')).not.toBeNull();
+    expect(screen.getByText(`(${modEnterSaveShortcutLabel()} to save)`)).not.toBeNull();
     expect(document.body.querySelector('.note-markdown-editor-fold-rail')).not.toBeNull();
     expect(screen.getByRole('button', {name: 'Save'})).not.toBeNull();
     expect(screen.getByRole('button', {name: 'Cancel'})).not.toBeNull();

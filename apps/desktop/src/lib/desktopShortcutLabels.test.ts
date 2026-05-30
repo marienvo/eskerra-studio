@@ -2,6 +2,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {
   cleanNoteMenuShortcutLabel,
+  modEnterSaveShortcutLabel,
   reopenClosedTabMenuShortcutLabel,
 } from './desktopShortcutLabels';
 
@@ -46,5 +47,27 @@ describe('cleanNoteMenuShortcutLabel', () => {
       userAgent: 'Mozilla/5.0 Macintosh',
     });
     expect(cleanNoteMenuShortcutLabel()).toBe('⌘E');
+  });
+});
+
+describe('modEnterSaveShortcutLabel', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns Ctrl+Enter for Linux', () => {
+    vi.stubGlobal('navigator', {
+      platform: 'Linux x86_64',
+      userAgent: 'Mozilla/5.0 X11; Linux',
+    });
+    expect(modEnterSaveShortcutLabel()).toBe('Ctrl+Enter');
+  });
+
+  it('returns ⌘Enter for macOS', () => {
+    vi.stubGlobal('navigator', {
+      platform: 'MacIntel',
+      userAgent: 'Mozilla/5.0 Macintosh',
+    });
+    expect(modEnterSaveShortcutLabel()).toBe('⌘Enter');
   });
 });
