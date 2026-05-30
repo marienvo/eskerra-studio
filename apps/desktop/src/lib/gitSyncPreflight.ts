@@ -16,7 +16,7 @@ export type SyncIntent = 'manual' | 'keyboard' | 'close' | 'startup' | 'autosync
  * 2. clean/synced:    all intents → false (nothing to do).
  * 3. local work:      all intents → true.
  * 4. ahead-only:      all intents → true (need to push).
- * 5. behind-only:     manual/keyboard → true; close/startup/autosync → false.
+ * 5. behind-only:     manual/keyboard/startup → true; close/autosync → false.
  * 6. diverged:        all intents → true.
  * 7. error state:     manual → true; all others → false.
  * 8. wrong branch / unsafe / unsupported: manual → true; all others → false.
@@ -57,9 +57,9 @@ export function shouldRunVaultGitSync(
     return true;
   }
 
-  // Rule 5: behind-only → only manual/keyboard; close/startup/autosync skip
+  // Rule 5: behind-only → pull on manual/keyboard/startup; close/autosync skip
   if (status.behind > 0) {
-    return intent === 'manual' || intent === 'keyboard';
+    return intent === 'manual' || intent === 'keyboard' || intent === 'startup';
   }
 
   // Rule 2: clean/synced (no local work, ahead === 0, behind === 0, no unsafe) → false for all

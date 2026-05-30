@@ -145,7 +145,10 @@ describe('useAppGitSyncOrchestration close handling', () => {
       refresh: vi.fn(),
     });
     mockUseVaultGitLocalWriteStatusRefresh.mockReturnValue(undefined);
-    mockUseVaultGitRemoteStatusPolling.mockReturnValue({remoteRefreshLoading: false});
+    mockUseVaultGitRemoteStatusPolling.mockReturnValue({
+      remoteRefreshLoading: false,
+      initialRemoteStatusSettled: true,
+    });
     mockUseVaultGitStartupSync.mockReturnValue(undefined);
     mockUseVaultGitStatus.mockReturnValue({
       status: cleanStatus(),
@@ -269,6 +272,16 @@ describe('useAppGitSyncOrchestration close handling', () => {
     renderOrchestration({saveSettledNonce: 3});
 
     expect(mockUseVaultGitStartupSync.mock.calls[0][0].localWriteNonce).toBe(3);
+  });
+
+  it('passes initialRemoteStatusSettled from remote polling to startup sync', () => {
+    mockUseVaultGitRemoteStatusPolling.mockReturnValue({
+      remoteRefreshLoading: true,
+      initialRemoteStatusSettled: false,
+    });
+    renderOrchestration();
+
+    expect(mockUseVaultGitStartupSync.mock.calls[0][0].initialRemoteStatusSettled).toBe(false);
   });
 
   it('flushes and uses fresh status before title-bar close preflight', async () => {

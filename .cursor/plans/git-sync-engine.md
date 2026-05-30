@@ -193,7 +193,7 @@ The `GitCmd` timeout loop was updated to use a back-off strategy: 10 ms initial 
 - New `useVaultGitRemoteRefresh` hook: on-demand, guards null vaultPath/branch and manualSyncRunning, latest-request-wins, `onRefreshed` callback.
 
 **Part 2 — Polling scheduler (frontend only):**
-- New `useVaultGitRemoteStatusPolling` hook: 5-minute interval (`REMOTE_POLL_INTERVAL_MS = 5 * 60 * 1000`) plus `visibilitychange` refresh when window becomes visible.
+- New `useVaultGitRemoteStatusPolling` hook: one immediate fetch when vault + branch become ready (exposes `initialRemoteStatusSettled` for startup sync), then a 5-minute interval (`REMOTE_POLL_INTERVAL_MS = 5 * 60 * 1000`) plus `visibilitychange` refresh when window becomes visible.
 - No polling while `manualSyncRunning`, `vaultPath == null`, `branch == null`, or a shared frontend Git operation busy ref is set (guarded in `useVaultGitRemoteRefresh`).
 - On failure, last-known status is preserved; no toast notification.
 - No autosync, no `vault_git_sync_run` invocation, no background commit/push.
@@ -243,11 +243,13 @@ The `GitCmd` timeout loop was updated to use a back-off strategy: 10 ms initial 
 
 **Gates (all must pass before the sync fires):**
 1. `vaultPath` is non-null
-2. Git status / branch is not loading
-3. Git status has no error
-4. `manualSyncDisabledReason` is null
-5. Manual sync is not already running
-6. The vault path has not already had a startup sync this session
+2. The first remote status fetch for this vault path has settled (success or failure)
+3. Git status / branch is not loading
+4. Git status has no error
+5. `manualSyncDisabledReason` is null
+6. Manual sync is not already running
+7. Preflight allows sync (including behind-only remote changes after the initial fetch)
+8. The vault path has not already had a startup sync this session
 
 **Per-session deduplication:** A `Set<string>` ref (`attemptedVaultPathsRef`) records every vault path that has triggered startup sync. Switching to a new vault allows one startup sync for that vault. Switching back to a previously attempted vault does not fire a second sync.
 
@@ -312,7 +314,7 @@ No `GitStatusChip.stories.tsx` exists. The chip states (loading, error, syncing,
 - status is null and intent is not `manual`
 - status is clean/synced (nothing to do) for any intent including `manual`
 - status has unsafeState or isWrongBranch and intent is not `manual`
-- status is behind-only and intent is `close`, `startup`, or `autosync`
+- status is behind-only and intent is `close` or `autosync` (startup pulls remote-only changes after the initial fetch)
 - status has an error (unsafeState) and intent is not `manual`
 
 The helper is wired into Ctrl/Cmd+S (keyboard intent, silent no-op when false), close sync in both custom-titlebar and OS-close paths (close immediately when false), startup sync (skip silently when false), and autosync scheduler (clear pending when clean/synced, keep pending when unknown/error). The manual button is not gated by preflight.
@@ -326,7 +328,7 @@ All hooks use an `undefined`-sentinel pattern for the optional `gitStatus` param
 Implementation summary:
 - Ctrl/Cmd+S now silently no-ops when preflight says there is nothing to sync.
 - Close sync now skips sync and closes immediately when status is clean/no-op; behind-only does not block close.
-- Startup sync now skips silently when status is clean/no-op.
+- Startup sync waits for the initial remote fetch, then runs when preflight says there is work (including behind-only); it still skips silently when status is clean/no-op.
 - Autosync skips full sync when status is clean and clears pending; preserves pending for unknown/error status.
 - Manual sync button remains explicit and is not gated by preflight.
 - Diverged state still runs through the existing conservative sync path for all intents.
@@ -877,7 +879,7 @@ Preflight design:
   - untracked files are present
   - `ahead > 0`
   - the repo is in a diverged state that the plan treats as actionable on this path
-- Remote-only behind state (`behind > 0`, `ahead === 0`, clean working tree) should not block close. Closing is allowed to proceed without sync; remote changes will be picked up by startup sync / remote polling on next launch.
+- Remote-only behind state (`behind > 0`, `ahead === 0`, clean working tree) should not block close. Closing is allowed to proceed without sync; remote changes are picked up by startup sync on next launch (after the initial remote fetch) and by manual sync / Ctrl+S at any time.
 - Unsafe states (merge/rebase/cherry-pick in progress, wrong branch, detached HEAD, missing config) should not trigger close sync — they already disable manual sync, and the user needs to resolve them explicitly.
 - Stale-or-unavailable status fallback: if the latest status is loading, errored, or missing (`null`), the safe choice is to **skip close sync and close immediately**, and document this fallback inline. Rationale: the user just asked to close; a stale status is not strong enough evidence to delay exit. (Manual Ctrl/Cmd+S in the same situation may still no-op silently for parity.)
 - Ctrl/Cmd+S consults the same helper. When it returns false, the shortcut is a silent no-op (no toast, no chip flash). The manual sync button does **not** consult the helper and always runs.
@@ -916,7 +918,7 @@ Open questions:
 - Whether the overlay should expose a "Cancel and close anyway" affordance, given that the current policy keeps the app open on failure. Default for first cut: no cancel button; rely on Shift-close as the documented bypass.
 
 Open questions and decisions to carry forward:
-- Remote polling should start with narrow fetch-based refresh because it updates local remote-tracking refs and keeps status comparison simple. The polling interval should be conservative, around 3-5 minutes while visible/focused, plus focus-return refresh with cooldown.
+- Remote polling should start with narrow fetch-based refresh because it updates local remote-tracking refs and keeps status comparison simple. Run one fetch when the vault opens (before startup sync), then keep a conservative interval around 3-5 minutes while visible/focused, plus focus-return refresh with cooldown.
 - Sync-on-close should keep the app open on sync failure for the first implementation. Closing anyway can lose the last obvious chance to surface the problem.
 - Startup sync should wait until vault bootstrap, initial Git status, and an idle moment. It should be configurable later and quiet on no-op success.
 - Batched autosync should wait until save-settled/sync-needed signaling, conflict handling, and settings are ready. The next safe step is the signal design, not background syncing.

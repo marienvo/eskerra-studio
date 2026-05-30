@@ -114,6 +114,25 @@ describe('useVaultGitRemoteRefresh', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('calls onSettled with vault path when a started refresh finishes', async () => {
+    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
+    const onSettled = vi.fn();
+    const {result} = renderRemoteRefresh({onSettled});
+
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(onSettled).toHaveBeenCalledWith(VAULT));
+  });
+
+  it('does not call onSettled when refresh is skipped', async () => {
+    const onSettled = vi.fn();
+    const {result} = renderRemoteRefresh({manualSyncRunning: true, onSettled});
+
+    act(() => { result.current.refresh(); });
+
+    await act(async () => { await new Promise(r => setTimeout(r, 10)); });
+    expect(onSettled).not.toHaveBeenCalled();
+  });
+
   it('sets error and clears loading on failure', async () => {
     const fetchError = {type: 'fetchFailed', stderr: 'fatal: auth failure'};
     mockRefreshVaultGitRemoteStatus.mockRejectedValue(fetchError);

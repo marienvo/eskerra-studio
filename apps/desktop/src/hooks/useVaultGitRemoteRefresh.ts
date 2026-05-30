@@ -10,6 +10,8 @@ type UseVaultGitRemoteRefreshInput = {
   fetchTimeoutSecs: number;
   manualSyncRunning: boolean;
   onRefreshed?: (result: GitStatusResult) => void;
+  /** Called when a started refresh finishes (success or failure), with the vault path for that request. */
+  onSettled?: (vaultPath: string) => void;
   gitOperationBusyRef?: MutableRefObject<boolean>;
 };
 
@@ -26,6 +28,7 @@ export function useVaultGitRemoteRefresh({
   fetchTimeoutSecs,
   manualSyncRunning,
   onRefreshed,
+  onSettled,
   gitOperationBusyRef,
 }: UseVaultGitRemoteRefreshInput): UseVaultGitRemoteRefreshResult {
   const [loading, setLoading] = useState(false);
@@ -38,6 +41,7 @@ export function useVaultGitRemoteRefresh({
     }
 
     const requestId = ++requestIdRef.current;
+    const requestVaultPath = vaultPath;
     if (gitOperationBusyRef) {
       gitOperationBusyRef.current = true;
     }
@@ -60,8 +64,9 @@ export function useVaultGitRemoteRefresh({
         if (gitOperationBusyRef) {
           gitOperationBusyRef.current = false;
         }
+        onSettled?.(requestVaultPath);
       });
-  }, [vaultPath, remote, branch, fetchTimeoutSecs, manualSyncRunning, onRefreshed, gitOperationBusyRef]);
+  }, [vaultPath, remote, branch, fetchTimeoutSecs, manualSyncRunning, onRefreshed, onSettled, gitOperationBusyRef]);
 
   return {refresh, loading, error};
 }

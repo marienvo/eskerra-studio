@@ -27,6 +27,10 @@ function localChangesStatus(): GitStatusResult {
   return {...cleanStatus(), hasUncommittedChanges: true};
 }
 
+function behindOnlyStatus(): GitStatusResult {
+  return {...cleanStatus(), behind: 2};
+}
+
 function ready(overrides: Partial<HookArgs> = {}): HookArgs {
   return {
     vaultPath: VAULT,
@@ -284,5 +288,29 @@ describe('useVaultGitStartupSync', () => {
 
       expect(runManualSync).toHaveBeenCalledTimes(1);
     });
+
+    it('runs sync when status is behind-only (remote changes)', async () => {
+      const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      render(ready({runManualSync, gitStatus: behindOnlyStatus()}));
+
+      await act(async () => { await Promise.resolve(); });
+
+      expect(runManualSync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not run until initial remote status has settled', async () => {
+    const runManualSync = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+    const {rerender} = render(
+      ready({runManualSync, initialRemoteStatusSettled: false}),
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    expect(runManualSync).not.toHaveBeenCalled();
+
+    rerender(ready({runManualSync, initialRemoteStatusSettled: true}));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(runManualSync).toHaveBeenCalledTimes(1);
   });
 });

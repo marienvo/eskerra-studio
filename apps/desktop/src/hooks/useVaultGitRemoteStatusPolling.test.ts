@@ -56,6 +56,7 @@ function stubDocumentHidden(hidden: boolean): void {
 describe('useVaultGitRemoteStatusPolling', () => {
   beforeEach(() => {
     mockRefreshVaultGitRemoteStatus.mockReset();
+    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
   });
 
   afterEach(() => {
@@ -64,32 +65,75 @@ describe('useVaultGitRemoteStatusPolling', () => {
     hiddenSpy = null;
   });
 
-  it('does not call refreshVaultGitRemoteStatus on mount', () => {
-    vi.useFakeTimers();
-    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
+  it('calls refreshVaultGitRemoteStatus once when vault and branch are ready', async () => {
     renderPolling();
 
-    expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
-  });
-
-  it('calls remote status after one interval elapses', async () => {
-    vi.useFakeTimers();
-    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
-    renderPolling();
-
-    await act(async () => { vi.advanceTimersByTime(REMOTE_POLL_INTERVAL_MS); });
+    await act(async () => { await Promise.resolve(); });
 
     expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(1);
   });
 
+  it('starts with initialRemoteStatusSettled false until the first fetch completes', async () => {
+    const {result} = renderPolling();
+
+    expect(result.current.initialRemoteStatusSettled).toBe(false);
+
+    await act(async () => { await Promise.resolve(); });
+
+    expect(result.current.initialRemoteStatusSettled).toBe(true);
+  });
+
+  it('sets initialRemoteStatusSettled when the first fetch fails', async () => {
+    mockRefreshVaultGitRemoteStatus.mockRejectedValue({type: 'fetchFailed', stderr: 'err'});
+    const {result} = renderPolling();
+
+    await act(async () => { await Promise.resolve(); });
+
+    expect(result.current.initialRemoteStatusSettled).toBe(true);
+  });
+
+  it('reports initialRemoteStatusSettled when vaultPath is null', () => {
+    const {result} = renderPolling({vaultPath: null});
+
+    expect(result.current.initialRemoteStatusSettled).toBe(true);
+    expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('resets initialRemoteStatusSettled when the vault path changes', async () => {
+    const {result, rerender} = renderPolling();
+
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.initialRemoteStatusSettled).toBe(true);
+
+    rerender({vaultPath: '/other-vault'});
+    expect(result.current.initialRemoteStatusSettled).toBe(false);
+
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.initialRemoteStatusSettled).toBe(true);
+    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('calls remote status after one interval elapses', async () => {
+    vi.useFakeTimers();
+    renderPolling();
+
+    await act(async () => { await Promise.resolve(); });
+    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => { vi.advanceTimersByTime(REMOTE_POLL_INTERVAL_MS); });
+
+    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(2);
+  });
+
   it('polls on each subsequent interval', async () => {
     vi.useFakeTimers();
-    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
     renderPolling();
+
+    await act(async () => { await Promise.resolve(); });
 
     await act(async () => { vi.advanceTimersByTime(REMOTE_POLL_INTERVAL_MS * 3); });
 
-    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(3);
+    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(4);
   });
 
   it('does not poll when manualSyncRunning is true', async () => {
@@ -99,6 +143,17 @@ describe('useVaultGitRemoteStatusPolling', () => {
     await act(async () => { vi.advanceTimersByTime(REMOTE_POLL_INTERVAL_MS); });
 
     expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('retries the initial fetch when manualSyncRunning becomes false', async () => {
+    const {rerender} = renderPolling({manualSyncRunning: true});
+
+    expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
+
+    rerender({manualSyncRunning: false});
+    await act(async () => { await Promise.resolve(); });
+
+    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(1);
   });
 
   it('does not poll when another frontend Git operation is running', async () => {
@@ -134,10 +189,9 @@ describe('useVaultGitRemoteStatusPolling', () => {
 
   it('clears interval on unmount', async () => {
     vi.useFakeTimers();
-    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
     const {unmount} = renderPolling();
 
-    await act(async () => { vi.advanceTimersByTime(REMOTE_POLL_INTERVAL_MS); });
+    await act(async () => { await Promise.resolve(); });
     expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(1);
 
     unmount();
@@ -150,7 +204,6 @@ describe('useVaultGitRemoteStatusPolling', () => {
 
   it('calls onRefreshed with the result when a poll succeeds', async () => {
     vi.useFakeTimers();
-    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
     const onRefreshed = vi.fn();
 
     renderHook(() =>
@@ -164,7 +217,7 @@ describe('useVaultGitRemoteStatusPolling', () => {
       }),
     );
 
-    // Advance the interval, then flush promise microtasks with a real-tick flush.
+    await act(async () => { await Promise.resolve(); });
     await act(async () => { vi.advanceTimersByTime(REMOTE_POLL_INTERVAL_MS); });
     await act(async () => { await Promise.resolve(); });
 
@@ -187,6 +240,7 @@ describe('useVaultGitRemoteStatusPolling', () => {
       }),
     );
 
+    await act(async () => { await Promise.resolve(); });
     await act(async () => { vi.advanceTimersByTime(REMOTE_POLL_INTERVAL_MS); });
     await act(async () => { await Promise.resolve(); });
 
@@ -195,8 +249,10 @@ describe('useVaultGitRemoteStatusPolling', () => {
 
   it('does not trigger refresh when visibilitychange fires while hidden', async () => {
     stubDocumentHidden(true);
-    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
     renderPolling();
+
+    await act(async () => { await Promise.resolve(); });
+    mockRefreshVaultGitRemoteStatus.mockClear();
 
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
     await act(async () => { await Promise.resolve(); });
@@ -206,8 +262,10 @@ describe('useVaultGitRemoteStatusPolling', () => {
 
   it('triggers one refresh when window becomes visible', async () => {
     stubDocumentHidden(false);
-    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
     renderPolling();
+
+    await act(async () => { await Promise.resolve(); });
+    mockRefreshVaultGitRemoteStatus.mockClear();
 
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
 
@@ -216,7 +274,6 @@ describe('useVaultGitRemoteStatusPolling', () => {
 
   it('removes visibility listener on unmount', async () => {
     stubDocumentHidden(false);
-    mockRefreshVaultGitRemoteStatus.mockResolvedValue(cleanResult);
     const {unmount} = renderPolling();
 
     unmount();
