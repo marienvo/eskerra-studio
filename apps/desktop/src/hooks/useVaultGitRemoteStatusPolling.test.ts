@@ -11,6 +11,7 @@ vi.mock('../lib/tauriVaultGitSync', () => ({
 
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 import {
+  INITIAL_REMOTE_BUSY_RETRY_MS,
   REMOTE_POLL_INTERVAL_MS,
   useVaultGitRemoteStatusPolling,
 } from './useVaultGitRemoteStatusPolling';
@@ -167,6 +168,50 @@ describe('useVaultGitRemoteStatusPolling', () => {
     expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
     expect(onRefreshed).not.toHaveBeenCalled();
     expect(gitOperationBusyRef.current).toBe(true);
+  });
+
+  it('retries the initial fetch when gitOperationBusyRef becomes idle', async () => {
+    vi.useFakeTimers();
+    const gitOperationBusyRef = {current: true};
+    const {result} = renderPolling({gitOperationBusyRef});
+
+    expect(result.current.initialRemoteStatusSettled).toBe(false);
+    expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
+
+    gitOperationBusyRef.current = false;
+    await act(async () => {
+      vi.advanceTimersByTime(INITIAL_REMOTE_BUSY_RETRY_MS);
+      await Promise.resolve();
+    });
+
+    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(1);
+    expect(result.current.initialRemoteStatusSettled).toBe(true);
+  });
+
+  it('retries the initial fetch after a busy skip when switching vaults', async () => {
+    vi.useFakeTimers();
+    const gitOperationBusyRef = {current: true};
+
+    const {result, rerender} = renderPolling({gitOperationBusyRef, vaultPath: VAULT});
+
+    expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
+
+    rerender({vaultPath: '/other-vault', gitOperationBusyRef});
+    expect(result.current.initialRemoteStatusSettled).toBe(false);
+    expect(mockRefreshVaultGitRemoteStatus).not.toHaveBeenCalled();
+
+    gitOperationBusyRef.current = false;
+    rerender({vaultPath: '/other-vault', gitOperationBusyRef});
+    await act(async () => {
+      vi.advanceTimersByTime(INITIAL_REMOTE_BUSY_RETRY_MS);
+      await Promise.resolve();
+    });
+
+    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenCalledTimes(1);
+    expect(mockRefreshVaultGitRemoteStatus).toHaveBeenLastCalledWith(
+      expect.objectContaining({vaultPath: '/other-vault'}),
+    );
+    expect(result.current.initialRemoteStatusSettled).toBe(true);
   });
 
   it('does not poll when vaultPath is null', async () => {

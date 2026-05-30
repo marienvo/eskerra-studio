@@ -12,6 +12,9 @@ import {useVaultGitRemoteRefresh} from './useVaultGitRemoteRefresh';
 
 export const REMOTE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
+/** Retry initial remote status when another Git op holds `gitOperationBusyRef`. */
+export const INITIAL_REMOTE_BUSY_RETRY_MS = 250;
+
 type UseVaultGitRemoteStatusPollingInput = {
   vaultPath: string | null;
   remote: string;
@@ -88,8 +91,36 @@ export function useVaultGitRemoteStatusPolling({
   useEffect(() => {
     if (vaultPath == null || branch == null) return;
     if (initialRemoteStatusSettled) return;
-    triggerRefresh();
-  }, [vaultPath, branch, manualSyncRunning, initialRemoteStatusSettled]);
+
+    let cancelled = false;
+    let retryTimeoutId: ReturnType<typeof window.setTimeout> | undefined;
+
+    const attemptInitialRefresh = () => {
+      if (cancelled) return;
+      const started = triggerRefresh();
+      if (!started && gitOperationBusyRef?.current) {
+        retryTimeoutId = window.setTimeout(
+          attemptInitialRefresh,
+          INITIAL_REMOTE_BUSY_RETRY_MS,
+        );
+      }
+    };
+
+    attemptInitialRefresh();
+
+    return () => {
+      cancelled = true;
+      if (retryTimeoutId != null) {
+        window.clearTimeout(retryTimeoutId);
+      }
+    };
+  }, [
+    vaultPath,
+    branch,
+    manualSyncRunning,
+    initialRemoteStatusSettled,
+    gitOperationBusyRef,
+  ]);
 
   useEffect(() => {
     const id = window.setInterval(triggerRefresh, REMOTE_POLL_INTERVAL_MS);

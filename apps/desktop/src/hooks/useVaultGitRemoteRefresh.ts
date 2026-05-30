@@ -16,7 +16,8 @@ type UseVaultGitRemoteRefreshInput = {
 };
 
 type UseVaultGitRemoteRefreshResult = {
-  refresh: () => void;
+  /** Returns true when a remote status request was started. */
+  refresh: () => boolean;
   loading: boolean;
   error: SyncError | null;
 };
@@ -35,9 +36,9 @@ export function useVaultGitRemoteRefresh({
   const [error, setError] = useState<SyncError | null>(null);
   const requestIdRef = useRef(0);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((): boolean => {
     if (manualSyncRunning || vaultPath == null || branch == null || gitOperationBusyRef?.current) {
-      return;
+      return false;
     }
 
     const requestId = ++requestIdRef.current;
@@ -66,6 +67,7 @@ export function useVaultGitRemoteRefresh({
         }
         onSettled?.(requestVaultPath);
       });
+    return true;
   }, [vaultPath, remote, branch, fetchTimeoutSecs, manualSyncRunning, onRefreshed, onSettled, gitOperationBusyRef]);
 
   return {refresh, loading, error};
