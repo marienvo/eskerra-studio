@@ -138,4 +138,81 @@ describe('buildNoteMarkdownVaultKeymapBindings', () => {
     expect(onDeleteNoteShortcut).toHaveBeenCalledTimes(1);
     view.destroy();
   });
+
+  it('invokes onSaveShortcut for Mod-Enter when modEnterSaveWhenNoLink is enabled and caret is not on a link', () => {
+    const onSaveShortcut = vi.fn();
+    const noopVaultHandlers = {
+      onWikiLinkActivate: () => {},
+      onMarkdownRelativeLinkActivate: () => {},
+      onMarkdownExternalLinkOpen: () => {},
+    };
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const state = EditorState.create({
+      doc: 'plain note title',
+      extensions: [
+        keymap.of([
+          ...buildNoteMarkdownVaultKeymapBindings({
+            ...noopVaultHandlers,
+            onSaveShortcut,
+            modEnterSaveWhenNoLink: () => true,
+          }),
+        ]),
+      ],
+    });
+    const view = new EditorView({state, parent});
+    runScopeHandlers(
+      view,
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        ctrlKey: true,
+        bubbles: true,
+      }),
+      'editor',
+    );
+    expect(onSaveShortcut).toHaveBeenCalledTimes(1);
+    view.destroy();
+  });
+
+  it('activates wiki links on Mod-Enter instead of saving when modEnterSaveWhenNoLink is enabled', () => {
+    const onSaveShortcut = vi.fn();
+    const onWikiLinkActivate = vi.fn();
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const doc = '[[alpha note]]';
+    const beforeClose = doc.indexOf(']]');
+    const state = EditorState.create({
+      doc,
+      selection: EditorSelection.cursor(beforeClose),
+      extensions: [
+        keymap.of([
+          ...buildNoteMarkdownVaultKeymapBindings({
+            onWikiLinkActivate,
+            onMarkdownRelativeLinkActivate: () => {},
+            onMarkdownExternalLinkOpen: () => {},
+            onSaveShortcut,
+            modEnterSaveWhenNoLink: () => true,
+          }),
+        ]),
+      ],
+    });
+    const view = new EditorView({state, parent});
+    runScopeHandlers(
+      view,
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        ctrlKey: true,
+        bubbles: true,
+      }),
+      'editor',
+    );
+    expect(onWikiLinkActivate).toHaveBeenCalledWith({
+      inner: 'alpha note',
+      at: beforeClose,
+    });
+    expect(onSaveShortcut).not.toHaveBeenCalled();
+    view.destroy();
+  });
 });

@@ -70,6 +70,14 @@ export function AddToInboxDialog({
   const safeComposeDraftMarkdown =
     typeof composeDraftMarkdown === 'string' ? composeDraftMarkdown : '';
   const wasOpenRef = useRef(false);
+  const focusEditorSelectAll = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      editorRef.current?.focus({
+        selectAll: true,
+        scrollIntoView: false,
+      });
+    });
+  }, [editorRef]);
   const focusEditorAtEnd = useCallback(
     (scrollIntoView = false, fallbackLength: number) => {
       window.requestAnimationFrame(() => {
@@ -100,8 +108,8 @@ export function AddToInboxDialog({
     if (!open || wasOpen) {
       return;
     }
-    focusEditorAtEnd(false, safeComposeDraftMarkdown.length);
-  }, [focusEditorAtEnd, open, safeComposeDraftMarkdown.length]);
+    focusEditorSelectAll();
+  }, [focusEditorSelectAll, open]);
 
   return (
     <Dialog.Root
@@ -116,38 +124,47 @@ export function AddToInboxDialog({
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content
           className={styles.content}
+          onOpenAutoFocus={event => {
+            event.preventDefault();
+          }}
           onCloseAutoFocus={event => {
             event.preventDefault();
           }}
         >
-          <Dialog.Title className={styles.title}>Add to inbox</Dialog.Title>
+          <Dialog.Title className={styles.title}>
+            Add to inbox{' '}
+            <span className={styles.titleHint}>(Ctrl+Enter to save)</span>
+          </Dialog.Title>
           <div
-            className={styles.editorSurface}
+            className={`${styles.editorSurface} note-markdown-editor-wrap`}
             data-app-surface="capture"
             onMouseDown={handleEditorSurfaceMouseDown}
           >
-            <NoteMarkdownEditor
-              ref={editorRef}
-              vaultRoot={vaultRoot}
-              activeNotePath={null}
-              initialMarkdown={safeComposeDraftMarkdown}
-              sessionKey={composeDraftResetNonce}
-              onMarkdownChange={onComposeDraftChange}
-              onEditorError={onEditorError}
-              onWikiLinkActivate={onWikiLinkActivate}
-              onMarkdownRelativeLinkActivate={onMarkdownRelativeLinkActivate}
-              onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
-              relativeMarkdownLinkHrefIsResolved={relativeMarkdownLinkHrefIsResolved}
-              wikiLinkTargetIsResolved={wikiLinkTargetIsResolved}
-              wikiLinkCompletionCandidates={wikiLinkCompletionCandidates}
-              onSaveShortcut={onSave}
-              placeholder="First line is title (H1)…"
-              busy={busy}
-              attachmentHost={attachmentHost}
-              resolveVaultImagePreviewUrl={resolveVaultImagePreviewUrl}
-              linkSnippetBlockedDomains={linkSnippetBlockedDomains}
-              onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
-            />
+            <div className={styles.editorScroll}>
+              <NoteMarkdownEditor
+                ref={editorRef}
+                vaultRoot={vaultRoot}
+                activeNotePath={null}
+                initialMarkdown={safeComposeDraftMarkdown}
+                sessionKey={composeDraftResetNonce}
+                onMarkdownChange={onComposeDraftChange}
+                onEditorError={onEditorError}
+                onWikiLinkActivate={onWikiLinkActivate}
+                onMarkdownRelativeLinkActivate={onMarkdownRelativeLinkActivate}
+                onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
+                relativeMarkdownLinkHrefIsResolved={relativeMarkdownLinkHrefIsResolved}
+                wikiLinkTargetIsResolved={wikiLinkTargetIsResolved}
+                wikiLinkCompletionCandidates={wikiLinkCompletionCandidates}
+                onSaveShortcut={onSave}
+                modEnterSaveWhenNoLink
+                placeholder="First line is title (H1)…"
+                busy={busy}
+                attachmentHost={attachmentHost}
+                resolveVaultImagePreviewUrl={resolveVaultImagePreviewUrl}
+                linkSnippetBlockedDomains={linkSnippetBlockedDomains}
+                onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+              />
+            </div>
           </div>
           <Dialog.Description className={styles.hint}>
             First line becomes the file name for a new note under <strong>Inbox/</strong>.

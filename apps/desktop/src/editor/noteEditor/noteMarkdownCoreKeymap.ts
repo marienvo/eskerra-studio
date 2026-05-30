@@ -10,6 +10,8 @@ import {wikiLinkActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPositio
 
 export type NoteMarkdownVaultKeymapHandlers = {
   onSaveShortcut?: () => void;
+  /** When true, Mod-Enter falls back to save when link activation does not apply. */
+  modEnterSaveWhenNoLink?: () => boolean;
   /** Shell-owned: Mod-Shift-D — request delete for the current note (confirmation outside the editor). */
   onDeleteNoteShortcut?: () => void;
   onWikiLinkActivate: (payload: {
@@ -109,6 +111,7 @@ export function buildNoteMarkdownVaultKeymapBindings(
 ): readonly KeyBinding[] {
   const {
     onSaveShortcut,
+    modEnterSaveWhenNoLink,
     onDeleteNoteShortcut,
     onWikiLinkActivate,
     onMarkdownRelativeLinkActivate,
@@ -132,13 +135,26 @@ export function buildNoteMarkdownVaultKeymapBindings(
     {key: '[', run: runWikiLinkOpenAssist},
     {
       key: 'Mod-Enter',
-      run: view =>
-        runWikiLinkActivateFromCaret(view, onWikiLinkActivate)
-        || runMarkdownRelativeLinkActivateFromCaret(
-          view,
-          onMarkdownRelativeLinkActivate,
-        )
-        || runMarkdownExternalLinkActivateFromCaret(view, onMarkdownExternalLinkOpen),
+      run: view => {
+        const linkHandled =
+          runWikiLinkActivateFromCaret(view, onWikiLinkActivate)
+          || runMarkdownRelativeLinkActivateFromCaret(
+            view,
+            onMarkdownRelativeLinkActivate,
+          )
+          || runMarkdownExternalLinkActivateFromCaret(
+            view,
+            onMarkdownExternalLinkOpen,
+          );
+        if (linkHandled) {
+          return true;
+        }
+        if (modEnterSaveWhenNoLink?.()) {
+          onSaveShortcut?.();
+          return true;
+        }
+        return false;
+      },
     },
   ];
 }

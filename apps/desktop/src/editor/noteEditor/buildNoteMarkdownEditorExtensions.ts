@@ -102,6 +102,7 @@ export type NoteMarkdownEditorExtensionsInput = {
     (payload: {href: string; at: number}) => void
   >;
   onSaveShortcutRef: MutableRefObject<(() => void) | undefined>;
+  modEnterSaveWhenNoLinkRef: MutableRefObject<boolean>;
   onDeleteNoteShortcutRef: MutableRefObject<(() => void) | undefined>;
   wikiLinkTargetIsResolvedRef: MutableRefObject<(inner: string) => boolean>;
   relativeMarkdownLinkHrefIsResolvedRef: MutableRefObject<
@@ -215,6 +216,7 @@ export function buildNoteMarkdownEditorExtensions(
     onMarkdownRelativeLinkActivateRef,
     onMarkdownExternalLinkOpenRef,
     onSaveShortcutRef,
+    modEnterSaveWhenNoLinkRef,
     onDeleteNoteShortcutRef,
     wikiLinkTargetIsResolvedRef,
     relativeMarkdownLinkHrefIsResolvedRef,
@@ -260,6 +262,7 @@ export function buildNoteMarkdownEditorExtensions(
     keymap.of([
       ...buildNoteMarkdownVaultKeymapBindings({
         onSaveShortcut: () => onSaveShortcutRef.current?.(),
+        modEnterSaveWhenNoLink: () => modEnterSaveWhenNoLinkRef.current,
         onDeleteNoteShortcut: () => onDeleteNoteShortcutRef.current?.(),
         onWikiLinkActivate: p => onWikiLinkActivateRef.current(p),
         onMarkdownRelativeLinkActivate: p =>

@@ -42,6 +42,7 @@ export type NoteMarkdownEditorShellRefs = {
     NoteMarkdownEditorProps['onMarkdownExternalLinkOpen']
   >;
   onSaveShortcutRef: RefObject<NoteMarkdownEditorProps['onSaveShortcut']>;
+  modEnterSaveWhenNoLinkRef: RefObject<boolean>;
   onDeleteNoteShortcutRef: RefObject<
     NoteMarkdownEditorProps['onDeleteNoteShortcut']
   >;
@@ -88,6 +89,7 @@ export function useNoteMarkdownEditorShellRefs(
     wikiLinkTargetIsResolved,
     wikiLinkCompletionCandidates = [],
     onSaveShortcut,
+    modEnterSaveWhenNoLink = false,
     onDeleteNoteShortcut,
     onFoldedRangesPresentChange,
     onFoldableRangesPresentChange,
@@ -138,6 +140,7 @@ export function useNoteMarkdownEditorShellRefs(
   }, [onMarkdownExternalLinkOpen]);
 
   const onSaveShortcutRef = useRef(onSaveShortcut);
+  const modEnterSaveWhenNoLinkRef = useRef(modEnterSaveWhenNoLink);
   const onDeleteNoteShortcutRef = useRef(onDeleteNoteShortcut);
 
   const onFoldedRangesPresentChangeRef = useRef(onFoldedRangesPresentChange);
@@ -170,6 +173,7 @@ export function useNoteMarkdownEditorShellRefs(
       relativeMarkdownLinkHrefIsResolved;
     initialMarkdownRef.current = initialMarkdown;
     onSaveShortcutRef.current = onSaveShortcut;
+    modEnterSaveWhenNoLinkRef.current = modEnterSaveWhenNoLink;
     onDeleteNoteShortcutRef.current = onDeleteNoteShortcut;
     vaultRootRef.current = vaultRoot;
     activeNotePathRef.current = props.activeNotePath;
@@ -232,6 +236,7 @@ export function useNoteMarkdownEditorShellRefs(
     onMarkdownRelativeLinkActivateRef,
     onMarkdownExternalLinkOpenRef,
     onSaveShortcutRef,
+    modEnterSaveWhenNoLinkRef,
     onDeleteNoteShortcutRef,
     onFoldedRangesPresentChangeRef,
     onFoldableRangesPresentChangeRef,
