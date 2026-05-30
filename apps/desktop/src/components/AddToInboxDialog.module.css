@@ -43,15 +43,12 @@
   flex-direction: column;
   border: 1px solid #d8e5ee;
   border-radius: 8px;
-  background: #ffffff;
   overflow: hidden;
 }
 
 .editorScroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 
 .hint {

@@ -140,30 +140,39 @@ export function AddToInboxDialog({
             data-app-surface="capture"
             onMouseDown={handleEditorSurfaceMouseDown}
           >
-            <div className={styles.editorScroll}>
-              <NoteMarkdownEditor
-                ref={editorRef}
-                vaultRoot={vaultRoot}
-                activeNotePath={null}
-                initialMarkdown={safeComposeDraftMarkdown}
-                sessionKey={composeDraftResetNonce}
-                onMarkdownChange={onComposeDraftChange}
-                onEditorError={onEditorError}
-                onWikiLinkActivate={onWikiLinkActivate}
-                onMarkdownRelativeLinkActivate={onMarkdownRelativeLinkActivate}
-                onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
-                relativeMarkdownLinkHrefIsResolved={relativeMarkdownLinkHrefIsResolved}
-                wikiLinkTargetIsResolved={wikiLinkTargetIsResolved}
-                wikiLinkCompletionCandidates={wikiLinkCompletionCandidates}
-                onSaveShortcut={onSave}
-                modEnterSaveWhenNoLink
-                placeholder="First line is title (H1)…"
-                busy={busy}
-                attachmentHost={attachmentHost}
-                resolveVaultImagePreviewUrl={resolveVaultImagePreviewUrl}
-                linkSnippetBlockedDomains={linkSnippetBlockedDomains}
-                onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
-              />
+            <div className={`${styles.editorScroll} note-markdown-editor-scroll`}>
+              <div className="note-markdown-editor-page">
+                <div className="note-markdown-editor-main-row">
+                  <div className="note-markdown-editor-fold-rail" aria-hidden="true" />
+                  <div className="note-markdown-editor-paper">
+                    <NoteMarkdownEditor
+                      ref={editorRef}
+                      vaultRoot={vaultRoot}
+                      activeNotePath={null}
+                      initialMarkdown={safeComposeDraftMarkdown}
+                      sessionKey={composeDraftResetNonce}
+                      onMarkdownChange={onComposeDraftChange}
+                      onEditorError={onEditorError}
+                      onWikiLinkActivate={onWikiLinkActivate}
+                      onMarkdownRelativeLinkActivate={onMarkdownRelativeLinkActivate}
+                      onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
+                      relativeMarkdownLinkHrefIsResolved={
+                        relativeMarkdownLinkHrefIsResolved
+                      }
+                      wikiLinkTargetIsResolved={wikiLinkTargetIsResolved}
+                      wikiLinkCompletionCandidates={wikiLinkCompletionCandidates}
+                      onSaveShortcut={onSave}
+                      modEnterSaveWhenNoLink
+                      placeholder="First line is title (H1)…"
+                      busy={busy}
+                      attachmentHost={attachmentHost}
+                      resolveVaultImagePreviewUrl={resolveVaultImagePreviewUrl}
+                      linkSnippetBlockedDomains={linkSnippetBlockedDomains}
+                      onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <Dialog.Description className={styles.hint}>

@@ -91,6 +91,7 @@ describe('AddToInboxDialog', () => {
 
     expect(screen.getByText('Add to inbox')).not.toBeNull();
     expect(screen.getByText('(Ctrl+Enter to save)')).not.toBeNull();
+    expect(document.body.querySelector('.note-markdown-editor-fold-rail')).not.toBeNull();
     expect(screen.getByRole('button', {name: 'Save'})).not.toBeNull();
     expect(screen.getByRole('button', {name: 'Cancel'})).not.toBeNull();
   });
