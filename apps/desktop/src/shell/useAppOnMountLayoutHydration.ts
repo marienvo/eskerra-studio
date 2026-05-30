@@ -5,6 +5,7 @@ import {
 } from 'react';
 
 import {hydrateEmojiUsageFromStore} from '../lib/emojiUsageStore';
+import {hydrateQuickOpenUsageFromStore} from '../lib/quickOpenUsageStore';
 import {
   loadStoredLayouts,
   type StoredLayouts,
@@ -34,6 +35,7 @@ export function useAppOnMountLayoutHydration({
       loadStoredLayouts(),
       loadMainWindowUi(),
       hydrateEmojiUsageFromStore(),
+      hydrateQuickOpenUsageFromStore(),
     ]).then(([loadedLayouts, ui]) => {
       if (cancelled) {
         return;
