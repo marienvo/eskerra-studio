@@ -5,7 +5,7 @@
   <img src="./assets/brand/eskerra-logo.png" alt="Eskerra logo" width="120"><br>
 </p>
 
-<h1 align="center">Eskerra</h1>
+<h1 align="center">Eskerra Studio</h1>
 
 <p align="center">
   Eskerra is a <strong>local-first Markdown notes</strong> app — a desktop editor for focused, keyboard-driven work and a mobile companion for quick capture:
