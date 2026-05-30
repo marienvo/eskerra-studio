@@ -162,6 +162,43 @@ Reason for selection: <one or two sentences, including why it is outside the dan
 
 ---
 
+## PR — 2026-05-25 — shared usageCounts core for Quick Open and emoji stores
+
+**Cycle:** usage-count-store-extraction
+**Type:** pure refactor
+**Author session:** composer
+
+**What moved**
+
+- From: `apps/desktop/src/lib/quickOpenUsageStore.ts` and `apps/desktop/src/lib/emojiUsageStore.ts` — duplicated cap/evict/parse/score-lookup/persistence helpers
+- To: `apps/desktop/src/lib/usageCounts/` — shared pure helpers plus parameterized runtime (`recordUsagePick`, debounced flush/hydrate)
+- LOC delta: `quickOpenUsageStore.ts` 420 → 188; `emojiUsageStore.ts` 436 → 208; new shared module ~486 LOC (excluding tests)
+- Tests added: `usageCounts/usageCounts.test.ts` (shared cap/evict/parse/queryWeight/buildLookup); store tests trimmed to integration-only
+
+**Module budget**
+
+- Baseline entries changed: `quickOpenUsageStore.ts` 420 → 188; added `usageCounts/runtime.ts` cap 180
+- All new `usageCounts/*` files under `NEW_FILE_MAX_LINES` (400)
+
+**Behavior**
+
+- Behavior change: no
+- Quick Open revision pub/sub unchanged; emoji v1→v2 hydrate fallback unchanged
+- Consumer import paths unchanged (`quickOpenUsageStore`, `emojiUsageStore`)
+
+**Verification**
+
+- `npx vitest run` (usageCounts, both stores, `useQuickOpenSearch`): pass
+- `npm run lint`: pass
+- `npm run module-budgets:check`: pass
+
+**Danger-zone check**
+
+- Touched cache / persistence / watcher / editor-save? no (app-local Tauri store only; same keys/format)
+- Touched `NoteMarkdownEditor.tsx` or `EskerraTableShell.tsx`? no
+
+---
+
 ## Review — 2026-05-14 — resolveModelBackedLegacyTabStrip extraction
 
 **Reviewer session:** sonnet 4.6 low

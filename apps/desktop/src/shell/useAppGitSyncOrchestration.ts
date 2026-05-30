@@ -26,6 +26,7 @@ import {getVaultGitStatus, type GitStatusResult, type SyncRunResult} from '../li
 import type {SessionNotificationTone} from '../lib/sessionNotifications';
 import type {useDesktopPodcastPlayback} from '../hooks/useDesktopPodcastPlayback';
 import {flushEmojiUsageToStore} from '../lib/emojiUsageStore';
+import {flushQuickOpenUsageToStore} from '../lib/quickOpenUsageStore';
 import {useAppOsCloseSync} from './useAppOsCloseSync';
 
 export type UseAppGitSyncOrchestrationArgs = {
@@ -259,6 +260,7 @@ export function useAppGitSyncOrchestration({
         await markCloseSyncActive(async () => {
           try { await flushInboxSave(); } catch { /* ignore flush errors on close */ }
           try { await flushEmojiUsageToStore(); } catch { /* ignore */ }
+          try { await flushQuickOpenUsageToStore(); } catch { /* ignore */ }
           const gitStatusForClose = await fetchFreshGitStatusForClose();
           await handleManualSyncCloseRequest({
             instant: false,

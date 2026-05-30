@@ -1,7 +1,12 @@
 import type {VaultMarkdownRef} from '@eskerra/core';
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useState, useSyncExternalStore} from 'react';
 
 import {filterVaultNotesForQuickOpen} from '../lib/quickOpenNoteFilter';
+import {
+  buildQuickOpenUsageScoreLookup,
+  getQuickOpenUsageRevision,
+  subscribeQuickOpenUsageRevision,
+} from '../lib/quickOpenUsageStore';
 
 export const QUICK_OPEN_SEARCH_DEBOUNCE_MS = 300;
 
@@ -16,6 +21,11 @@ export function useQuickOpenSearch(
   refs: readonly VaultMarkdownRef[],
 ) {
   const [appliedQuery, setAppliedQuery] = useState('');
+  const usageRevision = useSyncExternalStore(
+    subscribeQuickOpenUsageRevision,
+    getQuickOpenUsageRevision,
+    getQuickOpenUsageRevision,
+  );
   const searchTrimmed = search.trim();
 
   useEffect(() => {
@@ -31,15 +41,18 @@ export function useQuickOpenSearch(
     return () => window.clearTimeout(t);
   }, [search, searchTrimmed]);
 
-  const filtered = useMemo(
-    () => filterVaultNotesForQuickOpen(appliedQuery, vaultRoot, refs),
-    [appliedQuery, refs, vaultRoot],
-  );
+  const filtered = useMemo(() => {
+    const getScores =
+      appliedQuery.length > 0
+        ? buildQuickOpenUsageScoreLookup(appliedQuery)
+        : undefined;
+    return filterVaultNotesForQuickOpen(appliedQuery, vaultRoot, refs, getScores);
+  }, [appliedQuery, refs, usageRevision, vaultRoot]);
 
   const searchPending =
     searchTrimmed.length > 0 && appliedQuery !== searchTrimmed;
 
   const displayed = filtered;
 
-  return {displayed, searchPending, searchTrimmed};
+  return {appliedQuery, displayed, searchPending, searchTrimmed};
 }
