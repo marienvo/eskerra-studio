@@ -196,12 +196,12 @@ people's hands.
 
 | Tool | Core Idea | Strength | Trade-off | Source |
 | --- | --- | --- | --- | --- |
-| **Eskerra Studio** | Markdown desktop runtime | **Fast, predictable, no setup** | Fewer features | FOSS, AGPL-3.0 |
-| **Obsidian** | Knowledge system | Flexible, huge plugin ecosystem | Complexity and inconsistency | Proprietary |
-| **Joplin** | Open notebook | Private, cross-platform notes with mature sync | More notebook-oriented than writing-oriented | FOSS, AGPL-3.0 |
-| **Logseq** | Outliner / graph | Powerful linking and structure | Performance, learning curve | FOSS, AGPL-3.0 |
-| **iA Writer** | Writing tool | Clean, focused experience | Limited features | Proprietary |
-| **Zettlr** | Academic editor | Strong for long-form and research | Heavier, slower UI | FOSS, GPL-3.0 |
+| **Eskerra Studio** | Markdown desktop runtime | **Fast, predictable, no setup** | Fewer features | ✅ FOSS, AGPL-3.0 |
+| **Obsidian**  | Knowledge system | Flexible, huge plugin ecosystem | Complexity & inconsistency | 🏢 Proprietary    |
+| **Joplin**  | Open notebook | Private, cross-platform notes with mature sync | More notebook-oriented than writing-oriented | ✅ FOSS, AGPL-3.0 |
+| **Logseq**  | Outliner / graph | Powerful linking & structure | Performance, learning curve | ✅ FOSS, AGPL-3.0 |
+| **iA Writer** | Writing tool | Clean, focused experience | Limited features | 🏢 Proprietary    |
+| **Zettlr**  | Academic editor | Strong for long-form & research | Heavier, slower UI | ✅ FOSS, GPL-3.0  |
 
 ---
 
