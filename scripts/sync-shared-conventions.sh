@@ -62,13 +62,25 @@ strip_for_sibling() {
   '
 }
 
+file_mode_octal() {
+  local path="$1"
+  local mode=""
+  if mode="$(stat -c '%a' "${path}" 2>/dev/null)"; then
+    :
+  elif mode="$(stat -f '%OLp' "${path}" 2>/dev/null)"; then
+    :
+  else
+    mode="644"
+  fi
+  printf '%s' "${mode}"
+}
+
 commit_tmp_preserving_mode() {
   local file_path="$1"
+  local mode_source="${2:-${file_path}}"
   local tmp="${file_path}.tmp"
-  local mode="644"
-  if [[ -f "${file_path}" ]]; then
-    mode="$(stat -c '%a' "${file_path}")"
-  fi
+  local mode
+  mode="$(file_mode_octal "${mode_source}")"
   mv "${tmp}" "${file_path}"
   chmod "${mode}" "${file_path}"
 }
