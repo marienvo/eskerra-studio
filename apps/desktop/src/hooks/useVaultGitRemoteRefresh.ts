@@ -10,11 +10,14 @@ type UseVaultGitRemoteRefreshInput = {
   fetchTimeoutSecs: number;
   manualSyncRunning: boolean;
   onRefreshed?: (result: GitStatusResult) => void;
+  /** Called when a started refresh finishes (success or failure), with the vault path for that request. */
+  onSettled?: (vaultPath: string) => void;
   gitOperationBusyRef?: MutableRefObject<boolean>;
 };
 
 type UseVaultGitRemoteRefreshResult = {
-  refresh: () => void;
+  /** Returns true when a remote status request was started. */
+  refresh: () => boolean;
   loading: boolean;
   error: SyncError | null;
 };
@@ -26,18 +29,20 @@ export function useVaultGitRemoteRefresh({
   fetchTimeoutSecs,
   manualSyncRunning,
   onRefreshed,
+  onSettled,
   gitOperationBusyRef,
 }: UseVaultGitRemoteRefreshInput): UseVaultGitRemoteRefreshResult {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<SyncError | null>(null);
   const requestIdRef = useRef(0);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((): boolean => {
     if (manualSyncRunning || vaultPath == null || branch == null || gitOperationBusyRef?.current) {
-      return;
+      return false;
     }
 
     const requestId = ++requestIdRef.current;
+    const requestVaultPath = vaultPath;
     if (gitOperationBusyRef) {
       gitOperationBusyRef.current = true;
     }
@@ -60,8 +65,10 @@ export function useVaultGitRemoteRefresh({
         if (gitOperationBusyRef) {
           gitOperationBusyRef.current = false;
         }
+        onSettled?.(requestVaultPath);
       });
-  }, [vaultPath, remote, branch, fetchTimeoutSecs, manualSyncRunning, onRefreshed, gitOperationBusyRef]);
+    return true;
+  }, [vaultPath, remote, branch, fetchTimeoutSecs, manualSyncRunning, onRefreshed, onSettled, gitOperationBusyRef]);
 
   return {refresh, loading, error};
 }

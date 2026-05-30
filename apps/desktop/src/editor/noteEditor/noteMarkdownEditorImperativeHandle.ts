@@ -97,22 +97,40 @@ export function createNoteMarkdownEditorHandle(
       });
       return true;
     },
-    focus: (options?: {anchor?: number; scrollIntoView?: boolean}) => {
+    focus: (options?: {
+      anchor?: number;
+      head?: number;
+      selectAll?: boolean;
+      scrollIntoView?: boolean;
+    }) => {
       const view = shell.viewRef.current;
       if (!view) {
         return;
       }
-      if (options?.anchor !== undefined) {
-        const a = Math.max(
-          0,
-          Math.min(options.anchor, view.state.doc.length),
-        );
-        const scroll = options.scrollIntoView !== false;
+      const scroll = options?.scrollIntoView !== false;
+      const docLength = view.state.doc.length;
+      const clampOffset = (offset: number) =>
+        Math.max(0, Math.min(offset, docLength));
+
+      if (options?.selectAll) {
         view.dispatch({
-          selection: EditorSelection.cursor(a),
+          selection: EditorSelection.create([
+            EditorSelection.range(0, docLength),
+          ]),
           ...(scroll ? {scrollIntoView: true} : {}),
         });
-      } else if (view.state.doc.length === 0) {
+      } else if (options?.anchor !== undefined) {
+        const anchor = clampOffset(options.anchor);
+        const head =
+          options.head !== undefined ? clampOffset(options.head) : anchor;
+        view.dispatch({
+          selection:
+            anchor === head
+              ? EditorSelection.cursor(anchor)
+              : EditorSelection.create([EditorSelection.range(anchor, head)]),
+          ...(scroll ? {scrollIntoView: true} : {}),
+        });
+      } else if (docLength === 0) {
         view.dispatch({
           selection: EditorSelection.cursor(0),
           scrollIntoView: true,

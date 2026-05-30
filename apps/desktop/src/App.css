@@ -614,7 +614,7 @@ a:focus:not(:focus-visible) {
   white-space: nowrap;
 }
 
-/* Toast stack: fixed bottom-right floating notifications (see ToastStack). */
+/* Toast stack: portaled to document.body so toasts sit above modal overlays (e.g. Add to inbox z-index 301). */
 .toast-stack {
   position: fixed;
   bottom: 48px;
@@ -642,6 +642,36 @@ a:focus:not(:focus-visible) {
   pointer-events: auto;
   user-select: text;
   -webkit-user-select: text;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes toast-progress {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+.toast__progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.toast__progress-bar {
+  height: 100%;
+  width: 100%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: toast-progress var(--toast-duration, 10s) linear forwards;
+  transform-origin: left center;
+}
+
+.toast:hover .toast__progress-bar {
+  animation-play-state: paused;
 }
 
 .toast--error {

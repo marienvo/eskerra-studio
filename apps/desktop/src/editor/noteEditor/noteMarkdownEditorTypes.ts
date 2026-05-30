@@ -36,6 +36,11 @@ export type NoteMarkdownEditorProps = {
   wikiLinkCompletionCandidates?: ReadonlyArray<InboxWikiLinkCompletionCandidate>;
   /** Desktop: Ctrl/Cmd+S — auto-save flush or submit new entry (handled by shell). */
   onSaveShortcut?: () => void;
+  /**
+   * When true, Mod-Enter saves via `onSaveShortcut` when the caret is not on an activatable link.
+   * Used by the Add to inbox compose dialog only.
+   */
+  modEnterSaveWhenNoLink?: boolean;
   /** Desktop: normalize markdown layout for the open note (shell-owned). */
   onCleanNote?: () => void;
   /** Desktop: Ctrl/Cmd+Shift+D — request delete current note (shell shows confirmation). */
@@ -95,5 +100,10 @@ export type NoteMarkdownEditorHandle = {
    * Move focus into this editor; optionally place the caret at a UTF-16 offset (clamped to the document).
    * When `scrollIntoView` is false, the selection update omits scroll-into-view (faster; use when layout is local).
    */
-  focus: (options?: {anchor?: number; scrollIntoView?: boolean}) => void;
+  focus: (options?: {
+    anchor?: number;
+    head?: number;
+    selectAll?: boolean;
+    scrollIntoView?: boolean;
+  }) => void;
 };

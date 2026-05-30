@@ -111,8 +111,8 @@ describe('shouldRunVaultGitSync — behind-only', () => {
     expect(shouldRunVaultGitSync(behindOnly(), 'close')).toBe(false);
   });
 
-  it('returns false for startup when behind > 0 but nothing local', () => {
-    expect(shouldRunVaultGitSync(behindOnly(), 'startup')).toBe(false);
+  it('returns true for startup when behind > 0 but nothing local', () => {
+    expect(shouldRunVaultGitSync(behindOnly(), 'startup')).toBe(true);
   });
 
   it('returns false for autosync when behind > 0 but nothing local', () => {

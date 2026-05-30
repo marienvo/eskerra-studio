@@ -1,9 +1,19 @@
-import {useEffect, useEffectEvent, type MutableRefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react';
 
 import type {GitStatusResult} from '../lib/tauriVaultGitSync';
 import {useVaultGitRemoteRefresh} from './useVaultGitRemoteRefresh';
 
 export const REMOTE_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+/** Retry initial remote status when another Git op holds `gitOperationBusyRef`. */
+export const INITIAL_REMOTE_BUSY_RETRY_MS = 250;
 
 type UseVaultGitRemoteStatusPollingInput = {
   vaultPath: string | null;
@@ -15,13 +25,18 @@ type UseVaultGitRemoteStatusPollingInput = {
   gitOperationBusyRef?: MutableRefObject<boolean>;
 };
 
+type UseVaultGitRemoteStatusPollingResult = {
+  remoteRefreshLoading: boolean;
+  /** False until the first remote status fetch for the current vault path has finished (success or failure). */
+  initialRemoteStatusSettled: boolean;
+};
+
 /**
  * Polls the remote Git status at a fixed interval so GitStatusChip can show
  * "Remote changes" when another device has pushed commits.
  *
- * Delegates guarding (null vaultPath/branch, manualSyncRunning) to
- * useVaultGitRemoteRefresh. No polling fires on mount — the first fire is after
- * one full interval, or when the window returns to the foreground.
+ * Also runs one immediate fetch when vault + branch become ready so startup
+ * sync can see an up-to-date `behind` count.
  */
 export function useVaultGitRemoteStatusPolling({
   vaultPath,
@@ -31,7 +46,35 @@ export function useVaultGitRemoteStatusPolling({
   manualSyncRunning,
   onRefreshed,
   gitOperationBusyRef,
-}: UseVaultGitRemoteStatusPollingInput): {remoteRefreshLoading: boolean} {
+}: UseVaultGitRemoteStatusPollingInput): UseVaultGitRemoteStatusPollingResult {
+  const noRemoteTarget = vaultPath == null || branch == null;
+  const [trackedVault, setTrackedVault] = useState<string | null>(
+    noRemoteTarget ? null : vaultPath,
+  );
+  const [initialRemoteStatusSettled, setInitialRemoteStatusSettled] =
+    useState(noRemoteTarget);
+
+  if (noRemoteTarget) {
+    if (trackedVault !== null) {
+      setTrackedVault(null);
+      setInitialRemoteStatusSettled(true);
+    }
+  } else if (trackedVault !== vaultPath) {
+    setTrackedVault(vaultPath);
+    setInitialRemoteStatusSettled(false);
+  }
+
+  const trackedVaultRef = useRef(trackedVault);
+  useEffect(() => {
+    trackedVaultRef.current = trackedVault;
+  }, [trackedVault]);
+
+  const markInitialRemoteSettled = useCallback((settledVaultPath: string) => {
+    if (trackedVaultRef.current === settledVaultPath) {
+      setInitialRemoteStatusSettled(true);
+    }
+  }, []);
+
   const {refresh, loading: remoteRefreshLoading} = useVaultGitRemoteRefresh({
     vaultPath,
     remote,
@@ -39,10 +82,45 @@ export function useVaultGitRemoteStatusPolling({
     fetchTimeoutSecs,
     manualSyncRunning,
     onRefreshed,
+    onSettled: markInitialRemoteSettled,
     gitOperationBusyRef,
   });
 
   const triggerRefresh = useEffectEvent(() => refresh());
+
+  useEffect(() => {
+    if (vaultPath == null || branch == null) return;
+    if (initialRemoteStatusSettled) return;
+
+    let cancelled = false;
+    let retryTimeoutId: ReturnType<typeof window.setTimeout> | undefined;
+
+    const attemptInitialRefresh = () => {
+      if (cancelled) return;
+      const started = triggerRefresh();
+      if (!started && gitOperationBusyRef?.current) {
+        retryTimeoutId = window.setTimeout(
+          attemptInitialRefresh,
+          INITIAL_REMOTE_BUSY_RETRY_MS,
+        );
+      }
+    };
+
+    attemptInitialRefresh();
+
+    return () => {
+      cancelled = true;
+      if (retryTimeoutId != null) {
+        window.clearTimeout(retryTimeoutId);
+      }
+    };
+  }, [
+    vaultPath,
+    branch,
+    manualSyncRunning,
+    initialRemoteStatusSettled,
+    gitOperationBusyRef,
+  ]);
 
   useEffect(() => {
     const id = window.setInterval(triggerRefresh, REMOTE_POLL_INTERVAL_MS);
@@ -59,5 +137,5 @@ export function useVaultGitRemoteStatusPolling({
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
-  return {remoteRefreshLoading};
+  return {remoteRefreshLoading, initialRemoteStatusSettled};
 }

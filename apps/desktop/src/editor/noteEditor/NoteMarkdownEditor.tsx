@@ -140,6 +140,7 @@ const NoteMarkdownEditorImpl = forwardRef<
         shell.onMarkdownRelativeLinkActivateRef,
       onMarkdownExternalLinkOpenRef: shell.onMarkdownExternalLinkOpenRef,
       onSaveShortcutRef: shell.onSaveShortcutRef,
+      modEnterSaveWhenNoLinkRef: shell.modEnterSaveWhenNoLinkRef,
       onDeleteNoteShortcutRef: shell.onDeleteNoteShortcutRef,
       wikiLinkTargetIsResolvedRef: shell.wikiLinkTargetIsResolvedRef,
       relativeMarkdownLinkHrefIsResolvedRef:

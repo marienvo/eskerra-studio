@@ -3,6 +3,7 @@ import {forwardRef, useImperativeHandle} from 'react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {AddToInboxDialog} from './AddToInboxDialog';
+import {modEnterSaveShortcutLabel} from '../lib/desktopShortcutLabels';
 
 const editorHandleSpies = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -11,11 +12,17 @@ const editorHandleSpies = vi.hoisted(() => ({
 vi.mock('../editor/noteEditor/NoteMarkdownEditor', () => {
   const NoteMarkdownEditor = forwardRef<
     {
-      focus: (options?: {anchor?: number; scrollIntoView?: boolean}) => void;
+      focus: (options?: {
+        anchor?: number;
+        head?: number;
+        selectAll?: boolean;
+        scrollIntoView?: boolean;
+      }) => void;
       getMarkdown: () => string;
     },
     {
       initialMarkdown: string;
+      modEnterSaveWhenNoLink?: boolean;
       onMarkdownChange: (markdown: string) => void;
     }
   >(function NoteMarkdownEditorMock(props, ref) {
@@ -29,7 +36,10 @@ vi.mock('../editor/noteEditor/NoteMarkdownEditor', () => {
     );
 
     return (
-      <div className="cm-editor">
+      <div
+        className="cm-editor"
+        data-mod-enter-save={props.modEnterSaveWhenNoLink ? 'true' : 'false'}
+      >
         <div className="cm-scroller">
           <textarea
             className="cm-content"
@@ -77,12 +87,22 @@ describe('AddToInboxDialog', () => {
     onMuteLinkSnippetDomain: vi.fn(),
   };
 
-  it('renders title and action buttons', () => {
+  it('renders title, shortcut hint, and action buttons', () => {
     render(<AddToInboxDialog {...baseProps} />);
 
     expect(screen.getByText('Add to inbox')).not.toBeNull();
+    expect(screen.getByText(`(${modEnterSaveShortcutLabel()} to save)`)).not.toBeNull();
+    expect(document.body.querySelector('.note-markdown-editor-fold-rail')).not.toBeNull();
     expect(screen.getByRole('button', {name: 'Save'})).not.toBeNull();
     expect(screen.getByRole('button', {name: 'Cancel'})).not.toBeNull();
+  });
+
+  it('enables Mod-Enter save fallback on the compose editor', () => {
+    render(<AddToInboxDialog {...baseProps} />);
+
+    expect(
+      document.body.querySelector('[data-mod-enter-save="true"]'),
+    ).not.toBeNull();
   });
 
   it('forwards Save and Cancel actions', () => {
@@ -117,7 +137,7 @@ describe('AddToInboxDialog', () => {
       .toBe('');
   });
 
-  it('focuses the editor at the end when opened and when clicking below content', async () => {
+  it('selects all when opened and focuses at the end when clicking below content', async () => {
     const editorRef = {
       current: {
         focus: editorHandleSpies.focus,
@@ -139,7 +159,7 @@ describe('AddToInboxDialog', () => {
 
     await waitFor(() => {
       expect(editorHandleSpies.focus).toHaveBeenCalledWith({
-        anchor: '# Title'.length,
+        selectAll: true,
         scrollIntoView: false,
       });
     });
@@ -157,7 +177,7 @@ describe('AddToInboxDialog', () => {
     });
   });
 
-  it('does not refocus at the end when the draft changes while already open', async () => {
+  it('does not refocus when the draft changes while already open', async () => {
     const editorRef = {
       current: {
         focus: editorHandleSpies.focus,
@@ -179,7 +199,7 @@ describe('AddToInboxDialog', () => {
 
     await waitFor(() => {
       expect(editorHandleSpies.focus).toHaveBeenCalledWith({
-        anchor: '# Title'.length,
+        selectAll: true,
         scrollIntoView: false,
       });
     });

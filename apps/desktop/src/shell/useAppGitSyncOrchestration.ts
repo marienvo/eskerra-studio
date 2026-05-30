@@ -143,7 +143,7 @@ export function useAppGitSyncOrchestration({
     refreshGitStatus({silent: true});
   }, [refreshGitStatus]);
   const backgroundGitOperationBusyRef = useRef(false);
-  const {remoteRefreshLoading} = useVaultGitRemoteStatusPolling({
+  const {remoteRefreshLoading, initialRemoteStatusSettled} = useVaultGitRemoteStatusPolling({
     vaultPath,
     remote: GIT_SYNC_REMOTE,
     branch: currentGitBranch,
@@ -303,6 +303,7 @@ export function useAppGitSyncOrchestration({
     runManualSync: flushThenRunManualSync,
     notify,
     localWriteNonce: saveSettledNonce,
+    initialRemoteStatusSettled,
   });
 
   const autosyncSchedulerState = useVaultGitAutosyncScheduler({

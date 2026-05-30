@@ -12,6 +12,19 @@ export function reopenClosedTabMenuShortcutLabel(): string {
   return 'Ctrl+Shift+T';
 }
 
+/** Mod-Enter save hint in Add to inbox dialog title. */
+export function modEnterSaveShortcutLabel(): string {
+  if (typeof navigator === 'undefined') {
+    return 'Ctrl+Enter';
+  }
+  const ua = navigator.userAgent;
+  const platform = navigator.platform ?? '';
+  if (/^Mac/i.test(platform) || ua.includes('Mac OS')) {
+    return '⌘Enter';
+  }
+  return 'Ctrl+Enter';
+}
+
 /** Clean this note (markdown normalize); shown in editor context menu. */
 export function cleanNoteMenuShortcutLabel(): string {
   if (typeof navigator === 'undefined') {

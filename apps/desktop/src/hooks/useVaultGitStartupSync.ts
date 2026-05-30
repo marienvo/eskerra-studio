@@ -14,6 +14,8 @@ type UseVaultGitStartupSyncArgs = {
   runManualSync: (opts?: {readonly silent?: boolean}) => Promise<boolean>;
   notify: (tone: SessionNotificationTone, text: string) => void;
   localWriteNonce?: number;
+  /** Wait for the first remote status fetch for this vault before evaluating preflight. */
+  initialRemoteStatusSettled?: boolean;
 };
 
 /**
@@ -31,6 +33,7 @@ export function useVaultGitStartupSync({
   runManualSync,
   notify,
   localWriteNonce = 0,
+  initialRemoteStatusSettled = true,
 }: UseVaultGitStartupSyncArgs): void {
   // Tracks all vault paths that have already triggered startup sync this session.
   const attemptedVaultPathsRef = useRef(new Set<string>());
@@ -53,6 +56,7 @@ export function useVaultGitStartupSync({
 
   useEffect(() => {
     if (vaultPath == null) return;
+    if (!initialRemoteStatusSettled) return;
     if (gitStatusLoading) return;
     if (gitStatusError != null) return;
     if (manualSyncDisabledReason != null) return;
@@ -71,6 +75,7 @@ export function useVaultGitStartupSync({
     runStartupSync();
   }, [
     vaultPath,
+    initialRemoteStatusSettled,
     gitStatusLoading,
     gitStatusError,
     gitStatus,

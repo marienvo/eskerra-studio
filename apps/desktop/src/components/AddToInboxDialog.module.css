@@ -31,21 +31,24 @@
   color: #111418;
 }
 
+.titleHint {
+  color: #5d6873;
+  font-weight: 400;
+}
+
 .editorSurface {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   border: 1px solid #d8e5ee;
   border-radius: 8px;
-  background: #ffffff;
   overflow: hidden;
 }
 
-.editorSurface :global(.note-markdown-editor-wrap) {
-  height: 100%;
-}
-
-.editorSurface :global(.note-markdown-editor-wrap .cm-editor) {
-  height: 100%;
+.editorScroll {
+  flex: 1;
+  min-height: 0;
 }
 
 .hint {
