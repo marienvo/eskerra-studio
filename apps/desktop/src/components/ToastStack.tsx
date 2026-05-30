@@ -22,12 +22,8 @@ type TimerState = {
 export function ToastStack({items, onDismiss}: ToastStackProps) {
   const [liveIds, setLiveIds] = useState<ReadonlySet<string>>(() => new Set());
 
-  // Initialized with existing items on first render so the backlog never flashes as new toasts.
-  // The lint-allowed null-check pattern keeps this out of render body ref reads.
-  const seenIdsRef = useRef<Set<string>>(null);
-  if (seenIdsRef.current == null) {
-    seenIdsRef.current = new Set(items.map(i => i.id));
-  }
+  // Seeded once on mount so a notification backlog does not flash as new toasts.
+  const seenIdsRef = useRef<Set<string>>(new Set(items.map(i => i.id)));
 
   const timersRef = useRef<Map<string, TimerState>>(new Map());
   // Tracks last seen text for rename-progress to detect in-place text changes.
