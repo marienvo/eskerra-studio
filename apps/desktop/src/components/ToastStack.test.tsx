@@ -5,6 +5,15 @@ import {SESSION_NOTIF_RENAME_PROGRESS_ID} from '../lib/sessionNotifications';
 import type {SessionNotification} from '../lib/sessionNotifications';
 import {ToastStack} from './ToastStack';
 
+function renameProgressNotification(text: string): SessionNotification {
+  return {
+    id: SESSION_NOTIF_RENAME_PROGRESS_ID,
+    tone: 'info',
+    text,
+    source: 'renameProgress',
+  };
+}
+
 describe('ToastStack', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -16,19 +25,13 @@ describe('ToastStack', () => {
 
   it('remounts rename-progress bar when in-place text changes', () => {
     const onDismiss = vi.fn();
-    const renameProgress = (text: string): SessionNotification => ({
-      id: SESSION_NOTIF_RENAME_PROGRESS_ID,
-      tone: 'info',
-      text,
-      source: 'renameProgress',
-    });
 
     const {rerender} = render(<ToastStack items={[]} onDismiss={onDismiss} />);
 
     act(() => {
       rerender(
         <ToastStack
-          items={[renameProgress('Renaming 1 of 3…')]}
+          items={[renameProgressNotification('Renaming 1 of 3…')]}
           onDismiss={onDismiss}
         />,
       );
@@ -40,7 +43,7 @@ describe('ToastStack', () => {
     act(() => {
       rerender(
         <ToastStack
-          items={[renameProgress('Renaming 2 of 3…')]}
+          items={[renameProgressNotification('Renaming 2 of 3…')]}
           onDismiss={onDismiss}
         />,
       );
@@ -53,19 +56,13 @@ describe('ToastStack', () => {
 
   it('re-surfaces rename-progress toast after expiration when text updates', () => {
     const onDismiss = vi.fn();
-    const renameProgress = (text: string): SessionNotification => ({
-      id: SESSION_NOTIF_RENAME_PROGRESS_ID,
-      tone: 'info',
-      text,
-      source: 'renameProgress',
-    });
 
     const {rerender} = render(<ToastStack items={[]} onDismiss={onDismiss} />);
 
     act(() => {
       rerender(
         <ToastStack
-          items={[renameProgress('Renaming 1 of 3…')]}
+          items={[renameProgressNotification('Renaming 1 of 3…')]}
           onDismiss={onDismiss}
         />,
       );
@@ -84,7 +81,7 @@ describe('ToastStack', () => {
     act(() => {
       rerender(
         <ToastStack
-          items={[renameProgress('Renaming 1 of 5…')]}
+          items={[renameProgressNotification('Renaming 1 of 5…')]}
           onDismiss={onDismiss}
         />,
       );
@@ -93,5 +90,24 @@ describe('ToastStack', () => {
     expect(document.body.querySelector('.toast__text')?.textContent).toBe(
       'Renaming 1 of 5…',
     );
+
+    act(() => {
+      vi.advanceTimersByTime(10_001);
+    });
+
+    expect(document.body.querySelector('.toast-stack')).toBeNull();
+  });
+
+  it('does not flash seeded rename-progress backlog on mount', () => {
+    const onDismiss = vi.fn();
+
+    render(
+      <ToastStack
+        items={[renameProgressNotification('Renaming 2 of 5…')]}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    expect(document.body.querySelector('.toast-stack')).toBeNull();
   });
 });
