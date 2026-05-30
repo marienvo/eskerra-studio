@@ -115,6 +115,7 @@ build_skill_dir_snapshot() {
 inject_frontmatter_notice() {
   local file_path="$1"
   local rel_source="$2"
+  local mode_source="${3:-${file_path}}"
   awk -v marker="${HEADER_MARKER}" -v src="${rel_source}" '
     function read_line() {
       if ((getline) <= 0) {
@@ -139,13 +140,14 @@ inject_frontmatter_notice() {
       next
     }
     { print }
-  ' "${file_path}" > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
+  ' "${file_path}" > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}" "${mode_source}"
 }
 
 inject_sync_notice() {
   local file_path="$1"
   local rel_source="$2"
   local dest_hint="${3:-${file_path}}"
+  local mode_source="${4:-${file_path}}"
   if grep -q "${HEADER_MARKER}" "${file_path}" 2>/dev/null; then
     return 0
   fi
@@ -153,7 +155,7 @@ inject_sync_notice() {
   case "${dest_hint}" in
     *.mdc|*.md)
       if head -n 1 "${file_path}" | grep -q '^---$'; then
-        inject_frontmatter_notice "${file_path}" "${rel_source}"
+        inject_frontmatter_notice "${file_path}" "${rel_source}" "${mode_source}"
         return 0
       fi
       {
@@ -161,7 +163,7 @@ inject_sync_notice() {
         echo "<!-- Re-run: notebox/scripts/sync-shared-conventions.sh -->"
         echo ""
         cat "${file_path}"
-      } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
+      } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}" "${mode_source}"
       ;;
     *.sh)
       if head -n 1 "${file_path}" | grep -q '^#!'; then
@@ -170,13 +172,13 @@ inject_sync_notice() {
           echo "# ${HEADER_MARKER} — do not edit here. Canonical: notebox/${rel_source}"
           echo "# Re-run: notebox/scripts/sync-shared-conventions.sh"
           tail -n +2 "${file_path}"
-        } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
+        } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}" "${mode_source}"
       else
         {
           echo "# ${HEADER_MARKER} — do not edit here. Canonical: notebox/${rel_source}"
           echo "# Re-run: notebox/scripts/sync-shared-conventions.sh"
           cat "${file_path}"
-        } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
+        } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}" "${mode_source}"
       fi
       ;;
     *)
@@ -185,7 +187,7 @@ inject_sync_notice() {
         echo "<!-- Re-run: notebox/scripts/sync-shared-conventions.sh -->"
         echo ""
         cat "${file_path}"
-      } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}"
+      } > "${file_path}.tmp" && commit_tmp_preserving_mode "${file_path}" "${mode_source}"
       ;;
   esac
 }
@@ -202,9 +204,9 @@ copy_file() {
   if [[ "${CHECK_MODE}" == true ]]; then
     local tmp
     tmp="$(mktemp "${TMPDIR:-/tmp}/sync-conventions.XXXXXX")"
-    cp "${src}" "${tmp}"
+    cp -p "${src}" "${tmp}"
     if [[ "${inject_header}" == "true" ]]; then
-      inject_sync_notice "${tmp}" "${src_rel}" "${dest}"
+      inject_sync_notice "${tmp}" "${src_rel}" "${dest}" "${src}"
     fi
     if [[ -f "${dest}" ]] && cmp -s "${tmp}" "${dest}"; then
       rm -f "${tmp}"
@@ -221,10 +223,11 @@ copy_file() {
   fi
 
   mkdir -p "$(dirname "${dest}")"
-  cp "${src}" "${dest}"
+  cp -p "${src}" "${dest}"
   if [[ "${inject_header}" == "true" ]]; then
-    inject_sync_notice "${dest}" "${src_rel}" "${dest}"
+    inject_sync_notice "${dest}" "${src_rel}" "${dest}" "${src}"
   fi
+  chmod "$(file_mode_octal "${src}")" "${dest}"
   echo "Synced: ${dest_rel}"
 }
 

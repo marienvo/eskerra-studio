@@ -40,7 +40,7 @@ From notebox:
 ./scripts/sync-shared-conventions.sh --check /path/to/eskerra-go   # dry-run diff (no writes to target)
 ```
 
-Synced hook scripts keep the source file mode (e.g. `block-dangerous-git.sh` stays executable).
+Synced hook scripts take the canonical source file mode (e.g. `block-dangerous-git.sh` stays executable even when the target had a stale non-executable copy).
 
 Do **not** edit synced files in the target repo. Change the canonical file in notebox (or `.cursor/rules/shared/` for rules), then re-run the script.
 
