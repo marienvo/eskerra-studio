@@ -149,6 +149,7 @@ CodeMirror 6 derives vertical layout from DOM measurements (for example line and
 
 - Line-level classes under `[data-app-surface='capture'] .note-markdown-editor-host` (for example fenced code: `cm-md-fence-line`, and heading line decorations).
 - Vault image preview wrappers: [`cm-vault-image-preview`](../../apps/desktop/src/App.css) in `App.css`, and the widget root in [`vaultImagePreviewCodemirror.ts`](../../apps/desktop/src/editor/noteEditor/vaultImagePreviewCodemirror.ts).
+- Rich link preview cards: [`cm-link-rich-preview`](../../apps/desktop/src/App.css) in `App.css`, and the widget root in [`linkRichPreviewCodemirror.ts`](../../apps/desktop/src/editor/noteEditor/linkRichPreviewCodemirror.ts).
 
 Horizontal padding on the pane-level editor container (around the CodeMirror root) is fine; only vertical **margin** on measured line/block DOM is disallowed. The editor uses the **full width** of the editor pane (no max-width column).
 

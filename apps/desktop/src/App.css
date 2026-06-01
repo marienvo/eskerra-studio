@@ -3450,15 +3450,16 @@ button.primary.destructive {
 
 /* Rich link card rendered in place of lines whose sole content is a bare http(s) URL
    (see linkRichPreviewCodemirror). Replaces the line when unfocused; inserted after the
-   line when the caret is on it so the raw source remains editable. */
+   line when the caret is on it so the raw source remains editable.
+   No vertical margin on the widget root: CodeMirror height map excludes margin (see
+   specs/architecture/desktop-editor.md). */
 .cm-link-rich-preview {
   display: flex;
   gap: 0.7rem;
   align-items: stretch;
   box-sizing: border-box;
   max-width: 36rem;
-  margin: 0.4rem 0;
-  padding: 0.45rem;
+  padding: 0.85rem 0.45rem;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--nb-editor-text, currentColor) 12%, transparent);
   background: color-mix(in srgb, var(--nb-editor-paper, #fff) 85%, var(--nb-editor-margin-bg, #f3f3f3) 15%);
@@ -3477,7 +3478,7 @@ button.primary.destructive {
 .cm-link-rich-preview--inline {
   display: inline-flex;
   vertical-align: middle;
-  margin: 0.1rem 0 0.1rem 0.25rem;
+  padding: 0.1rem 0 0.1rem 0.25rem;
 }
 
 .cm-link-rich-preview__thumb {
