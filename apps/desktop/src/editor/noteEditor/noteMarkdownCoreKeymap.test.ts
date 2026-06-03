@@ -1,3 +1,4 @@
+import {commonmarkLanguage, markdown} from '@codemirror/lang-markdown';
 import {historyKeymap} from '@codemirror/commands';
 import {searchKeymap} from '@codemirror/search';
 import {EditorState, EditorSelection} from '@codemirror/state';
@@ -8,8 +9,10 @@ import {
   buildNoteMarkdownDeleteLineModYBindings,
   buildNoteMarkdownDuplicateLineModDBindings,
   buildNoteMarkdownVaultKeymapBindings,
+  runMarkdownExternalLinkActivateFromCaret,
   runWikiLinkActivateFromCaret,
 } from './noteMarkdownCoreKeymap';
+import {noteMarkdownParserExtensions} from './markdownEditorStyling';
 
 describe('runWikiLinkActivateFromCaret', () => {
   let view: EditorView | null = null;
@@ -34,6 +37,46 @@ describe('runWikiLinkActivateFromCaret', () => {
     expect(onWiki).toHaveBeenCalledWith({
       inner: 'alpha note',
       at: beforeClose,
+    });
+  });
+});
+
+describe('runMarkdownExternalLinkActivateFromCaret', () => {
+  let view: EditorView | null = null;
+
+  afterEach(() => {
+    view?.destroy();
+    view = null;
+  });
+
+  it('activates only when caret is in the URL span of an inline external link', () => {
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    const doc = '[Site](https://example.com/path)';
+    const onOpen = vi.fn();
+
+    view = new EditorView({
+      state: EditorState.create({
+        doc,
+        selection: EditorSelection.cursor(doc.indexOf('Site')),
+        extensions: [
+          markdown({
+            base: commonmarkLanguage,
+            extensions: noteMarkdownParserExtensions,
+          }),
+        ],
+      }),
+      parent,
+    });
+    expect(runMarkdownExternalLinkActivateFromCaret(view, onOpen)).toBe(false);
+
+    view.dispatch({
+      selection: EditorSelection.cursor(doc.indexOf('https://example.com/path')),
+    });
+    expect(runMarkdownExternalLinkActivateFromCaret(view, onOpen)).toBe(true);
+    expect(onOpen).toHaveBeenCalledWith({
+      href: 'https://example.com/path',
+      at: doc.indexOf('https://example.com/path'),
     });
   });
 });

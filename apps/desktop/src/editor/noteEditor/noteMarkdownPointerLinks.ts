@@ -11,8 +11,9 @@ import {markdownActivatableRelativeMdLinkAtPosition} from './markdownActivatable
 import {markdownBareBrowserUrlAtPosition} from './markdownBareUrl';
 import {
   discardStoredPrimaryPointerDownForLinkClick,
-  resolveDocPositionForLinkPrimaryClick,
+  resolvePrimaryLinkClickContext,
 } from './linkClickUseMousedownPosition';
+import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {wikiLinkPointerActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPosition';
 
 export type NoteMarkdownPointerLinkHandlers = {
@@ -47,6 +48,7 @@ export function activateNoteMarkdownPrimaryLinkAtPosition(
   pos: number,
   event: LinkActivationEvent,
   handlers: NoteMarkdownPointerLinkHandlers,
+  options?: {allowExternalLabelActivation?: boolean},
 ): boolean {
   const inner = wikiLinkPointerActivatableInnerAtDocPosition(
     view.state.doc,
@@ -72,11 +74,13 @@ export function activateNoteMarkdownPrimaryLinkAtPosition(
     });
     return true;
   }
-  const extHit = markdownActivatableRelativeMdLinkAtPosition(
-    view.state,
-    pos,
-    isBrowserOpenableMarkdownHref,
-  );
+  const extHit = options?.allowExternalLabelActivation === false
+    ? markdownActivatableExternalMdLinkAtPosition(view.state, pos)
+    : markdownActivatableRelativeMdLinkAtPosition(
+      view.state,
+      pos,
+      isBrowserOpenableMarkdownHref,
+    );
   const bareHit = markdownBareBrowserUrlAtPosition(view.state, pos);
   if (extHit) {
     event.preventDefault();
@@ -155,11 +159,18 @@ export function createNoteMarkdownPointerLinkHandlers(
         discardStoredPrimaryPointerDownForLinkClick(view);
         return false;
       }
-      const pos = resolveDocPositionForLinkPrimaryClick(view, event);
+      const click = resolvePrimaryLinkClickContext(view, event);
+      const pos = click.pos;
       if (pos == null) {
         return false;
       }
-      return activateNoteMarkdownPrimaryLinkAtPosition(view, pos, event, handlers);
+      return activateNoteMarkdownPrimaryLinkAtPosition(
+        view,
+        pos,
+        event,
+        handlers,
+        {allowExternalLabelActivation: !click.markerFocusLine},
+      );
     },
     onEditorMiddleClick(event, view) {
       if (event.button !== 1) {

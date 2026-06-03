@@ -27,9 +27,9 @@
     "ci:all": "npm test && npm run desktop:build",
     "test:phase1": "concurrently --kill-others-on-fail -s all -c auto -n lint,meta,core,tokens,dsd,desk,dsm,mob \"npm run lint\" \"npm run validate-metainfo -w @eskerra/desktop\" \"npm run test -w @eskerra/core\" \"npm run test -w @eskerra/tokens && npm run check:generated -w @eskerra/tokens\" \"npm run test -w @eskerra/ds-desktop\" \"npm run test -w @eskerra/desktop\" \"npm run test -w @eskerra/ds-mobile\" \"npm run test -w @eskerra/mobile\"",
     "test:phase2": "concurrently --kill-others-on-fail -s all -c auto -n sbDesk,sbMob \"npm run build-storybook -w @eskerra/ds-desktop\" \"npm run build-storybook-web -w @eskerra/ds-mobile\"",
-    "test:phase3": "node --test scripts/bump-release-version-lib.test.mjs && node --test scripts/sync-app-version-artifacts-lib.test.mjs && node --test scripts/tauri-desktop-build.test.mjs && node --test scripts/update-module-budget-baseline.test.mjs && node scripts/assert-app-versions-align.mjs",
+    "test:phase3": "node --test scripts/bump-release-version-lib.test.mjs && node --test scripts/generate-brand-app-icons.test.mjs scripts/sync-app-version-artifacts-lib.test.mjs scripts/tauri-desktop-build.test.mjs scripts/update-module-budget-baseline.test.mjs && node scripts/assert-app-versions-align.mjs",
     "test": "npm run test:phase1 && npm run test:phase2 && npm run test:phase3",
-    "test:scripts": "node --test scripts/bump-release-version-lib.test.mjs scripts/sync-app-version-artifacts-lib.test.mjs scripts/tauri-desktop-build.test.mjs scripts/update-module-budget-baseline.test.mjs && node scripts/assert-app-versions-align.mjs",
+    "test:scripts": "node --test scripts/bump-release-version-lib.test.mjs scripts/generate-brand-app-icons.test.mjs scripts/sync-app-version-artifacts-lib.test.mjs scripts/tauri-desktop-build.test.mjs scripts/update-module-budget-baseline.test.mjs && node scripts/assert-app-versions-align.mjs",
     "test:storybook-web": "npm run test-storybook-web -w @eskerra/ds-mobile",
     "prepare": "husky"
   },

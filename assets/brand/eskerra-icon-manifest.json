@@ -1,0 +1,5 @@
+{
+  "default": "eskerra-logo-desktop-icon.png",
+  "android_fg": "eskerra-logo-app-icon.png",
+  "android_fg_scale": 100
+}

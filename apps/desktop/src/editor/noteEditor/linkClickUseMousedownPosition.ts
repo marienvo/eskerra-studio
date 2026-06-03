@@ -11,9 +11,15 @@ export type LinkPointerDownSample = {
   y: number;
   pos: number | null;
   timeStamp: number;
+  markerFocusLine: boolean;
 };
 
 const lastPrimaryDownByView = new WeakMap<EditorView, LinkPointerDownSample>();
+
+function targetInMarkerFocusLine(target: EventTarget | null): boolean {
+  return target instanceof Element
+    && target.closest('.cm-line')?.classList.contains('cm-eskerra-marker-focus-line') === true;
+}
 
 export function recordPrimaryPointerDownForLinkClick(
   view: EditorView,
@@ -27,6 +33,7 @@ export function recordPrimaryPointerDownForLinkClick(
     y: e.clientY,
     pos: view.posAtCoords({x: e.clientX, y: e.clientY}),
     timeStamp: e.timeStamp,
+    markerFocusLine: targetInMarkerFocusLine(e.target),
   });
 }
 
@@ -63,12 +70,37 @@ export function pickDocPosForLinkPrimaryClick(
   return down.pos;
 }
 
+export function pickPrimaryLinkClickContext(
+  atClick: number | null,
+  click: {timeStamp: number; clientX: number; clientY: number},
+  down: LinkPointerDownSample | undefined,
+  atClickMarkerFocusLine: boolean,
+): {pos: number | null; markerFocusLine: boolean} {
+  const pos = pickDocPosForLinkPrimaryClick(atClick, click, down);
+  if (pos != null && down != null && pos === down.pos) {
+    return {pos, markerFocusLine: down.markerFocusLine};
+  }
+  return {pos, markerFocusLine: atClickMarkerFocusLine};
+}
+
 export function resolveDocPositionForLinkPrimaryClick(
   view: EditorView,
   e: MouseEvent,
 ): number | null {
+  return resolvePrimaryLinkClickContext(view, e).pos;
+}
+
+export function resolvePrimaryLinkClickContext(
+  view: EditorView,
+  e: MouseEvent,
+): {pos: number | null; markerFocusLine: boolean} {
   const down = lastPrimaryDownByView.get(view);
   lastPrimaryDownByView.delete(view);
   const atClick = view.posAtCoords({x: e.clientX, y: e.clientY});
-  return pickDocPosForLinkPrimaryClick(atClick, e, down);
+  return pickPrimaryLinkClickContext(
+    atClick,
+    e,
+    down,
+    targetInMarkerFocusLine(e.target),
+  );
 }

@@ -39,6 +39,7 @@ import {
 } from './markdownEditorStyling';
 import {markdownEskerra} from './markdownEskerraLanguage';
 import {markdownBareBrowserUrlAtPosition} from './markdownBareUrl';
+import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {markdownActivatableRelativeMdLinkAtPosition} from './markdownActivatableRelativeMdLinkAtPosition';
 import {markdownExternalLinkHighlightExtension} from './markdownExternalLinkCodemirror';
 import {markdownRelativeLinkHighlightExtensions} from './markdownRelativeLinkCodemirror';
@@ -49,7 +50,7 @@ import {vaultImagePreviewExtension} from './vaultImagePreviewCodemirror';
 import {
   discardStoredPrimaryPointerDownForLinkClick,
   recordPrimaryPointerDownForLinkClick,
-  resolveDocPositionForLinkPrimaryClick,
+  resolvePrimaryLinkClickContext,
 } from './linkClickUseMousedownPosition';
 import {wikiLinkPointerActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPosition';
 import {multiCaretClickAddsSelectionRangeExtension} from './multiCaretClick';
@@ -195,7 +196,8 @@ export function buildNoteMarkdownCellExtensions(
       discardStoredPrimaryPointerDownForLinkClick(view);
       return false;
     }
-    const pos = resolveDocPositionForLinkPrimaryClick(view, e);
+    const click = resolvePrimaryLinkClickContext(view, e);
+    const pos = click.pos;
     if (pos == null) {
       return false;
     }
@@ -220,11 +222,16 @@ export function buildNoteMarkdownCellExtensions(
       onMarkdownRelativeLinkActivate({href: relHit.href, at: relHit.hrefFrom});
       return true;
     }
-    const extHit = markdownActivatableRelativeMdLinkAtPosition(
-      view.state,
-      pos,
-      isBrowserOpenableMarkdownHref,
-    );
+    const extHit = click.markerFocusLine
+      ? markdownActivatableExternalMdLinkAtPosition(
+        view.state,
+        pos,
+      )
+      : markdownActivatableRelativeMdLinkAtPosition(
+        view.state,
+        pos,
+        isBrowserOpenableMarkdownHref,
+      );
     if (extHit) {
       e.preventDefault();
       e.stopPropagation();

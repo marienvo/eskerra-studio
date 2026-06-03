@@ -46,12 +46,12 @@ export function buildExternalMdLinkDecorations(view: EditorView): DecorationSet 
       const hasVisibleLabel =
         labelSpan != null && labelSpan.to > labelSpan.from;
       const hrefClass = hasVisibleLabel
-        ? `${cls} cm-md-external-href`
+        ? `${cls} cm-md-external-href ${g}`
         : `${cls} cm-md-external-href ${g} ${CM_MD_EXTERNAL_BARE_URL_CLASS}`;
       ranges.push(Decoration.mark({class: hrefClass}).range(ref.from, ref.to));
       if (hasVisibleLabel && labelSpan != null) {
         ranges.push(
-          Decoration.mark({class: `${cls} ${g}`}).range(
+          Decoration.mark({class: cls}).range(
             labelSpan.from,
             labelSpan.to,
           ),
