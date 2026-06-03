@@ -105,7 +105,7 @@ describe('noteMarkdownPointerLinks', () => {
     });
   });
 
-  it('opens external markdown links from the label on marker-focus lines', () => {
+  it('opens external markdown links from the label on non-focus lines', () => {
     const doc = '[Site](https://example.com/path)\n\nhttps://bare.example/x';
     view = createView(doc);
     const h = handlers();

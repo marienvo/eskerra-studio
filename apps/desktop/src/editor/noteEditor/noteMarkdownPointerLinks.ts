@@ -1,5 +1,6 @@
 import type {EditorView} from '@codemirror/view';
 import {
+  isBrowserOpenableMarkdownHref,
   isExternalMarkdownHref,
   MARKDOWN_EXTENSION,
   stripMarkdownLinkHrefToPathPart,
@@ -14,7 +15,6 @@ import {
 } from './linkClickUseMousedownPosition';
 import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {wikiLinkPointerActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPosition';
-import {isBrowserOpenableMarkdownHref} from '@eskerra/core';
 
 export type NoteMarkdownPointerLinkHandlers = {
   onWikiLinkActivate: (payload: {
@@ -169,7 +169,7 @@ export function createNoteMarkdownPointerLinkHandlers(
         pos,
         event,
         handlers,
-        {allowExternalLabelActivation: click.markerFocusLine},
+        {allowExternalLabelActivation: !click.markerFocusLine},
       );
     },
     onEditorMiddleClick(event, view) {

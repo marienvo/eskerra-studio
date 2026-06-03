@@ -1,9 +1,9 @@
 import {copyLineDown, deleteLine} from '@codemirror/commands';
 import {EditorSelection} from '@codemirror/state';
 import {type EditorView, type KeyBinding} from '@codemirror/view';
-import {isBrowserOpenableMarkdownHref} from '@eskerra/core';
 
 import {isActivatableRelativeMarkdownHref} from './markdownActivatableRelativeHref';
+import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {markdownBareBrowserUrlAtPosition} from './markdownBareUrl';
 import {markdownActivatableRelativeMdLinkAtPosition} from './markdownActivatableRelativeMdLinkAtPosition';
 import {wikiLinkActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPosition';
@@ -88,10 +88,9 @@ export function runMarkdownExternalLinkActivateFromCaret(
   onMarkdownExternalLinkOpen: NoteMarkdownVaultKeymapHandlers['onMarkdownExternalLinkOpen'],
 ): boolean {
   const sel = view.state.selection.main;
-  const hit = markdownActivatableRelativeMdLinkAtPosition(
+  const hit = markdownActivatableExternalMdLinkAtPosition(
     view.state,
     sel.head,
-    isBrowserOpenableMarkdownHref,
   );
   if (hit != null) {
     onMarkdownExternalLinkOpen({href: hit.href, at: hit.hrefFrom});

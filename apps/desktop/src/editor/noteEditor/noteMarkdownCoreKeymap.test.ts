@@ -49,7 +49,7 @@ describe('runMarkdownExternalLinkActivateFromCaret', () => {
     view = null;
   });
 
-  it('activates when caret is in the label or URL span of an inline external link', () => {
+  it('activates only when caret is in the URL span of an inline external link', () => {
     const parent = document.createElement('div');
     document.body.append(parent);
     const doc = '[Site](https://example.com/path)';
@@ -68,7 +68,7 @@ describe('runMarkdownExternalLinkActivateFromCaret', () => {
       }),
       parent,
     });
-    expect(runMarkdownExternalLinkActivateFromCaret(view, onOpen)).toBe(true);
+    expect(runMarkdownExternalLinkActivateFromCaret(view, onOpen)).toBe(false);
 
     view.dispatch({
       selection: EditorSelection.cursor(doc.indexOf('https://example.com/path')),

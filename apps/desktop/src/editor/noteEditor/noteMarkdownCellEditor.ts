@@ -223,14 +223,14 @@ export function buildNoteMarkdownCellExtensions(
       return true;
     }
     const extHit = click.markerFocusLine
-      ? markdownActivatableRelativeMdLinkAtPosition(
+      ? markdownActivatableExternalMdLinkAtPosition(
+        view.state,
+        pos,
+      )
+      : markdownActivatableRelativeMdLinkAtPosition(
         view.state,
         pos,
         isBrowserOpenableMarkdownHref,
-      )
-      : markdownActivatableExternalMdLinkAtPosition(
-        view.state,
-        pos,
       );
     if (extHit) {
       e.preventDefault();

@@ -3422,7 +3422,7 @@ button.primary.destructive {
 
 [data-app-surface='capture']
   .note-markdown-editor-host
-  .cm-line:not(.cm-eskerra-marker-focus-line)
+  .cm-line.cm-eskerra-marker-focus-line
   .cm-md-external-link:not(.cm-md-external-bare-url):not(.cm-md-external-href) {
   color: inherit;
   cursor: default;
