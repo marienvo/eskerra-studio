@@ -1,3 +1,4 @@
+import {commonmarkLanguage, markdown} from '@codemirror/lang-markdown';
 import {historyKeymap} from '@codemirror/commands';
 import {searchKeymap} from '@codemirror/search';
 import {EditorState, EditorSelection} from '@codemirror/state';
@@ -11,6 +12,7 @@ import {
   runMarkdownExternalLinkActivateFromCaret,
   runWikiLinkActivateFromCaret,
 } from './noteMarkdownCoreKeymap';
+import {noteMarkdownParserExtensions} from './markdownEditorStyling';
 
 describe('runWikiLinkActivateFromCaret', () => {
   let view: EditorView | null = null;
@@ -47,7 +49,7 @@ describe('runMarkdownExternalLinkActivateFromCaret', () => {
     view = null;
   });
 
-  it('activates only when caret is in the URL span of an inline external link', () => {
+  it('activates when caret is in the label or URL span of an inline external link', () => {
     const parent = document.createElement('div');
     document.body.append(parent);
     const doc = '[Site](https://example.com/path)';
@@ -57,10 +59,16 @@ describe('runMarkdownExternalLinkActivateFromCaret', () => {
       state: EditorState.create({
         doc,
         selection: EditorSelection.cursor(doc.indexOf('Site')),
+        extensions: [
+          markdown({
+            base: commonmarkLanguage,
+            extensions: noteMarkdownParserExtensions,
+          }),
+        ],
       }),
       parent,
     });
-    expect(runMarkdownExternalLinkActivateFromCaret(view, onOpen)).toBe(false);
+    expect(runMarkdownExternalLinkActivateFromCaret(view, onOpen)).toBe(true);
 
     view.dispatch({
       selection: EditorSelection.cursor(doc.indexOf('https://example.com/path')),

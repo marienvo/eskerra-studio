@@ -105,7 +105,7 @@ describe('noteMarkdownPointerLinks', () => {
     });
   });
 
-  it('opens external markdown links only from the URL span, plus bare URLs', () => {
+  it('opens external markdown links from the label on marker-focus lines', () => {
     const doc = '[Site](https://example.com/path)\n\nhttps://bare.example/x';
     view = createView(doc);
     const h = handlers();
@@ -117,6 +117,26 @@ describe('noteMarkdownPointerLinks', () => {
         activationEvent(),
         h,
       ),
+    ).toBe(true);
+    expect(h.onMarkdownExternalLinkOpen).toHaveBeenNthCalledWith(1, {
+      href: 'https://example.com/path',
+      at: doc.indexOf('https://example.com/path'),
+    });
+  });
+
+  it('opens external markdown links only from the URL span when label activation is disabled', () => {
+    const doc = '[Site](https://example.com/path)\n\nhttps://bare.example/x';
+    view = createView(doc);
+    const h = handlers();
+
+    expect(
+      activateNoteMarkdownPrimaryLinkAtPosition(
+        view,
+        doc.indexOf('Site'),
+        activationEvent(),
+        h,
+        {allowExternalLabelActivation: false},
+      ),
     ).toBe(false);
     expect(
       activateNoteMarkdownPrimaryLinkAtPosition(
@@ -124,6 +144,7 @@ describe('noteMarkdownPointerLinks', () => {
         doc.indexOf('https://example.com/path'),
         activationEvent(),
         h,
+        {allowExternalLabelActivation: false},
       ),
     ).toBe(true);
     expect(
@@ -132,6 +153,7 @@ describe('noteMarkdownPointerLinks', () => {
         doc.indexOf('bare.example'),
         activationEvent(),
         h,
+        {allowExternalLabelActivation: false},
       ),
     ).toBe(true);
 

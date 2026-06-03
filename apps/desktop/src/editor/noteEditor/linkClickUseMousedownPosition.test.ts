@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  pickPrimaryLinkClickContext,
   pickDocPosForLinkPrimaryClick,
   type LinkPointerDownSample,
 } from './linkClickUseMousedownPosition';
@@ -10,6 +11,7 @@ const down = (partial: Partial<LinkPointerDownSample> & Pick<LinkPointerDownSamp
   x: 100,
   y: 200,
   timeStamp: 1000,
+  markerFocusLine: false,
   ...partial,
 });
 
@@ -72,5 +74,27 @@ describe('pickDocPosForLinkPrimaryClick', () => {
         down({pos: 55, timeStamp: 1000}),
       ),
     ).toBe(49);
+  });
+
+  it('keeps marker-focus state from mousedown when the stored position wins', () => {
+    expect(
+      pickPrimaryLinkClickContext(
+        49,
+        {timeStamp: 1050, clientX: 103, clientY: 202},
+        down({pos: 55, markerFocusLine: false}),
+        true,
+      ),
+    ).toEqual({pos: 55, markerFocusLine: false});
+  });
+
+  it('falls back to click marker-focus state when the stored position is not used', () => {
+    expect(
+      pickPrimaryLinkClickContext(
+        49,
+        {timeStamp: 1050, clientX: 120, clientY: 200},
+        down({pos: 55, markerFocusLine: false}),
+        true,
+      ),
+    ).toEqual({pos: 49, markerFocusLine: true});
   });
 });
