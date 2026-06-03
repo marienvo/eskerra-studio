@@ -105,7 +105,7 @@ describe('noteMarkdownPointerLinks', () => {
     });
   });
 
-  it('opens external markdown links and bare URLs on primary click', () => {
+  it('opens external markdown links only from the URL span, plus bare URLs', () => {
     const doc = '[Site](https://example.com/path)\n\nhttps://bare.example/x';
     view = createView(doc);
     const h = handlers();
@@ -114,6 +114,14 @@ describe('noteMarkdownPointerLinks', () => {
       activateNoteMarkdownPrimaryLinkAtPosition(
         view,
         doc.indexOf('Site'),
+        activationEvent(),
+        h,
+      ),
+    ).toBe(false);
+    expect(
+      activateNoteMarkdownPrimaryLinkAtPosition(
+        view,
+        doc.indexOf('https://example.com/path'),
         activationEvent(),
         h,
       ),

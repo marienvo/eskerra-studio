@@ -16,7 +16,6 @@ import {drawSelection, EditorView, keymap} from '@codemirror/view';
 import type {MutableRefObject} from 'react';
 
 import {
-  isBrowserOpenableMarkdownHref,
   wikiLinkInnerBrowserOpenableHref,
   type InboxWikiLinkCompletionCandidate,
 } from '@eskerra/core';
@@ -39,6 +38,7 @@ import {
 } from './markdownEditorStyling';
 import {markdownEskerra} from './markdownEskerraLanguage';
 import {markdownBareBrowserUrlAtPosition} from './markdownBareUrl';
+import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {markdownActivatableRelativeMdLinkAtPosition} from './markdownActivatableRelativeMdLinkAtPosition';
 import {markdownExternalLinkHighlightExtension} from './markdownExternalLinkCodemirror';
 import {markdownRelativeLinkHighlightExtensions} from './markdownRelativeLinkCodemirror';
@@ -220,10 +220,9 @@ export function buildNoteMarkdownCellExtensions(
       onMarkdownRelativeLinkActivate({href: relHit.href, at: relHit.hrefFrom});
       return true;
     }
-    const extHit = markdownActivatableRelativeMdLinkAtPosition(
+    const extHit = markdownActivatableExternalMdLinkAtPosition(
       view.state,
       pos,
-      isBrowserOpenableMarkdownHref,
     );
     if (extHit) {
       e.preventDefault();

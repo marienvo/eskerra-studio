@@ -1,6 +1,5 @@
 import type {EditorView} from '@codemirror/view';
 import {
-  isBrowserOpenableMarkdownHref,
   isExternalMarkdownHref,
   MARKDOWN_EXTENSION,
   stripMarkdownLinkHrefToPathPart,
@@ -13,6 +12,7 @@ import {
   discardStoredPrimaryPointerDownForLinkClick,
   resolveDocPositionForLinkPrimaryClick,
 } from './linkClickUseMousedownPosition';
+import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {wikiLinkPointerActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPosition';
 
 export type NoteMarkdownPointerLinkHandlers = {
@@ -72,11 +72,7 @@ export function activateNoteMarkdownPrimaryLinkAtPosition(
     });
     return true;
   }
-  const extHit = markdownActivatableRelativeMdLinkAtPosition(
-    view.state,
-    pos,
-    isBrowserOpenableMarkdownHref,
-  );
+  const extHit = markdownActivatableExternalMdLinkAtPosition(view.state, pos);
   const bareHit = markdownBareBrowserUrlAtPosition(view.state, pos);
   if (extHit) {
     event.preventDefault();

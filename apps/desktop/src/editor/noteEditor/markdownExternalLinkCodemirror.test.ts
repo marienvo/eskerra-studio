@@ -59,7 +59,7 @@ describe('markdownExternalLinkCodemirror', () => {
         i =>
           i.from === labelFrom
           && i.to === labelTo
-          && i.class === 'cm-md-external-link cm-md-external-link-glyph',
+          && i.class === 'cm-md-external-link',
       ),
     ).toBe(true);
     expect(
@@ -67,7 +67,8 @@ describe('markdownExternalLinkCodemirror', () => {
         i =>
           i.from === urlFrom
           && i.to === urlTo
-          && i.class === 'cm-md-external-link cm-md-external-href',
+          && i.class
+            === 'cm-md-external-link cm-md-external-href cm-md-external-link-glyph',
       ),
     ).toBe(true);
   });
