@@ -3425,7 +3425,8 @@ button.primary.destructive {
   .cm-line.cm-eskerra-marker-focus-line
   .cm-md-external-link:not(.cm-md-external-bare-url):not(.cm-md-external-href) {
   color: inherit;
-  cursor: default;
+  cursor: text;
+  text-decoration: none;
 }
 
 [data-app-surface='capture']
