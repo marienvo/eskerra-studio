@@ -5,15 +5,18 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BRAND_DIR="$ROOT/assets/brand"
-MASTER="$BRAND_DIR/eskerra-logo-app-icon.png"
 SOURCE="$BRAND_DIR/eskerra-logo.png"
+DESKTOP_MASTER="$BRAND_DIR/eskerra-logo-desktop-icon.png"
+ANDROID_MASTER="$BRAND_DIR/eskerra-logo-app-icon.png"
+MANIFEST="$BRAND_DIR/eskerra-icon-manifest.json"
 DESKTOP_DIR="$ROOT/apps/desktop"
 ICONS_DIR="$DESKTOP_DIR/src-tauri/icons"
 ANDROID_SRC="$ICONS_DIR/android"
 MOBILE_RES="$ROOT/apps/mobile/android/app/src/main/res"
 
 CANVAS=1024
-SCALE_PCT=68
+DESKTOP_SCALE_PCT=100
+ANDROID_SCALE_PCT=68
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -22,19 +25,7 @@ require_command() {
   fi
 }
 
-ensure_square_master() {
-  if [[ -f "$MASTER" ]]; then
-    local dims w h
-    dims="$(identify -format '%w %h' "$MASTER" 2>/dev/null || true)"
-    w="${dims%% *}"
-    h="${dims##* }"
-    if [[ -n "$w" && "$w" == "$h" && "$w" -ge 512 ]]; then
-      echo "Using existing square master: $MASTER (${w}x${h})"
-      return
-    fi
-    echo "warning: $MASTER is not square or too small; regenerating" >&2
-  fi
-
+generate_square_masters() {
   require_command magick
   require_command identify
   if [[ ! -f "$SOURCE" ]]; then
@@ -42,24 +33,32 @@ ensure_square_master() {
     exit 1
   fi
 
-  local logo_size=$((CANVAS * SCALE_PCT / 100))
-  echo "Generating ${CANVAS}x${CANVAS} master (${SCALE_PCT}% logo) from $SOURCE"
+  local desktop_logo_size android_logo_size
+  desktop_logo_size=$((CANVAS * DESKTOP_SCALE_PCT / 100))
+  android_logo_size=$((CANVAS * ANDROID_SCALE_PCT / 100))
+
+  echo "Generating desktop master: $DESKTOP_MASTER"
+  magick "$SOURCE" -resize "${desktop_logo_size}x${desktop_logo_size}" \
+    -gravity center -background none -extent "${CANVAS}x${CANVAS}" \
+    -depth 8 -strip \
+    "$DESKTOP_MASTER"
+
+  echo "Generating Android master: $ANDROID_MASTER"
   magick -size "${CANVAS}x${CANVAS}" xc:none \
-    \( "$SOURCE" -resize "${logo_size}x${logo_size}" \) \
+    \( "$SOURCE" -resize "${android_logo_size}x${android_logo_size}" \) \
     -gravity center -composite \
     -depth 8 -strip \
-    "$MASTER"
+    "$ANDROID_MASTER"
 }
 
 generate_tauri_icons() {
-  require_command npx
-  if [[ ! -d "$DESKTOP_DIR" ]]; then
-    echo "error: desktop app not found: $DESKTOP_DIR" >&2
+  if [[ ! -x "$ROOT/node_modules/.bin/tauri" ]]; then
+    echo "error: local tauri CLI not found: $ROOT/node_modules/.bin/tauri" >&2
     exit 1
   fi
 
   echo "Running tauri icon..."
-  (cd "$DESKTOP_DIR" && npx tauri icon "../../assets/brand/eskerra-logo-app-icon.png")
+  (cd "$ROOT" && ./node_modules/.bin/tauri icon -o "$ICONS_DIR" "$MANIFEST")
 }
 
 LAUNCHER_BG="#031226"
@@ -93,7 +92,7 @@ sync_mobile_android_icons() {
 }
 
 main() {
-  ensure_square_master
+  generate_square_masters
   generate_tauri_icons
   sync_mobile_android_icons
   echo "Done. Tauri icons: $ICONS_DIR"
