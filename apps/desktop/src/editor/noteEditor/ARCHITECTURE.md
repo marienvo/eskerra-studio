@@ -39,3 +39,15 @@ Under [`eskerraTableV1/`](eskerraTableV1/): shell widget, nested cell editors, d
 | [`markdownEskerraLanguage.ts`](markdownEskerraLanguage.ts) | Parser + fold rules |
 | [`markdownEditorStyling.ts`](markdownEditorStyling.ts) | Appearance extensions |
 | [`wikiLinkCodemirror.ts`](wikiLinkCodemirror.ts) / [`markdownRelativeLinkCodemirror.ts`](markdownRelativeLinkCodemirror.ts) | Link highlight plugins |
+
+## Date tokens (`@YYYY-MM-DD`)
+
+Spec: [`specs/architecture/desktop-date-token.md`](../../../../specs/architecture/desktop-date-token.md). Desktop capture editor only; plain-text tokens with optional pickers — no reminder model yet.
+
+| Module | Role |
+|--------|------|
+| [`dateToken/dateToken.ts`](dateToken/dateToken.ts) | Grammar, `parseDateToken` / `formatDateToken`, scan patterns |
+| [`dateToken/dateTokenHighlightCodemirror.ts`](dateToken/dateTokenHighlightCodemirror.ts) | ViewPlugin mark decoration (`cm-date-token`) |
+| [`dateToken/dateTokenTrigger.ts`](dateToken/dateTokenTrigger.ts) | `@` at word boundary → open picker |
+| [`dateToken/dateTokenClick.ts`](dateToken/dateTokenClick.ts) | Click chip → reopen picker pre-filled |
+| [`dateToken/DateTimePicker.tsx`](dateToken/DateTimePicker.tsx) | Calendar + time overlay UI (DS primitives) |
