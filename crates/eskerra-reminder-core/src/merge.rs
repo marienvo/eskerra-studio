@@ -34,8 +34,8 @@ use crate::index::{Reminder, ReminderState};
 ///    (the common case: a unique token, including edit-elsewhere).
 /// 2. Duplicate content key → exact `id` match is **not** sufficient alone.
 ///    Migrate only when:
-///    - exactly one live candidate (same content key) shares the prior
-///      entry's `contextAnchor` (rule 4), or
+///    - exactly one prior entry and exactly one live candidate (same content
+///      key) share the prior entry's `contextAnchor` (rule 4), or
 ///    - the recomputed `scanFingerprint` proves the file is byte-for-byte
 ///      unchanged, in which case `occurrenceOrdinal` is still authoritative
 ///      and selects the candidate (rule 5; `len`/`mtime` are never proof —
@@ -47,8 +47,10 @@ use crate::index::{Reminder, ReminderState};
 pub fn merge_reminders(prior: &[Reminder], fresh: Vec<Reminder>) -> Vec<Reminder> {
     let prior_counts = content_key_counts(prior);
     let fresh_counts = content_key_counts(&fresh);
+    let prior_anchor_counts = content_anchor_counts(prior);
     let is_duplicate_key = |key: &(String, String)| -> bool {
-        prior_counts.get(key).copied().unwrap_or(0) > 1 || fresh_counts.get(key).copied().unwrap_or(0) > 1
+        prior_counts.get(key).copied().unwrap_or(0) > 1
+            || fresh_counts.get(key).copied().unwrap_or(0) > 1
     };
 
     let mut by_id: HashMap<&str, usize> = HashMap::with_capacity(fresh.len());
@@ -84,7 +86,12 @@ pub fn merge_reminders(prior: &[Reminder], fresh: Vec<Reminder>) -> Vec<Reminder
             .filter(|&i| fresh[i].context_anchor == prior_entry.context_anchor)
             .collect();
 
-        if anchor_matches.len() == 1 {
+        let prior_anchor_is_unique = prior_anchor_counts
+            .get(&content_anchor_key(prior_entry))
+            .copied()
+            .unwrap_or(0)
+            == 1;
+        if prior_anchor_is_unique && anchor_matches.len() == 1 {
             attach_once(&mut carried, anchor_matches[0], prior_entry);
             continue;
         }
@@ -143,13 +150,32 @@ impl From<&Reminder> for CarriedState {
 }
 
 fn content_key(reminder: &Reminder) -> (String, String) {
-    (reminder.note_uri.clone(), reminder.normalized_token_text.clone())
+    (
+        reminder.note_uri.clone(),
+        reminder.normalized_token_text.clone(),
+    )
 }
 
 fn content_key_counts(reminders: &[Reminder]) -> HashMap<(String, String), u32> {
     let mut counts = HashMap::new();
     for reminder in reminders {
         *counts.entry(content_key(reminder)).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn content_anchor_key(reminder: &Reminder) -> (String, String, String) {
+    (
+        reminder.note_uri.clone(),
+        reminder.normalized_token_text.clone(),
+        reminder.context_anchor.clone(),
+    )
+}
+
+fn content_anchor_counts(reminders: &[Reminder]) -> HashMap<(String, String, String), u32> {
+    let mut counts = HashMap::new();
+    for reminder in reminders {
+        *counts.entry(content_anchor_key(reminder)).or_insert(0) += 1;
     }
     counts
 }
@@ -201,10 +227,17 @@ mod tests {
         reminder
     }
 
-    fn find<'a>(reminders: &'a [Reminder], normalized_token_text: &str, occurrence_ordinal: u32) -> &'a Reminder {
+    fn find<'a>(
+        reminders: &'a [Reminder],
+        normalized_token_text: &str,
+        occurrence_ordinal: u32,
+    ) -> &'a Reminder {
         reminders
             .iter()
-            .find(|r| r.normalized_token_text == normalized_token_text && r.occurrence_ordinal == occurrence_ordinal)
+            .find(|r| {
+                r.normalized_token_text == normalized_token_text
+                    && r.occurrence_ordinal == occurrence_ordinal
+            })
             .expect("candidate present")
     }
 
@@ -217,7 +250,10 @@ mod tests {
         let merged = merge_reminders(&prior, fresh);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].id, prior[0].id, "id is offset-independent across unrelated edits");
+        assert_eq!(
+            merged[0].id, prior[0].id,
+            "id is offset-independent across unrelated edits"
+        );
         assert_eq!(merged[0].state, ReminderState::Notified);
         assert_eq!(merged[0].fire_at_ms, 1_000);
         assert_eq!(merged[0].last_notified_ms, Some(900));
@@ -230,10 +266,14 @@ mod tests {
         // every ordinal shifts and every id changes.
         let prior_set = fresh_set("alpha @2026-01-01 here\nbeta @2026-01-01 there");
         let target = find(&prior_set, "@2026-01-01", 1);
-        assert_eq!(target.context_anchor, find(&prior_set, "@2026-01-01", 1).context_anchor);
+        assert_eq!(
+            target.context_anchor,
+            find(&prior_set, "@2026-01-01", 1).context_anchor
+        );
         let prior = vec![snoozed(target.clone(), 5_000, 4_000)];
 
-        let fresh = fresh_set("gamma @2026-01-01 inserted\nalpha @2026-01-01 here\nbeta @2026-01-01 there");
+        let fresh =
+            fresh_set("gamma @2026-01-01 inserted\nalpha @2026-01-01 here\nbeta @2026-01-01 there");
         let merged = merge_reminders(&prior, fresh);
 
         // The "beta ... there" line's reminder carries the snooze, even
@@ -243,11 +283,20 @@ mod tests {
         assert_eq!(migrated.state, ReminderState::Notified);
         assert_eq!(migrated.fire_at_ms, 5_000);
         assert_eq!(migrated.last_notified_ms, Some(4_000));
-        assert_ne!(migrated.id, prior[0].id, "ordinal shifted, so identity changed");
+        assert_ne!(
+            migrated.id, prior[0].id,
+            "ordinal shifted, so identity changed"
+        );
 
         // Nothing landed on the newly inserted line or the unrelated "alpha" line.
-        assert_eq!(find(&merged, "@2026-01-01", 0).state, ReminderState::Scheduled);
-        assert_eq!(find(&merged, "@2026-01-01", 1).state, ReminderState::Scheduled);
+        assert_eq!(
+            find(&merged, "@2026-01-01", 0).state,
+            ReminderState::Scheduled
+        );
+        assert_eq!(
+            find(&merged, "@2026-01-01", 1).state,
+            ReminderState::Scheduled
+        );
     }
 
     #[test]
@@ -263,16 +312,24 @@ mod tests {
         let old_ordinal_zero_id = original.id.clone();
         let prior = vec![snoozed(original.clone(), 9_000, 8_000)];
 
-        let fresh = fresh_set("inserted @2026-03-03 line\nfirst @2026-03-03 line\nsecond @2026-03-03 line");
+        let fresh =
+            fresh_set("inserted @2026-03-03 line\nfirst @2026-03-03 line\nsecond @2026-03-03 line");
         // Confirm the hazard: the old id now belongs to the inserted line.
         assert_eq!(find(&fresh, "@2026-03-03", 0).id, old_ordinal_zero_id);
-        assert_ne!(find(&fresh, "@2026-03-03", 0).context_anchor, original.context_anchor);
+        assert_ne!(
+            find(&fresh, "@2026-03-03", 0).context_anchor,
+            original.context_anchor
+        );
 
         let merged = merge_reminders(&prior, fresh);
 
         let inserted = find(&merged, "@2026-03-03", 0);
         assert_eq!(inserted.id, old_ordinal_zero_id);
-        assert_eq!(inserted.state, ReminderState::Scheduled, "no state lands on the newly inserted line");
+        assert_eq!(
+            inserted.state,
+            ReminderState::Scheduled,
+            "no state lands on the newly inserted line"
+        );
         assert_eq!(inserted.last_notified_ms, None);
 
         let migrated = find(&merged, "@2026-03-03", 1);
@@ -300,9 +357,38 @@ mod tests {
 
         let merged = merge_reminders(&prior, fresh);
         for reminder in &merged {
-            assert_eq!(reminder.state, ReminderState::Scheduled, "fresh baseline, no migrated state");
+            assert_eq!(
+                reminder.state,
+                ReminderState::Scheduled,
+                "fresh baseline, no migrated state"
+            );
             assert_eq!(reminder.last_notified_ms, None);
         }
+    }
+
+    #[test]
+    fn c_prime_identical_context_duplicate_deletion_is_ambiguous() {
+        // Both prior reminders have identical surrounding lines, so the
+        // contextAnchor cannot identify which physical occurrence survived
+        // after one line is deleted. Even though the fresh side has exactly
+        // one anchor match, the prior side had two, so migrating either
+        // snooze would risk applying wrong-line state.
+        let prior_set = fresh_set("- @2026-04-04 task\n- @2026-04-04 task");
+        assert_eq!(prior_set[0].context_anchor, prior_set[1].context_anchor);
+        let prior = vec![
+            snoozed(prior_set[0].clone(), 1_111, 1_000),
+            snoozed(prior_set[1].clone(), 2_222, 2_000),
+        ];
+
+        let fresh = fresh_set("- @2026-04-04 task");
+        assert_eq!(fresh.len(), 1);
+        assert_eq!(fresh[0].context_anchor, prior[0].context_anchor);
+        assert_ne!(fresh[0].scan_fingerprint, prior[0].scan_fingerprint);
+
+        let merged = merge_reminders(&prior, fresh);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].state, ReminderState::Scheduled);
+        assert_eq!(merged[0].last_notified_ms, None);
     }
 
     #[test]
@@ -323,9 +409,15 @@ mod tests {
 
         let merged = merge_reminders(&prior, fresh);
         assert_eq!(find(&merged, "@2026-05-05", 0).fire_at_ms, 1_111);
-        assert_eq!(find(&merged, "@2026-05-05", 0).last_notified_ms, Some(1_000));
+        assert_eq!(
+            find(&merged, "@2026-05-05", 0).last_notified_ms,
+            Some(1_000)
+        );
         assert_eq!(find(&merged, "@2026-05-05", 1).fire_at_ms, 2_222);
-        assert_eq!(find(&merged, "@2026-05-05", 1).last_notified_ms, Some(2_000));
+        assert_eq!(
+            find(&merged, "@2026-05-05", 1).last_notified_ms,
+            Some(2_000)
+        );
     }
 
     #[test]
@@ -352,14 +444,26 @@ mod tests {
         ];
 
         let fresh = fresh_set(after);
-        assert_eq!(fresh[0].context_anchor, fresh[1].context_anchor, "still ambiguous on the fresh side");
-        assert_ne!(fresh[0].context_anchor, prior[0].context_anchor, "the anchor itself changed with the edit");
-        assert_ne!(fresh[0].scan_fingerprint, prior[0].scan_fingerprint, "content hash diverges despite equal length");
+        assert_eq!(
+            fresh[0].context_anchor, fresh[1].context_anchor,
+            "still ambiguous on the fresh side"
+        );
+        assert_ne!(
+            fresh[0].context_anchor, prior[0].context_anchor,
+            "the anchor itself changed with the edit"
+        );
+        assert_ne!(
+            fresh[0].scan_fingerprint, prior[0].scan_fingerprint,
+            "content hash diverges despite equal length"
+        );
 
         let merged = merge_reminders(&prior, fresh);
         for reminder in &merged {
             assert_eq!(reminder.state, ReminderState::Scheduled);
-            assert_eq!(reminder.last_notified_ms, None, "ordinal not trusted from len-only equality");
+            assert_eq!(
+                reminder.last_notified_ms, None,
+                "ordinal not trusted from len-only equality"
+            );
         }
     }
 
