@@ -1,6 +1,10 @@
 //! Duplicate-aware index merge / state migration: carries mutable reminder
 //! state (`state`, snooze override `fireAtMs`, `lastNotifiedMs`) from a prior
-//! index into a freshly scanned reminder set. Rules are LOCKED in the plan's
+//! index into a freshly scanned reminder set. Schedule-derived fields
+//! (`dueAtMs`, baseline `fireAtMs`) always come from the fresh scan; if a
+//! settings-only rescan changes that schedule, notification state is reset
+//! with the fresh `scheduled` baseline instead of carrying an old fire guard.
+//! Rules are LOCKED in the plan's
 //! *Index merge / state migration* section and ADR §4 — this is the single
 //! place that implements them; Phase 4's write-time resolver mirrors the
 //! same duplicate-safety primitives (`contextAnchor`, `scanFingerprint`,
@@ -123,9 +127,11 @@ pub fn merge_reminders(prior: &[Reminder], fresh: Vec<Reminder>) -> Vec<Reminder
         .zip(carried)
         .map(|(mut reminder, carry)| {
             if let Some(state) = carry {
-                reminder.state = state.state;
-                reminder.fire_at_ms = state.fire_at_ms;
-                reminder.last_notified_ms = state.last_notified_ms;
+                if state.can_apply_to(&reminder) {
+                    reminder.state = state.state;
+                    reminder.fire_at_ms = state.fire_at_ms;
+                    reminder.last_notified_ms = state.last_notified_ms;
+                }
             }
             reminder
         })
@@ -135,6 +141,7 @@ pub fn merge_reminders(prior: &[Reminder], fresh: Vec<Reminder>) -> Vec<Reminder
 #[derive(Debug, Clone)]
 struct CarriedState {
     state: ReminderState,
+    due_at_ms: i64,
     fire_at_ms: i64,
     last_notified_ms: Option<i64>,
 }
@@ -143,10 +150,31 @@ impl From<&Reminder> for CarriedState {
     fn from(reminder: &Reminder) -> Self {
         Self {
             state: reminder.state,
+            due_at_ms: reminder.due_at_ms,
             fire_at_ms: reminder.fire_at_ms,
             last_notified_ms: reminder.last_notified_ms,
         }
     }
+}
+
+impl CarriedState {
+    fn can_apply_to(&self, fresh: &Reminder) -> bool {
+        if self.due_at_ms != fresh.due_at_ms {
+            return false;
+        }
+
+        self.fire_at_ms == fresh.fire_at_ms || !looks_like_schedule_derived_fire(self)
+    }
+}
+
+fn looks_like_schedule_derived_fire(state: &CarriedState) -> bool {
+    // The schema stores the active fire time, not the configured lead that
+    // produced it. Treat whole-minute fire times up to 24h before due as
+    // baseline schedule values so a lead-minute settings change resets old
+    // notified guards instead of preserving stale scheduler state. Snooze
+    // overrides outside that baseline shape still carry across normal rescans.
+    let lead_ms = state.due_at_ms - state.fire_at_ms;
+    (0..=24 * 60 * 60 * 1_000).contains(&lead_ms) && lead_ms % 60_000 == 0
 }
 
 fn content_key(reminder: &Reminder) -> (String, String) {
@@ -203,6 +231,14 @@ mod tests {
     const PATH: &str = "notes/today.md";
 
     fn fresh_set(text: &str) -> Vec<Reminder> {
+        fresh_set_with(text, DefaultTime::DEFAULT_NINE_AM, 5)
+    }
+
+    fn fresh_set_with(
+        text: &str,
+        date_only_default_time: DefaultTime,
+        lead_minutes: u32,
+    ) -> Vec<Reminder> {
         let out = scan(text.as_bytes()).expect("valid utf8");
         out.tokens
             .iter()
@@ -212,8 +248,8 @@ mod tests {
                     NOTE_URI,
                     token,
                     &out.scan_fingerprint,
-                    DefaultTime::DEFAULT_NINE_AM,
-                    5,
+                    date_only_default_time,
+                    lead_minutes,
                 )
                 .expect("resolvable due date")
             })
@@ -257,6 +293,53 @@ mod tests {
         assert_eq!(merged[0].state, ReminderState::Notified);
         assert_eq!(merged[0].fire_at_ms, 1_000);
         assert_eq!(merged[0].last_notified_ms, Some(900));
+    }
+
+    #[test]
+    fn settings_default_time_change_keeps_fresh_schedule_and_resets_notification_state() {
+        let text = "@2026-06-06 date-only";
+        let mut prior = fresh_set_with(text, DefaultTime::new(9, 0).unwrap(), 5);
+        prior[0].state = ReminderState::Notified;
+        prior[0].last_notified_ms = Some(prior[0].fire_at_ms);
+        let old_due_at_ms = prior[0].due_at_ms;
+        let old_fire_at_ms = prior[0].fire_at_ms;
+
+        let fresh = fresh_set_with(text, DefaultTime::new(10, 0).unwrap(), 5);
+        assert_eq!(fresh[0].id, prior[0].id);
+        assert_ne!(fresh[0].due_at_ms, old_due_at_ms);
+        assert_ne!(fresh[0].fire_at_ms, old_fire_at_ms);
+        let fresh_due_at_ms = fresh[0].due_at_ms;
+        let fresh_fire_at_ms = fresh[0].fire_at_ms;
+
+        let merged = merge_reminders(&prior, fresh);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].state, ReminderState::Scheduled);
+        assert_eq!(merged[0].due_at_ms, fresh_due_at_ms);
+        assert_eq!(merged[0].fire_at_ms, fresh_fire_at_ms);
+        assert_eq!(merged[0].last_notified_ms, None);
+    }
+
+    #[test]
+    fn settings_lead_change_keeps_fresh_fire_time_and_resets_notification_state() {
+        let text = "@2026-06-06_0900 explicit-time";
+        let mut prior = fresh_set_with(text, DefaultTime::new(9, 0).unwrap(), 5);
+        prior[0].state = ReminderState::Notified;
+        prior[0].last_notified_ms = Some(prior[0].fire_at_ms);
+        let old_fire_at_ms = prior[0].fire_at_ms;
+
+        let fresh = fresh_set_with(text, DefaultTime::new(9, 0).unwrap(), 10);
+        assert_eq!(fresh[0].id, prior[0].id);
+        assert_eq!(fresh[0].due_at_ms, prior[0].due_at_ms);
+        assert_ne!(fresh[0].fire_at_ms, old_fire_at_ms);
+        let fresh_fire_at_ms = fresh[0].fire_at_ms;
+
+        let merged = merge_reminders(&prior, fresh);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].state, ReminderState::Scheduled);
+        assert_eq!(merged[0].fire_at_ms, fresh_fire_at_ms);
+        assert_eq!(merged[0].last_notified_ms, None);
     }
 
     #[test]
