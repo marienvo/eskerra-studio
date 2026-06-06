@@ -1,7 +1,10 @@
 # Desktop reminders — phased plan (daemon-owned, Rust-level vault monitoring)
 
-Status: **proposed plan** (not yet implemented). Supersedes the "Future reminders
-(deferred)" section of [`specs/architecture/desktop-date-token.md`](../architecture/desktop-date-token.md)
+Status: **Phase 0 complete** (2026-06-06) — architecture, cargo layout, index/IPC
+schema, systemd/packaging sketch, observability fields, and the `RemoveReminder` failure
+contract are locked in [ADR 003](../adrs/003-adr-reminder-daemon.md). Phases 1–7 not yet
+implemented. Supersedes the "Future reminders (deferred)" section of
+[`specs/architecture/desktop-date-token.md`](../architecture/desktop-date-token.md)
 once shipped.
 
 ## Goal
@@ -440,7 +443,16 @@ Each phase is independently shippable and testable. Rust phases reuse the worksp
 TS phases reuse existing pane/editor infra. Tests are mandatory per phase
 (Vitest for TS, `cargo test` for Rust) — failing tests block the phase.
 
-### Phase 0 — Spec + ADR + cargo layout decision
+### Phase 0 — Spec + ADR + cargo layout decision  ✅ DONE (2026-06-06 — [ADR 003](../adrs/003-adr-reminder-daemon.md))
+
+**Outcome:** All Phase 0 deliverables are locked in [ADR 003](../adrs/003-adr-reminder-daemon.md):
+the separate-daemon decision, **cargo layout** (a cargo **workspace** with a pure
+`crates/eskerra-reminder-core` consumed by both the app and a slim `crates/eskerra-reminderd`
+daemon that excludes the Tauri/GUI stack — chosen over a `lib + two bins` split so the
+daemon stays lean), the finalized **index + `reminderd.json` schema**, the
+**`dev.eskerra.Reminders1` IPC interface**, the **systemd unit + RPM packaging sketch**,
+the **observability fields list**, and the **locked `RemoveReminder` failure contract**
+(`removed` / `stale` / app-side `remove-unavailable`). No runtime code was written.
 
 **Scope:** This document + an ADR for "separate reminder daemon" (under `specs/adrs/`)
 + decide cargo layout: split `src-tauri` into a `lib` + two `bin` targets (`app`,
