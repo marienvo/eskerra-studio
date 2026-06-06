@@ -172,9 +172,16 @@ for identity).** For each reminder the index also stores:
 - `duplicateCount` — the number of byte-identical tokens in the file observed at the
   last scan. A change in this count between scan and write is a positive signal that
   ordinals may have drifted.
-- `scanFingerprint` — a file fingerprint (content hash, or `len`+`mtime` as a cheap
-  pre-check) captured at the scan that produced this reminder, recording the file
-  state the ordinal/anchor were derived against.
+- `scanFingerprint` — the **authoritative content hash** of the file bytes captured at
+  the scan that produced this reminder, recording the exact file content the
+  ordinal/anchor were derived against. It **must** be a content hash (e.g. SHA-256 of
+  the file bytes). `len`+`mtime` may be kept only as an **optional performance
+  pre-check / cache-invalidation hint** — used to skip recomputing the hash when they
+  are unchanged — but it is **never** accepted as proof on its own. "Provably unchanged"
+  always means the recomputed content hash equals the stored `scanFingerprint`. This is
+  load-bearing: an external editor or Syncthing can preserve `mtime` or make a
+  same-length edit above the target, so trusting `len`+`mtime` would let the daemon
+  treat a drifted ordinal as authoritative and strike the wrong occurrence.
 
 Consequences and rules:
 - Editing text **elsewhere** in the file does not change any `id` (path, token text,
@@ -192,8 +199,9 @@ Consequences and rules:
   `duplicateCount` or the set of ordinals has changed since `scanFingerprint`, the
   ordinal may have drifted and the daemon **must not** guess: it refuses the write and
   marks the reminder `stale` (see Phase 4). Only when the anchor uniquely identifies
-  the occurrence — or the file is provably unchanged since `scanFingerprint` so the
-  ordinal is still authoritative — does the write proceed.
+  the occurrence — or the file is provably unchanged (the recomputed content hash equals
+  the stored `scanFingerprint`) so the ordinal is still authoritative — does the write
+  proceed.
 - Renaming/moving a note changes `vaultRelativePath` and therefore the `id`. The
   reminder re-appears under the new path on the next scan with default `state`; any
   prior snooze override is not carried across renames (accepted, rare).
@@ -225,10 +233,12 @@ its own duplicate-aware rules. The merge is therefore:
 4. **Unique `contextAnchor` → migrate.** If exactly one live candidate has the same
    `contextAnchor` as the prior entry, migrate `state` / snooze (`fireAtMs`) /
    `lastNotifiedMs` to that candidate's new `id`.
-5. **Ordinal only when the file is provably unchanged.** Use `occurrenceOrdinal` to map
-   old→new state **only** when `scanFingerprint` proves the file is unchanged since the
-   prior scan (in which case ordinals are still authoritative). If the file changed, the
-   ordinal is not trusted for migration.
+5. **Ordinal only when the content hash matches.** Use `occurrenceOrdinal` to map
+   old→new state **only** when the recomputed content hash equals the stored
+   `scanFingerprint` (the file is byte-for-byte unchanged, so ordinals are still
+   authoritative). A matching `len`+`mtime` is **not** sufficient — it is only an
+   optional pre-check before hashing. If the content hash differs (or cannot be
+   confirmed), the ordinal is not trusted for migration.
 6. **Ambiguous → fail safe, do not migrate.** If duplicate insert/delete or identical
    surrounding context makes the mapping ambiguous (multiple candidates share the
    `contextAnchor`, or the anchor cannot separate duplicates and
@@ -419,9 +429,13 @@ by **unique `contextAnchor`** after an identical token is inserted above it (ord
 drifted); (c) when surrounding context is also identical and
 `duplicateCount`/`scanFingerprint` changed, state is **not** migrated to any line —
 candidates become fresh reminders rather than carrying snooze/`notified`/`stale` onto
-the wrong occurrence; (d) ordinal-based migration is used only when `scanFingerprint`
-proves the file unchanged. No watcher, no D-Bus, no real filesystem watching yet
-(scanning provided bytes is fine).
+the wrong occurrence; (d) ordinal-based migration is used only when the recomputed
+content hash equals the stored `scanFingerprint`; (e) **`len`+`mtime` is not proof** —
+a same-length edit above one of identical-context duplicates that preserves (or
+artificially restores) `len`+`mtime` while changing the content hash must **not** be
+treated as "unchanged": the ordinal is distrusted and the case fails safe (no wrong-line
+migration), proving the content hash — not `len`+`mtime` — gates ordinal trust. No
+watcher, no D-Bus, no real filesystem watching yet (scanning provided bytes is fine).
 
 **Risks:** identity must be offset-independent (see Reminder identity); the only
 residual ambiguity is multiple byte-identical tokens in one file, disambiguated by the
@@ -553,10 +567,12 @@ action semantics are version-sensitive.
      scanned **byte span** `[tokenByteFrom, tokenByteTo)` is the target span. The write
      path operates exclusively on this byte span — never on character offsets or any
      `uiCaretHint`.
-   - **Use `occurrenceOrdinal` only as a tie-breaker, and only when `scanFingerprint`
-     proves the file is unchanged** since the entry was scanned. If the file is
-     unchanged, the stored ordinal still indexes the same occurrence and may break a
-     tie; if the file changed, the ordinal is not trusted at all.
+   - **Use `occurrenceOrdinal` only as a tie-breaker, and only when the recomputed
+     content hash equals the stored `scanFingerprint`** (the file is byte-for-byte
+     unchanged since the entry was scanned). A matching `len`+`mtime` does **not**
+     qualify — it is only an optional pre-check before hashing. If the file is
+     byte-unchanged, the stored ordinal still indexes the same occurrence and may break a
+     tie; if the content hash differs at all, the ordinal is not trusted.
    - **Fail closed (`stale`) on ambiguity:** if candidates/anchors/fingerprint cannot
      single out exactly one occurrence — e.g. duplicate tokens share an identical
      `contextAnchor` and `scanFingerprint` no longer matches (so the ordinal cannot be
@@ -777,7 +793,14 @@ refs are exactly its failure mode.
     `notified` / `stale` is migrated to any candidate; the live reminders are recomputed
     **fresh** (default state, scheduled per discovery rules) and no spurious OS fire
     results from the re-derivation.
-  - **No wrong-line carry (both cases):** explicitly assert that no snooze / `stale` /
+  - **`len`+`mtime` is not proof (same-length / preserved-mtime edit):** simulate an
+    external editor / Syncthing update that makes a **same-length** edit above one of
+    identical-context duplicates while preserving (or artificially restoring) the file's
+    `mtime`, so `len`+`mtime` look unchanged but the content hash differs. Assert the
+    daemon recomputes the content hash, finds it ≠ stored `scanFingerprint`, distrusts
+    the ordinal, and fails safe (no migration of snooze/`notified`/`stale` to any line).
+    A matching `len`+`mtime` alone must never be accepted as "unchanged".
+  - **No wrong-line carry (all cases):** explicitly assert that no snooze / `stale` /
     `notified` state is ever attached to a different line than the one it originated on —
     state either lands on the correct migrated `id` or is dropped, never on a sibling
     duplicate.
@@ -791,8 +814,12 @@ refs are exactly its failure mode.
   the target between scan and remove so the ordinal shifts, assert resolution by
   `contextAnchor` and, when context is also identical with a changed
   `duplicateCount`/`scanFingerprint`, fail-closed to
-  `stale` rather than striking the wrong occurrence. Assert no wrong-span and no
-  partial writes in every case.
+  `stale` rather than striking the wrong occurrence; **same-length / preserved-mtime
+  edit** — make a same-length edit above an identical-context duplicate while keeping
+  `len`+`mtime` unchanged so the content hash diverges, and assert the writer recomputes
+  the content hash, refuses to trust the ordinal, and fails closed to `stale` rather
+  than striking by stale ordinal. Assert no wrong-span and no partial writes in every
+  case.
 - Scheduler-semantics tests (scheduled fire vs. stale discovery):
   - **snooze-0 fires at-time:** a reminder scheduled before `dueAt` then snoozed to
     `fireAt = dueAt` fires the OS notification once at `now == dueAt` (exact-at-time
