@@ -48,7 +48,12 @@ fn is_leap_year(year: u16) -> bool {
     (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
-pub fn days_in_month(year: u16, month: u8) -> u8 {
+/// Days in `month` (1..=12) of `year`. Internal helper: the index `month - 1`
+/// would panic for `month == 0` or `month > 12`, so this is private and its
+/// sole caller [`is_valid_calendar_date`] range-checks `month` first. Kept off
+/// the public module API for exactly that reason — validated callers only.
+fn days_in_month(year: u16, month: u8) -> u8 {
+    debug_assert!((1..=12).contains(&month), "days_in_month requires a 1..=12 month");
     const DAYS: [u8; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     if month == 2 && is_leap_year(year) {
         29

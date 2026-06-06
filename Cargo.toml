@@ -5,6 +5,15 @@ members = [
     "crates/eskerra-reminder-core",
 ]
 
+# Single version source for internal workspace crates (the reminder-core crate
+# today, the eskerra-reminderd daemon in Phase 2). Crates opt in with
+# `version.workspace = true`, so a release bump stamps one place and they never
+# drift. The `app` crate keeps its own version line: it is the release artifact
+# anchored to the canonical mobile semver, and the bump/assert scripts stamp
+# both this workspace version and the app version to the same value.
+[workspace.package]
+version = "0.61.5"
+
 # Vendored patches for the Tauri/desktop app build (see
 # apps/desktop/src-tauri/Cargo.toml for the rationale comments). Lives at the
 # workspace root because [patch.crates-io] is workspace-wide; paths are

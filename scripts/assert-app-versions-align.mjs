@@ -48,6 +48,11 @@ function main() {
   const mobilePkg = join(ROOT, 'apps', 'mobile', 'package.json');
   const desktopPkg = join(ROOT, 'apps', 'desktop', 'package.json');
   const cargoToml = join(ROOT, 'apps', 'desktop', 'src-tauri', 'Cargo.toml');
+  // Root [workspace.package] version (first `version = "…"` line), inherited by
+  // crates using `version.workspace = true` such as eskerra-reminder-core. The
+  // core crate itself has no literal version line, so it is validated via this
+  // workspace version plus its Cargo.lock [[package]] entry below.
+  const workspaceCargoToml = join(ROOT, 'Cargo.toml');
   const metainfo = join(
     ROOT,
     'apps',
@@ -66,6 +71,11 @@ function main() {
       getFirstMetainfoReleaseVersion(readFileSync(metainfo, 'utf8')),
     ],
     ['Cargo.lock (package app)', readCargoLockPackageVersion('app')],
+    ['Cargo.toml ([workspace.package])', readCargoTomlPackageVersion(workspaceCargoToml)],
+    [
+      'Cargo.lock (package eskerra-reminder-core)',
+      readCargoLockPackageVersion('eskerra-reminder-core'),
+    ],
   ];
 
   const bad = checks.filter(([, actual]) => actual !== expected);

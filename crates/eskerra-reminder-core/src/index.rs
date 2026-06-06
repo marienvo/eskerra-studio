@@ -250,6 +250,14 @@ pub fn fresh_reminder_from_scan(
 /// destination, so a reader never observes a partial file. Used for both the
 /// index and `reminderd.json` (per the plan's *Vault / config edge cases* and
 /// *Write-back safety rules* rule 6).
+///
+/// `sync_data` is issued before the rename so the contents are durable on
+/// disk, not merely flushed to the kernel page cache: after an unclean reboot
+/// the renamed destination holds the written bytes rather than stale or zero
+/// bytes. (The derived index is recoverable by re-scanning, but `reminderd.json`
+/// config is not, so durability must match the rename-atomicity the caller
+/// relies on. Note this does not fsync the parent directory — making the
+/// rename itself crash-durable is a separate hardening left for the daemon.)
 pub fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
     let dir = path.parent().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "destination path has no parent directory")
@@ -257,6 +265,7 @@ pub fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
     let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
     tmp.write_all(contents)?;
     tmp.flush()?;
+    tmp.as_file().sync_data()?;
     tmp.persist(path).map_err(|e| e.error)?;
     Ok(())
 }

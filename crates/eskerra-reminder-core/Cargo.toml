@@ -1,6 +1,8 @@
 [package]
 name = "eskerra-reminder-core"
-version = "0.61.5"
+# Inherited from [workspace.package] in the root Cargo.toml so the release bump
+# drives it automatically (see that file's comment); never drifts from the app.
+version.workspace = true
 description = "Pure reminder model: date-token grammar, scanner, index schema, identity and merge — shared by the eskerra app and the eskerra-reminderd daemon. No I/O side effects."
 authors = ["Eskerra contributors"]
 license = "AGPL-3.0-only"

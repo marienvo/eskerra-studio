@@ -126,35 +126,51 @@ pub fn scan(bytes: &[u8]) -> Option<ScanOutput> {
 }
 
 /// Try to match a token starting at byte `start` (which must be `@`).
-/// Mirrors the regex `@\d{4}-\d{2}-\d{2}(?:_\d{4})?` greedily — the
-/// `_HHMM` suffix is preferred when present and well-shaped — followed by
-/// the same calendar/time validation as `parse_date_token`. Tokens whose
-/// shape matches but whose value is not a valid calendar date/time (e.g.
-/// `@2026-13-99`) are not reminders and are skipped, mirroring
+/// Mirrors the regex `@\d{4}-\d{2}-\d{2}(?:_\d{4})?` greedily: the span is
+/// fixed by *shape* first — the `_\d{4}` time suffix is consumed whenever it
+/// is syntactically present — and only then is the single resulting candidate
+/// validated by `parse_date_token`.
+///
+/// Crucially, there is **no fall back from a shaped time suffix to the
+/// date-only prefix**. The TypeScript `DATE_TOKEN_PATTERN` matches
+/// `(?:_\d{4})?` greedily and then validates the combined value, so a
+/// well-shaped but out-of-range time (e.g. `@2026-06-06_2460`) makes
+/// `parseDateToken` reject the *entire* token and the editor leaves it
+/// un-highlighted. If this scanner instead retried the 10-byte date-only
+/// prefix it would schedule a spurious 09:00 reminder for a token the app
+/// considers invalid. Tokens whose shape matches but whose value is invalid
+/// (e.g. `@2026-13-99`) are likewise skipped, mirroring
 /// `dateTokenAtPosition`'s `if (value)` filter.
 fn match_token_at(bytes: &[u8], start: usize) -> Option<(usize, DateTokenValue)> {
     debug_assert_eq!(bytes.get(start), Some(&b'@'));
     let body = &bytes[start + 1..];
 
-    if body.len() >= 15 && is_ascii(&body[..15]) {
-        // Safety: `body[..15]` is verified ASCII, so prefixing `@` yields
-        // valid UTF-8 and `parse_date_token` can run on it directly.
-        let candidate = format!("@{}", std::str::from_utf8(&body[..15]).unwrap());
-        if let Some(value) = parse_date_token(&candidate) {
-            return Some((start + 1 + 15, value));
-        }
+    // The date shape `\d{4}-\d{2}-\d{2}` must be present for any token at all.
+    if !has_date_shape(body) {
+        return None;
     }
-    if body.len() >= 10 && is_ascii(&body[..10]) {
-        let candidate = format!("@{}", std::str::from_utf8(&body[..10]).unwrap());
-        if let Some(value) = parse_date_token(&candidate) {
-            return Some((start + 1 + 10, value));
-        }
-    }
-    None
+    // Greedy: consume `_\d{4}` whenever its shape is present, then validate the
+    // one resulting candidate (no shorter-prefix retry — see doc comment).
+    let len = if has_time_suffix_shape(body) { 15 } else { 10 };
+    // Safety: the shape checks guarantee `body[..len]` is ASCII, so prefixing
+    // `@` yields valid UTF-8 that `parse_date_token` can run on directly.
+    let candidate = format!("@{}", std::str::from_utf8(&body[..len]).unwrap());
+    parse_date_token(&candidate).map(|value| (start + 1 + len, value))
 }
 
-fn is_ascii(bytes: &[u8]) -> bool {
-    bytes.iter().all(u8::is_ascii)
+/// `\d{4}-\d{2}-\d{2}` in the first 10 bytes (ASCII digits and dashes).
+fn has_date_shape(body: &[u8]) -> bool {
+    body.len() >= 10
+        && body[0..4].iter().all(u8::is_ascii_digit)
+        && body[4] == b'-'
+        && body[5..7].iter().all(u8::is_ascii_digit)
+        && body[7] == b'-'
+        && body[8..10].iter().all(u8::is_ascii_digit)
+}
+
+/// `_\d{4}` immediately after the 10-byte date shape (bytes 10..15).
+fn has_time_suffix_shape(body: &[u8]) -> bool {
+    body.len() >= 15 && body[10] == b'_' && body[11..15].iter().all(u8::is_ascii_digit)
 }
 
 /// Word-boundary characters per the JS `\s` class the original grammar uses
@@ -243,6 +259,26 @@ mod tests {
         // `dateTokenAtPosition`'s `if (value)` filter), unlike the editor's
         // raw highlight scan which surfaces shape matches for validation UI.
         assert_eq!(token_texts(&scan(b"@2026-13-99").unwrap()), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn well_shaped_but_invalid_time_rejects_whole_token_without_date_only_fallback() {
+        // The `_\d{4}` suffix is syntactically present but out of range, so —
+        // matching the greedy TS grammar — the entire token is rejected; we
+        // must NOT fall back to scheduling a date-only 09:00 reminder for the
+        // `@2026-06-06` prefix. Covers both an out-of-range hour and minute.
+        assert_eq!(token_texts(&scan(b"@2026-06-06_2500").unwrap()), Vec::<&str>::new());
+        assert_eq!(token_texts(&scan(b"@2026-06-06_2460").unwrap()), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn trailing_non_suffix_digits_still_parse_date_only() {
+        // `_99` is not a `_\d{4}` suffix shape, so the optional group does not
+        // apply (just like the TS regex) and the date-only token stands; the
+        // `_99` is incidental trailing text.
+        let out = scan(b"@2026-06-06_99").unwrap();
+        assert_eq!(token_texts(&out), vec!["@2026-06-06"]);
+        assert_eq!(out.tokens[0].token_byte_to, 11);
     }
 
     #[test]
