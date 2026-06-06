@@ -95,6 +95,7 @@ export function useNoteMarkdownEditorImageDrop(
   }, [
     attachmentHost,
     busy,
+    hostRef,
     insertRelativePaths,
     reportEditorError,
     vaultRoot,

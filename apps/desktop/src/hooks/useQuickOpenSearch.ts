@@ -43,7 +43,7 @@ export function useQuickOpenSearch(
 
   const filtered = useMemo(() => {
     const getScores =
-      appliedQuery.length > 0
+      appliedQuery.length > 0 && usageRevision >= 0
         ? buildQuickOpenUsageScoreLookup(appliedQuery)
         : undefined;
     return filterVaultNotesForQuickOpen(appliedQuery, vaultRoot, refs, getScores);
