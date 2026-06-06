@@ -1,4 +1,5 @@
-import {act, render} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
+import type {Transaction} from '@codemirror/state';
 import {createRef} from 'react';
 import {describe, expect, it, vi} from 'vitest';
 
@@ -10,6 +11,7 @@ import {
   type NoteMarkdownEditorHandle,
   type NoteMarkdownEditorProps,
 } from './NoteMarkdownEditor';
+import {formatDateToken, todayDateParts} from './dateToken/dateToken';
 
 function attachmentHost(): NoteInboxAttachmentHost {
   const none = async () => [];
@@ -66,6 +68,25 @@ function editorView(container: HTMLElement): EditorView {
     throw new Error('Missing CodeMirror view');
   }
   return view;
+}
+
+function dispatchEditorInput(
+  view: EditorView,
+  from: number,
+  text: string,
+): boolean {
+  const insert = (): Transaction =>
+    view.state.update({
+      changes: {from, to: from, insert: text},
+      selection: {anchor: from + text.length},
+    });
+  const handled = view.state
+    .facet(EditorView.inputHandler)
+    .some(handler => handler(view, from, from, text, insert));
+  if (!handled) {
+    view.dispatch(insert());
+  }
+  return handled;
 }
 
 describe('NoteMarkdownEditor', () => {
@@ -143,5 +164,44 @@ describe('NoteMarkdownEditor', () => {
     });
 
     expect(onSaveShortcut).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the date token picker from @ input and commits the selected date', () => {
+    const onMarkdownChange = vi.fn();
+    const {container} = render(
+      <NoteMarkdownEditor
+        {...baseProps({initialMarkdown: '', onMarkdownChange})}
+      />,
+    );
+    const view = editorView(container);
+    const rect = {
+      bottom: 16,
+      height: 12,
+      left: 10,
+      right: 18,
+      top: 4,
+      width: 8,
+      x: 10,
+      y: 4,
+      toJSON: () => ({}),
+    } as DOMRect;
+    vi.spyOn(view, 'coordsAtPos').mockReturnValue(rect);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+    });
+
+    const expectedToken = formatDateToken(todayDateParts(new Date()));
+    expect(view.state.doc.toString()).toBe(`${expectedToken} `);
+    expect(onMarkdownChange).toHaveBeenLastCalledWith(`${expectedToken} `);
+    expect(
+      screen.queryByRole('dialog', {name: 'Pick date and time'}),
+    ).toBeNull();
   });
 });

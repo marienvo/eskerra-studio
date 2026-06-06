@@ -189,7 +189,8 @@ export function createNoteMarkdownUpdateListener(
           if (
             ae.closest('.cm-tooltip') ||
             ae.closest('.cm-panels') ||
-            ae.closest('.note-markdown-editor-context-menu')
+            ae.closest('.note-markdown-editor-context-menu') ||
+            ae.closest('[data-date-token-picker-overlay]')
           ) {
             return;
           }
