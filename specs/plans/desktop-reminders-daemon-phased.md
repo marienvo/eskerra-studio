@@ -200,6 +200,49 @@ Consequences and rules:
 - The daemon writes it atomically (temp + rename). The app **watches** this file and
   re-renders; it treats it as read-only.
 
+### Index merge / state migration (rescan → new index)
+
+When a scan produces a fresh token set, the daemon merges the **prior** index into it
+to carry forward mutable state (`state`, snooze override / `fireAtMs`, `lastNotifiedMs`,
+`stale`). Because `id` embeds `occurrenceOrdinal`, carrying state **by `id` alone is
+unsafe for duplicate identical tokens**: inserting/deleting an identical token above one
+of them renumbers ordinals, mints new `id`s on the next scan, and a naive `id`-keyed
+merge would move a snooze/`stale`/`notified` state to the wrong line or silently reset
+the real reminder. The write-time `contextAnchor` rules guard *writes only*; merge needs
+its own duplicate-aware rules. The merge is therefore:
+
+1. **Exact `id` match → preserve normally.** If a prior entry's `id` still exists in the
+   fresh scan, carry its `state`/snooze/`lastNotifiedMs` across unchanged. (This is the
+   common, non-duplicate case and the edit-elsewhere case.)
+2. **Never carry duplicate state by ordinal-derived `id` alone.** For tokens that are
+   byte-identical within a note, an `id` equality is *not* sufficient evidence of the
+   same occurrence — it must be corroborated by the anchor/fingerprint rules below
+   before any state is migrated.
+3. **Lost `id` → recollect candidates by content.** If a prior entry's `id` is absent
+   from the fresh scan, collect live candidates by `noteUri` + `normalizedTokenText`
+   (the same content key the writer uses). These are the possible new homes for the old
+   state.
+4. **Unique `contextAnchor` → migrate.** If exactly one live candidate has the same
+   `contextAnchor` as the prior entry, migrate `state` / snooze (`fireAtMs`) /
+   `lastNotifiedMs` to that candidate's new `id`.
+5. **Ordinal only when the file is provably unchanged.** Use `occurrenceOrdinal` to map
+   old→new state **only** when `scanFingerprint` proves the file is unchanged since the
+   prior scan (in which case ordinals are still authoritative). If the file changed, the
+   ordinal is not trusted for migration.
+6. **Ambiguous → fail safe, do not migrate.** If duplicate insert/delete or identical
+   surrounding context makes the mapping ambiguous (multiple candidates share the
+   `contextAnchor`, or the anchor cannot separate duplicates and
+   `duplicateCount`/`scanFingerprint` changed), do **not** migrate `state` / snooze /
+   `notified` / `stale` to any candidate. Treat the affected live candidates as **fresh
+   reminders** recomputed from the current time (default `state`, schedule per the
+   missed/grace discovery rules) rather than risk attaching stale state to the wrong
+   line. Only mark an old entry `stale`/ambiguous if needed for user visibility (e.g. it
+   had a pending `stale` removal worth surfacing); never silently move it onto a
+   mismatched occurrence.
+
+This keeps the safety budget symmetric with write-back: when duplicates make identity
+uncertain, the system prefers a clean re-derivation over a wrong-line state carry.
+
 ### Vault-root discovery (chicken/egg)
 
 The daemon must know the active vault before it can scan, including right after login
@@ -247,21 +290,56 @@ vault that is not currently active. Required behavior:
 
 ### Missed / grace semantics
 
-Evaluated at scan time and at each minute tick:
+Two evaluation contexts must be kept distinct — they have **different** outcomes for
+`now ≥ dueAt`, and conflating them is the snooze-0 bug:
 
-- `now < fireAt` → schedule normally.
-- `fireAt ≤ now < dueAt` → fire the 5-min notification **immediately, once**.
-- `now ≥ dueAt` (we were off when it was due) → mark `due` (counts for dot, shows in
-  pane) but **do not** pop a stale OS notification. Document as "missed, surfaced
-  in-app only".
+1. **Scheduled-fire execution** — the scheduler's own timer event firing for a
+   reminder that was already scheduled (its `fireAt` known to a running daemon before
+   `fireAt` arrived). This *executes* a fire.
+2. **Discovery on scan / restart / minute-tick reconcile** — the daemon first learning
+   a reminder's state by reading disk (initial scan, vault switch, daemon restart,
+   resume reconcile, or a stale catch-up scan). This *classifies* state; it does not
+   resurrect missed OS popups.
+
+**Scheduled-fire execution (timer event for an already-scheduled reminder):**
+
+- Fires the OS notification **once** when its `fireAt` is reached, including the
+  intentional at-time case. A snooze-0 sets `fireAt = dueAt` on purpose, so the
+  scheduled fire must pop **at** `dueAt`, not be swallowed as overdue.
+- **Exact-at-time case:** if a scheduled fire event reaches `now == dueAt` with
+  `fireAt == dueAt` (snooze-0), fire once, record `lastNotifiedMs`, then mark
+  `due`/`notified` as appropriate. This is an explicit *fire*, not an overdue
+  suppression.
+- **Scheduler-late tolerance:** to tolerate timer wakeup jitter, a scheduled fire still
+  executes when `now ≥ fireAt && now ≤ dueAt + schedulerGraceMs`, **only** for a
+  reminder that was scheduled before `dueAt` and has **not** already fired for that
+  `fireAt`. `schedulerGraceMs` is a small bound (e.g. a few seconds). Beyond that
+  window the event is treated as a missed scheduled fire and downgraded to in-app
+  discovery (no late OS popup).
+- **Duplicate / late-fire prevention:** each fire is guarded by `lastNotifiedMs` (or an
+  equivalent per-`fireAt` fire-event id). A reminder never fires twice for the same
+  `fireAt`: re-arming, reconcile ticks, and resume re-evaluation all check this before
+  firing.
+
+**Discovery on scan / restart / minute-tick (classification only):**
+
+- `now < fireAt` → schedule normally (arms a future scheduled-fire event).
+- `fireAt ≤ now < dueAt` → the daemon was off through the T-5min lead but it is still
+  before the due time → fire the 5-min notification **immediately, once** (guarded by
+  `lastNotifiedMs`).
+- `now ≥ dueAt` and the reminder is **first discovered here** (no prior scheduled fire
+  executed for it) → mark `due` (counts for dot, shows in pane) but **do not** pop a
+  stale OS notification. "Missed, surfaced in-app only." This suppression applies to
+  *stale discovery*, never to a live scheduled fire (above).
 
 **Overdue tokens (explicit rule):** Past, non-struck-through tokens are treated as
 overdue reminders. They appear in the Notifications pane and count toward the unread
 dot until they are removed / struck through. They do **not** trigger stale OS
-notifications when discovered after their due time. This is the same outcome as the
+notifications when *discovered* after their due time. This is the discovery-context
 `now ≥ dueAt` case above and applies regardless of how far in the past the token is —
 a token authored last week with a past date surfaces in-app immediately on scan, with
-no OS popup.
+no OS popup. It does **not** override a snooze-0 scheduled fire executed by a running
+daemon.
 
 ---
 
@@ -319,8 +397,11 @@ the highest-leverage reasoning phase and benefits most from the strongest model.
   advisory; it is never used for slicing.
 - Index model + (de)serialization (serde), stable `id` derivation per the
   **Reminder identity** rules (path + normalized token text + occurrence ordinal;
-  never offsets), atomic write helper, merge logic (preserve `state`/snooze across
-  rescans by `id`).
+  never offsets), atomic write helper, and **duplicate-aware merge / state migration**
+  per the *Index merge / state migration* rules — exact-`id` carry for the common case,
+  but for duplicate identical tokens migrate state only by `contextAnchor` (ordinal only
+  when `scanFingerprint` proves the file unchanged) and fail safe to fresh reminders
+  when the mapping is ambiguous; never carry state by ordinal-derived `id` alone.
 - Date-only → `dueAt` resolution using the configurable default time.
 
 **Deliverables:** `eskerra-reminder-core` with thorough `cargo test`, including:
@@ -331,14 +412,24 @@ multi-byte UTF-8 (e.g. emoji / accented text) on lines above and on the same lin
 before the token, asserting that slicing `[tokenByteFrom, tokenByteTo)` yields exactly
 the token bytes (no panic on a non-boundary slice, no off-by-bytes), that the byte span
 diverges from the character offset as expected, and that the `uiCaretHint` conversion
-is computed separately from the byte span. No watcher, no D-Bus, no real filesystem
-watching yet (scanning provided bytes is fine).
+is computed separately from the byte span; and **duplicate-aware merge** tests:
+(a) exact-`id` carry preserves `state`/snooze for the non-duplicate / edit-elsewhere
+case; (b) a snooze on one of several identical tokens migrates to the correct new `id`
+by **unique `contextAnchor`** after an identical token is inserted above it (ordinal
+drifted); (c) when surrounding context is also identical and
+`duplicateCount`/`scanFingerprint` changed, state is **not** migrated to any line —
+candidates become fresh reminders rather than carrying snooze/`notified`/`stale` onto
+the wrong occurrence; (d) ordinal-based migration is used only when `scanFingerprint`
+proves the file unchanged. No watcher, no D-Bus, no real filesystem watching yet
+(scanning provided bytes is fine).
 
 **Risks:** identity must be offset-independent (see Reminder identity); the only
 residual ambiguity is multiple byte-identical tokens in one file, disambiguated by the
-stored `contextAnchor` (with `scanFingerprint` gating any ordinal use) and, at write
-time, by Phase 4's lookup-by-`id` then resolve-by-text-and-anchor, unique-match-or-fail
-rule — never by recomputing `id` from current ordinals.
+stored `contextAnchor` (with `scanFingerprint` gating any ordinal use) on **both**
+critical paths — at merge time (state migration, *Index merge / state migration*) and
+at write time (Phase 4's lookup-by-`id` then resolve-by-text-and-anchor,
+unique-match-or-fail). Neither path may carry/select by ordinal-derived `id` alone;
+ambiguity fails safe (merge → fresh reminders; write → `stale`).
 
 **LLM advice:** **Claude Sonnet 4.6, thinking medium** for the bulk port (mechanical,
 well-specified by `dateToken.ts`), escalate to **Opus 4.8 thinking medium** for the
@@ -380,6 +471,8 @@ the app watcher — use the strongest model and keep the existing watcher tests 
 **Scope:**
 - Scheduler: min-heap / sorted timer of `fireAt` times; sleep-until-next; re-arm on
   index change. Minute-tick to flip `scheduled → due` and update missed/grace state.
+  A scheduled-fire timer event **executes** a fire (per *scheduled-fire execution*),
+  separately from discovery-context classification — see *Missed / grace semantics*.
 - `zbus` client for `org.freedesktop.Notifications`: fire at T-5min with body =
   note title + reminder text context; actions: `snooze-3`, `snooze-1`, `snooze-0`,
   `remove`, plus default action (click). Localized/clear button labels
@@ -387,17 +480,26 @@ the app watcher — use the strongest model and keep the existing watcher tests 
 - Action handling: snooze-N reschedules a new `fireAt` = `dueAt − N min` (and persists
   the override in the index); `remove` triggers Phase 4 write + closes; default click
   triggers Phase 5 open.
-- Missed/grace semantics from the architecture section.
+- **snooze-0 (`fireAt = dueAt`) must fire at-time.** Because the override is an
+  intentional scheduled fire, the scheduler fires it once at `dueAt` (exact-at-time
+  case) with the small `schedulerGraceMs` late tolerance; it is **not** swallowed by
+  the overdue/stale-discovery suppression. Every fire is guarded against duplicates by
+  `lastNotifiedMs` (or a per-`fireAt` fire-event id) so re-arm / reconcile / resume
+  cannot double-fire the same `fireAt`.
+- Missed/grace semantics from the architecture section (scheduled-fire execution vs.
+  stale discovery — keep the two contexts distinct in the implementation).
 - **Linux suspend/resume handling (mandatory).** A `Duration`-based sleep-until-next
   timer does not advance across system suspend, and the wall clock can jump on resume,
   so a fire scheduled before suspend can be silently late or skipped. Subscribe to the
   `PrepareForSleep(bool)` signal on `org.freedesktop.login1` (D-Bus, via `zbus` — same
   client stack as notifications). On the `false` (waking) edge, **immediately**: (a)
   recompute "now" from the wall clock, (b) re-evaluate every reminder's
-  missed/grace/overdue state (a reminder whose `fireAt` passed during suspend fires
-  once on resume if still within `fireAt ≤ now < dueAt`; one whose `dueAt` passed is
-  marked `due`/overdue with no stale popup), and (c) fully re-arm the scheduler from
-  the recomputed times rather than resuming the pre-suspend timer. Also re-evaluate on
+  missed/grace/overdue state using the *scheduled-fire execution* rule (an
+  already-scheduled reminder whose `fireAt`/at-time elapsed during suspend fires once on
+  resume if still within `now ≤ dueAt + schedulerGraceMs` and it has not already fired
+  for that `fireAt`; beyond that window it is marked `due`/overdue with no stale popup),
+  honoring `lastNotifiedMs` so resume never double-fires, and (c) fully re-arm the
+  scheduler from the recomputed times rather than resuming the pre-suspend timer. Also re-evaluate on
   the same path for wall-clock jumps/timezone changes where detectable. If
   `login1`/`PrepareForSleep` is unavailable, fall back to a periodic wall-clock
   reconciliation tick (bounded interval) so a missed wake still self-heals.
@@ -662,6 +764,23 @@ refs are exactly its failure mode.
 - Integration tests: token on disk → index → notification fire → snooze → remove →
   strikethrough → index drops it → pane updates → dot clears. Daemon-edits-open-note
   reconcile test. Missed/grace + overdue test. Vault-switch test.
+- Index merge / state-migration integration tests (end-to-end across a live rescan):
+  - **Unique-anchor migration:** with several byte-identical tokens in a note, snooze
+    (and let it record `lastNotifiedMs` / `notified`) one of them, then on disk insert
+    another identical token **above** it so `occurrenceOrdinal`s shift and the affected
+    `id`s change. Because `contextAnchor` uniquely identifies the old reminder, assert
+    its `state` / snooze (`fireAtMs`) / `lastNotifiedMs` migrate to the **new `id`** on
+    the same line.
+  - **Identical-context → no migration:** with duplicates that also share identical
+    surrounding context (so `contextAnchor` cannot separate them) and a changed
+    `duplicateCount` / `scanFingerprint` after the edit, assert **no** `state` / snooze /
+    `notified` / `stale` is migrated to any candidate; the live reminders are recomputed
+    **fresh** (default state, scheduled per discovery rules) and no spurious OS fire
+    results from the re-derivation.
+  - **No wrong-line carry (both cases):** explicitly assert that no snooze / `stale` /
+    `notified` state is ever attached to a different line than the one it originated on —
+    state either lands on the correct migrated `id` or is dropped, never on a sibling
+    duplicate.
 - Write-back fail-closed tests: token already struck/edited/gone before remove
   (zero-match → `removed`, no write); byte mismatch at resolved byte span (no write,
   `stale`); ambiguous duplicate match (no write, `stale`); **non-ASCII-before-token
@@ -674,10 +793,25 @@ refs are exactly its failure mode.
   `duplicateCount`/`scanFingerprint`, fail-closed to
   `stale` rather than striking the wrong occurrence. Assert no wrong-span and no
   partial writes in every case.
-- Suspend/resume tests: a `fireAt` that elapses during a simulated suspend fires once
-  on the `PrepareForSleep(false)` resume edge when still `< dueAt`; one whose `dueAt`
-  elapsed becomes overdue/`due` with no stale popup; full re-arm from recomputed
-  wall-clock times; fallback reconciliation tick when `login1` is unavailable.
+- Scheduler-semantics tests (scheduled fire vs. stale discovery):
+  - **snooze-0 fires at-time:** a reminder scheduled before `dueAt` then snoozed to
+    `fireAt = dueAt` fires the OS notification once at `now == dueAt` (exact-at-time
+    case), is **not** suppressed as overdue, and records `lastNotifiedMs`.
+  - **scheduler-late tolerance:** a scheduled fire whose event arrives slightly late
+    (`dueAt < now ≤ dueAt + schedulerGraceMs`) still fires once; past the grace window
+    it does not OS-fire and is downgraded to in-app discovery.
+  - **stale discovery after `dueAt` does not fire:** a reminder first discovered after
+    `dueAt` (daemon restart / fresh scan / vault switch with no prior scheduled fire)
+    is marked `due`/overdue in-app with **no** OS popup.
+  - **no duplicate / late double-fire:** re-arm, minute-tick reconcile, and resume
+    re-evaluation do not re-fire a reminder already fired for the same `fireAt`
+    (guarded by `lastNotifiedMs` / per-`fireAt` fire-event id).
+- Suspend/resume tests: a scheduled fire whose at-time/`fireAt` elapses during a
+  simulated suspend fires once on the `PrepareForSleep(false)` resume edge when still
+  within `now ≤ dueAt + schedulerGraceMs` and not already fired (covers snooze-0 across
+  a short suspend); one elapsed beyond that window becomes overdue/`due` with no stale
+  popup; full re-arm from recomputed wall-clock times; fallback reconciliation tick when
+  `login1` is unavailable.
 - Daemon-unavailable IPC tests: with the daemon down / service unregistered / call
   timing out, `RemoveReminder` returns a transport error → the app performs **no local
   write**, keeps the reminder row visible in `remove-unavailable` (distinct from
