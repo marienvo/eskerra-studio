@@ -279,8 +279,12 @@ uncertain, the system prefers a clean re-derivation over a wrong-line state carr
 The daemon must know the active vault before it can scan, including right after login
 before the app runs. The app writes the active vault root (+ vault hash + reminder
 settings like the date-only default time) to a fixed config path the daemon reads and
-watches: `~/.config/eskerra/reminderd.json`. On vault switch the app rewrites it; the
-daemon reloads and re-scans.
+watches: `~/.config/eskerra/reminderd.json`. The daemon watches this file for **both**
+vault-root changes **and** settings-only changes (the file is the same source for both).
+On vault switch the app rewrites it; the daemon reloads and re-scans. On a **settings-only
+change** (same `vaultRoot`/`vaultHash`, but e.g. a changed date-only default time) the
+daemon reloads config and re-derives the affected reminders **without** a vault switch —
+see *Settings-only config change* below.
 
 ### Vault / config edge cases (daemon must fail safe)
 
@@ -303,6 +307,32 @@ vault that is not currently active. Required behavior:
   re-arm. In-flight notifications/actions tagged with the old session are ignored
   (mirrors `vault_watch.rs` stale-session dropping). Each vault has its own index file,
   so switching back is cheap and non-destructive.
+- **Settings-only config change while daemon is running (no vault switch):** the config
+  file changes but `vaultRoot`/`vaultHash` are unchanged — only a setting like the
+  date-only default time differs. This is **not** a vault switch (do **not** bump the
+  session id or tear down the index), but it **must** re-derive config-dependent fields,
+  because otherwise unchanged `@YYYY-MM-DD` tokens keep stale `dueAtMs`/`fireAtMs`
+  indefinitely. On such a change the daemon:
+  1. **Reloads config** and detects that the date-only default time (or any other
+     `dueAt`-affecting setting) changed.
+  2. **Re-derives `dueAtMs` and `fireAtMs` for every date-only token** (`@YYYY-MM-DD`,
+     no `_HHMM`) in the **active** vault, using the new default time. This needs **no**
+     token-text change and **does not change reminder `id`s** (`id` is path + normalized
+     token text + ordinal — none depend on the default time), so existing reminders keep
+     their identity and merge cleanly: the same date-only `id` simply gets new
+     `dueAtMs`/`fireAtMs`.
+  3. **Treats the new `dueAtMs`/`fireAtMs` as a schedule change** for each re-derived
+     reminder: re-evaluate its state from the new times and **reset/recompute the mutable
+     notification state** (`state`, `lastNotifiedMs`, any per-`fireAt` fire-event id) so a
+     prior `notified`/`lastNotifiedMs` for the **old** time can **never** suppress the new
+     fire. A reminder already notified at the old 09:00 must still fire at, say, a new
+     08:00 (or be classified per the missed/grace discovery rules for the new time).
+  4. **Re-arms the scheduler** from the recomputed `fireAt`s (drop the stale timers, arm
+     the new ones).
+  - **Explicit timed tokens `@YYYY-MM-DD_HHMM` are unaffected** by a date-only default
+    time change — their `dueAt` comes from the token itself, so their `dueAtMs`/`fireAtMs`
+    and notification state are left untouched (no spurious re-fire). Only date-only tokens
+    are re-derived.
 - **Invalid `reminderd.json`** (unparseable, missing required fields, or schema
   version mismatch): do **not** crash and do **not** act on partial data. Keep the
   last-known-good config in memory, log the parse failure, and keep watching the file
@@ -555,7 +585,9 @@ TS reference, so a cheaper fast model is low-risk; keep Opus for the merge logic
 
 **Scope:**
 - New binary `eskerra-reminderd`. Reads `~/.config/eskerra/reminderd.json` for vault
-  root + settings; watches that config file for live vault switches.
+  root + settings; watches that config file for **both** live vault switches **and
+  settings-only changes** (e.g. the date-only default time), applying the
+  *Settings-only config change* re-derive path for the latter without a session bump.
 - File watching: extract the reusable parts of `vault_watch.rs` (debounce,
   recommended+poll backends, coarse fallback, ignored-dir filtering) into a shared
   module so the daemon and the app share one watcher implementation. Daemon does an
@@ -568,8 +600,12 @@ TS reference, so a cheaper fast model is low-risk; keep Opus for the merge logic
 **Deliverables:** daemon that, given a vault, keeps an accurate index updated within
 the <1s latency budget on disk changes from any source. No notifications yet.
 Must implement and test the **Vault / config edge cases** (no vault, missing path,
-vault switch, invalid config, restart-before-app-ran) with their fail-safe behavior,
-and use atomic temp+rename for both the index and any app-written config.
+vault switch, **settings-only change**, invalid config, restart-before-app-ran) with
+their fail-safe behavior, and use atomic temp+rename for both the index and any
+app-written config. The **settings-only change** test must assert that changing the
+date-only default time re-derives `dueAtMs`/`fireAtMs` for date-only tokens **without**
+a session bump or index teardown, **keeps the same reminder `id`s**, leaves explicit
+timed `@…_HHMM` tokens untouched, and re-arms the scheduler from the new times.
 
 **Risks:** double watcher (app + daemon both watching the same vault) — acceptable
 (independent processes), but document it and keep both debounced. Watcher extraction
@@ -1063,6 +1099,22 @@ refs are exactly its failure mode.
 - Config/vault edge-case tests: no vault idle; missing vault path preserves index and
   does not fire; invalid `reminderd.json` keeps last-known-good; restart-before-app-ran
   rebuilds from disk; clear-all leaves reminder rows untouched.
+- Settings-only config-change tests (date-only default time re-derive, end-to-end):
+  - **Re-derive on settings-only update:** with a date-only token `@YYYY-MM-DD` indexed
+    against a 09:00 default, rewrite `reminderd.json` with the **same** `vaultRoot`/
+    `vaultHash` but a new default time (e.g. 08:00). Assert the daemon reloads config and
+    re-derives without a vault switch (no session bump, no index teardown), the **same
+    reminder `id`** now carries the **new** `dueAtMs`/`fireAtMs`, and the scheduler
+    re-arms from the new `fireAt`.
+  - **Old notified state does not suppress the new fire:** the date-only reminder was
+    already `notified`/`lastNotifiedMs` at the old 09:00; after the default time changes
+    to an earlier-but-still-future 08:00, assert the stale `notified`/`lastNotifiedMs` is
+    reset/recomputed for the new time so the reminder fires again at the new time (and is
+    not swallowed as already-notified). Conversely a guard against double-firing the
+    **new** `fireAt` still holds.
+  - **Timed tokens unaffected:** an explicit `@YYYY-MM-DD_HHMM` reminder in the same vault
+    keeps its `dueAtMs`/`fireAtMs` and notification state unchanged across the default-time
+    change (no re-derive, no spurious re-fire).
 - Observability: scan duration, reminder counts, notification send success/fail,
   D-Bus unavailability, `RemoveReminder` transport-failure (`remove-unavailable`) rate
   and best-effort-restart outcomes, watcher coarse-invalidation (mirror the app's Sentry

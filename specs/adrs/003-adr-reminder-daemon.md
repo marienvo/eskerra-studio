@@ -221,6 +221,15 @@ temp + rename); the daemon reloads and re-scans.
   timers, load the new vault's index (by hash), full-scan, re-arm. In-flight
   notifications/actions tagged with the old session are ignored (mirrors `vault_watch.rs`
   stale-session dropping).
+- **Settings-only change (no vault switch):** config changes with `vaultRoot`/`vaultHash`
+  unchanged — only a `dueAt`-affecting setting (e.g. the date-only default time) differs.
+  This is **not** a vault switch (no session bump, no index teardown), but the daemon
+  **must** re-derive `dueAtMs`/`fireAtMs` for every date-only `@YYYY-MM-DD` token (else
+  unchanged tokens keep stale times indefinitely). Re-derive keeps the same reminder `id`s
+  (identity does not depend on the default time), treats the new times as a **schedule
+  change** — resetting/recomputing `state`/`lastNotifiedMs` so an old `notified` cannot
+  suppress the new fire — and re-arms the scheduler. Explicit timed `@…_HHMM` tokens are
+  unaffected. Full rules: plan §*Settings-only config change*.
 - **Invalid `reminderd.json`** (unparseable / missing required fields / version
   mismatch): do **not** crash or act on partial data; keep last-known-good config in
   memory; keep watching so a corrected write recovers. No last-known-good → idle.
