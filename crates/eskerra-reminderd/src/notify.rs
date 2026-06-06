@@ -12,6 +12,9 @@
 //! `Proxy::receive_signal` → blocking `SignalIterator`, `Message::body()` →
 //! `Body::deserialize::<T>()`).
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use eskerra_reminder_core::Reminder;
 
 use crate::scheduler::{Action, FireKind};
@@ -48,11 +51,18 @@ pub struct NotificationRequest {
     pub reminder_id: String,
     pub summary: String,
     pub body: String,
+    /// Platform notification id to replace, or `0` for a fresh notification.
+    /// Set when an action (e.g. snooze-0 at exactly due → `FiredNow`) must
+    /// atomically replace the triggering notification rather than spawn a
+    /// duplicate live notification for the same reminder.
+    pub replaces_id: u32,
 }
 
 impl NotificationRequest {
     /// Build the notification copy for a reminder fire. `summary` is the note
-    /// title (file stem), `body` describes the reminder and fire kind.
+    /// title (file stem), `body` describes the reminder and fire kind. Defaults
+    /// to a fresh notification (`replaces_id = 0`); use [`Self::replacing`] to
+    /// supersede an existing one.
     pub fn for_reminder(reminder: &Reminder, kind: FireKind) -> Self {
         let title = note_title(&reminder.vault_relative_path);
         let body = match kind {
@@ -63,7 +73,15 @@ impl NotificationRequest {
             reminder_id: reminder.id.clone(),
             summary: title,
             body,
+            replaces_id: 0,
         }
+    }
+
+    /// Mark this request as replacing the notification with id `replaces_id`
+    /// (the platform replaces it in place when non-zero).
+    pub fn replacing(mut self, replaces_id: u32) -> Self {
+        self.replaces_id = replaces_id;
+        self
     }
 
     /// The standard action set + labels for a reminder notification, in display
@@ -113,6 +131,101 @@ impl Notifier for NullNotifier {
     }
 }
 
+/// An OS-notification action that has been routed back to its reminder. Carries
+/// the notification id alongside the reminder id and decoded [`Action`] so the
+/// daemon can, for an at-time `FiredNow`, replace the triggering notification in
+/// place instead of opening a duplicate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActionEvent {
+    pub reminder_id: String,
+    /// The platform notification id the action came from.
+    pub notification_id: u32,
+    pub action: Action,
+}
+
+/// Callback invoked (off the run loop) when a notification action fires. The run
+/// layer forwards it into the daemon's single-threaded event loop. Only `Send`
+/// is required (it is moved into and called from the single signal-listener
+/// thread), so a closure capturing an `mpsc::Sender` — which is `Send` but not
+/// `Sync` — fits without extra synchronization.
+pub type ActionCallback = Box<dyn Fn(ActionEvent) + Send>;
+
+/// The id→reminder map plus the routing of incoming notification signals. A
+/// **single** listener feeds both `ActionInvoked` and `NotificationClosed` here
+/// in arrival order, so an `ActionInvoked` that a server emits immediately
+/// before `NotificationClosed` is always routed *before* the close removes the
+/// mapping. This eliminates the action/close cleanup race that previously made
+/// snooze/remove/default-click intermittently become no-ops.
+///
+/// Kept free of any D-Bus types so the routing logic is unit-testable without a
+/// live session bus.
+pub struct NotificationRegistry {
+    /// notification id (from `Notify`) → reminder id.
+    map: Mutex<HashMap<u32, String>>,
+}
+
+impl NotificationRegistry {
+    pub fn new() -> Self {
+        Self {
+            map: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Record that `notification_id` (returned by `Notify`) belongs to
+    /// `reminder_id`, so a later `ActionInvoked` can be routed back.
+    pub fn register(&self, notification_id: u32, reminder_id: String) -> Result<(), String> {
+        self.map
+            .lock()
+            .map_err(|e| format!("map lock poisoned: {e}"))?
+            .insert(notification_id, reminder_id);
+        Ok(())
+    }
+
+    /// Route an `ActionInvoked(id, key)` into an [`ActionEvent`]. Returns `None`
+    /// when the id is unknown (already closed / from another app) or the key is
+    /// unrecognized (forward-compat) — both are ignored by the caller.
+    pub fn route_action(&self, notification_id: u32, key: &str) -> Option<ActionEvent> {
+        let reminder_id = self.lookup(notification_id)?;
+        let action = parse_action_key(key)?;
+        Some(ActionEvent {
+            reminder_id,
+            notification_id,
+            action,
+        })
+    }
+
+    /// Handle a `NotificationClosed(id)` by dropping the mapping. Because the
+    /// single listener processes signals in order, any near-simultaneous
+    /// `ActionInvoked` for this id has already been routed by the time we get
+    /// here.
+    pub fn on_closed(&self, notification_id: u32) {
+        match self.map.lock() {
+            Ok(mut map) => {
+                map.remove(&notification_id);
+            }
+            // A poisoned lock means a listener panicked; log so the leak is
+            // observable, but never panic the daemon.
+            Err(e) => eprintln!("[reminderd] notification map lock poisoned on close: {e}"),
+        }
+    }
+
+    fn lookup(&self, notification_id: u32) -> Option<String> {
+        match self.map.lock() {
+            Ok(map) => map.get(&notification_id).cloned(),
+            Err(e) => {
+                eprintln!("[reminderd] notification map lock poisoned on lookup: {e}");
+                None
+            }
+        }
+    }
+}
+
+impl Default for NotificationRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // --- real D-Bus implementation -------------------------------------------
 
 #[cfg(target_os = "linux")]
@@ -121,48 +234,37 @@ pub use zbus_impl::ZbusNotifier;
 #[cfg(target_os = "linux")]
 mod zbus_impl {
     use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     use zbus::blocking::{Connection, Proxy};
 
-    use super::{parse_action_key, NotificationRequest, Notifier};
-    use crate::scheduler::Action;
+    use super::{ActionCallback, NotificationRegistry, NotificationRequest, Notifier};
 
     const NOTIFY_DEST: &str = "org.freedesktop.Notifications";
     const NOTIFY_PATH: &str = "/org/freedesktop/Notifications";
     const NOTIFY_IFACE: &str = "org.freedesktop.Notifications";
 
-    /// Callback invoked (off the run loop) when a notification action fires,
-    /// carrying the reminder id and decoded [`Action`]. The run layer forwards
-    /// it into the daemon's single-threaded event loop. Only `Send` is required
-    /// (it is moved into and called from the single action-listener thread), so
-    /// a closure capturing an `mpsc::Sender` — which is `Send` but not `Sync` —
-    /// fits without extra synchronization.
-    pub type ActionCallback = Box<dyn Fn(String, Action) + Send>;
-
     /// Real notifier over `org.freedesktop.Notifications`. Holds a blocking
-    /// notification-service proxy and an id→reminder map so the background
-    /// signal listener can route `ActionInvoked` back to the originating
-    /// reminder.
+    /// notification-service proxy and a [`NotificationRegistry`] so the single
+    /// background signal listener can route `ActionInvoked` back to the
+    /// originating reminder.
     pub struct ZbusNotifier {
         proxy: Proxy<'static>,
-        /// notification id (from `Notify`) → reminder id.
-        map: Arc<Mutex<HashMap<u32, String>>>,
+        registry: Arc<NotificationRegistry>,
     }
 
     impl ZbusNotifier {
-        /// Connect to the session bus and spawn the `ActionInvoked` /
-        /// `NotificationClosed` signal listeners. `on_action` is called for each
-        /// recognized action on a notification we sent.
+        /// Connect to the session bus and spawn the single signal listener that
+        /// handles both `ActionInvoked` and `NotificationClosed`. `on_action` is
+        /// called for each recognized action on a notification we sent.
         pub fn new(on_action: ActionCallback) -> zbus::Result<Self> {
             let conn = Connection::session()?;
             let proxy = Proxy::new_owned(conn.clone(), NOTIFY_DEST, NOTIFY_PATH, NOTIFY_IFACE)?;
-            let map: Arc<Mutex<HashMap<u32, String>>> = Arc::new(Mutex::new(HashMap::new()));
+            let registry = Arc::new(NotificationRegistry::new());
 
-            spawn_action_listener(conn.clone(), Arc::clone(&map), on_action);
-            spawn_closed_listener(conn.clone(), Arc::clone(&map));
+            spawn_signal_listener(conn.clone(), Arc::clone(&registry), on_action);
 
-            Ok(Self { proxy, map })
+            Ok(Self { proxy, registry })
         }
     }
 
@@ -189,8 +291,8 @@ mod zbus_impl {
                     "Notify",
                     &(
                         "Eskerra",
-                        0u32, // replaces_id: 0 = new notification
-                        "",   // app_icon
+                        req.replaces_id, // 0 = new notification; else replace in place
+                        "",              // app_icon
                         req.summary.as_str(),
                         req.body.as_str(),
                         actions,
@@ -200,77 +302,63 @@ mod zbus_impl {
                 )
                 .map_err(|e| format!("Notify: {e}"))?;
 
-            self.map
-                .lock()
-                .map_err(|e| format!("map lock poisoned: {e}"))?
-                .insert(id, req.reminder_id.clone());
+            self.registry.register(id, req.reminder_id.clone())?;
             Ok(id)
         }
     }
 
-    fn spawn_action_listener(
+    /// One thread, both signals. Routing `ActionInvoked` and `NotificationClosed`
+    /// through the *same* iterator keeps them serialized in the bus's delivery
+    /// order, so a close that follows an action never removes the mapping before
+    /// the action is routed. Startup/listener failures are logged (never
+    /// panicked) so a dead listener — which would otherwise leak one map entry
+    /// per sent notification — is observable in the journal.
+    fn spawn_signal_listener(
         conn: Connection,
-        map: Arc<Mutex<HashMap<u32, String>>>,
+        registry: Arc<NotificationRegistry>,
         on_action: ActionCallback,
     ) {
         std::thread::spawn(move || {
             let proxy = match Proxy::new(&conn, NOTIFY_DEST, NOTIFY_PATH, NOTIFY_IFACE) {
                 Ok(p) => p,
                 Err(e) => {
-                    eprintln!("[reminderd] action listener proxy failed: {e}");
+                    eprintln!("[reminderd] signal listener proxy failed: {e}");
                     return;
                 }
             };
-            let signals = match proxy.receive_signal("ActionInvoked") {
+            let signals = match proxy.receive_all_signals() {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("[reminderd] receive ActionInvoked failed: {e}");
+                    eprintln!("[reminderd] receive notification signals failed: {e}");
                     return;
                 }
             };
             for msg in signals {
-                // ActionInvoked(UINT32 id, STRING action_key)
-                let Ok((id, key)) = msg.body().deserialize::<(u32, String)>() else {
-                    continue;
-                };
-                let reminder_id = match map.lock() {
-                    Ok(map) => map.get(&id).cloned(),
-                    Err(e) => {
-                        eprintln!("[reminderd] action listener map lock poisoned: {e}");
-                        return;
-                    }
-                };
-                if let (Some(reminder_id), Some(action)) = (reminder_id, parse_action_key(&key)) {
-                    on_action(reminder_id, action);
-                }
-            }
-        });
-    }
-
-    fn spawn_closed_listener(conn: Connection, map: Arc<Mutex<HashMap<u32, String>>>) {
-        std::thread::spawn(move || {
-            let proxy = match Proxy::new(&conn, NOTIFY_DEST, NOTIFY_PATH, NOTIFY_IFACE) {
-                Ok(p) => p,
-                Err(_) => return,
-            };
-            let signals = match proxy.receive_signal("NotificationClosed") {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-            for msg in signals {
-                // NotificationClosed(UINT32 id, UINT32 reason)
-                if let Ok((id, _reason)) = msg.body().deserialize::<(u32, u32)>() {
-                    match map.lock() {
-                        Ok(mut map) => {
-                            map.remove(&id);
-                        }
-                        Err(e) => {
-                            eprintln!("[reminderd] closed listener map lock poisoned: {e}");
-                            return;
+                // `header()` borrows `msg`; copy the member name out before
+                // deserializing the body so the borrow ends.
+                let member = msg.header().member().map(|m| m.to_string());
+                match member.as_deref() {
+                    // ActionInvoked(UINT32 id, STRING action_key)
+                    Some("ActionInvoked") => {
+                        let Ok((id, key)) = msg.body().deserialize::<(u32, String)>() else {
+                            continue;
+                        };
+                        if let Some(event) = registry.route_action(id, &key) {
+                            on_action(event);
                         }
                     }
+                    // NotificationClosed(UINT32 id, UINT32 reason)
+                    Some("NotificationClosed") => {
+                        if let Ok((id, _reason)) = msg.body().deserialize::<(u32, u32)>() {
+                            registry.on_closed(id);
+                        }
+                    }
+                    _ => {}
                 }
             }
+            // The iterator ending means the connection/stream closed; log so a
+            // silently-dead listener (and the resulting map leak) is observable.
+            eprintln!("[reminderd] notification signal listener stopped");
         });
     }
 }
@@ -336,5 +424,59 @@ mod tests {
         assert!(n
             .send(&NotificationRequest::for_reminder(&r, FireKind::AtTime))
             .is_ok());
+    }
+
+    #[test]
+    fn replacing_sets_replaces_id() {
+        let r = a_reminder();
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        assert_eq!(req.replaces_id, 0, "fresh notifications default to 0");
+        assert_eq!(req.replacing(42).replaces_id, 42);
+    }
+
+    // --- registry routing / action-vs-close race --------------------------
+
+    #[test]
+    fn action_then_close_routes_then_drops_mapping() {
+        // The single listener processes signals in arrival order. A server that
+        // emits ActionInvoked immediately before NotificationClosed therefore
+        // routes the action first — it is not lost to the close cleanup.
+        let reg = NotificationRegistry::new();
+        reg.register(7, "rem-1".to_string()).unwrap();
+
+        let event = reg.route_action(7, ACTION_SNOOZE_3).expect("routes");
+        assert_eq!(
+            event,
+            ActionEvent {
+                reminder_id: "rem-1".to_string(),
+                notification_id: 7,
+                action: Action::Snooze { minutes: 3 },
+            }
+        );
+
+        // The trailing close then cleans up the (now-consumed) mapping.
+        reg.on_closed(7);
+        assert!(
+            reg.route_action(7, ACTION_SNOOZE_3).is_none(),
+            "mapping is gone after close"
+        );
+    }
+
+    #[test]
+    fn close_before_action_makes_the_action_a_noop() {
+        // If a close genuinely precedes the action (user dismissed without
+        // acting), routing finds no mapping and the action is ignored.
+        let reg = NotificationRegistry::new();
+        reg.register(7, "rem-1".to_string()).unwrap();
+        reg.on_closed(7);
+        assert!(reg.route_action(7, ACTION_SNOOZE_0).is_none());
+    }
+
+    #[test]
+    fn route_action_ignores_unknown_id_and_unknown_key() {
+        let reg = NotificationRegistry::new();
+        reg.register(7, "rem-1".to_string()).unwrap();
+        assert!(reg.route_action(99, ACTION_SNOOZE_3).is_none(), "unknown id");
+        assert!(reg.route_action(7, "bogus").is_none(), "unknown key");
     }
 }
