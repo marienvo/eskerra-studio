@@ -6,7 +6,7 @@
 use std::io::Write as _;
 use std::path::Path;
 
-use chrono::{Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
+use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -195,20 +195,61 @@ impl DefaultTime {
 ///
 /// DST edge cases: an ambiguous local time (fall-back overlap) resolves to
 /// the earlier of the two instants; a nonexistent local time (spring-forward
-/// gap) falls back to interpreting the wall-clock fields as UTC rather than
-/// guessing — both are rare for a fixed default time like `09:00` and never
-/// panic or silently drop the reminder.
-pub fn resolve_due_at_ms(value: DateTokenValue, date_only_default_time: DefaultTime) -> Option<i64> {
-    let (hour, minute) = value.time.unwrap_or((date_only_default_time.hour, date_only_default_time.minute));
+/// gap) resolves to the first valid local instant after the gap. If no valid
+/// local instant is found within the bounded search window, resolution fails
+/// safe instead of reinterpreting the user's wall-clock token as UTC.
+pub fn resolve_due_at_ms(
+    value: DateTokenValue,
+    date_only_default_time: DefaultTime,
+) -> Option<i64> {
+    let (hour, minute) = value
+        .time
+        .unwrap_or((date_only_default_time.hour, date_only_default_time.minute));
     let date = NaiveDate::from_ymd_opt(value.year as i32, value.month as u32, value.day as u32)?;
     let time = NaiveTime::from_hms_opt(hour as u32, minute as u32, 0)?;
     let naive = NaiveDateTime::new(date, time);
-    let local = match Local.from_local_datetime(&naive) {
-        chrono::LocalResult::Single(dt) => dt,
-        chrono::LocalResult::Ambiguous(earliest, _latest) => earliest,
-        chrono::LocalResult::None => Local.from_utc_datetime(&naive),
-    };
-    Some(local.timestamp_millis())
+    resolve_local_datetime_ms(&naive)
+}
+
+const DST_GAP_RESOLUTION_WINDOW_MINUTES: i64 = 24 * 60;
+
+fn resolve_local_datetime_ms(naive: &NaiveDateTime) -> Option<i64> {
+    resolve_local_datetime_ms_by(*naive, |candidate| {
+        match Local.from_local_datetime(&candidate) {
+            chrono::LocalResult::Single(dt) => chrono::LocalResult::Single(dt.timestamp_millis()),
+            chrono::LocalResult::Ambiguous(earliest, latest) => chrono::LocalResult::Ambiguous(
+                earliest.timestamp_millis(),
+                latest.timestamp_millis(),
+            ),
+            chrono::LocalResult::None => chrono::LocalResult::None,
+        }
+    })
+}
+
+fn resolve_local_datetime_ms_by(
+    naive: NaiveDateTime,
+    resolve: impl Fn(NaiveDateTime) -> chrono::LocalResult<i64>,
+) -> Option<i64> {
+    match resolve(naive) {
+        chrono::LocalResult::Single(timestamp_ms) => Some(timestamp_ms),
+        chrono::LocalResult::Ambiguous(earliest_ms, _latest_ms) => Some(earliest_ms),
+        chrono::LocalResult::None => resolve_next_valid_local_datetime_ms(naive, resolve),
+    }
+}
+
+fn resolve_next_valid_local_datetime_ms(
+    naive: NaiveDateTime,
+    resolve: impl Fn(NaiveDateTime) -> chrono::LocalResult<i64>,
+) -> Option<i64> {
+    for minutes_after_gap in 1..=DST_GAP_RESOLUTION_WINDOW_MINUTES {
+        let candidate = naive.checked_add_signed(Duration::minutes(minutes_after_gap))?;
+        match resolve(candidate) {
+            chrono::LocalResult::Single(timestamp_ms) => return Some(timestamp_ms),
+            chrono::LocalResult::Ambiguous(earliest_ms, _latest_ms) => return Some(earliest_ms),
+            chrono::LocalResult::None => {}
+        }
+    }
+    None
 }
 
 /// Builds a fresh, never-fired `Reminder` from a scanned token — the default
@@ -274,6 +315,7 @@ pub fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use crate::scanner::scan;
+    use chrono::LocalResult;
 
     fn scan_first(bytes: &[u8]) -> (ScannedToken, String) {
         let out = scan(bytes).expect("valid utf8");
@@ -311,6 +353,53 @@ mod tests {
         let with_nine = resolve_due_at_ms(token.value, DefaultTime::new(9, 0).unwrap()).unwrap();
         let with_eight = resolve_due_at_ms(token.value, DefaultTime::new(8, 0).unwrap()).unwrap();
         assert_eq!(with_nine, with_eight);
+    }
+
+    #[test]
+    fn nonexistent_local_time_resolves_to_first_post_gap_local_instant() {
+        let naive_gap = NaiveDate::from_ymd_opt(2026, 3, 8)
+            .unwrap()
+            .and_hms_opt(2, 30, 0)
+            .unwrap();
+        let post_gap = NaiveDate::from_ymd_opt(2026, 3, 8)
+            .unwrap()
+            .and_hms_opt(3, 0, 0)
+            .unwrap();
+
+        let resolved = resolve_local_datetime_ms_by(naive_gap, |candidate| {
+            if candidate >= naive_gap && candidate < post_gap {
+                LocalResult::None
+            } else {
+                LocalResult::Single(candidate.and_utc().timestamp_millis())
+            }
+        });
+
+        assert_eq!(resolved, Some(post_gap.and_utc().timestamp_millis()));
+    }
+
+    #[test]
+    fn nonexistent_local_time_fails_safe_when_gap_never_resolves() {
+        let naive_gap = NaiveDate::from_ymd_opt(2026, 3, 8)
+            .unwrap()
+            .and_hms_opt(2, 30, 0)
+            .unwrap();
+
+        let resolved = resolve_local_datetime_ms_by(naive_gap, |_candidate| LocalResult::None);
+
+        assert_eq!(resolved, None);
+    }
+
+    #[test]
+    fn ambiguous_local_time_resolves_to_earliest_instant() {
+        let ambiguous = NaiveDate::from_ymd_opt(2026, 11, 1)
+            .unwrap()
+            .and_hms_opt(1, 30, 0)
+            .unwrap();
+
+        let resolved =
+            resolve_local_datetime_ms_by(ambiguous, |_candidate| LocalResult::Ambiguous(10, 20));
+
+        assert_eq!(resolved, Some(10));
     }
 
     #[test]
