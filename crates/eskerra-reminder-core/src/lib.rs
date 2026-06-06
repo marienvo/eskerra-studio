@@ -9,6 +9,7 @@
 pub mod date_token;
 pub mod index;
 pub mod merge;
+pub mod resolve;
 pub mod scanner;
 
 pub use date_token::{format_date_token, parse_date_token, DateTokenValue};
@@ -17,4 +18,5 @@ pub use index::{
     IndexParseError, Reminder, ReminderIndex, ReminderState, UiCaretHint, SCHEMA_VERSION,
 };
 pub use merge::merge_reminders;
+pub use resolve::{resolve_live_token, TokenResolution};
 pub use scanner::{scan, ScanOutput, ScannedToken};

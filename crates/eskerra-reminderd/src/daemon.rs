@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use eskerra_reminder_core::{merge_reminders, DefaultTime, ReminderIndex};
+use eskerra_reminder_core::{merge_reminders, DefaultTime, Reminder, ReminderIndex, ReminderState};
 
 use crate::config::ReminderdConfig;
 use crate::index_store::{load_index, write_index, IndexLoadError};
@@ -19,6 +19,7 @@ use crate::paths::index_path_in;
 use crate::rederive::rederive_for_settings;
 use crate::scan::{rescan_changed_files, scan_vault};
 use crate::scheduler::{self, Action, ActionOutcome, FireKind, FireRequest, SCHEDULER_GRACE_MS};
+use crate::writeback::RemoveResult;
 
 /// Injected control over the real vault filesystem watcher, so the daemon's
 /// edge-case logic is testable without spawning `notify` backends. The real
@@ -65,6 +66,17 @@ pub enum Outcome {
     Rescanned { reminder_count: usize, full: bool },
     /// A watch batch arrived with no active vault — ignored.
     Ignored,
+}
+
+/// Everything an off-loop write-back worker needs to strike a reminder `id`,
+/// resolved from the run-loop-owned index so worker threads never touch the
+/// index directly (Phase 4). The `lock_key` is the canonical vault-relative
+/// path — the per-note write lock key (write-back rule 0).
+#[derive(Debug, Clone)]
+pub struct RemoveTarget {
+    pub note_abs_path: PathBuf,
+    pub lock_key: String,
+    pub stored: Reminder,
 }
 
 struct ActiveVault {
@@ -281,6 +293,51 @@ impl Daemon {
             self.dispatch(fires, now_ms);
         }
         outcome
+    }
+
+    // --- write-back (Phase 4) ---
+
+    /// Resolve the data a write-back worker needs for reminder `id`, or `None`
+    /// when there is no active vault or no such reminder (the caller treats
+    /// `None` as already-gone → `removed`, per write-back rule 1). A pure read of
+    /// the active index — the worker does the file I/O off the run loop so
+    /// removes to different notes run in parallel.
+    pub fn remove_target(&self, id: &str) -> Option<RemoveTarget> {
+        let active = self.active.as_ref()?;
+        let stored = active.index.reminders.iter().find(|r| r.id == id)?;
+        Some(RemoveTarget {
+            note_abs_path: active.root.join(&stored.vault_relative_path),
+            lock_key: stored.vault_relative_path.clone(),
+            stored: stored.clone(),
+        })
+    }
+
+    /// Record a write-back outcome in the index (write-back rules 3/7): drop the
+    /// reminder on `Removed`, mark it `Stale` on `Stale`, then persist + re-arm.
+    /// No-op without an active vault or a matching reminder (e.g. a vault switch
+    /// raced the worker). Runs inside the worker's per-note lock via the run
+    /// loop, so the index update is part of the locked critical section.
+    pub fn apply_remove_result(&mut self, id: &str, result: RemoveResult, now_ms: i64) {
+        let Some(active) = self.active.as_mut() else {
+            return;
+        };
+        match result {
+            RemoveResult::Removed => {
+                let before = active.index.reminders.len();
+                active.index.reminders.retain(|r| r.id != id);
+                if active.index.reminders.len() == before {
+                    return; // already gone from the index; no rewrite needed
+                }
+            }
+            RemoveResult::Stale => match active.index.reminders.iter_mut().find(|r| r.id == id) {
+                // Stale reminders stop firing (the scheduler skips `Stale`) but
+                // stay visible until a future safe rescan/write resolves them.
+                Some(reminder) => reminder.state = ReminderState::Stale,
+                None => return,
+            },
+        }
+        // Persist + recompute the next wakeup with no fires to send.
+        self.dispatch(Vec::new(), now_ms);
     }
 
     // --- internals ---
@@ -1129,5 +1186,128 @@ mod tests {
         assert_eq!(outcome, ActionOutcome::Unknown);
         // Index untouched (no needless rewrite / generatedAt bump).
         assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), before);
+    }
+
+    // --- write-back wiring (Phase 4) --------------------------------------
+
+    use crate::writeback::Remover;
+
+    fn only_reminder_id(d: &Daemon) -> String {
+        d.active_index().unwrap().reminders[0].id.clone()
+    }
+
+    #[test]
+    fn remove_target_resolves_path_lock_key_and_stored_entry() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "meet @2026-06-06_0900 soon");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let id = only_reminder_id(&d);
+
+        let target = d.remove_target(&id).expect("target for a live reminder");
+        assert_eq!(target.lock_key, "Inbox/a.md");
+        assert_eq!(target.note_abs_path, h.vault.join("Inbox/a.md"));
+        assert_eq!(target.stored.id, id);
+        assert_eq!(target.stored.normalized_token_text, "@2026-06-06_0900");
+
+        // No vault / unknown id → None (caller treats as already-gone → removed).
+        assert!(d.remove_target("no-such-id").is_none());
+    }
+
+    #[test]
+    fn apply_remove_result_removed_drops_reminder_and_persists() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let id = only_reminder_id(&d);
+        assert!(d.next_wakeup_ms().is_some(), "armed before removal");
+
+        d.apply_remove_result(&id, RemoveResult::Removed, NOW + 1);
+
+        assert!(d.active_index().unwrap().reminders.is_empty());
+        assert!(d.next_wakeup_ms().is_none(), "nothing left armed");
+        let on_disk =
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
+        assert!(on_disk.reminders.is_empty(), "drop persisted to disk");
+    }
+
+    #[test]
+    fn apply_remove_result_stale_marks_stale_and_stops_firing() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let id = only_reminder_id(&d);
+
+        d.apply_remove_result(&id, RemoveResult::Stale, NOW + 1);
+
+        let r = &d.active_index().unwrap().reminders[0];
+        assert_eq!(r.state, ReminderState::Stale);
+        assert!(d.next_wakeup_ms().is_none(), "stale reminders are not armed");
+        // A tick at the former fire time must not pop a notification.
+        let fire_at = r.fire_at_ms;
+        assert_eq!(d.on_tick(fire_at), 0);
+        assert!(h.sent().is_empty());
+        let on_disk =
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
+        assert_eq!(on_disk.reminders[0].state, ReminderState::Stale);
+    }
+
+    #[test]
+    fn end_to_end_remove_strikes_token_on_disk_and_drops_from_index() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "meet @2026-06-06_0900 soon");
+        h.write_note("Inbox/b.md", "other @2026-07-07_1000 keep");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let id = d
+            .active_index()
+            .unwrap()
+            .reminders
+            .iter()
+            .find(|r| r.vault_relative_path == "Inbox/a.md")
+            .unwrap()
+            .id
+            .clone();
+
+        // Mirror the production flow: resolve the target, strike under the
+        // per-note lock, then record the outcome in the index.
+        let target = d.remove_target(&id).unwrap();
+        let result = Remover::new().remove(
+            &target.note_abs_path,
+            &target.lock_key,
+            &target.stored,
+            |_| {},
+        );
+        assert_eq!(result, RemoveResult::Removed);
+        d.apply_remove_result(&id, result, NOW + 1);
+
+        // Token struck on disk, rest of the note byte-preserved.
+        assert_eq!(
+            std::fs::read_to_string(h.vault.join("Inbox/a.md")).unwrap(),
+            "meet @~~2026-06-06_0900~~ soon"
+        );
+        // a.md's reminder gone; b.md untouched.
+        let reminders = &d.active_index().unwrap().reminders;
+        assert_eq!(reminders.len(), 1);
+        assert_eq!(reminders[0].vault_relative_path, "Inbox/b.md");
+
+        // A rescan of the struck note keeps it gone (the struck token no longer
+        // matches the grammar).
+        let changed = vec![h.vault.join("Inbox/a.md").to_string_lossy().into_owned()];
+        d.on_watch_batch(false, &changed, NOW + 2);
+        assert!(d
+            .active_index()
+            .unwrap()
+            .reminders
+            .iter()
+            .all(|r| r.vault_relative_path != "Inbox/a.md"));
     }
 }
