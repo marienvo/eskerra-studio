@@ -34,6 +34,7 @@ import {useNoteMarkdownEditorCompartmentEffects} from './useNoteMarkdownEditorCo
 import {useNoteMarkdownEditorImageDrop} from './useNoteMarkdownEditorImageDrop';
 import {useNoteMarkdownEditorLoad} from './useNoteMarkdownEditorLoad';
 import {useNoteMarkdownEditorShellRefs} from './useNoteMarkdownEditorShellRefs';
+import type {DateTokenPickerOpenHandler} from './dateToken/dateTokenTrigger';
 
 export type {
   NoteMarkdownEditorHandle,
@@ -61,6 +62,9 @@ const NoteMarkdownEditorImpl = forwardRef<
   const shell = useNoteMarkdownEditorShellRefs(props, readOnly);
 
   const tableCellMenuViewRef = useRef<EditorView | null>(null);
+  const onOpenDateTokenPickerRef = useRef<DateTokenPickerOpenHandler | undefined>(
+    undefined,
+  );
   const [tableCellMenuOpen, setTableCellMenuOpen] = useState(false);
   const [tableCellMenuAnchor, setTableCellMenuAnchor] = useState<{
     x: number;
@@ -111,6 +115,7 @@ const NoteMarkdownEditorImpl = forwardRef<
     const paste = pasteHandlersRef.current;
     const {onEditorClick, onEditorMiddleClick} =
       createNoteMarkdownPointerLinkHandlers({
+        onOpenDateTokenPicker: () => onOpenDateTokenPickerRef.current,
         onWikiLinkActivate: p => shell.onWikiLinkActivateRef.current(p),
         onMarkdownRelativeLinkActivate: p =>
           shell.onMarkdownRelativeLinkActivateRef.current(p),
@@ -139,6 +144,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       onMarkdownRelativeLinkActivateRef:
         shell.onMarkdownRelativeLinkActivateRef,
       onMarkdownExternalLinkOpenRef: shell.onMarkdownExternalLinkOpenRef,
+      onOpenDateTokenPickerRef,
       onSaveShortcutRef: shell.onSaveShortcutRef,
       modEnterSaveWhenNoLinkRef: shell.modEnterSaveWhenNoLinkRef,
       onDeleteNoteShortcutRef: shell.onDeleteNoteShortcutRef,

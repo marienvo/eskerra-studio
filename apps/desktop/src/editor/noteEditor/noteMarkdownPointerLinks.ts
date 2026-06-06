@@ -15,8 +15,11 @@ import {
 } from './linkClickUseMousedownPosition';
 import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {wikiLinkPointerActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPosition';
+import {openDateTokenPickerAtClickPosition} from './dateToken/dateTokenClick';
+import type {DateTokenPickerOpenHandler} from './dateToken/dateTokenTrigger';
 
 export type NoteMarkdownPointerLinkHandlers = {
+  onOpenDateTokenPicker?: () => DateTokenPickerOpenHandler | undefined;
   onWikiLinkActivate: (payload: {
     inner: string;
     at: number;
@@ -162,6 +165,17 @@ export function createNoteMarkdownPointerLinkHandlers(
       const click = resolvePrimaryLinkClickContext(view, event);
       const pos = click.pos;
       if (pos == null) {
+        return false;
+      }
+      if (
+        openDateTokenPickerAtClickPosition(
+          view,
+          pos,
+          event,
+          handlers.onOpenDateTokenPicker?.(),
+        )
+      ) {
+        // Keep the click non-modal: CodeMirror can still place the caret for direct text editing.
         return false;
       }
       return activateNoteMarkdownPrimaryLinkAtPosition(

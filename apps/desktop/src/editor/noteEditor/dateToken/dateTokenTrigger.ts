@@ -1,12 +1,13 @@
 import {EditorState, type Extension} from '@codemirror/state';
 import {EditorView, type Rect} from '@codemirror/view';
 
-import {DATE_TOKEN_PREFIX_PATTERN} from './dateToken';
+import {DATE_TOKEN_PREFIX_PATTERN, type DateTokenValue} from './dateToken';
 
 export type DateTokenPickerOpenRequest = {
   readonly view: EditorView;
   readonly tokenFrom: number;
   readonly tokenTo: number;
+  readonly initialValue?: DateTokenValue;
   readonly anchorRect: Rect | null;
 };
 
