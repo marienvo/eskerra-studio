@@ -27,6 +27,7 @@ vi.mock('../lib/htmlAudioPlayer', () => ({
     getProgress: (...args: unknown[]) => hoisted.playerGetProgress(...args),
     getCurrentTrackEpisodeId: vi.fn().mockReturnValue(null),
     getLoadedTrack: vi.fn().mockReturnValue(null),
+    isPlaybackActive: vi.fn().mockReturnValue(false),
     play: vi.fn().mockResolvedValue(undefined),
     pause: vi.fn().mockResolvedValue(undefined),
     resume: vi.fn().mockResolvedValue(undefined),

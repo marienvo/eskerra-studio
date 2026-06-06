@@ -134,6 +134,7 @@ export function useAppGitSyncOrchestration({
     onSettled: refreshGitStatus,
   });
   const runManualGitSync = manualGitSync.run;
+  const waitForManualGitSync = manualGitSync.waitForCurrentRun;
   const flushBeforeManualSyncBusyRef = useRef(false);
   const flushBeforeManualSyncPromiseRef = useRef<Promise<boolean> | null>(null);
   const [flushBeforeManualSyncRunning, setFlushBeforeManualSyncRunning] = useState(false);
@@ -199,10 +200,10 @@ export function useAppGitSyncOrchestration({
   const waitForFlushThenManualSync = useCallback((): Promise<boolean> | null => {
     return (
       flushBeforeManualSyncPromiseRef.current ??
-      manualGitSync.waitForCurrentRun?.() ??
+      waitForManualGitSync?.() ??
       null
     );
-  }, [manualGitSync.waitForCurrentRun]);
+  }, [waitForManualGitSync]);
   const fetchFreshGitStatusForClose = useCallback(async (): Promise<GitStatusResult | null> => {
     if (vaultPath == null || currentGitBranch == null) {
       return gitStatusForDisplay;

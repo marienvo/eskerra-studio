@@ -1,6 +1,7 @@
-import {act, render} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
+import type {Transaction} from '@codemirror/state';
 import {createRef} from 'react';
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {EditorView, runScopeHandlers} from '@codemirror/view';
 
@@ -10,6 +11,7 @@ import {
   type NoteMarkdownEditorHandle,
   type NoteMarkdownEditorProps,
 } from './NoteMarkdownEditor';
+import {formatDateToken, todayDateParts} from './dateToken/dateToken';
 
 function attachmentHost(): NoteInboxAttachmentHost {
   const none = async () => [];
@@ -68,7 +70,46 @@ function editorView(container: HTMLElement): EditorView {
   return view;
 }
 
+function mockDateTokenAnchorCoords(view: EditorView): DOMRect {
+  const rect = {
+    bottom: 16,
+    height: 12,
+    left: 10,
+    right: 18,
+    top: 4,
+    width: 8,
+    x: 10,
+    y: 4,
+    toJSON: () => ({}),
+  } as DOMRect;
+  vi.spyOn(view, 'coordsAtPos').mockReturnValue(rect);
+  return rect;
+}
+
+function dispatchEditorInput(
+  view: EditorView,
+  from: number,
+  text: string,
+): boolean {
+  const insert = (): Transaction =>
+    view.state.update({
+      changes: {from, to: from, insert: text},
+      selection: {anchor: from + text.length},
+    });
+  const handled = view.state
+    .facet(EditorView.inputHandler)
+    .some(handler => handler(view, from, from, text, insert));
+  if (!handled) {
+    view.dispatch(insert());
+  }
+  return handled;
+}
+
 describe('NoteMarkdownEditor', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('emits markdown changes from the mounted CodeMirror view', () => {
     const onMarkdownChange = vi.fn();
     const {container} = render(
@@ -143,5 +184,180 @@ describe('NoteMarkdownEditor', () => {
     });
 
     expect(onSaveShortcut).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the date token picker from @ input and commits the selected date', () => {
+    const onMarkdownChange = vi.fn();
+    const {container} = render(
+      <NoteMarkdownEditor
+        {...baseProps({initialMarkdown: '', onMarkdownChange})}
+      />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+
+    const today = todayDateParts(new Date());
+    const monthLabels = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ] as const;
+
+    act(() => {
+      fireEvent.click(
+        screen.getByRole('gridcell', {
+          name: `${today.day} ${monthLabels[today.month - 1]} ${today.year}`,
+        }),
+      );
+    });
+
+    const expectedToken = formatDateToken(today);
+    expect(view.state.doc.toString()).toBe(`${expectedToken} `);
+    expect(onMarkdownChange).toHaveBeenLastCalledWith(`${expectedToken} `);
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+  });
+
+  it('reopens the date token picker on chip click and replaces the whole token without a trailing space', () => {
+    const initialMarkdown = 'Due @2026-12-28 please';
+    const onMarkdownChange = vi.fn();
+    const {container} = render(
+      <NoteMarkdownEditor
+        {...baseProps({initialMarkdown, onMarkdownChange})}
+      />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+    const tokenFrom = initialMarkdown.indexOf('@2026-12-28');
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(tokenFrom);
+
+    const tokenEl = container.querySelector('[data-date-token]');
+    if (!(tokenEl instanceof HTMLElement)) {
+      throw new Error('Missing date token chip');
+    }
+
+    act(() => {
+      fireEvent.click(tokenEl, {clientX: 100, clientY: 100, button: 0});
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+
+    act(() => {
+      fireEvent.click(screen.getByRole('gridcell', {name: '15 December 2026'}));
+    });
+
+    const expectedMarkdown = `Due ${formatDateToken({year: 2026, month: 12, day: 15})} please`;
+    expect(view.state.doc.toString()).toBe(expectedMarkdown);
+    expect(onMarkdownChange).toHaveBeenLastCalledWith(expectedMarkdown);
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+  });
+
+  it('dismisses the date token picker on outside pointerdown', () => {
+    const {container} = render(
+      <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+
+    const host = container.querySelector('[data-note-markdown-editor]');
+    if (!(host instanceof HTMLElement)) {
+      throw new Error('Missing editor host');
+    }
+
+    act(() => {
+      fireEvent.pointerDown(host);
+    });
+
+    expect(view.state.doc.toString()).toBe('@');
+    expect(
+      screen.queryByRole('dialog', {name: 'Pick date and time'}),
+    ).toBeNull();
+  });
+
+  it('does not open the date token picker when the editor is read-only', () => {
+    const {container} = render(
+      <NoteMarkdownEditor
+        {...baseProps({initialMarkdown: '', readOnly: true})}
+      />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    expect(
+      screen.queryByRole('dialog', {name: 'Pick date and time'}),
+    ).toBeNull();
+    expect(view.state.doc.toString()).toBe('@');
+  });
+
+  it('does not reopen the date token picker on chip click when read-only', () => {
+    const initialMarkdown = 'Due @2026-12-28 please';
+    const {container} = render(
+      <NoteMarkdownEditor
+        {...baseProps({initialMarkdown, readOnly: true})}
+      />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+    const tokenFrom = initialMarkdown.indexOf('@2026-12-28');
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(tokenFrom);
+
+    const tokenEl = container.querySelector('[data-date-token]');
+    if (!(tokenEl instanceof HTMLElement)) {
+      throw new Error('Missing date token chip');
+    }
+
+    act(() => {
+      fireEvent.click(tokenEl, {clientX: 100, clientY: 100, button: 0});
+    });
+
+    expect(
+      screen.queryByRole('dialog', {name: 'Pick date and time'}),
+    ).toBeNull();
+    expect(view.state.doc.toString()).toBe(initialMarkdown);
+  });
+
+  it('does not dismiss the date token picker on pointerdown inside the overlay', () => {
+    const {container} = render(
+      <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    const dialog = screen.getByRole('dialog', {name: 'Pick date and time'});
+
+    act(() => {
+      fireEvent.pointerDown(dialog);
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+    expect(view.state.doc.toString()).toBe('@');
   });
 });

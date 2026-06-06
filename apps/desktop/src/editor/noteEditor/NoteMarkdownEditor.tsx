@@ -3,12 +3,14 @@ import {EditorView} from '@codemirror/view';
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
+import {createPortal} from 'react-dom';
 
 import {
   todayHubPerfEnabled,
@@ -34,11 +36,86 @@ import {useNoteMarkdownEditorCompartmentEffects} from './useNoteMarkdownEditorCo
 import {useNoteMarkdownEditorImageDrop} from './useNoteMarkdownEditorImageDrop';
 import {useNoteMarkdownEditorLoad} from './useNoteMarkdownEditorLoad';
 import {useNoteMarkdownEditorShellRefs} from './useNoteMarkdownEditorShellRefs';
+import {DateTimePicker} from './dateToken/DateTimePicker';
+import {
+  formatDateToken,
+  type DateTokenValue,
+} from './dateToken/dateToken';
+import {
+  clampDateTokenPickerOverlayPosition,
+  DATE_TOKEN_PICKER_OVERLAY_GAP_PX,
+  type DateTokenPickerOverlayAnchor,
+  type DateTokenPickerOverlayPosition,
+} from './dateToken/dateTokenPickerOverlayPosition';
+import type {
+  DateTokenPickerOpenHandler,
+  DateTokenPickerOpenRequest,
+} from './dateToken/dateTokenTrigger';
 
 export type {
   NoteMarkdownEditorHandle,
   NoteMarkdownEditorProps,
 } from './noteMarkdownEditorTypes';
+
+type DateTokenPickerOverlayState = {
+  readonly anchorRect: DateTokenPickerOverlayAnchor;
+  readonly initialValue: DateTokenValue | null;
+  readonly commit: (value: DateTokenValue) => void;
+};
+
+function fallbackDateTokenAnchorRect(view: EditorView): DateTokenPickerOverlayAnchor {
+  const rect = view.dom.getBoundingClientRect();
+  const anchorY = rect.top + 24;
+  return {
+    left: rect.left + 24,
+    top: anchorY,
+    bottom: anchorY,
+  };
+}
+
+function dateTokenOverlayAnchorFromRequest(
+  request: DateTokenPickerOpenRequest,
+): DateTokenPickerOverlayAnchor {
+  if (request.anchorRect) {
+    return {
+      left: request.anchorRect.left,
+      top: request.anchorRect.top,
+      bottom: request.anchorRect.bottom,
+    };
+  }
+  return fallbackDateTokenAnchorRect(request.view);
+}
+
+function buildDateTokenPickerOverlayState(
+  request: DateTokenPickerOpenRequest,
+): DateTokenPickerOverlayState {
+  const insertTrailingSpace = request.initialValue == null;
+  let tokenEnd = request.tokenTo;
+  return {
+    anchorRect: dateTokenOverlayAnchorFromRequest(request),
+    initialValue: request.initialValue ?? null,
+    commit: value => {
+      const view = request.view;
+      if (!view.state.facet(EditorView.editable)) {
+        return;
+      }
+      const token = formatDateToken(value);
+      const replacement = insertTrailingSpace ? `${token} ` : token;
+      const currentDocLength = view.state.doc.length;
+      const from = Math.max(0, Math.min(request.tokenFrom, currentDocLength));
+      const requestedTo = insertTrailingSpace
+        ? view.state.selection.main.head
+        : tokenEnd;
+      const to = Math.max(from, Math.min(requestedTo, currentDocLength));
+      view.dispatch({
+        changes: {from, to, insert: replacement},
+        selection: {anchor: from + replacement.length},
+        scrollIntoView: true,
+      });
+      tokenEnd = from + replacement.length;
+    },
+  };
+}
 
 const NoteMarkdownEditorImpl = forwardRef<
   NoteMarkdownEditorHandle,
@@ -61,6 +138,14 @@ const NoteMarkdownEditorImpl = forwardRef<
   const shell = useNoteMarkdownEditorShellRefs(props, readOnly);
 
   const tableCellMenuViewRef = useRef<EditorView | null>(null);
+  const onOpenDateTokenPickerRef = useRef<DateTokenPickerOpenHandler | undefined>(
+    undefined,
+  );
+  const dateTokenPickerOverlayRef = useRef<HTMLDivElement | null>(null);
+  const [dateTokenPicker, setDateTokenPicker] =
+    useState<DateTokenPickerOverlayState | null>(null);
+  const [dateTokenPickerOverlayPosition, setDateTokenPickerOverlayPosition] =
+    useState<DateTokenPickerOverlayPosition | null>(null);
   const [tableCellMenuOpen, setTableCellMenuOpen] = useState(false);
   const [tableCellMenuAnchor, setTableCellMenuAnchor] = useState<{
     x: number;
@@ -111,6 +196,7 @@ const NoteMarkdownEditorImpl = forwardRef<
     const paste = pasteHandlersRef.current;
     const {onEditorClick, onEditorMiddleClick} =
       createNoteMarkdownPointerLinkHandlers({
+        onOpenDateTokenPicker: () => onOpenDateTokenPickerRef.current,
         onWikiLinkActivate: p => shell.onWikiLinkActivateRef.current(p),
         onMarkdownRelativeLinkActivate: p =>
           shell.onMarkdownRelativeLinkActivateRef.current(p),
@@ -139,6 +225,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       onMarkdownRelativeLinkActivateRef:
         shell.onMarkdownRelativeLinkActivateRef,
       onMarkdownExternalLinkOpenRef: shell.onMarkdownExternalLinkOpenRef,
+      onOpenDateTokenPickerRef,
       onSaveShortcutRef: shell.onSaveShortcutRef,
       modEnterSaveWhenNoLinkRef: shell.modEnterSaveWhenNoLinkRef,
       onDeleteNoteShortcutRef: shell.onDeleteNoteShortcutRef,
@@ -194,6 +281,96 @@ const NoteMarkdownEditorImpl = forwardRef<
       setTableCellMenuOpen(true);
     };
   });
+
+  useLayoutEffect(() => {
+    onOpenDateTokenPickerRef.current = request => {
+      if (shell.readOnlyRef.current) {
+        return;
+      }
+      setDateTokenPicker(buildDateTokenPickerOverlayState(request));
+    };
+    return () => {
+      onOpenDateTokenPickerRef.current = undefined;
+    };
+  }, [shell.readOnlyRef]);
+
+  useLayoutEffect(() => {
+    if (!dateTokenPicker) {
+      setDateTokenPickerOverlayPosition(null);
+      return;
+    }
+
+    const measureAndClamp = () => {
+      const overlay = dateTokenPickerOverlayRef.current;
+      if (!overlay) {
+        return;
+      }
+      const {width, height} = overlay.getBoundingClientRect();
+      setDateTokenPickerOverlayPosition(
+        clampDateTokenPickerOverlayPosition(
+          dateTokenPicker.anchorRect,
+          {width, height},
+          {width: window.innerWidth, height: window.innerHeight},
+        ),
+      );
+    };
+
+    measureAndClamp();
+
+    const overlay = dateTokenPickerOverlayRef.current;
+    let resizeObserver: ResizeObserver | null = null;
+    if (overlay && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(measureAndClamp);
+      resizeObserver.observe(overlay);
+    }
+    window.addEventListener('resize', measureAndClamp);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', measureAndClamp);
+    };
+  }, [dateTokenPicker]);
+
+  useEffect(() => {
+    if (!dateTokenPicker) {
+      return;
+    }
+    const view = shell.viewRef.current;
+    if (!view) {
+      return;
+    }
+    const onEditorScroll = () => {
+      setDateTokenPicker(null);
+    };
+    view.scrollDOM.addEventListener('scroll', onEditorScroll, {passive: true});
+    return () => {
+      view.scrollDOM.removeEventListener('scroll', onEditorScroll);
+    };
+  }, [dateTokenPicker, shell.viewRef]);
+
+  useEffect(() => {
+    if (!dateTokenPicker) {
+      return;
+    }
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const overlay = dateTokenPickerOverlayRef.current;
+      if (!overlay) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (overlay.contains(target)) {
+        return;
+      }
+      setDateTokenPicker(null);
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+    };
+  }, [dateTokenPicker]);
 
   useImperativeHandle(
     ref,
@@ -264,6 +441,32 @@ const NoteMarkdownEditorImpl = forwardRef<
           setTableCellMenuOpen(o);
         }}
       />
+      {dateTokenPicker
+        ? createPortal(
+            <div
+              ref={dateTokenPickerOverlayRef}
+              data-date-token-picker-overlay
+              style={{
+                position: 'fixed',
+                left:
+                  dateTokenPickerOverlayPosition?.left
+                  ?? dateTokenPicker.anchorRect.left,
+                top:
+                  dateTokenPickerOverlayPosition?.top
+                  ?? dateTokenPicker.anchorRect.bottom
+                    + DATE_TOKEN_PICKER_OVERLAY_GAP_PX,
+                zIndex: 320,
+              }}
+            >
+              <DateTimePicker
+                initialValue={dateTokenPicker.initialValue}
+                onConfirm={dateTokenPicker.commit}
+                onCancel={() => setDateTokenPicker(null)}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 });

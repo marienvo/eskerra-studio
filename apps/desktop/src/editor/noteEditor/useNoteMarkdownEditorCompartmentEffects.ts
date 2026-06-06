@@ -30,6 +30,7 @@ export function useNoteMarkdownEditorCompartmentEffects(
     );
     view.dispatch({effects: wikiEffect});
     dispatchEskerraTableNestedCellEditors(view, {effects: wikiEffect});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads shell refs; re-run keyed on resolver
   }, [wikiLinkTargetIsResolved]);
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export function useNoteMarkdownEditorCompartmentEffects(
     );
     view.dispatch({effects: relEffect});
     dispatchEskerraTableNestedCellEditors(view, {effects: relEffect});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads shell refs; re-run keyed on resolver
   }, [relativeMarkdownLinkHrefIsResolved]);
 
   useLayoutEffect(() => {
@@ -57,5 +59,6 @@ export function useNoteMarkdownEditorCompartmentEffects(
     ]);
     view.dispatch({effects: roEffect});
     dispatchEskerraTableNestedCellEditors(view, {effects: roEffect});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads shell refs; re-run keyed on readOnly
   }, [readOnly]);
 }

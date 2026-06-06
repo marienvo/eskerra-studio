@@ -1,0 +1,156 @@
+.root {
+  box-sizing: border-box;
+  width: 17.5rem;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color-scheme: light;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.headerNav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-button-secondary-bg);
+  color: var(--color-text);
+  cursor: default;
+}
+
+.headerNav:hover,
+.headerNav:focus-visible {
+  background: color-mix(in srgb, var(--color-button-secondary-bg) 80%, var(--color-text) 20%);
+  outline: none;
+}
+
+.monthLabel {
+  margin: 0;
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.todayRow {
+  display: flex;
+  justify-content: center;
+}
+
+.weekdayRow,
+.dayGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.weekday {
+  margin: 0;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-text-muted, color-mix(in srgb, var(--color-text) 55%, transparent));
+}
+
+.dayCell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  cursor: default;
+}
+
+.dayCell:hover,
+.dayCell:focus-visible {
+  background: color-mix(in srgb, var(--color-button-secondary-bg) 70%, var(--color-text) 30%);
+  outline: none;
+}
+
+.dayCellOutside {
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.dayCellSelected {
+  background: var(--color-accent);
+  color: var(--color-primary-fg);
+  border-color: var(--color-primary-border);
+}
+
+.dayCellSelected:hover,
+.dayCellSelected:focus-visible {
+  background: color-mix(in srgb, var(--color-accent) 88%, var(--color-text) 12%);
+}
+
+.timeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border);
+}
+
+.noTimeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+  user-select: none;
+}
+
+.noTimeLabel p {
+  margin: 0;
+}
+
+.timeFields {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timeInput {
+  box-sizing: border-box;
+  width: 3rem;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeInput:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.timeSeparator {
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}

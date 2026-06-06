@@ -173,8 +173,7 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
 
   const pauseIfPlaying = useCallback(async () => {
     const p = getDesktopAudioPlayer();
-    const st = await p.getState();
-    if (st !== 'playing') {
+    if (!p.isPlaybackActive()) {
       return;
     }
     const ep = snapshotRef.current.context.episode
@@ -186,6 +185,12 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
 
     await p.pause();
     const latestProgress = await p.getProgress();
+    send({
+      type: 'PROGRESS',
+      positionMs: latestProgress.positionMs,
+      durationMs: latestProgress.durationMs,
+    });
+    send({type: 'NATIVE', state: 'paused'});
 
     const root = vaultRootRef.current;
     if (!root) {
@@ -222,13 +227,13 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
     onError,
     onPlaylistDiskUpdatedRef,
     queuePersistFromProgress,
+    send,
     snapshotRef,
     vaultRootRef,
   ]);
 
   const togglePause = useCallback(async () => {
     const p = getDesktopAudioPlayer();
-    const st = await p.getState();
     const ep = snapshotRef.current.context.episode
       ? episodesByIdRef.current.get(snapshotRef.current.context.episode!.id) ?? null
       : null;
@@ -236,34 +241,30 @@ export function useDesktopPlaybackTransportActions(ctx: DesktopPlaybackContext) 
       return;
     }
 
-    if (st === 'playing') {
+    if (p.isPlaybackActive()) {
       await pauseIfPlaying();
-    } else if (
-      st === 'paused' ||
-      st === 'ended' ||
-      st === 'loading' ||
-      st === 'error'
-    ) {
-      await p.resume();
-      const resumeProgress = await p.getProgress();
+      return;
+    }
 
-      const resumeDeviceId = deviceIdRef.current;
-      if (!resumeDeviceId) {
-        onError('Device id missing from local settings.');
-        return;
-      }
+    await p.resume();
+    const resumeProgress = await p.getProgress();
 
-      try {
-        queuePersistFromProgress(
-          ep,
-          resumeProgress.positionMs,
-          resumeProgress.durationMs,
-        );
-      } catch (e) {
-        onError(
-          e instanceof Error ? e.message : 'Could not save playback position.',
-        );
-      }
+    const resumeDeviceId = deviceIdRef.current;
+    if (!resumeDeviceId) {
+      onError('Device id missing from local settings.');
+      return;
+    }
+
+    try {
+      queuePersistFromProgress(
+        ep,
+        resumeProgress.positionMs,
+        resumeProgress.durationMs,
+      );
+    } catch (e) {
+      onError(
+        e instanceof Error ? e.message : 'Could not save playback position.',
+      );
     }
   },
   [

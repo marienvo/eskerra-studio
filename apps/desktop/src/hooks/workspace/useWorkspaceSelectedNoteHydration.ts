@@ -131,6 +131,7 @@ export function useWorkspaceSelectedNoteHydration({
       openTimeDiskBodyRef.current = '';
       clearLastPersistedSnapshot();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs omitted; keyed on note selection
   }, [
     vaultRoot,
     selectedUri,
@@ -162,6 +163,7 @@ export function useWorkspaceSelectedNoteHydration({
     });
     inboxEditorRef.current?.loadMarkdown('', {selection: 'start'});
     scheduleBacklinksDeferOneFrameAfterLoad();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs omitted; keyed on note selection
   }, [
     vaultRoot,
     selectedUri,
@@ -185,6 +187,7 @@ export function useWorkspaceSelectedNoteHydration({
     queueMicrotask(() => {
       setBacklinksActiveBody(snap);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs omitted; keyed on note selection
   }, [
     backlinksActiveBodyRef,
     composingNewEntry,
@@ -212,6 +215,7 @@ export function useWorkspaceSelectedNoteHydration({
       setBacklinksActiveBody(liveFull);
     }, INBOX_BACKLINK_BODY_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs omitted; keyed on body transitions
   }, [
     backlinksActiveBodyRef,
     composingNewEntry,
@@ -264,6 +268,7 @@ export function useWorkspaceSelectedNoteHydration({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs omitted; keyed on note selection
   }, [
     vaultRoot,
     selectedUri,
