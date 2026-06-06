@@ -1,7 +1,7 @@
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import type {Transaction} from '@codemirror/state';
 import {createRef} from 'react';
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {EditorView, runScopeHandlers} from '@codemirror/view';
 
@@ -70,6 +70,22 @@ function editorView(container: HTMLElement): EditorView {
   return view;
 }
 
+function mockDateTokenAnchorCoords(view: EditorView): DOMRect {
+  const rect = {
+    bottom: 16,
+    height: 12,
+    left: 10,
+    right: 18,
+    top: 4,
+    width: 8,
+    x: 10,
+    y: 4,
+    toJSON: () => ({}),
+  } as DOMRect;
+  vi.spyOn(view, 'coordsAtPos').mockReturnValue(rect);
+  return rect;
+}
+
 function dispatchEditorInput(
   view: EditorView,
   from: number,
@@ -90,6 +106,10 @@ function dispatchEditorInput(
 }
 
 describe('NoteMarkdownEditor', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('emits markdown changes from the mounted CodeMirror view', () => {
     const onMarkdownChange = vi.fn();
     const {container} = render(
@@ -174,18 +194,7 @@ describe('NoteMarkdownEditor', () => {
       />,
     );
     const view = editorView(container);
-    const rect = {
-      bottom: 16,
-      height: 12,
-      left: 10,
-      right: 18,
-      top: 4,
-      width: 8,
-      x: 10,
-      y: 4,
-      toJSON: () => ({}),
-    } as DOMRect;
-    vi.spyOn(view, 'coordsAtPos').mockReturnValue(rect);
+    mockDateTokenAnchorCoords(view);
 
     act(() => {
       expect(dispatchEditorInput(view, 0, '@')).toBe(true);
@@ -225,23 +234,48 @@ describe('NoteMarkdownEditor', () => {
     ).toBeNull();
   });
 
+  it('reopens the date token picker on chip click and replaces the whole token without a trailing space', () => {
+    const initialMarkdown = 'Due @2026-12-28 please';
+    const onMarkdownChange = vi.fn();
+    const {container} = render(
+      <NoteMarkdownEditor
+        {...baseProps({initialMarkdown, onMarkdownChange})}
+      />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+    const tokenFrom = initialMarkdown.indexOf('@2026-12-28');
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(tokenFrom);
+
+    const tokenEl = container.querySelector('[data-date-token]');
+    if (!(tokenEl instanceof HTMLElement)) {
+      throw new Error('Missing date token chip');
+    }
+
+    act(() => {
+      fireEvent.click(tokenEl, {clientX: 100, clientY: 100, button: 0});
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+
+    act(() => {
+      fireEvent.click(screen.getByRole('gridcell', {name: '15 December 2026'}));
+    });
+
+    const expectedMarkdown = `Due ${formatDateToken({year: 2026, month: 12, day: 15})} please`;
+    expect(view.state.doc.toString()).toBe(expectedMarkdown);
+    expect(onMarkdownChange).toHaveBeenLastCalledWith(expectedMarkdown);
+    expect(
+      screen.queryByRole('dialog', {name: 'Pick date and time'}),
+    ).toBeNull();
+  });
+
   it('dismisses the date token picker on outside pointerdown', () => {
     const {container} = render(
       <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,
     );
     const view = editorView(container);
-    const rect = {
-      bottom: 16,
-      height: 12,
-      left: 10,
-      right: 18,
-      top: 4,
-      width: 8,
-      x: 10,
-      y: 4,
-      toJSON: () => ({}),
-    } as DOMRect;
-    vi.spyOn(view, 'coordsAtPos').mockReturnValue(rect);
+    mockDateTokenAnchorCoords(view);
 
     act(() => {
       expect(dispatchEditorInput(view, 0, '@')).toBe(true);
@@ -269,18 +303,7 @@ describe('NoteMarkdownEditor', () => {
       <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,
     );
     const view = editorView(container);
-    const rect = {
-      bottom: 16,
-      height: 12,
-      left: 10,
-      right: 18,
-      top: 4,
-      width: 8,
-      x: 10,
-      y: 4,
-      toJSON: () => ({}),
-    } as DOMRect;
-    vi.spyOn(view, 'coordsAtPos').mockReturnValue(rect);
+    mockDateTokenAnchorCoords(view);
 
     act(() => {
       expect(dispatchEditorInput(view, 0, '@')).toBe(true);
