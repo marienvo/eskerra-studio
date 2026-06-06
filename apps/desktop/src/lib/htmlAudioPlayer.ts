@@ -40,7 +40,8 @@ async function playIgnoringSuperseded(audio: HTMLAudioElement): Promise<void> {
   }
 }
 
-function mapAudioPaused(audio: HTMLAudioElement, ended: boolean): PlayerState {
+/** Maps `HTMLAudioElement` flags to shared player state (exported for unit tests). */
+export function mapAudioPaused(audio: HTMLAudioElement, ended: boolean): PlayerState {
   if (ended) {
     return 'ended';
   }
@@ -59,6 +60,13 @@ function mapAudioPaused(audio: HTMLAudioElement, ended: boolean): PlayerState {
       audio.played.length > 0)
   ) {
     return 'paused';
+  }
+  // WebKitGTK can keep `readyState` below HAVE_FUTURE_DATA while playback is audible.
+  if (
+    !audio.paused &&
+    (audio.currentTime > 0 || audio.played.length > 0)
+  ) {
+    return 'playing';
   }
   if (audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
     return 'loading';
@@ -194,10 +202,12 @@ export class HtmlAudioPlayer implements AudioPlayer {
     this.audio.addEventListener('playing', () => {
       this.waitingHold = false;
       this.scheduleBufferingEval();
+      this.emitState();
     });
     this.audio.addEventListener('canplay', () => {
       this.waitingHold = false;
       this.scheduleBufferingEval();
+      this.emitState();
     });
     this.audio.addEventListener('play', () => {
       this.endedFlag = false;
@@ -360,6 +370,11 @@ export class HtmlAudioPlayer implements AudioPlayer {
 
   async getState(): Promise<PlayerState> {
     return mapAudioPaused(this.audio, this.endedFlag);
+  }
+
+  /** True when the element is audibly playing (independent of `getState()` label quirks). */
+  isPlaybackActive(): boolean {
+    return Boolean(this.audio.src) && !this.endedFlag && !this.audio.paused;
   }
 
   /** Episode id of the loaded track, for playlist priming / reconciliation. */
