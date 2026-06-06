@@ -316,11 +316,11 @@ const NoteMarkdownEditorImpl = forwardRef<
     measureAndClamp();
 
     const overlay = dateTokenPickerOverlayRef.current;
-    const resizeObserver =
-      overlay && typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(measureAndClamp)
-        : null;
-    resizeObserver?.observe(overlay);
+    let resizeObserver: ResizeObserver | null = null;
+    if (overlay && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(measureAndClamp);
+      resizeObserver.observe(overlay);
+    }
     window.addEventListener('resize', measureAndClamp);
 
     return () => {
