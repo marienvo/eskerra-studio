@@ -43,10 +43,11 @@ export function useQuickOpenSearch(
 
   const filtered = useMemo(() => {
     const getScores =
-      appliedQuery.length > 0 && usageRevision >= 0
+      appliedQuery.length > 0
         ? buildQuickOpenUsageScoreLookup(appliedQuery)
         : undefined;
     return filterVaultNotesForQuickOpen(appliedQuery, vaultRoot, refs, getScores);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- usageRevision triggers recompute when the mutable usage store mutates
   }, [appliedQuery, refs, usageRevision, vaultRoot]);
 
   const searchPending =
