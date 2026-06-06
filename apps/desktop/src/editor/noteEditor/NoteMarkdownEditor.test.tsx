@@ -204,4 +204,75 @@ describe('NoteMarkdownEditor', () => {
       screen.queryByRole('dialog', {name: 'Pick date and time'}),
     ).toBeNull();
   });
+
+  it('dismisses the date token picker on outside pointerdown', () => {
+    const {container} = render(
+      <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,
+    );
+    const view = editorView(container);
+    const rect = {
+      bottom: 16,
+      height: 12,
+      left: 10,
+      right: 18,
+      top: 4,
+      width: 8,
+      x: 10,
+      y: 4,
+      toJSON: () => ({}),
+    } as DOMRect;
+    vi.spyOn(view, 'coordsAtPos').mockReturnValue(rect);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+
+    const host = container.querySelector('[data-note-markdown-editor]');
+    if (!(host instanceof HTMLElement)) {
+      throw new Error('Missing editor host');
+    }
+
+    act(() => {
+      fireEvent.pointerDown(host);
+    });
+
+    expect(view.state.doc.toString()).toBe('@');
+    expect(
+      screen.queryByRole('dialog', {name: 'Pick date and time'}),
+    ).toBeNull();
+  });
+
+  it('does not dismiss the date token picker on pointerdown inside the overlay', () => {
+    const {container} = render(
+      <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,
+    );
+    const view = editorView(container);
+    const rect = {
+      bottom: 16,
+      height: 12,
+      left: 10,
+      right: 18,
+      top: 4,
+      width: 8,
+      x: 10,
+      y: 4,
+      toJSON: () => ({}),
+    } as DOMRect;
+    vi.spyOn(view, 'coordsAtPos').mockReturnValue(rect);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    const dialog = screen.getByRole('dialog', {name: 'Pick date and time'});
+
+    act(() => {
+      fireEvent.pointerDown(dialog);
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+    expect(view.state.doc.toString()).toBe('@');
+  });
 });

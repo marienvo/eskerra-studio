@@ -3,6 +3,7 @@ import {EditorView} from '@codemirror/view';
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -134,6 +135,7 @@ const NoteMarkdownEditorImpl = forwardRef<
   const onOpenDateTokenPickerRef = useRef<DateTokenPickerOpenHandler | undefined>(
     undefined,
   );
+  const dateTokenPickerOverlayRef = useRef<HTMLDivElement | null>(null);
   const [dateTokenPicker, setDateTokenPicker] =
     useState<DateTokenPickerOverlayState | null>(null);
   const [tableCellMenuOpen, setTableCellMenuOpen] = useState(false);
@@ -285,6 +287,30 @@ const NoteMarkdownEditorImpl = forwardRef<
     };
   }, []);
 
+  useEffect(() => {
+    if (!dateTokenPicker) {
+      return;
+    }
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const overlay = dateTokenPickerOverlayRef.current;
+      if (!overlay) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (overlay.contains(target)) {
+        return;
+      }
+      setDateTokenPicker(null);
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+    };
+  }, [dateTokenPicker]);
+
   useImperativeHandle(
     ref,
     () => createNoteMarkdownEditorHandle(shell, applyMarkdownLoadNow),
@@ -357,6 +383,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       {dateTokenPicker
         ? createPortal(
             <div
+              ref={dateTokenPickerOverlayRef}
               data-date-token-picker-overlay
               style={{
                 position: 'fixed',
