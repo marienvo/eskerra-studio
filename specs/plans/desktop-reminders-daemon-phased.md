@@ -131,10 +131,14 @@ token span, so the reconcile/merge logic sees a minimal diff.
   violate the "source of truth is the note text" model.
 - Schema (per reminder): stable `id` (see **Reminder identity** below — **never**
   derived from byte offsets), `noteUri`, `dueAtMs` (the reminder time itself),
-  `fireAtMs` (`dueAtMs - leadMinutes`, unless a snooze override is active), `state`
-  (`scheduled` | `due` | `notified` | `stale`), `lastNotifiedMs`. (`removed` is a
-  transient result/outcome; removed reminders are dropped from the index, never
-  persisted.)
+  `fireAtMs` (effective scheduler time), `fireSource` (`defaultLead` | `snooze`),
+  `snoozedFireAtMs` (`i64?`, present only when `fireSource: snooze`), `state`
+  (`scheduled` | `due` | `notified` | `stale`), `lastNotifiedMs`. For
+  `fireSource: defaultLead`, `fireAtMs` is derived as
+  `dueAtMs - (leadMinutes * 60_000)`; for `fireSource: snooze`, `fireAtMs` equals the
+  active `snoozedFireAtMs`. The explicit source fields are required so restart/config
+  reload never has to guess from `fireAtMs` alone. (`removed` is a transient
+  result/outcome; removed reminders are dropped from the index, never persisted.)
 - **Byte spans vs. UI positions (must not be confused):** the scanner records the
   token's **byte span** `tokenByteFrom`/`tokenByteTo` (UTF-8 byte indexes into the
   file). These are the **only** spans the daemon may use for disk write-back. Any
@@ -216,8 +220,9 @@ Consequences and rules:
 ### Index merge / state migration (rescan → new index)
 
 When a scan produces a fresh token set, the daemon merges the **prior** index into it
-to carry forward mutable state (`state`, snooze override / `fireAtMs`, `lastNotifiedMs`,
-`stale`). Because `id` embeds `occurrenceOrdinal`, carrying state **by `id` alone is
+to carry forward mutable state (`state`, snooze override fields `fireSource` /
+`snoozedFireAtMs` / effective `fireAtMs`, `lastNotifiedMs`, `stale`). Because `id`
+embeds `occurrenceOrdinal`, carrying state **by `id` alone is
 unsafe for duplicate identical tokens**: inserting/deleting an identical token above one
 of them renumbers ordinals, mints new `id`s on the next scan, and a naive `id`-keyed
 merge would move a snooze/`stale`/`notified` state to the wrong line or silently reset
@@ -233,7 +238,7 @@ its own duplicate-aware rules. The merge is therefore:
    delete makes the prior side a duplicate).
 1. **Exact `id` carry — non-duplicate content keys only.** If a prior entry's `id` still
    exists in the fresh scan **and its content key is non-duplicate on both sides**, carry
-   its `state`/snooze/`lastNotifiedMs` across unchanged. This blind, automatic carry is
+   its `state`/snooze fields/`lastNotifiedMs` across unchanged. This blind, automatic carry is
    the common case (a unique token, including the edit-elsewhere case). It must **not**
    be applied to a duplicate content key: there, the same ordinal-derived `id` can now
    refer to a *different* occurrence (e.g. inserting an identical token above ordinal-0
@@ -241,7 +246,7 @@ its own duplicate-aware rules. The merge is therefore:
    equality alone is not proof of the same occurrence.
 2. **Duplicate content keys → never carry by ordinal-derived `id` alone; require
    corroboration.** For a duplicate content key, an exact `id` match is **not** sufficient
-   by itself. `state`/snooze/`lastNotifiedMs`/`stale` may be migrated **only** if one of:
+   by itself. `state`/snooze fields/`lastNotifiedMs`/`stale` may be migrated **only** if one of:
    - the prior entry's `contextAnchor` **uniquely** matches exactly one live candidate
      (migrate to that candidate's new `id`), **or**
    - the recomputed content hash equals the stored `scanFingerprint`, proving the file is
@@ -254,8 +259,9 @@ its own duplicate-aware rules. The merge is therefore:
    (the same content key the writer uses). These are the possible new homes for the old
    state.
 4. **Unique `contextAnchor` → migrate.** If exactly one live candidate has the same
-   `contextAnchor` as the prior entry, migrate `state` / snooze (`fireAtMs`) /
-   `lastNotifiedMs` to that candidate's new `id`.
+   `contextAnchor` as the prior entry, migrate `state` / snooze fields (`fireSource`,
+   `snoozedFireAtMs`, and effective `fireAtMs`) / `lastNotifiedMs` to that candidate's
+   new `id`.
 5. **Ordinal only when the content hash matches.** Use `occurrenceOrdinal` to map
    old→new state **only** when the recomputed content hash equals the stored
    `scanFingerprint` (the file is byte-for-byte unchanged, so ordinals are still
@@ -265,8 +271,8 @@ its own duplicate-aware rules. The merge is therefore:
 6. **Ambiguous → fail safe, do not migrate.** If duplicate insert/delete or identical
    surrounding context makes the mapping ambiguous (multiple candidates share the
    `contextAnchor`, or the anchor cannot separate duplicates and
-   `duplicateCount`/`scanFingerprint` changed), do **not** migrate `state` / snooze /
-   `notified` / `stale` to any candidate. Treat the affected live candidates as **fresh
+   `duplicateCount`/`scanFingerprint` changed), do **not** migrate `state` / snooze
+   fields / `notified` / `stale` to any candidate. Treat the affected live candidates as **fresh
    reminders** recomputed from the current time (default `state`, schedule per the
    missed/grace discovery rules) rather than risk attaching stale state to the wrong
    line. Only mark an old entry `stale`/ambiguous if needed for user visibility (e.g. it
@@ -318,26 +324,34 @@ vault that is not currently active. Required behavior:
   1. **Reloads config** and detects which reminder-time settings changed.
   2. **For `dateOnlyDefaultTime` changes, re-derives `dueAtMs` and default-derived
      `fireAtMs` for every date-only token** (`@YYYY-MM-DD`, no `_HHMM`) in the **active**
-     vault, using the new default time. Explicit timed tokens `@YYYY-MM-DD_HHMM` are not
-     affected by `dateOnlyDefaultTime` because their `dueAt` comes from the token itself.
+     vault, using the new default time and `dueAtMs - (leadMinutes * 60_000)` for
+     reminders with `fireSource: defaultLead`. Explicit timed tokens `@YYYY-MM-DD_HHMM`
+     are not affected by `dateOnlyDefaultTime` because their `dueAt` comes from the token
+     itself.
   3. **For `leadMinutes` changes, keeps `dueAtMs` unchanged and re-derives
-     default-derived `fireAtMs`** as `dueAtMs - leadMinutes` for reminders whose fire time
-     comes from the default lead. This applies to both date-only tokens and explicit timed
-     tokens, because explicit timed tokens still compute `fireAtMs` from their explicit
-     `dueAtMs`.
+     default-lead `fireAtMs`** as `dueAtMs - (leadMinutes * 60_000)` for reminders whose
+     `fireSource` is `defaultLead`. This applies to both date-only tokens and explicit
+     timed tokens, because explicit timed tokens still compute default-lead `fireAtMs`
+     from their explicit `dueAtMs`.
   4. **Preserves active snooze overrides.** If a reminder has an active snoozed
-     `fireAtMs`, the snooze remains authoritative; a global `leadMinutes` change does not
-     overwrite it. The daemon still keeps the same `id` and re-arms from the active
-     snoozed `fireAtMs`.
+     override (`fireSource: snooze`, `snoozedFireAtMs`), the snooze remains
+     authoritative; a global `leadMinutes` change does not overwrite it or recompute the
+     effective `fireAtMs` from the default lead. The daemon still keeps the same `id` and
+     re-arms from the active snoozed `fireAtMs`.
   5. These re-derivations need **no** token-text change and **do not change reminder
      `id`s** (`id` is path + normalized token text + ordinal — none depend on these
      settings), so existing reminders keep their identity and merge cleanly.
-  6. **Treats every changed `dueAtMs`/`fireAtMs` as a schedule change**: re-evaluate its
-     state from the new times and **reset/recompute the mutable notification state**
-     (`state`, `lastNotifiedMs`, any per-`fireAt` fire-event id) so a prior
-     `notified`/`lastNotifiedMs` for the **old** time can **never** suppress the new fire.
-     A reminder already notified at the old 09:00 must still fire at, say, a new 08:00 (or
-     be classified per the missed/grace discovery rules for the new time).
+  6. **Treats every changed `dueAtMs`/`fireAtMs` as a schedule change for non-stale
+     reminders**: re-evaluate their state from the new times and **reset/recompute the
+     mutable notification state** (`state`, `lastNotifiedMs`, any per-`fireAt` fire-event
+     id) so a prior `notified`/`lastNotifiedMs` for the **old** time can **never**
+     suppress the new fire. A reminder already notified at the old 09:00 must still fire
+     at, say, a new 08:00 (or be classified per the missed/grace discovery rules for the
+     new time). A `state: stale` reminder is different: settings-only re-derive **must
+     not** clear or downgrade `stale`, and must not allow it to fire OS notifications.
+     The daemon may update stored timing fields on stale entries for display/debug
+     consistency, but they remain stale, visible, and non-firing until the underlying
+     note/index condition is resolved by a future safe rescan/write path.
   7. **Re-arms the scheduler** from the active `fireAt`s (drop stale timers, arm the new
      ones).
 - **Invalid `reminderd.json`** (unparseable, missing required fields, or schema
@@ -553,7 +567,7 @@ before the token, asserting that slicing `[tokenByteFrom, tokenByteTo)` yields e
 the token bytes (no panic on a non-boundary slice, no off-by-bytes), that the byte span
 diverges from the character offset as expected, and that the `uiCaretHint` conversion
 is computed separately from the byte span; and **duplicate-aware merge** tests:
-(a) exact-`id` carry preserves `state`/snooze for the non-duplicate / edit-elsewhere
+(a) exact-`id` carry preserves `state`/snooze fields for the non-duplicate / edit-elsewhere
 case; (b) a snooze on one of several identical tokens migrates to the correct new `id`
 by **unique `contextAnchor`** after an identical token is inserted above it (ordinal
 drifted); (b') **exact-`id` carry is gated for duplicates** — the old ordinal-0
@@ -613,10 +627,12 @@ app-written config. The **settings-only change** tests must assert that changing
 `dateOnlyDefaultTime` re-derives `dueAtMs` and default-derived `fireAtMs` for date-only
 tokens **without** a session bump or index teardown, **keeps the same reminder `id`s**,
 and leaves explicit timed `@…_HHMM` tokens' `dueAtMs` untouched; changing `leadMinutes`
-with the same `vaultRoot`/`vaultHash` re-derives default-derived `fireAtMs` without
-changing `id`s or tearing down the index; explicit timed tokens are affected by
-`leadMinutes`; date-only tokens are affected by both settings; and active snooze
-overrides are preserved.
+with the same `vaultRoot`/`vaultHash` re-derives default-lead `fireAtMs` as
+`dueAtMs - (leadMinutes * 60_000)` without changing `id`s or tearing down the index;
+explicit timed tokens are affected by `leadMinutes`; date-only tokens are affected by
+both settings; active snooze overrides are preserved via `fireSource: snooze` /
+`snoozedFireAtMs` rather than guessed from `fireAtMs`; and settings-only re-derive does
+not clear `state: stale` or make stale reminders schedulable again.
 
 **Risks:** double watcher (app + daemon both watching the same vault) — acceptable
 (independent processes), but document it and keep both debounced. Watcher extraction
@@ -1003,8 +1019,8 @@ refs are exactly its failure mode.
     (and let it record `lastNotifiedMs` / `notified`) one of them, then on disk insert
     another identical token **above** it so `occurrenceOrdinal`s shift and the affected
     `id`s change. Because `contextAnchor` uniquely identifies the old reminder, assert
-    its `state` / snooze (`fireAtMs`) / `lastNotifiedMs` migrate to the **new `id`** on
-    the same line.
+    its `state` / snooze fields (`fireSource`, `snoozedFireAtMs`, effective `fireAtMs`) /
+    `lastNotifiedMs` migrate to the **new `id`** on the same line.
   - **Exact-`id` carry gated for duplicates (old ordinal-0 id survives):** the old
     ordinal-0 duplicate has a snooze; insert a **new identical token above it** so the
     old ordinal-0 `id` **still exists** in the fresh scan but now points to the **newly
@@ -1117,23 +1133,26 @@ refs are exactly its failure mode.
     against a 09:00 default, rewrite `reminderd.json` with the **same** `vaultRoot`/
     `vaultHash` but a new default time (e.g. 08:00). Assert the daemon reloads config and
     re-derives without a vault switch (no session bump, no index teardown), the **same
-    reminder `id`** now carries the **new** `dueAtMs` and default-derived `fireAtMs`, and
-    the scheduler re-arms from the new `fireAt`.
+    reminder `id`** now carries the **new** `dueAtMs` and default-derived `fireAtMs`
+    (`dueAtMs - (leadMinutes * 60_000)`), and the scheduler re-arms from the new
+    `fireAt`.
   - **Lead-minute re-derive:** with the same `vaultRoot`/`vaultHash`, change
     `leadMinutes` only. Assert `dueAtMs` stays unchanged, default-derived `fireAtMs`
-    recomputes as `dueAtMs - leadMinutes`, reminder `id`s are unchanged, the index is not
-    torn down, and the scheduler re-arms from the new `fireAt`.
+    recomputes as `dueAtMs - (leadMinutes * 60_000)` rather than subtracting raw minutes,
+    reminder `id`s are unchanged, the index is not torn down, and the scheduler re-arms
+    from the new `fireAt`.
   - **Explicit timed tokens follow lead changes:** an explicit `@YYYY-MM-DD_HHMM`
     reminder keeps its explicit `dueAtMs` across both settings, is unaffected by
     `dateOnlyDefaultTime`, but recomputes default-derived `fireAtMs` when `leadMinutes`
-    changes.
+    changes, using `leadMinutes * 60_000` and keeping the same reminder `id`.
   - **Date-only tokens follow both settings:** a date-only reminder recomputes `dueAtMs`
     on `dateOnlyDefaultTime` changes and recomputes default-derived `fireAtMs` on both
     `dateOnlyDefaultTime` and `leadMinutes` changes, with the same reminder `id`.
   - **Active snooze survives global lead changes:** a snoozed reminder keeps its active
-    snoozed `fireAtMs` when `leadMinutes` changes; the daemon keeps the same `id`, does
+    snoozed `fireAtMs` when `leadMinutes` changes because the index stores
+    `fireSource: snooze` plus `snoozedFireAtMs`; the daemon keeps the same `id`, does
     not tear down the index, and re-arms from the snoozed `fireAtMs` rather than
-    overwriting it with `dueAtMs - leadMinutes`.
+    overwriting it with `dueAtMs - (leadMinutes * 60_000)`.
   - **Old notified state does not suppress the new fire:** the date-only reminder was
     already `notified`/`lastNotifiedMs` at the old 09:00; after either setting change
     creates a new effective `fireAtMs`, assert the stale `notified`/`lastNotifiedMs` is
@@ -1141,6 +1160,12 @@ refs are exactly its failure mode.
     not swallowed as already-notified). Conversely a guard against double-firing the
     **new** `fireAt` still holds. A lead change that leaves an active snooze `fireAtMs`
     unchanged must not reset the guard for that unchanged snoozed fire.
+  - **Stale state survives settings-only re-derive:** a reminder with `state: stale`
+    remains stale, visible, and non-firing after `dateOnlyDefaultTime` or `leadMinutes`
+    changes. The daemon may update stored timing fields for display/debug consistency,
+    but it must not reset the stale state, clear the stale row, reset notification guards
+    in a way that makes it schedulable, or emit an OS notification until a future safe
+    rescan/write path resolves the underlying note/index condition.
 - Observability: scan duration, reminder counts, notification send success/fail,
   D-Bus unavailability, `RemoveReminder` transport-failure (`remove-unavailable`) rate
   and best-effort-restart outcomes, watcher coarse-invalidation (mirror the app's Sentry

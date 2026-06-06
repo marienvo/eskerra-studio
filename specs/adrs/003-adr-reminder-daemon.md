@@ -147,7 +147,9 @@ as read-only.
 | `normalizedTokenText` | `string` | Canonical `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` (parser-normalized, not raw bytes). |
 | `occurrenceOrdinal` | `u32` | 0-based index among **identical** tokens in the file, document order. A *tie-break only*; never trusted blindly (ordinals drift on insert/delete above). |
 | `dueAtMs` | `i64` | The reminder time itself. Date-only tokens resolve via the configurable default time (default 09:00 local). |
-| `fireAtMs` | `i64` | `dueAtMs - leadMinutes`, unless a snooze override is active. Drives the scheduler. |
+| `fireAtMs` | `i64` | Effective scheduler time. For `fireSource: defaultLead`, derive as `dueAtMs - (leadMinutes * 60_000)`. For `fireSource: snooze`, this equals the active `snoozedFireAtMs`. |
+| `fireSource` | enum | `defaultLead` \| `snooze`. Persisted so config reloads never have to guess whether `fireAtMs` came from the global lead or an active snooze override. |
+| `snoozedFireAtMs` | `i64?` | Present only when `fireSource: snooze`; the snoozed fire time to preserve across daemon restart/config reload. Null/absent for default-lead reminders. |
 | `state` | enum | `scheduled` \| `due` \| `notified` \| `stale`. (`removed` is transient — a removed reminder is **dropped** from the index, never persisted.) |
 | `lastNotifiedMs` | `i64?` | Per-`fireAt` fire guard; prevents double-fire across re-arm / reconcile / resume. |
 | `tokenByteFrom` | `u64` | **Byte** span start (UTF-8 byte index). Last-scan only; the **only** span class allowed for write-back. Re-derived by re-scan before any write. |
@@ -182,10 +184,11 @@ on *both* critical paths:
 - **Merge / state migration** (rescan → new index): classify each content key
   (`noteUri` + `normalizedTokenText`) as duplicate (>1 on either side) or non-duplicate
   **first**. Exact-`id` carry is allowed **only** for non-duplicate content keys. For
-  duplicate content keys, migrate `state`/snooze/`lastNotifiedMs`/`stale` **only** by
-  unique `contextAnchor`, or by ordinal **only** when the recomputed content hash equals
-  the stored `scanFingerprint`. Ambiguous → do **not** migrate; recompute affected
-  candidates as **fresh** reminders. (Full rules: plan §*Index merge / state migration*.)
+  duplicate content keys, migrate `state`/snooze fields (`fireSource`,
+  `snoozedFireAtMs`, effective `fireAtMs`)/`lastNotifiedMs`/`stale` **only** by unique
+  `contextAnchor`, or by ordinal **only** when the recomputed content hash equals the
+  stored `scanFingerprint`. Ambiguous → do **not** migrate; recompute affected candidates
+  as **fresh** reminders. (Full rules: plan §*Index merge / state migration*.)
 - **Write-back** (Phase 4): look up the stored entry by `id` first; re-read+re-scan;
   resolve the live token by `normalizedTokenText` + unique `contextAnchor` (ordinal only
   when content hash matches `scanFingerprint`); ambiguity → **`stale`**, write nothing.
@@ -226,12 +229,17 @@ temp + rename); the daemon reloads and re-scans.
   daemon **must** re-derive the config-dependent time fields while keeping the same
   reminder `id`s. `dateOnlyDefaultTime` changes re-derive `dueAtMs` and default-derived
   `fireAtMs` for date-only `@YYYY-MM-DD` tokens only; explicit timed `@…_HHMM` tokens keep
-  their explicit `dueAtMs`. `leadMinutes` changes keep `dueAtMs` unchanged but re-derive
-  default-derived `fireAtMs` for both date-only and explicit timed tokens. Active snooze
-  overrides remain authoritative and are not overwritten by a global `leadMinutes`
-  change. Any changed `dueAtMs`/`fireAtMs` is a **schedule change**: reset/recompute
-  `state`/`lastNotifiedMs`/the per-fire guard so an old `notified` cannot suppress the new
-  fire, then re-arm the scheduler. Full rules: plan §*Settings-only config change*.
+  their explicit `dueAtMs`. For `fireSource: defaultLead`, `fireAtMs` is always
+  `dueAtMs - (leadMinutes * 60_000)`. `leadMinutes` changes keep `dueAtMs` unchanged but
+  re-derive default-lead `fireAtMs` for both date-only and explicit timed tokens. Active
+  snooze overrides (`fireSource: snooze`, `snoozedFireAtMs`) remain authoritative and are
+  not overwritten by a global `leadMinutes` change. Any changed `dueAtMs`/`fireAtMs` is a
+  **schedule change** for non-stale reminders: reset/recompute `state`/`lastNotifiedMs`/
+  the per-fire guard so an old `notified` cannot suppress the new fire, then re-arm the
+  scheduler. A `state: stale` reminder must stay stale, visible, and non-firing until the
+  underlying note/index condition is resolved by a future safe rescan/write path; settings
+  changes may update its stored timing fields for display/debug consistency, but must not
+  make it schedulable again. Full rules: plan §*Settings-only config change*.
 - **Invalid `reminderd.json`** (unparseable / missing required fields / version
   mismatch): do **not** crash or act on partial data; keep last-known-good config in
   memory; keep watching so a corrected write recovers. No last-known-good → idle.
