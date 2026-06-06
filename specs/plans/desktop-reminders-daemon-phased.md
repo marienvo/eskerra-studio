@@ -679,6 +679,30 @@ action semantics are version-sensitive.
 
 **Write-back safety rules (mandatory — fail closed):**
 
+0. **Serialize all writes to a note (per-note write lock).** The daemon serializes
+   **all** vault-markdown writes per `noteUri` / vault-relative path using a keyed
+   per-note mutex (or a per-note write queue) — atomic temp+rename alone is *not*
+   sufficient: it prevents partial files, but two concurrent `RemoveReminder` calls for
+   **different** tokens in the **same** note can each read the same old bytes, each apply
+   one strikethrough, and the later rename then clobbers the earlier strikethrough — a
+   lost logical update. To prevent this, a `RemoveReminder` write-back **must acquire the
+   target note's write lock before re-reading/re-scanning the file**, and hold it
+   continuously through re-read, re-scan, span resolution (rules 1–2), byte verification
+   (rule 4), temp write, atomic rename (rules 5–6), **and** the index update / single-note
+   rescan that records the outcome for that note. Only then is the lock released.
+   - **Different notes run in parallel.** The lock is keyed per `noteUri`, so removes
+     targeting different notes never block each other.
+   - **Same note runs sequentially.** Concurrent removes for the same note are processed
+     one at a time. The second remove acquires the lock only after the first fully
+     completes, so its re-read/re-scan observes the first remove's on-disk strikethrough.
+     It then resolves normally against that fresh content (rules 1–3): if its token is now
+     gone (already struck/edited/deleted) → `removed` (no write); if its token is still
+     present → strike it safely; if resolution is ambiguous → `stale`. No second remove
+     ever reads pre-first-write bytes, so no strikethrough is lost.
+   - Key the lock by the canonical vault-relative path (not a raw `noteUri` string) so
+     path aliases/encodings for the same file share one lock. Use the same lock for any
+     future daemon-owned write to that note, keeping the single-writer invariant
+     race-free as well as exclusive.
 1. **Look up the stored reminder entry by `id` first.** `RemoveReminder(noteUri, id)`
    resolves the request against the **index**, not against freshly scanned tokens: load
    the stored entry whose `id` equals the requested `id` and read its
@@ -733,7 +757,9 @@ action semantics are version-sensitive.
    re-serialization of the document.
 6. **Atomic write.** Write to a temp file in the same directory and `rename` over the
    original, so a reader never sees a partial file and the app's watcher sees one clean
-   external edit.
+   external edit. The atomic rename happens **while the per-note write lock (rule 0) is
+   held**, so a concurrent same-note remove cannot have read the pre-rename bytes — atomic
+   rename guards against partial files; the lock guards against lost logical updates.
 7. **Fail closed → surface, don't guess.** For every `stale` outcome from rule 3, the
    daemon performs **no** write and surfaces `stale` in the index. The app shows the row
    as "could not remove — open the note" (links to the note for manual edit) instead of
@@ -788,10 +814,23 @@ daemon cannot be reached — leaves the row visible in a UI-level `remove-unavai
 state with retry/open-note recovery; in no case does the app perform a local write or
 strike a wrong/partial span.
 
+**Phase 4 tests (write-path level, mandatory):** beyond the resolution/fail-closed cases
+exercised end-to-end in Phase 7, this phase must include a **concurrent same-note
+no-lost-update** test: issue two `RemoveReminder` calls **concurrently** for two
+**different** tokens in the **same** note and assert both strikethroughs survive — the
+final on-disk file contains **both** struck tokens, neither remove clobbers the other,
+both resolve `removed`, and the index reflects both. Also assert that two removes for
+**different** notes can run **in parallel** (the per-note lock does not serialize across
+notes).
+
 **Risks (highest data-loss surface in the whole plan):** clobbering concurrent edits;
-striking the wrong span after ordinal/offset drift among duplicate identical tokens;
-slicing the wrong bytes when character offsets are used on non-ASCII text;
-encoding/line-ending changes. Mitigation: re-scan at write time, resolve by index
+**lost logical updates when two removes target the same note** (each reads the same old
+bytes and the later rename overwrites the earlier strikethrough — atomic rename alone
+does not prevent this); striking the wrong span after ordinal/offset drift among
+duplicate identical tokens; slicing the wrong bytes when character offsets are used on
+non-ASCII text; encoding/line-ending changes. Mitigation: **per-note write
+serialization (write-back rule 0)** held across re-read → re-scan → resolve → verify →
+temp write → atomic rename → index update; re-scan at write time, resolve by index
 lookup + `contextAnchor` (ordinal only authoritative when `scanFingerprint` matches),
 operate strictly on the token **byte span** `[tokenByteFrom, tokenByteTo)` (never
 character offsets), zero-match → `removed` vs. any ambiguity/mismatch/IO → `stale`,
@@ -958,6 +997,21 @@ refs are exactly its failure mode.
   the content hash, refuses to trust the ordinal, and fails closed to `stale` rather
   than striking by stale ordinal. Assert no wrong-span and no partial writes in every
   case.
+- Concurrent-write serialization tests (per-note write lock, *Write-back safety rules*
+  rule 0):
+  - **Same-note, two tokens, no lost update:** a note with two distinct, non-struck
+    tokens; issue `RemoveReminder` for **both concurrently**. Assert the final on-disk
+    file contains **both** strikethroughs (neither remove clobbers the other), both
+    resolve `removed`, the index drops both, and every other byte of the note is
+    unchanged. Without the lock this is the lost-update failure (the later atomic rename
+    overwrites the earlier strikethrough); the test must fail if serialization is removed.
+  - **Same-note sequential observation:** the second of two same-note removes observes the
+    first remove's on-disk strikethrough during its re-read/re-scan — if its own token is
+    now gone it resolves `removed`, if still present it strikes safely, if ambiguous it is
+    `stale`; never reads pre-first-write bytes.
+  - **Different notes run in parallel:** concurrent removes targeting **different** notes
+    are not serialized by the per-note lock (assert they can interleave / both complete
+    without one blocking on the other's lock).
 - Scheduler-semantics tests (scheduled fire vs. stale discovery):
   - **snooze-0 fires at-time:** a reminder scheduled before `dueAt` then snoozed to
     `fireAt = dueAt` fires the OS notification once at `now == dueAt` (exact-at-time

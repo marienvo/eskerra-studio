@@ -53,6 +53,16 @@ the daemon's `RemoveReminder` IPC — the app never strikes the token itself, in
 when the daemon is unreachable (see **`RemoveReminder` failure contract**). This keeps
 exactly one writer for that mutation and prevents two processes racing on the same bytes.
 
+Single-writer is *exclusivity across processes*, not *serialization within the daemon*:
+two concurrent `RemoveReminder` calls for different tokens in the **same** note could
+each read the same old bytes and have the later atomic rename clobber the earlier
+strikethrough (a lost update — atomic rename prevents partial files, not lost logical
+updates). The daemon therefore also serializes **all** writes to a given note with a
+**keyed per-note write lock**, held across re-read → re-scan → resolve → byte-verify →
+temp write → atomic rename → index update; removes to different notes run in parallel,
+removes to the same note run sequentially. Full rules: plan §Phase 4 *Write-back safety
+rules* rule 0.
+
 When the daemon rewrites a note open in the editor, it is by design indistinguishable
 from any other external on-disk edit and flows through the existing
 `vault-files-changed` → reconcile path (AGENTS.md *Vault disk sync invariants* + *Note
