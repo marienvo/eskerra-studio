@@ -1,10 +1,12 @@
 import {EditorState} from '@codemirror/state';
-import {EditorView} from '@codemirror/view';
+import {EditorView, ViewPlugin, type ViewUpdate} from '@codemirror/view';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {
   buildDateTokenDecorations,
   CM_DATE_TOKEN_CLASS,
+  dateTokenHighlightExtensions,
+  updateDateTokenDecorationsForDocChange,
 } from './dateTokenHighlightCodemirror';
 
 type MarkInterval = {
@@ -14,8 +16,10 @@ type MarkInterval = {
   readonly attributes: Record<string, string> | undefined;
 };
 
-function collectMarkIntervals(view: EditorView): MarkInterval[] {
-  const set = buildDateTokenDecorations(view);
+function collectMarkIntervalsFromSet(
+  view: EditorView,
+  set: ReturnType<typeof buildDateTokenDecorations>,
+): MarkInterval[] {
   const out: MarkInterval[] = [];
   set.between(0, view.state.doc.length, (from, to, deco) => {
     const spec =
@@ -33,6 +37,10 @@ function collectMarkIntervals(view: EditorView): MarkInterval[] {
     });
   });
   return out;
+}
+
+function collectMarkIntervals(view: EditorView): MarkInterval[] {
+  return collectMarkIntervalsFromSet(view, buildDateTokenDecorations(view));
 }
 
 describe('dateTokenHighlightCodemirror', () => {
@@ -89,5 +97,64 @@ describe('dateTokenHighlightCodemirror', () => {
     view = new EditorView({state, parent});
 
     expect(collectMarkIntervals(view)).toEqual([]);
+  });
+
+  it('incrementally updates decorations to match a full rescan after a line edit', () => {
+    const initialDoc = 'Due @2026-06-06 tomorrow\n@2026-12-28 end';
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    let lastDocChange: ViewUpdate | null = null;
+    const captureUpdate = ViewPlugin.fromClass(
+      class {
+        update(update: ViewUpdate) {
+          if (update.docChanged) {
+            lastDocChange = update;
+          }
+        }
+      },
+    );
+    const state = EditorState.create({
+      doc: initialDoc,
+      extensions: [dateTokenHighlightExtensions(), captureUpdate],
+    });
+    view = new EditorView({state, parent});
+
+    const beforeDecorations = buildDateTokenDecorations(view);
+    const line1End = initialDoc.indexOf('\n');
+
+    view.dispatch({
+      changes: {from: 0, to: line1End, insert: 'Meet @2026-12-15 today'},
+    });
+
+    if (!lastDocChange) {
+      throw new Error('Expected a captured document change update');
+    }
+
+    const incremental = updateDateTokenDecorationsForDocChange(
+      beforeDecorations,
+      lastDocChange,
+    );
+    const fullRescan = buildDateTokenDecorations(view);
+
+    expect(collectMarkIntervalsFromSet(view, incremental)).toEqual(
+      collectMarkIntervalsFromSet(view, fullRescan),
+    );
+    const docText = view.state.doc.toString();
+    const dec15From = docText.indexOf('@2026-12-15');
+    const dec28From = docText.indexOf('@2026-12-28');
+    expect(collectMarkIntervalsFromSet(view, incremental)).toEqual([
+      {
+        from: dec15From,
+        to: dec15From + '@2026-12-15'.length,
+        class: CM_DATE_TOKEN_CLASS,
+        attributes: {'data-date-token': ''},
+      },
+      {
+        from: dec28From,
+        to: dec28From + '@2026-12-28'.length,
+        class: CM_DATE_TOKEN_CLASS,
+        attributes: {'data-date-token': ''},
+      },
+    ]);
   });
 });

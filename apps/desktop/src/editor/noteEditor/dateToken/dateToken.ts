@@ -91,7 +91,7 @@ export function nowTimeParts(
 }
 
 export function formatDateToken(value: DateTokenValue): string {
-  const date = `@${value.year}-${pad2(value.month)}-${pad2(value.day)}`;
+  const date = `@${pad4(value.year)}-${pad2(value.month)}-${pad2(value.day)}`;
   if (value.hour === undefined || value.minute === undefined) {
     return date;
   }

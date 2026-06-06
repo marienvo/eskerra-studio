@@ -107,6 +107,13 @@ describe('formatDateToken and parseDateToken', () => {
     expect(parseDateToken(formatted)).toEqual(dateOnly);
   });
 
+  test('round-trips years shorter than four digits with zero padding', () => {
+    const shortYear: DateTokenValue = {year: 100, month: 1, day: 1};
+    const formatted = formatDateToken(shortYear);
+    expect(formatted).toBe('@0100-01-01');
+    expect(parseDateToken(formatted)).toEqual(shortYear);
+  });
+
   test('rejects invalid calendar dates', () => {
     expect(parseDateToken('@2026-13-99')).toBeNull();
     expect(parseDateToken('@2026-02-29')).toBeNull();

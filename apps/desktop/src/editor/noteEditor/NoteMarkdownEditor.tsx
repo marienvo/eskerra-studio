@@ -95,9 +95,12 @@ function buildDateTokenPickerOverlayState(
     anchorRect: dateTokenOverlayAnchorFromRequest(request),
     initialValue: request.initialValue ?? null,
     commit: value => {
+      const view = request.view;
+      if (!view.state.facet(EditorView.editable)) {
+        return;
+      }
       const token = formatDateToken(value);
       const replacement = insertTrailingSpace ? `${token} ` : token;
-      const view = request.view;
       const currentDocLength = view.state.doc.length;
       const from = Math.max(0, Math.min(request.tokenFrom, currentDocLength));
       const requestedTo = insertTrailingSpace
@@ -281,12 +284,15 @@ const NoteMarkdownEditorImpl = forwardRef<
 
   useLayoutEffect(() => {
     onOpenDateTokenPickerRef.current = request => {
+      if (shell.readOnlyRef.current) {
+        return;
+      }
       setDateTokenPicker(buildDateTokenPickerOverlayState(request));
     };
     return () => {
       onOpenDateTokenPickerRef.current = undefined;
     };
-  }, []);
+  }, [shell.readOnlyRef]);
 
   useLayoutEffect(() => {
     if (!dateTokenPicker) {

@@ -20,7 +20,7 @@ Single source of truth for parsing, formatting, and scan regexes: [`dateToken.ts
 | `DATE_TOKEN_PATTERN` | Document scan for chip decoration and click hit-testing (`(?:^|\s)(@…)`; group 1 is the token span). |
 | `DATE_TOKEN_PREFIX_PATTERN` | Word-boundary check when the user has just typed `@`. |
 | `parseDateToken(text)` | Returns `{year, month, day, hour?, minute?}` or `null` when syntax or calendar/time validation fails. |
-| `formatDateToken(value)` | Builds the on-disk string (date-only when `hour` / `minute` are absent). |
+| `formatDateToken(value)` | Builds the on-disk string (date-only when `hour` / `minute` are absent); year is zero-padded to four digits via `pad4`. |
 | `isValidCalendarDate` | Leap-year aware month/day validation. |
 
 **Validation:** A span is styled and treated as a date token only when `parseDateToken` succeeds. Invalid dates (for example `@2026-02-29`) and invalid times (for example `@2026-01-01_2560`) stay **plain unstyled text** so partial typing does not flash false chips.
@@ -71,7 +71,7 @@ Valid tokens receive a **mark decoration** (editable plain text, not a replace w
 - Class: `cm-date-token`; attribute `data-date-token` for click detection
 - Styles: [`dateTokenHighlight.css`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenHighlight.css) under `[data-app-surface='capture']` — subtle pill (monospace date, interactive accent color, pointer cursor on the chip)
 
-Invalid or in-progress spans are not decorated. Multiple tokens per line are supported (global line scan).
+Invalid or in-progress spans are not decorated. Multiple tokens per line are supported. On document changes, the ViewPlugin maps existing decorations through the change set and rescans only the lines touched by `iterChangedRanges` (full-document scan on initial mount only).
 
 ## Click to reopen
 
@@ -95,6 +95,8 @@ Registered in [`buildNoteMarkdownEditorExtensions.ts`](../../apps/desktop/src/ed
 
 `NoteMarkdownEditor` holds overlay state and assigns `onOpenDateTokenPickerRef` to open/replace via `buildDateTokenPickerOverlayState`.
 
+**Read-only editors:** When `readOnly` is true, the picker does not open (`@` trigger or chip click) and `commit` does not dispatch document changes (CodeMirror's read-only facet blocks user input but not programmatic transactions, so both paths are gated explicitly).
+
 **Out of scope (current):** Eskerra table cell editors (`noteMarkdownCellEditor.ts`) do not register the trigger or highlight extensions.
 
 ## Future reminders (deferred)
@@ -104,6 +106,6 @@ Parsing helpers in `dateToken.ts` are intentionally reusable so a later **remind
 - Reminder persistence or metadata
 - Today Hub rows or hub canvas integration
 - Mobile rendering (Android has no vault editor)
-- Read-only / preview surfaces outside the capture editor
+- Read-only / preview surfaces outside the capture editor (read-only capture mounts skip picker open and commit)
 
 When reminder behavior ships, extend or supersede this document with storage and UX contracts rather than changing the on-disk token format silently.
