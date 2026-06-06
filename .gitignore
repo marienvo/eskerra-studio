@@ -1,3 +1,7 @@
+# Rust workspace build output (moved here from apps/desktop/src-tauri/target
+# when the Cargo workspace root moved up for the reminder-core crate)
+/target/
+
 # OSX
 #
 .DS_Store

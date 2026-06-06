@@ -37,13 +37,12 @@ const DESKTOP_CARGO_TOML = join(
   'src-tauri',
   'Cargo.toml',
 );
-const DESKTOP_CARGO_LOCK = join(
-  ROOT,
-  'apps',
-  'desktop',
-  'src-tauri',
-  'Cargo.lock',
-);
+// Workspace root Cargo.toml: holds [workspace.package] version, inherited by
+// internal crates (eskerra-reminder-core today, the daemon in Phase 2).
+const WORKSPACE_CARGO_TOML = join(ROOT, 'Cargo.toml');
+// Lives at the workspace root (apps/desktop/src-tauri is now a workspace
+// member; cargo resolves/locks the whole workspace from one root lockfile).
+const DESKTOP_CARGO_LOCK = join(ROOT, 'Cargo.lock');
 const DESKTOP_METAINFO = join(
   ROOT,
   'apps',
@@ -185,12 +184,24 @@ function syncDesktopReleaseArtifacts(version) {
     applySemverToCargoTomlPackageVersion(cargo, version),
     'utf8',
   );
-  const cargoLock = readFileSync(DESKTOP_CARGO_LOCK, 'utf8');
+  // [workspace.package] version: the first `version = "…"` line in the root
+  // Cargo.toml. Drives every crate using `version.workspace = true`.
+  const workspaceCargo = readFileSync(WORKSPACE_CARGO_TOML, 'utf8');
   writeFileSync(
-    DESKTOP_CARGO_LOCK,
-    applySemverToCargoLockPackageVersion(cargoLock, 'app', version),
+    WORKSPACE_CARGO_TOML,
+    applySemverToCargoTomlPackageVersion(workspaceCargo, version),
     'utf8',
   );
+  // Both the app crate and the workspace-versioned core crate carry their own
+  // [[package]] version in the single root lockfile; stamp both.
+  let cargoLock = readFileSync(DESKTOP_CARGO_LOCK, 'utf8');
+  cargoLock = applySemverToCargoLockPackageVersion(cargoLock, 'app', version);
+  cargoLock = applySemverToCargoLockPackageVersion(
+    cargoLock,
+    'eskerra-reminder-core',
+    version,
+  );
+  writeFileSync(DESKTOP_CARGO_LOCK, cargoLock, 'utf8');
   const meta = readFileSync(DESKTOP_METAINFO, 'utf8');
   writeFileSync(
     DESKTOP_METAINFO,

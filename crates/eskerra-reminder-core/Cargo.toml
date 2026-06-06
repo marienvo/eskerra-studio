@@ -1,0 +1,28 @@
+[package]
+name = "eskerra-reminder-core"
+# Inherited from [workspace.package] in the root Cargo.toml so the release bump
+# drives it automatically (see that file's comment); never drifts from the app.
+version.workspace = true
+description = "Pure reminder model: date-token grammar, scanner, index schema, identity and merge — shared by the eskerra app and the eskerra-reminderd daemon. No I/O side effects."
+authors = ["Eskerra contributors"]
+license = "AGPL-3.0-only"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+[lib]
+name = "eskerra_reminder_core"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+# Local-timezone-aware date/time math for date-only -> dueAt resolution
+# (configurable default time). Already resolved transitively in the
+# workspace tree (via tauri); `clock` brings in the local-timezone database
+# so the daemon stays lean (no GUI deps pulled in).
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+# Atomic index/config writes (temp file in the same directory + rename).
+tempfile = "3"
+
+[dev-dependencies]
