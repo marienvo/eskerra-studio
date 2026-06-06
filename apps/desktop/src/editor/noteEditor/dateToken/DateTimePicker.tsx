@@ -162,12 +162,14 @@ export function DateTimePicker({
   initialValue,
   onConfirm,
   onCancel,
-  now = new Date(),
+  now,
 }: DateTimePickerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const stableNowRef = useRef(now ?? new Date());
+  const stableNow = stableNowRef.current;
   const initial = useMemo(
-    () => resolveInitialState(initialValue, now),
-    [initialValue, now],
+    () => resolveInitialState(initialValue, stableNow),
+    [initialValue, stableNow],
   );
   const [viewYear, setViewYear] = useState(initial.viewYear);
   const [viewMonth, setViewMonth] = useState(initial.viewMonth);
@@ -217,9 +219,9 @@ export function DateTimePicker({
   );
 
   const goToToday = useCallback(() => {
-    const today = todayDateParts(now);
+    const today = todayDateParts(stableNow);
     selectDate(today.year, today.month, today.day);
-  }, [now, selectDate]);
+  }, [selectDate, stableNow]);
 
   const shiftSelectedDay = useCallback((delta: number) => {
     setSelected(current => {

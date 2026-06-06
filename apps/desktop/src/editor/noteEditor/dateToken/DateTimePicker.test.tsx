@@ -142,6 +142,33 @@ describe('DateTimePicker', () => {
     });
   });
 
+  it('keeps a stable default clock when now is omitted across rerenders', () => {
+    const onConfirm = vi.fn();
+    const {rerender} = render(
+      <DateTimePicker
+        initialValue={null}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    rerender(
+      <DateTimePicker
+        initialValue={null}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', {name: 'Today'}));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      year: 2026,
+      month: 6,
+      day: 6,
+    });
+  });
+
   it('calls onCancel on Escape', () => {
     const onCancel = vi.fn();
     render(
