@@ -33,9 +33,15 @@ const SAFETY_TICK: Duration = Duration::from_secs(30);
 
 enum DaemonEvent {
     ConfigChanged,
-    Vault { coarse: bool, paths: Vec<String> },
+    Vault {
+        coarse: bool,
+        paths: Vec<String>,
+    },
     /// An OS-notification action fired (snooze / remove / open).
-    Action { reminder_id: String, action: Action },
+    Action {
+        reminder_id: String,
+        action: Action,
+    },
     /// `PrepareForSleep(false)` wake edge — resume catch-up.
     Resume,
 }
@@ -47,8 +53,8 @@ fn now_ms() -> i64 {
 /// Run the daemon forever. Returns only on an unrecoverable setup error
 /// (missing HOME, etc.) — systemd restarts us per the unit's `Restart=on-failure`.
 pub fn run() -> Result<(), String> {
-    let config_path =
-        config_path().ok_or_else(|| "cannot resolve config path (no HOME/XDG_CONFIG_HOME)".to_string())?;
+    let config_path = config_path()
+        .ok_or_else(|| "cannot resolve config path (no HOME/XDG_CONFIG_HOME)".to_string())?;
     let data_dir = reminders_data_dir()
         .ok_or_else(|| "cannot resolve data dir (no HOME/XDG_DATA_HOME)".to_string())?;
 
@@ -90,7 +96,10 @@ pub fn run() -> Result<(), String> {
                 let outcome = daemon.on_watch_batch(coarse, &paths, now_ms());
                 eprintln!("[reminderd] watch batch: {outcome:?}");
             }
-            Ok(DaemonEvent::Action { reminder_id, action }) => {
+            Ok(DaemonEvent::Action {
+                reminder_id,
+                action,
+            }) => {
                 let outcome = daemon.on_action(&reminder_id, action, now_ms());
                 eprintln!("[reminderd] action {action:?} on {reminder_id}: {outcome:?}");
                 handle_action_followup(&reminder_id, &outcome);
@@ -100,12 +109,18 @@ pub fn run() -> Result<(), String> {
                 eprintln!("[reminderd] resume catch-up: fired {fired}");
             }
             Err(RecvTimeoutError::Timeout) => {
+                let now = now_ms();
                 // Either the next armed fire is due, or the safety tick elapsed.
-                if matches!(daemon.state(), crate::daemon::DaemonStateKind::VaultUnavailable) {
-                    let outcome = daemon.retry(now_ms());
+                let fired = daemon.on_tick(now);
+                if fired > 0 {
+                    eprintln!("[reminderd] scheduler tick: fired {fired}");
+                }
+                if timeout >= SAFETY_TICK {
+                    // Slow self-heal for missed config watcher events, config
+                    // watcher startup failure, unavailable vaults, and failed
+                    // vault-watch rearming. Unchanged config returns NoChange.
+                    let outcome = daemon.reload_config(now);
                     eprintln!("[reminderd] retry tick: {outcome:?}");
-                } else {
-                    daemon.on_tick(now_ms());
                 }
             }
             Err(RecvTimeoutError::Disconnected) => break, // all senders gone
@@ -131,10 +146,14 @@ fn compute_timeout(daemon: &Daemon) -> Duration {
 fn handle_action_followup(reminder_id: &str, outcome: &ActionOutcome) {
     match outcome {
         ActionOutcome::RemoveRequested => {
-            eprintln!("[reminderd] remove requested for {reminder_id} (Phase 4 write-back not yet wired)");
+            eprintln!(
+                "[reminderd] remove requested for {reminder_id} (Phase 4 write-back not yet wired)"
+            );
         }
         ActionOutcome::OpenRequested => {
-            eprintln!("[reminderd] open requested for {reminder_id} (Phase 5 app-open not yet wired)");
+            eprintln!(
+                "[reminderd] open requested for {reminder_id} (Phase 5 app-open not yet wired)"
+            );
         }
         _ => {}
     }
@@ -145,7 +164,10 @@ fn handle_action_followup(reminder_id: &str, outcome: &ActionOutcome) {
 #[cfg(target_os = "linux")]
 fn build_notifier(tx: Sender<DaemonEvent>) -> Box<dyn Notifier> {
     let on_action = Box::new(move |reminder_id: String, action: Action| {
-        let _ = tx.send(DaemonEvent::Action { reminder_id, action });
+        let _ = tx.send(DaemonEvent::Action {
+            reminder_id,
+            action,
+        });
     });
     match crate::notify::ZbusNotifier::new(on_action) {
         Ok(n) => Box::new(n),
@@ -172,7 +194,9 @@ fn spawn_suspend_listener(tx: Sender<DaemonEvent>) {
         let conn = match Connection::system() {
             Ok(c) => c,
             Err(err) => {
-                eprintln!("[reminderd] login1 unavailable ({err}); relying on periodic reconciliation");
+                eprintln!(
+                    "[reminderd] login1 unavailable ({err}); relying on periodic reconciliation"
+                );
                 return;
             }
         };
@@ -223,7 +247,10 @@ fn spawn_config_watcher(config_path: &Path, tx: Sender<DaemonEvent>) -> Option<R
         move |res: Result<Event, notify::Error>| {
             if let Ok(ev) = res {
                 let relevant = match &file_name {
-                    Some(name) => ev.paths.iter().any(|p| p.file_name() == Some(name.as_os_str())),
+                    Some(name) => ev
+                        .paths
+                        .iter()
+                        .any(|p| p.file_name() == Some(name.as_os_str())),
                     None => true,
                 };
                 if relevant {

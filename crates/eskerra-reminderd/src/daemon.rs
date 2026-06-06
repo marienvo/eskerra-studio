@@ -16,7 +16,7 @@ use crate::config::ReminderdConfig;
 use crate::index_store::{load_index, write_index, IndexLoadError};
 use crate::notify::{NotificationRequest, Notifier};
 use crate::paths::index_path_in;
-use crate::rederive::rederive_date_only;
+use crate::rederive::rederive_for_settings;
 use crate::scan::{rescan_changed_files, scan_vault};
 use crate::scheduler::{self, Action, ActionOutcome, FireKind, FireRequest, SCHEDULER_GRACE_MS};
 
@@ -57,7 +57,7 @@ pub enum Outcome {
     InvalidConfigIdle { reason: &'static str },
     /// Switched to (or first activated) a vault: full scan + merge written.
     VaultSwitched { reminder_count: usize },
-    /// Settings-only change (no vault switch): re-derived date-only reminders.
+    /// Settings-only change (no vault switch): re-derived reminder schedules.
     SettingsRederived { rederived_count: usize },
     /// Config reload found nothing actionable changed.
     NoChange,
@@ -91,6 +91,10 @@ pub struct Daemon {
     /// Earliest instant the run loop should wake to fire/flip a reminder, or
     /// `None` when nothing is armed. Recomputed after every reminder change.
     next_wakeup_ms: Option<i64>,
+    /// Set when the active vault has a valid index but the filesystem watcher
+    /// failed to arm. Retry/config reloads reattempt the watch without forcing
+    /// a full rescan.
+    watch_needs_rearm: bool,
 }
 
 impl Daemon {
@@ -110,6 +114,7 @@ impl Daemon {
             active: None,
             unavailable: false,
             next_wakeup_ms: None,
+            watch_needs_rearm: false,
         }
     }
 
@@ -212,7 +217,10 @@ impl Daemon {
         }
         // Re-classify against `now` (discovery) and persist + re-arm.
         self.run_discovery_and_dispatch(now_ms);
-        Outcome::Rescanned { reminder_count: count, full }
+        Outcome::Rescanned {
+            reminder_count: count,
+            full,
+        }
     }
 
     /// Scheduled-fire / minute-tick: execute armed fires whose `fireAt` arrived
@@ -291,7 +299,11 @@ impl Daemon {
             self.active = None;
             self.unavailable = true;
             self.next_wakeup_ms = None;
-            eprintln!("[reminderd] vault unavailable (path missing): {}", root.display());
+            self.watch_needs_rearm = false;
+            eprintln!(
+                "[reminderd] vault unavailable (path missing): {}",
+                root.display()
+            );
             return Outcome::VaultUnavailable;
         }
 
@@ -301,6 +313,7 @@ impl Daemon {
                 let settings_changed = active.default_time != cfg.date_only_default_time
                     || active.lead_minutes != cfg.lead_minutes;
                 if !settings_changed {
+                    self.rearm_watch_if_needed();
                     return Outcome::NoChange;
                 }
                 // Settings-only re-derive: no session bump, no teardown. Update
@@ -308,19 +321,23 @@ impl Daemon {
                 // schedule change) and persist + re-arm.
                 active.default_time = cfg.date_only_default_time;
                 active.lead_minutes = cfg.lead_minutes;
-                let rederived = rederive_date_only(
+                let rederived = rederive_for_settings(
                     &mut active.index.reminders,
                     cfg.date_only_default_time,
                     cfg.lead_minutes,
                 );
                 self.run_discovery_and_dispatch(now_ms);
-                return Outcome::SettingsRederived { rederived_count: rederived };
+                self.rearm_watch_if_needed();
+                return Outcome::SettingsRederived {
+                    rederived_count: rederived,
+                };
             }
         }
 
         // Vault switch (or first activation): tear down, load prior index, full
         // scan, merge, then discover + write + re-arm watch.
         self.watch.stop();
+        self.watch_needs_rearm = false;
         let prior_index = match load_index(&index_path_in(&self.data_dir, &hash)) {
             Ok(index) => index,
             Err(IndexLoadError::NotFound) => ReminderIndex::new(hash.clone(), now_ms, vec![]),
@@ -343,17 +360,40 @@ impl Daemon {
         });
         if let Err(err) = self.watch.start_watching(&root) {
             eprintln!("[reminderd] watch start failed: {err}");
+            self.watch_needs_rearm = true;
+        } else {
+            self.watch_needs_rearm = false;
         }
         // Discovery classifies the freshly-scanned reminders against `now`
-        // (overdue → due in-app, in-window → fire, future → armed) and writes
+        // (overdue -> due in-app, in-window -> fire, future -> armed) and writes
         // the index post-classification.
         self.run_discovery_and_dispatch(now_ms);
-        Outcome::VaultSwitched { reminder_count: count }
+        Outcome::VaultSwitched {
+            reminder_count: count,
+        }
+    }
+
+    fn rearm_watch_if_needed(&mut self) {
+        if !self.watch_needs_rearm {
+            return;
+        }
+        let Some(active) = self.active.as_ref() else {
+            self.watch_needs_rearm = false;
+            return;
+        };
+        match self.watch.start_watching(&active.root) {
+            Ok(()) => {
+                self.watch_needs_rearm = false;
+            }
+            Err(err) => {
+                eprintln!("[reminderd] watch rearm failed: {err}");
+            }
+        }
     }
 
     /// Run a discovery pass over the active index, then dispatch (send fires +
-    /// persist + re-arm). The single funnel used after every index change
-    /// (vault switch, settings re-derive, watch rescan).
+    /// persist). The single funnel used after every index change (vault switch,
+    /// settings re-derive, watch rescan).
     fn run_discovery_and_dispatch(&mut self, now_ms: i64) {
         if self.active.is_none() {
             self.next_wakeup_ms = None;
@@ -410,6 +450,7 @@ impl Daemon {
         self.active = None;
         self.unavailable = false;
         self.next_wakeup_ms = None;
+        self.watch_needs_rearm = false;
         Outcome::Idle
     }
 
@@ -423,6 +464,7 @@ impl Daemon {
             self.active = None;
             self.unavailable = false;
             self.next_wakeup_ms = None;
+            self.watch_needs_rearm = false;
             Outcome::InvalidConfigIdle { reason }
         }
     }
@@ -442,11 +484,20 @@ mod tests {
     /// neither (no session bump / no index teardown).
     struct RecordingWatch {
         log: Arc<Mutex<Vec<String>>>,
+        start_failures_remaining: Arc<Mutex<usize>>,
     }
 
     impl WatchControl for RecordingWatch {
         fn start_watching(&self, root: &Path) -> Result<(), String> {
-            self.log.lock().unwrap().push(format!("start:{}", root.display()));
+            self.log
+                .lock()
+                .unwrap()
+                .push(format!("start:{}", root.display()));
+            let mut failures = self.start_failures_remaining.lock().unwrap();
+            if *failures > 0 {
+                *failures -= 1;
+                return Err("injected start failure".to_string());
+            }
             Ok(())
         }
         fn stop(&self) {
@@ -474,6 +525,7 @@ mod tests {
         vault: PathBuf,
         log: Arc<Mutex<Vec<String>>>,
         sent: Arc<Mutex<Vec<String>>>,
+        start_failures_remaining: Arc<Mutex<usize>>,
     }
 
     impl Harness {
@@ -491,6 +543,7 @@ mod tests {
                 vault,
                 log: Arc::new(Mutex::new(Vec::new())),
                 sent: Arc::new(Mutex::new(Vec::new())),
+                start_failures_remaining: Arc::new(Mutex::new(0)),
             }
         }
 
@@ -498,13 +551,22 @@ mod tests {
             Daemon::new(
                 self.config_path.clone(),
                 self.data_dir.clone(),
-                Box::new(RecordingWatch { log: Arc::clone(&self.log) }),
-                Box::new(RecordingNotifier { sent: Arc::clone(&self.sent) }),
+                Box::new(RecordingWatch {
+                    log: Arc::clone(&self.log),
+                    start_failures_remaining: Arc::clone(&self.start_failures_remaining),
+                }),
+                Box::new(RecordingNotifier {
+                    sent: Arc::clone(&self.sent),
+                }),
             )
         }
 
         fn sent(&self) -> Vec<String> {
             self.sent.lock().unwrap().clone()
+        }
+
+        fn fail_next_watch_starts(&self, count: usize) {
+            *self.start_failures_remaining.lock().unwrap() = count;
         }
 
         fn write_config(&self, json: &str) {
@@ -560,16 +622,24 @@ mod tests {
         h.write_config(&h.config_for("vh1", "09:00", 5));
 
         let mut d = h.daemon();
-        assert_eq!(d.reload_config(NOW), Outcome::VaultSwitched { reminder_count: 2 });
+        assert_eq!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { reminder_count: 2 }
+        );
         assert_eq!(d.state(), DaemonStateKind::Active);
 
         // Index file written with both reminders.
-        let index = ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap()).unwrap();
+        let index =
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
         assert_eq!(index.reminders.len(), 2);
         assert_eq!(index.vault_hash, "vh1");
 
         // A switch tears down then re-arms the watcher.
-        assert_eq!(h.log(), vec!["stop".to_string(), format!("start:{}", h.vault.display())]);
+        assert_eq!(
+            h.log(),
+            vec!["stop".to_string(), format!("start:{}", h.vault.display())]
+        );
     }
 
     #[test]
@@ -597,14 +667,17 @@ mod tests {
     }
 
     #[test]
-    fn settings_only_change_rederives_without_teardown_keeps_ids_leaves_timed() {
+    fn settings_only_change_rederives_without_teardown_keeps_ids_and_timed_fire_at() {
         let h = Harness::new();
         h.write_note("Inbox/a.md", "@2026-06-06"); // date-only → default time
         h.write_note("Inbox/timed.md", "@2026-06-06_2330"); // explicit time
         h.write_config(&h.config_for("vh1", "09:00", 5));
 
         let mut d = h.daemon();
-        assert_eq!(d.reload_config(NOW), Outcome::VaultSwitched { reminder_count: 2 });
+        assert_eq!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { reminder_count: 2 }
+        );
 
         let date_id_before = d
             .active_index()
@@ -631,11 +704,16 @@ mod tests {
             .find(|r| r.normalized_token_text == "@2026-06-06_2330")
             .unwrap()
             .clone();
+        let timed_due_before = timed_before.due_at_ms;
+        let timed_fire_before = timed_before.fire_at_ms;
         let log_after_switch = h.log();
 
-        // Same vault/hash, earlier default time.
-        h.write_config(&h.config_for("vh1", "08:00", 5));
-        assert_eq!(d.reload_config(NOW + 1), Outcome::SettingsRederived { rederived_count: 1 });
+        // Same vault/hash, earlier default time and longer lead.
+        h.write_config(&h.config_for("vh1", "08:00", 10));
+        assert_eq!(
+            d.reload_config(NOW + 1),
+            Outcome::SettingsRederived { rederived_count: 2 }
+        );
 
         let date_after = d
             .active_index()
@@ -649,7 +727,7 @@ mod tests {
         assert_eq!(date_after.id, date_id_before);
         assert_eq!(due_before - date_after.due_at_ms, 60 * 60 * 1000);
 
-        // Timed token untouched.
+        // Timed token keeps its explicit due time but moves fireAt for the new lead.
         let timed_after = d
             .active_index()
             .unwrap()
@@ -658,10 +736,17 @@ mod tests {
             .find(|r| r.normalized_token_text == "@2026-06-06_2330")
             .unwrap()
             .clone();
-        assert_eq!(timed_after, timed_before);
+        assert_eq!(timed_after.due_at_ms, timed_due_before);
+        assert_eq!(timed_fire_before - timed_after.fire_at_ms, 5 * 60_000);
+        assert_eq!(timed_after.state, ReminderState::Scheduled);
+        assert_eq!(timed_after.last_notified_ms, None);
 
         // No teardown / re-arm on a settings-only change.
-        assert_eq!(h.log(), log_after_switch, "settings-only change must not stop/start the watcher");
+        assert_eq!(
+            h.log(),
+            log_after_switch,
+            "settings-only change must not stop/start the watcher"
+        );
     }
 
     #[test]
@@ -672,18 +757,26 @@ mod tests {
 
         // First run builds the index.
         let mut d1 = h.daemon();
-        assert!(matches!(d1.reload_config(NOW), Outcome::VaultSwitched { .. }));
+        assert!(matches!(
+            d1.reload_config(NOW),
+            Outcome::VaultSwitched { .. }
+        ));
 
         // Simulate the date-only reminder having fired at the old 09:00 by
         // editing the persisted index, then "restart" with a fresh Daemon.
-        let mut index = ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap()).unwrap();
+        let mut index =
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
         let snooze_fire = index.reminders[0].fire_at_ms;
         index.reminders[0].state = ReminderState::Notified;
         index.reminders[0].last_notified_ms = Some(snooze_fire);
         crate::index_store::write_index(&h.index_path("vh1"), &index).unwrap();
 
         let mut d2 = h.daemon();
-        assert!(matches!(d2.reload_config(NOW), Outcome::VaultSwitched { .. }));
+        assert!(matches!(
+            d2.reload_config(NOW),
+            Outcome::VaultSwitched { .. }
+        ));
         // Merge carried the notified state across the restart.
         let after_restart = &d2.active_index().unwrap().reminders[0];
         assert_eq!(after_restart.state, ReminderState::Notified);
@@ -692,10 +785,72 @@ mod tests {
         // A settings-only re-derive must reset that stale notified state so the
         // new time can fire.
         h.write_config(&h.config_for("vh1", "08:00", 5));
-        assert_eq!(d2.reload_config(NOW + 1), Outcome::SettingsRederived { rederived_count: 1 });
+        assert_eq!(
+            d2.reload_config(NOW + 1),
+            Outcome::SettingsRederived { rederived_count: 1 }
+        );
         let after_rederive = &d2.active_index().unwrap().reminders[0];
         assert_eq!(after_rederive.state, ReminderState::Scheduled);
         assert_eq!(after_rederive.last_notified_ms, None);
+    }
+
+    #[test]
+    fn retry_rearms_watcher_after_start_failure_without_rebuilding_index() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        h.fail_next_watch_starts(1);
+
+        let mut d = h.daemon();
+        assert_eq!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { reminder_count: 1 }
+        );
+        assert_eq!(d.state(), DaemonStateKind::Active);
+        let generated_before = d.active_index().unwrap().generated_at_ms;
+        assert_eq!(
+            h.log(),
+            vec!["stop".to_string(), format!("start:{}", h.vault.display())]
+        );
+
+        assert_eq!(d.retry(NOW + 1), Outcome::NoChange);
+        assert_eq!(d.active_index().unwrap().generated_at_ms, generated_before);
+        assert_eq!(
+            h.log(),
+            vec![
+                "stop".to_string(),
+                format!("start:{}", h.vault.display()),
+                format!("start:{}", h.vault.display())
+            ]
+        );
+    }
+
+    #[test]
+    fn settings_only_change_rearms_failed_watcher_without_teardown() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        h.fail_next_watch_starts(1);
+
+        let mut d = h.daemon();
+        assert_eq!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { reminder_count: 1 }
+        );
+
+        h.write_config(&h.config_for("vh1", "08:00", 5));
+        assert_eq!(
+            d.reload_config(NOW + 1),
+            Outcome::SettingsRederived { rederived_count: 1 }
+        );
+        assert_eq!(
+            h.log(),
+            vec![
+                "stop".to_string(),
+                format!("start:{}", h.vault.display()),
+                format!("start:{}", h.vault.display())
+            ]
+        );
     }
 
     #[test]
@@ -705,7 +860,10 @@ mod tests {
         h.write_config(&h.config_for("vh1", "09:00", 5));
 
         let mut d = h.daemon();
-        assert!(matches!(d.reload_config(NOW), Outcome::VaultSwitched { .. }));
+        assert!(matches!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { .. }
+        ));
         let index_before = std::fs::read(h.index_path("vh1")).unwrap();
         let log_before = h.log();
 
@@ -751,19 +909,37 @@ mod tests {
         h.write_config(&h.config_for("vh1", "09:00", 5));
 
         let mut d = h.daemon();
-        assert_eq!(d.reload_config(NOW), Outcome::VaultSwitched { reminder_count: 2 });
+        assert_eq!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { reminder_count: 2 }
+        );
 
         // Edit a.md's token on disk, then deliver a precise (non-coarse) batch.
         h.write_note("Inbox/a.md", "@2026-06-06_1100 moved");
         let changed = vec![h.vault.join("Inbox/a.md").to_string_lossy().into_owned()];
         let outcome = d.on_watch_batch(false, &changed, NOW + 1);
-        assert_eq!(outcome, Outcome::Rescanned { reminder_count: 2, full: false });
+        assert_eq!(
+            outcome,
+            Outcome::Rescanned {
+                reminder_count: 2,
+                full: false
+            }
+        );
 
-        let index = ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap()).unwrap();
-        let a = index.reminders.iter().find(|r| r.vault_relative_path == "Inbox/a.md").unwrap();
+        let index =
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
+        let a = index
+            .reminders
+            .iter()
+            .find(|r| r.vault_relative_path == "Inbox/a.md")
+            .unwrap();
         assert_eq!(a.normalized_token_text, "@2026-06-06_1100");
         // b.md unchanged.
-        assert!(index.reminders.iter().any(|r| r.normalized_token_text == "@2026-07-07_1000"));
+        assert!(index
+            .reminders
+            .iter()
+            .any(|r| r.normalized_token_text == "@2026-07-07_1000"));
     }
 
     #[test]
@@ -775,7 +951,10 @@ mod tests {
         h.write_config(&h.config_for("vh1", "09:00", 5));
 
         let mut d = h.daemon();
-        assert_eq!(d.reload_config(NOW), Outcome::VaultSwitched { reminder_count: 3 });
+        assert_eq!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { reminder_count: 3 }
+        );
 
         // Delete the whole Inbox/ directory, then deliver a precise (non-coarse)
         // batch carrying only the now-missing directory path. is_dir() is false
@@ -784,9 +963,17 @@ mod tests {
         std::fs::remove_dir_all(h.vault.join("Inbox")).unwrap();
         let changed = vec![h.vault.join("Inbox").to_string_lossy().into_owned()];
         let outcome = d.on_watch_batch(false, &changed, NOW + 1);
-        assert_eq!(outcome, Outcome::Rescanned { reminder_count: 1, full: false });
+        assert_eq!(
+            outcome,
+            Outcome::Rescanned {
+                reminder_count: 1,
+                full: false
+            }
+        );
 
-        let index = ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap()).unwrap();
+        let index =
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
         assert_eq!(index.reminders.len(), 1);
         assert_eq!(index.reminders[0].vault_relative_path, "Notes/keep.md");
     }
@@ -806,10 +993,16 @@ mod tests {
         h.write_config(&h.config_for("vh1", "09:00", 5));
 
         let mut d = h.daemon();
-        assert!(matches!(d.reload_config(NOW), Outcome::VaultSwitched { .. }));
+        assert!(matches!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { .. }
+        ));
         let (fire_at, _due) = the_times(&d);
         // NOW (2023) is far before the 2026 fire → armed, nothing sent.
-        assert_eq!(d.active_index().unwrap().reminders[0].state, ReminderState::Scheduled);
+        assert_eq!(
+            d.active_index().unwrap().reminders[0].state,
+            ReminderState::Scheduled
+        );
         assert!(h.sent().is_empty());
         assert_eq!(d.next_wakeup_ms(), Some(fire_at));
     }
@@ -828,7 +1021,10 @@ mod tests {
         assert_eq!(fired, 1);
         let id = d.active_index().unwrap().reminders[0].id.clone();
         assert_eq!(h.sent(), vec![id]);
-        assert_eq!(d.active_index().unwrap().reminders[0].state, ReminderState::Notified);
+        assert_eq!(
+            d.active_index().unwrap().reminders[0].state,
+            ReminderState::Notified
+        );
         // Nothing left armed → no further wakeup.
         assert_eq!(d.next_wakeup_ms(), None);
         // A second tick does not re-fire.
@@ -850,7 +1046,10 @@ mod tests {
         // A fresh daemon discovering it well after due must not pop a popup.
         let mut d2 = h.daemon();
         d2.reload_config(due + 60_000);
-        assert_eq!(d2.active_index().unwrap().reminders[0].state, ReminderState::Due);
+        assert_eq!(
+            d2.active_index().unwrap().reminders[0].state,
+            ReminderState::Due
+        );
         assert!(h.sent().is_empty(), "overdue discovery must be in-app only");
     }
 
@@ -869,11 +1068,17 @@ mod tests {
         d.on_tick(fire_at);
         let now = due - 4 * 60_000;
         let outcome = d.on_action(&id, Action::Snooze { minutes: 3 }, now);
-        assert_eq!(outcome, ActionOutcome::Rescheduled { fire_at_ms: due - 3 * 60_000 });
+        assert_eq!(
+            outcome,
+            ActionOutcome::Rescheduled {
+                fire_at_ms: due - 3 * 60_000
+            }
+        );
 
         // Persisted to disk with the new fire time + re-armed.
         let index =
-            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap()).unwrap();
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
         assert_eq!(index.reminders[0].fire_at_ms, due - 3 * 60_000);
         assert_eq!(d.next_wakeup_ms(), Some(due - 3 * 60_000));
 
