@@ -60,7 +60,7 @@ Orchestration lives in [`NoteMarkdownEditor.tsx`](../../apps/desktop/src/editor/
 - **Cancel / Esc:** overlay closes; document text is unchanged (the lone `@` or existing token stays as typed).
 - **Commit** (day click, **Today**, or `Enter`): `formatDateToken` result is dispatched as a CodeMirror transaction; editor refocuses.
 
-Overlay is portaled to `document.body`, positioned with `view.coordsAtPos` (fallback: editor host top-left inset).
+Overlay is portaled to `document.body`, positioned with `view.coordsAtPos` (fallback: editor host top-left inset). After mount, measured overlay size is clamped into the viewport (`clampDateTokenPickerOverlayPosition` in [`dateTokenPickerOverlayPosition.ts`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenPickerOverlayPosition.ts)): horizontal inset 8px; prefer below the anchor with a 6px gap, flip above when the bottom would overflow, then clamp top. Editor scroll dismisses the overlay (anchor is not re-followed on scroll).
 
 ## Inline chip rendering
 

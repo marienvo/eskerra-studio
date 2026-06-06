@@ -41,6 +41,12 @@ import {
   formatDateToken,
   type DateTokenValue,
 } from './dateToken/dateToken';
+import {
+  clampDateTokenPickerOverlayPosition,
+  DATE_TOKEN_PICKER_OVERLAY_GAP_PX,
+  type DateTokenPickerOverlayAnchor,
+  type DateTokenPickerOverlayPosition,
+} from './dateToken/dateTokenPickerOverlayPosition';
 import type {
   DateTokenPickerOpenHandler,
   DateTokenPickerOpenRequest,
@@ -52,31 +58,28 @@ export type {
 } from './noteMarkdownEditorTypes';
 
 type DateTokenPickerOverlayState = {
-  readonly anchorRect: {
-    readonly left: number;
-    readonly bottom: number;
-  };
+  readonly anchorRect: DateTokenPickerOverlayAnchor;
   readonly initialValue: DateTokenValue | null;
   readonly commit: (value: DateTokenValue) => void;
 };
 
-function fallbackDateTokenAnchorRect(view: EditorView): {
-  left: number;
-  bottom: number;
-} {
+function fallbackDateTokenAnchorRect(view: EditorView): DateTokenPickerOverlayAnchor {
   const rect = view.dom.getBoundingClientRect();
+  const anchorY = rect.top + 24;
   return {
     left: rect.left + 24,
-    bottom: rect.top + 24,
+    top: anchorY,
+    bottom: anchorY,
   };
 }
 
 function dateTokenOverlayAnchorFromRequest(
   request: DateTokenPickerOpenRequest,
-): {left: number; bottom: number} {
+): DateTokenPickerOverlayAnchor {
   if (request.anchorRect) {
     return {
       left: request.anchorRect.left,
+      top: request.anchorRect.top,
       bottom: request.anchorRect.bottom,
     };
   }
@@ -138,6 +141,8 @@ const NoteMarkdownEditorImpl = forwardRef<
   const dateTokenPickerOverlayRef = useRef<HTMLDivElement | null>(null);
   const [dateTokenPicker, setDateTokenPicker] =
     useState<DateTokenPickerOverlayState | null>(null);
+  const [dateTokenPickerOverlayPosition, setDateTokenPickerOverlayPosition] =
+    useState<DateTokenPickerOverlayPosition | null>(null);
   const [tableCellMenuOpen, setTableCellMenuOpen] = useState(false);
   const [tableCellMenuAnchor, setTableCellMenuAnchor] = useState<{
     x: number;
@@ -287,6 +292,60 @@ const NoteMarkdownEditorImpl = forwardRef<
     };
   }, []);
 
+  useLayoutEffect(() => {
+    if (!dateTokenPicker) {
+      setDateTokenPickerOverlayPosition(null);
+      return;
+    }
+
+    const measureAndClamp = () => {
+      const overlay = dateTokenPickerOverlayRef.current;
+      if (!overlay) {
+        return;
+      }
+      const {width, height} = overlay.getBoundingClientRect();
+      setDateTokenPickerOverlayPosition(
+        clampDateTokenPickerOverlayPosition(
+          dateTokenPicker.anchorRect,
+          {width, height},
+          {width: window.innerWidth, height: window.innerHeight},
+        ),
+      );
+    };
+
+    measureAndClamp();
+
+    const overlay = dateTokenPickerOverlayRef.current;
+    const resizeObserver =
+      overlay && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(measureAndClamp)
+        : null;
+    resizeObserver?.observe(overlay);
+    window.addEventListener('resize', measureAndClamp);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', measureAndClamp);
+    };
+  }, [dateTokenPicker]);
+
+  useEffect(() => {
+    if (!dateTokenPicker) {
+      return;
+    }
+    const view = shell.viewRef.current;
+    if (!view) {
+      return;
+    }
+    const onEditorScroll = () => {
+      setDateTokenPicker(null);
+    };
+    view.scrollDOM.addEventListener('scroll', onEditorScroll, {passive: true});
+    return () => {
+      view.scrollDOM.removeEventListener('scroll', onEditorScroll);
+    };
+  }, [dateTokenPicker, shell.viewRef]);
+
   useEffect(() => {
     if (!dateTokenPicker) {
       return;
@@ -387,8 +446,13 @@ const NoteMarkdownEditorImpl = forwardRef<
               data-date-token-picker-overlay
               style={{
                 position: 'fixed',
-                left: dateTokenPicker.anchorRect.left,
-                top: dateTokenPicker.anchorRect.bottom + 6,
+                left:
+                  dateTokenPickerOverlayPosition?.left
+                  ?? dateTokenPicker.anchorRect.left,
+                top:
+                  dateTokenPickerOverlayPosition?.top
+                  ?? dateTokenPicker.anchorRect.bottom
+                    + DATE_TOKEN_PICKER_OVERLAY_GAP_PX,
                 zIndex: 320,
               }}
             >
