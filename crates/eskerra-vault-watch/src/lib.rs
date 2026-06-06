@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant, SystemTime};
 
 #[cfg(test)]
@@ -71,6 +71,8 @@ enum VaultWatchSignal {
 
 struct VaultWatchers {
     _recommended: RecommendedWatcher,
+    // Owns the poll backend. Watch callbacks only hold `Weak` references to
+    // this mutex, so the PollWatcher callback cannot keep its own owner alive.
     _poll: Arc<Mutex<Option<PollWatcher>>>,
     _poll_watched_dirs: Arc<Mutex<HashSet<PathBuf>>>,
 }
@@ -110,6 +112,7 @@ impl VaultWatchEngine {
 
         let tx_poll = self.notify_tx.clone();
         let poll = Arc::new(Mutex::new(None));
+        let poll_weak = Arc::downgrade(&poll);
         let poll_watched_dirs = Arc::new(Mutex::new(HashSet::new()));
         // Keep the poll fallback stat-based. `compare_contents=true` would recursively
         // read and hash every file in the vault on every poll, including attachments.
@@ -118,7 +121,7 @@ impl VaultWatchEngine {
             .with_compare_contents(WATCH_POLL_COMPARE_CONTENTS);
         match PollWatcher::new(
             {
-                let poll = Arc::clone(&poll);
+                let poll = Weak::clone(&poll_weak);
                 let root = root.to_path_buf();
                 let poll_watched_dirs = Arc::clone(&poll_watched_dirs);
                 let tx_poll = tx_poll.clone();
@@ -146,7 +149,7 @@ impl VaultWatchEngine {
         };
 
         let tx_recommended = self.notify_tx.clone();
-        let recommended_poll = Arc::clone(&poll);
+        let recommended_poll = Weak::clone(&poll_weak);
         let recommended_root = root.to_path_buf();
         let recommended_poll_watched_dirs = Arc::clone(&poll_watched_dirs);
         let mut recommended = RecommendedWatcher::new(
@@ -170,7 +173,7 @@ impl VaultWatchEngine {
                 .watch(root, RecursiveMode::Recursive)
                 .map_err(|e| format!("recommended watch {}: {e}", root.display()))?;
             register_poll_watch_roots_lossy(
-                &poll,
+                &poll_weak,
                 &poll_watched_dirs,
                 &[root.to_path_buf()],
                 &self.notify_tx,
@@ -245,7 +248,7 @@ fn handle_notify_event(
     session_id: u64,
     backend: &'static str,
     root: &Path,
-    poll: &Arc<Mutex<Option<PollWatcher>>>,
+    poll: &Weak<Mutex<Option<PollWatcher>>>,
     watched_dirs: &Arc<Mutex<HashSet<PathBuf>>>,
     res: Result<Event, notify::Error>,
 ) {
@@ -602,7 +605,7 @@ fn candidate_poll_watch_roots(root: &Path, paths: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 fn register_poll_watch_directories(
-    poll: &Arc<Mutex<Option<PollWatcher>>>,
+    poll: &Weak<Mutex<Option<PollWatcher>>>,
     watched_dirs: &Arc<Mutex<HashSet<PathBuf>>>,
     dirs: Vec<PathBuf>,
     tx: &std::sync::mpsc::Sender<VaultWatchSignal>,
@@ -620,6 +623,9 @@ fn register_poll_watch_directories(
             continue;
         }
 
+        let Some(poll) = poll.upgrade() else {
+            return;
+        };
         let watch_result = match poll.lock() {
             Ok(mut poll) => match poll.as_mut() {
                 Some(poll) => poll.watch(&dir, RecursiveMode::NonRecursive),
@@ -645,7 +651,7 @@ fn register_poll_watch_directories(
 }
 
 fn register_poll_watch_roots_lossy(
-    poll: &Arc<Mutex<Option<PollWatcher>>>,
+    poll: &Weak<Mutex<Option<PollWatcher>>>,
     watched_dirs: &Arc<Mutex<HashSet<PathBuf>>>,
     roots: &[PathBuf],
     tx: &std::sync::mpsc::Sender<VaultWatchSignal>,
@@ -1077,6 +1083,9 @@ mod tests {
                 .paths
                 .iter()
                 .any(|p| Path::new(p).ends_with("note.md") || p.contains("note.md"));
-        assert!(touched_note, "batch did not reference the new file: {batch:?}");
+        assert!(
+            touched_note,
+            "batch did not reference the new file: {batch:?}"
+        );
     }
 }

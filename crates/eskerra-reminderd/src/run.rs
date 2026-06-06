@@ -33,8 +33,8 @@ fn now_ms() -> i64 {
 /// Run the daemon forever. Returns only on an unrecoverable setup error
 /// (missing HOME, etc.) — systemd restarts us per the unit's `Restart=on-failure`.
 pub fn run() -> Result<(), String> {
-    let config_path =
-        config_path().ok_or_else(|| "cannot resolve config path (no HOME/XDG_CONFIG_HOME)".to_string())?;
+    let config_path = config_path()
+        .ok_or_else(|| "cannot resolve config path (no HOME/XDG_CONFIG_HOME)".to_string())?;
     let data_dir = reminders_data_dir()
         .ok_or_else(|| "cannot resolve data dir (no HOME/XDG_DATA_HOME)".to_string())?;
 
@@ -75,12 +75,11 @@ pub fn run() -> Result<(), String> {
                 eprintln!("[reminderd] watch batch: {outcome:?}");
             }
             DaemonEvent::RetryTick => {
-                // Only meaningful when a vault is unavailable; otherwise a cheap
-                // re-evaluation that returns NoChange.
-                if matches!(daemon.state(), crate::daemon::DaemonStateKind::VaultUnavailable) {
-                    let outcome = daemon.retry(now_ms());
-                    eprintln!("[reminderd] retry tick: {outcome:?}");
-                }
+                // Slow self-heal for missed config watcher events, config
+                // watcher startup failure, unavailable vaults, and failed
+                // vault-watch rearming. Unchanged config returns NoChange.
+                let outcome = daemon.reload_config(now_ms());
+                eprintln!("[reminderd] retry tick: {outcome:?}");
             }
         }
     }
@@ -101,7 +100,10 @@ fn spawn_config_watcher(config_path: &Path, tx: Sender<DaemonEvent>) -> Option<R
         move |res: Result<Event, notify::Error>| {
             if let Ok(ev) = res {
                 let relevant = match &file_name {
-                    Some(name) => ev.paths.iter().any(|p| p.file_name() == Some(name.as_os_str())),
+                    Some(name) => ev
+                        .paths
+                        .iter()
+                        .any(|p| p.file_name() == Some(name.as_os_str())),
                     None => true,
                 };
                 if relevant {
