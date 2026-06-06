@@ -16,7 +16,7 @@ describe('DateTimePicker', () => {
     vi.useRealTimers();
   });
 
-  it('selects today when Today is clicked', () => {
+  it('commits today when Today is clicked', () => {
     const onConfirm = vi.fn();
     render(
       <DateTimePicker
@@ -28,12 +28,31 @@ describe('DateTimePicker', () => {
     );
 
     fireEvent.click(screen.getByRole('button', {name: 'Today'}));
-    fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
 
     expect(onConfirm).toHaveBeenCalledWith({
       year: 2026,
       month: 6,
       day: 6,
+    });
+  });
+
+  it('commits immediately when a calendar day is clicked', () => {
+    const onConfirm = vi.fn();
+    render(
+      <DateTimePicker
+        initialValue={{year: 2026, month: 6, day: 6}}
+        now={FIXED_NOW}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('gridcell', {name: '15 June 2026'}));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      year: 2026,
+      month: 6,
+      day: 15,
     });
   });
 
@@ -86,7 +105,7 @@ describe('DateTimePicker', () => {
     expect(hourInput.disabled).toBe(true);
     expect(minuteInput.disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+    fireEvent.click(screen.getByRole('gridcell', {name: '6 June 2026'}));
 
     const payload = onConfirm.mock.calls[0]![0] as DateTokenValue;
     expect(payload).toEqual({year: 2026, month: 6, day: 6});
@@ -112,7 +131,7 @@ describe('DateTimePicker', () => {
     fireEvent.change(screen.getByRole('spinbutton', {name: 'Minute'}), {
       target: {value: '52'},
     });
-    fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+    fireEvent.click(screen.getByRole('gridcell', {name: '6 June 2026'}));
 
     expect(onConfirm).toHaveBeenCalledWith({
       year: 2026,

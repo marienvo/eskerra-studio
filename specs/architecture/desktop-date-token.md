@@ -43,7 +43,7 @@ Presentational React overlay: [`DateTimePicker.tsx`](../../apps/desktop/src/edit
 - **Calendar:** month grid with previous/next month navigation; week rows start on **Monday** (Fedora/GNOME reference).
 - **Today:** prominent button sets the selected date to the current local calendar day.
 - **Time:** hour and minute inputs (24-hour) plus a **No time** toggle. When **No time** is on, time inputs disable and confirm yields a date-only token.
-- **Confirm / Cancel:** `Enter` confirms, `Esc` cancels. Arrow keys move the calendar selection.
+- **Day pick / Cancel:** clicking a calendar day or **Today** commits immediately and closes the overlay. `Enter` confirms the current selection (for keyboard navigation and time tweaks). `Esc` cancels. Arrow keys move the calendar selection without committing until `Enter` or a day click.
 - **Defaults:** today’s date; no time pre-selected on a fresh `@` trigger.
 
 Storybook sandbox: [`dateToken/__sandbox__/DateTimePicker.stories.tsx`](../../apps/desktop/src/editor/noteEditor/dateToken/__sandbox__/DateTimePicker.stories.tsx).
@@ -58,7 +58,7 @@ Orchestration lives in [`NoteMarkdownEditor.tsx`](../../apps/desktop/src/editor/
 | Click existing chip | Entire validated token span | No |
 
 - **Cancel / Esc:** overlay closes; document text is unchanged (the lone `@` or existing token stays as typed).
-- **Confirm:** `formatDateToken` result is dispatched as a CodeMirror transaction; editor refocuses.
+- **Commit** (day click, **Today**, or `Enter`): `formatDateToken` result is dispatched as a CodeMirror transaction; editor refocuses.
 
 Overlay is portaled to `document.body`, positioned with `view.coordsAtPos` (fallback: editor host top-left inset).
 

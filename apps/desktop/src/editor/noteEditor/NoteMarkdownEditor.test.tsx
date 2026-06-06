@@ -193,11 +193,31 @@ describe('NoteMarkdownEditor', () => {
 
     expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
 
+    const today = todayDateParts(new Date());
+    const monthLabels = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ] as const;
+
     act(() => {
-      fireEvent.click(screen.getByRole('button', {name: 'Confirm'}));
+      fireEvent.click(
+        screen.getByRole('gridcell', {
+          name: `${today.day} ${monthLabels[today.month - 1]} ${today.year}`,
+        }),
+      );
     });
 
-    const expectedToken = formatDateToken(todayDateParts(new Date()));
+    const expectedToken = formatDateToken(today);
     expect(view.state.doc.toString()).toBe(`${expectedToken} `);
     expect(onMarkdownChange).toHaveBeenLastCalledWith(`${expectedToken} `);
     expect(

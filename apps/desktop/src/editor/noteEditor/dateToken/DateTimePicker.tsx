@@ -185,11 +185,36 @@ export function DateTimePicker({
     rootRef.current?.focus();
   }, []);
 
-  const selectDate = useCallback((year: number, month: number, day: number) => {
-    setSelected({year, month, day});
-    setViewYear(year);
-    setViewMonth(month);
-  }, []);
+  const commitValue = useCallback(
+    (date: Pick<DateTokenValue, 'year' | 'month' | 'day'>) => {
+      const value: DateTokenValue = noTime
+        ? {
+            year: date.year,
+            month: date.month,
+            day: date.day,
+          }
+        : {
+            year: date.year,
+            month: date.month,
+            day: date.day,
+            hour: clampHour(hour),
+            minute: clampMinute(minute),
+          };
+      onConfirm(value);
+    },
+    [hour, minute, noTime, onConfirm],
+  );
+
+  const selectDate = useCallback(
+    (year: number, month: number, day: number) => {
+      const next = {year, month, day};
+      setSelected(next);
+      setViewYear(year);
+      setViewMonth(month);
+      commitValue(next);
+    },
+    [commitValue],
+  );
 
   const goToToday = useCallback(() => {
     const today = todayDateParts(now);
@@ -206,21 +231,8 @@ export function DateTimePicker({
   }, []);
 
   const handleConfirm = useCallback(() => {
-    const value: DateTokenValue = noTime
-      ? {
-          year: selected.year,
-          month: selected.month,
-          day: selected.day,
-        }
-      : {
-          year: selected.year,
-          month: selected.month,
-          day: selected.day,
-          hour: clampHour(hour),
-          minute: clampMinute(minute),
-        };
-    onConfirm(value);
-  }, [hour, minute, noTime, onConfirm, selected.day, selected.month, selected.year]);
+    commitValue(selected);
+  }, [commitValue, selected]);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -380,9 +392,6 @@ export function DateTimePicker({
       <div className={styles.actions}>
         <DsButton type="button" variant="secondary" onClick={onCancel}>
           Cancel
-        </DsButton>
-        <DsButton type="button" variant="primary" onClick={handleConfirm}>
-          Confirm
         </DsButton>
       </div>
       </DsSurface>
