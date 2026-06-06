@@ -163,18 +163,23 @@ impl CarriedState {
             return false;
         }
 
-        self.fire_at_ms == fresh.fire_at_ms || !looks_like_schedule_derived_fire(self)
+        self.fire_at_ms == fresh.fire_at_ms || !self.looks_like_stale_baseline_fire()
     }
-}
 
-fn looks_like_schedule_derived_fire(state: &CarriedState) -> bool {
-    // The schema stores the active fire time, not the configured lead that
-    // produced it. Treat whole-minute fire times up to 24h before due as
-    // baseline schedule values so a lead-minute settings change resets old
-    // notified guards instead of preserving stale scheduler state. Snooze
-    // overrides outside that baseline shape still carry across normal rescans.
-    let lead_ms = state.due_at_ms - state.fire_at_ms;
-    (0..=24 * 60 * 60 * 1_000).contains(&lead_ms) && lead_ms % 60_000 == 0
+    fn looks_like_stale_baseline_fire(&self) -> bool {
+        // The schema stores only the active fire time, not whether it came
+        // from the current lead setting or a snooze action. Reset only the
+        // shapes that represent plain baseline scheduler state when the fresh
+        // baseline fire changed: not-yet-fired scheduled baseline entries, and
+        // notified entries whose guard is for the same old fire. Preserve
+        // override-like carries, including whole-minute snoozes before/at due
+        // time (T-3/T-1/T-0) that differ from the fresh baseline.
+        match self.state {
+            ReminderState::Scheduled => self.last_notified_ms.is_none(),
+            ReminderState::Notified => self.last_notified_ms == Some(self.fire_at_ms),
+            ReminderState::Due | ReminderState::Stale => false,
+        }
+    }
 }
 
 fn content_key(reminder: &Reminder) -> (String, String) {
@@ -340,6 +345,34 @@ mod tests {
         assert_eq!(merged[0].state, ReminderState::Scheduled);
         assert_eq!(merged[0].fire_at_ms, fresh_fire_at_ms);
         assert_eq!(merged[0].last_notified_ms, None);
+    }
+
+    #[test]
+    fn whole_minute_snooze_override_survives_ordinary_rescan() {
+        let text = "@2026-06-06_0900 explicit-time";
+        let mut prior = fresh_set_with(text, DefaultTime::new(9, 0).unwrap(), 5);
+        let baseline_fire_at_ms = prior[0].fire_at_ms;
+        let snooze_fire_at_ms = prior[0].due_at_ms;
+        prior[0].state = ReminderState::Scheduled;
+        prior[0].fire_at_ms = snooze_fire_at_ms;
+        prior[0].last_notified_ms = Some(baseline_fire_at_ms);
+
+        let fresh = fresh_set_with(
+            "ordinary edit elsewhere\n@2026-06-06_0900 explicit-time",
+            DefaultTime::new(9, 0).unwrap(),
+            5,
+        );
+        assert_eq!(fresh[0].id, prior[0].id);
+        assert_eq!(fresh[0].due_at_ms, prior[0].due_at_ms);
+        assert_eq!(fresh[0].fire_at_ms, baseline_fire_at_ms);
+        assert_ne!(fresh[0].fire_at_ms, snooze_fire_at_ms);
+
+        let merged = merge_reminders(&prior, fresh);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].state, ReminderState::Scheduled);
+        assert_eq!(merged[0].fire_at_ms, snooze_fire_at_ms);
+        assert_eq!(merged[0].last_notified_ms, Some(baseline_fire_at_ms));
     }
 
     #[test]
