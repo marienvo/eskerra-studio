@@ -63,10 +63,10 @@ Turn the existing `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` date tokens into **reminder
                     │      └──▶ strikethrough writer (sole writer)│
                     │                                            │
                     │  D-Bus service dev.eskerra.Reminders1:      │
-                    │    - RemoveReminder(uri, range)  ◀── app    │
+                    │    - RemoveReminder(noteUri, id) ◀── app    │
                     │    - signal/launch app on click            │
                     └──────────────────────────────────────────┘
-                                   │ launch/focus + open(uri,pos)
+                                   │ launch/focus + open(uri, reminderId)
                                    ▼
                     ┌──────────────────────────────────────────┐
                     │  eskerra app (Tauri)                       │
@@ -74,7 +74,7 @@ Turn the existing `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` date tokens into **reminder
                     │   - renders reminders in Notifications pane │
                     │   - dot logic (due vs future, minute tick) │
                     │   - delete-from-pane → RemoveReminder()     │
-                    │   - single-instance: open(uri,pos) → editor │
+                    │   - single-instance: open(uri,id) → editor  │
                     │   - external write reconcile (existing)     │
                     └──────────────────────────────────────────┘
 ```
@@ -103,8 +103,14 @@ Turn the existing `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` date tokens into **reminder
 
 The daemon is the **only** writer of strikethrough rewrites. The app must never write
 the `~~…~~` mutation locally — deleting from the pane calls the daemon's
-`RemoveReminder`. This keeps one writer for that mutation and avoids two processes
-racing on the same bytes.
+`RemoveReminder(noteUri, id)`. This keeps one writer for that mutation and avoids two
+processes racing on the same bytes.
+
+**Removal IPC never accepts byte ranges.** `RemoveReminder` takes only the stable
+reminder `id` (plus `noteUri` for routing) — never a `tokenFrom`/`tokenTo`, offset, or
+any byte range. The caller cannot dictate *where* to write; the daemon alone resolves
+the span by re-scanning at write time (Phase 4). Any range the app holds is advisory
+UI state and is never sent over IPC, so a stale offset can never drive a write.
 
 When the daemon rewrites a note that is **open in the editor**, it is — by design —
 indistinguishable from any other external on-disk edit. It therefore must flow through
@@ -141,22 +147,47 @@ id = hash(vaultRelativePath + "\0" + normalizedTokenText + "\0" + occurrenceOrdi
 - `normalizedTokenText` — the canonical token string `@YYYY-MM-DD` /
   `@YYYY-MM-DD_HHMM` (already normalized by the parser; not the raw matched bytes).
 - `occurrenceOrdinal` — the **0-based index of this token among identical tokens in
-  the same file**, assigned in document order at scan time. This is what
-  disambiguates duplicate identical tokens in one note (e.g. two `@2026-11-27_2300`
-  lines): the first is ordinal 0, the second ordinal 1, and so on.
+  the same file**, assigned in document order at scan time. It is a *primary*
+  disambiguator for duplicate identical tokens (e.g. two `@2026-11-27_2300` lines),
+  but it is **not sufficient on its own**: inserting or deleting another identical
+  token *above* the target renumbers the later ordinals, so an ordinal captured at
+  scan time can silently point at the wrong occurrence after a concurrent edit. The
+  ordinal therefore must never be trusted blindly at write time; it is always
+  cross-checked against the duplicate-safety anchor below.
+
+**Duplicate-safety anchor (stored alongside `id`, used only for safe matching, never
+for identity).** For each reminder the index also stores:
+
+- `contextAnchor` — a hash of the token's **containing line** with the token text
+  itself masked out (so it is stable across snooze/state changes but distinct between
+  two duplicate tokens that live on different lines / in different surrounding text).
+  This lets the writer re-find *this* occurrence by content rather than by position
+  even after ordinals shift.
+- `duplicateCount` — the number of byte-identical tokens in the file observed at the
+  last scan. A change in this count between scan and write is a positive signal that
+  ordinals may have drifted.
+- `scanFingerprint` — a file fingerprint (content hash, or `len`+`mtime` as a cheap
+  pre-check) captured at the scan that produced this reminder, recording the file
+  state the ordinal/anchor were derived against.
 
 Consequences and rules:
 - Editing text **elsewhere** in the file does not change any `id` (path, token text,
   and ordinal are all unaffected) — the reminder's `state`/snooze survive rescans.
+  (`contextAnchor`/`scanFingerprint` may update on rescan; that is fine — they are
+  matching aids, not identity.)
 - Editing the **token text itself** (date/time) yields a new `id`; the old reminder
   vanishes from the scan and the new one appears `scheduled`. This is correct: a
   changed time is a different reminder.
-- Adding/removing a **duplicate identical token above another** shifts the
-  ordinals of the later duplicates, so their `id`s change. This is an accepted,
-  bounded ambiguity that only affects multiple *byte-identical* tokens in one file;
-  it never causes a wrong-span write because Phase 4 re-scans and requires a unique,
-  high-confidence match before writing (see below). When duplicates make a target
-  ambiguous, the write is refused and the reminder is marked `stale`.
+- **Duplicate identical tokens are matched by `contextAnchor`, with the ordinal only
+  as a tie-break — and any residual ambiguity fails closed.** At write time the daemon
+  re-scans and resolves the target by `contextAnchor`. If exactly one live token has a
+  matching `contextAnchor`, that is the span. If the surrounding lines are themselves
+  identical (so `contextAnchor` does not uniquely separate the duplicates) **and**
+  `duplicateCount` or the set of ordinals has changed since `scanFingerprint`, the
+  ordinal may have drifted and the daemon **must not** guess: it refuses the write and
+  marks the reminder `stale` (see Phase 4). Only when the anchor uniquely identifies
+  the occurrence — or the file is provably unchanged since `scanFingerprint` so the
+  ordinal is still authoritative — does the write proceed.
 - Renaming/moving a note changes `vaultRelativePath` and therefore the `id`. The
   reminder re-appears under the new path on the next scan with default `state`; any
   prior snooze override is not carried across renames (accepted, rare).
@@ -273,8 +304,10 @@ disambiguation of duplicate identical tokens; new-`id`-on-token-edit; struck-thr
 (scanning provided bytes is fine).
 
 **Risks:** identity must be offset-independent (see Reminder identity); the only
-residual ambiguity is multiple byte-identical tokens in one file, handled by the
-ordinal and, at write time, by Phase 4's unique-match-or-refuse rule.
+residual ambiguity is multiple byte-identical tokens in one file, disambiguated by the
+stored `contextAnchor` (with `scanFingerprint` gating any ordinal use) and, at write
+time, by Phase 4's lookup-by-`id` then resolve-by-text-and-anchor, unique-match-or-fail
+rule — never by recomputing `id` from current ordinals.
 
 **LLM advice:** **Claude Sonnet 4.6, thinking medium** for the bulk port (mechanical,
 well-specified by `dateToken.ts`), escalate to **Opus 4.8 thinking medium** for the
@@ -324,6 +357,19 @@ the app watcher — use the strongest model and keep the existing watcher tests 
   the override in the index); `remove` triggers Phase 4 write + closes; default click
   triggers Phase 5 open.
 - Missed/grace semantics from the architecture section.
+- **Linux suspend/resume handling (mandatory).** A `Duration`-based sleep-until-next
+  timer does not advance across system suspend, and the wall clock can jump on resume,
+  so a fire scheduled before suspend can be silently late or skipped. Subscribe to the
+  `PrepareForSleep(bool)` signal on `org.freedesktop.login1` (D-Bus, via `zbus` — same
+  client stack as notifications). On the `false` (waking) edge, **immediately**: (a)
+  recompute "now" from the wall clock, (b) re-evaluate every reminder's
+  missed/grace/overdue state (a reminder whose `fireAt` passed during suspend fires
+  once on resume if still within `fireAt ≤ now < dueAt`; one whose `dueAt` passed is
+  marked `due`/overdue with no stale popup), and (c) fully re-arm the scheduler from
+  the recomputed times rather than resuming the pre-suspend timer. Also re-evaluate on
+  the same path for wall-clock jumps/timezone changes where detectable. If
+  `login1`/`PrepareForSleep` is unavailable, fall back to a periodic wall-clock
+  reconciliation tick (bounded interval) so a missed wake still self-heals.
 - New deps justification (`zbus`): needed for action buttons + callbacks on GNOME;
   not on app startup path; cannot be deferred (core of requirement 6); Rust required
   (D-Bus, long-lived); risk = D-Bus availability → fall back to click-only
@@ -334,7 +380,8 @@ reference Fedora/GNOME environment.
 
 **Risks:** D-Bus action callbacks require the sender to stay alive (the daemon does);
 notification daemon quirks across GNOME versions; clock changes / suspend-resume
-(re-evaluate schedule on wake).
+(handled via `org.freedesktop.login1` `PrepareForSleep` + on-resume re-evaluation
+above, with a periodic wall-clock reconciliation fallback).
 
 **LLM advice:** **Claude Opus 4.8, thinking high** for the scheduler correctness
 (time math, snooze re-arm, suspend/resume, missed handling — easy to get subtly
@@ -354,32 +401,59 @@ action semantics are version-sensitive.
 
 **Write-back safety rules (mandatory — fail closed):**
 
-1. **Re-read + re-scan before writing.** Never write from cached offsets or the index's
-   advisory `tokenFrom`/`tokenTo`. Read the current file bytes from disk and re-run the
-   scanner to enumerate live tokens and their current spans.
-2. **Match by identity, require a unique high-confidence match.** Recompute `id`
-   (path + normalized token text + occurrence ordinal) for the freshly scanned tokens
-   and find the one equal to the requested `id`. The match must be **unique**. If zero
-   match (token already struck, edited, or gone) → no write, resolve the reminder as
-   "already removed" and drop it from the index. If more than one candidate could
-   correspond (ambiguity from duplicates after concurrent edits) → **do not guess**.
-3. **Verify the bytes at the resolved span are exactly the expected token.** Before
+1. **Look up the stored reminder entry by `id` first.** `RemoveReminder(noteUri, id)`
+   resolves the request against the **index**, not against freshly scanned tokens: load
+   the stored entry whose `id` equals the requested `id` and read its
+   `normalizedTokenText`, `contextAnchor`, `duplicateCount`, `occurrenceOrdinal`, and
+   `scanFingerprint`. If no such entry exists in the index → treat as already gone
+   (`removed`, rule 3). **Never recompute `id` from current ordinals as the primary
+   match filter** — `id` embeds `occurrenceOrdinal`, and ordinal drift is precisely the
+   duplicate-token failure mode, so an `id`-equality filter over freshly scanned tokens
+   would silently select the wrong occurrence.
+2. **Re-read + re-scan, then resolve the live token by token text + anchor.** Read the
+   current file bytes from disk and re-scan. Resolution proceeds from the stored entry's
+   fields, not from recomputed ids:
+   - **Collect live candidates by `normalizedTokenText`** in the target note (every
+     live token whose normalized text equals the stored entry's `normalizedTokenText`).
+   - **Prefer a unique `contextAnchor` match** among those candidates: if exactly one
+     candidate's containing-line anchor equals the stored `contextAnchor`, that is the
+     target span.
+   - **Use `occurrenceOrdinal` only as a tie-breaker, and only when `scanFingerprint`
+     proves the file is unchanged** since the entry was scanned. If the file is
+     unchanged, the stored ordinal still indexes the same occurrence and may break a
+     tie; if the file changed, the ordinal is not trusted at all.
+   - **Fail closed (`stale`) on ambiguity:** if candidates/anchors/fingerprint cannot
+     single out exactly one occurrence — e.g. duplicate tokens share an identical
+     `contextAnchor` and `scanFingerprint` no longer matches (so the ordinal cannot be
+     trusted), or `duplicateCount` differs from the live count in a way that leaves the
+     target ambiguous — do **not** guess.
+3. **Distinguish zero-match (removed) from unsafe (stale).** Outcomes:
+   - **No live candidate matches** the stored `normalizedTokenText` (token already
+     struck through, its date/time was edited, or it was deleted), or no index entry
+     exists for the `id` → this is a *success-equivalent*: the reminder is already gone.
+     Perform **no** write, resolve it as **`removed`**, and drop it from the index. This
+     is not an error.
+   - **Ambiguous resolution** (multiple candidates not separable per rule 2),
+     **byte mismatch** (rule 4 fails), **IO/read/write error**, or any other situation
+     where the daemon cannot identify *exactly one* correct span with confidence →
+     mark **`stale`**, write nothing.
+4. **Verify the bytes at the resolved span are exactly the expected token.** Before
    editing, assert the slice `[from, to)` equals the normalized token text. If it does
-   not (drift/corruption/encoding surprise) → no write.
-4. **Byte-preserving, minimal edit.** Replace only `[from, to)` with the struck form,
+   not (drift/corruption/encoding surprise) → no write → `stale` (rule 3).
+5. **Byte-preserving, minimal edit.** Replace only `[from, to)` with the struck form,
    leaving every other byte — including line endings, trailing whitespace, BOM, and
    final-newline state — untouched. No reformatting, no re-serialization of the
    document.
-5. **Atomic write.** Write to a temp file in the same directory and `rename` over the
+6. **Atomic write.** Write to a temp file in the same directory and `rename` over the
    original, so a reader never sees a partial file and the app's watcher sees one clean
    external edit.
-6. **Fail closed → surface, don't guess.** On any of (no unique match, byte mismatch,
-   read/write/IO error, ambiguity), the daemon performs **no** write, marks the
-   reminder `stale`, and surfaces that state in the index. The app shows the row as
-   "could not remove — open the note" (links to the note for manual edit) instead of
+7. **Fail closed → surface, don't guess.** For every `stale` outcome from rule 3, the
+   daemon performs **no** write and surfaces `stale` in the index. The app shows the row
+   as "could not remove — open the note" (links to the note for manual edit) instead of
    silently dropping it or striking the wrong span. `stale` reminders stop firing OS
-   notifications but remain visible until resolved.
-7. **No writes to a note with an unsaved in-editor draft are special-cased in the
+   notifications but remain visible until resolved. (Contrast: `removed` from a
+   zero-match silently and correctly disappears.)
+8. **No writes to a note with an unsaved in-editor draft are special-cased in the
    daemon** — the daemon only ever rewrites the on-disk file via the atomic path above.
    Reconciliation with an open editor is the app's existing job: the resulting
    `vault-files-changed` event flows through the established conflict/reconcile
@@ -391,8 +465,11 @@ strikes the exact token on disk (surviving concurrent edits elsewhere in the fil
 fails closed into a visible `stale` state — never a wrong-span or partial write.
 
 **Risks (highest data-loss surface in the whole plan):** clobbering concurrent edits;
-striking the wrong span after offset drift; encoding/line-ending changes. Mitigation:
-match by `id` + re-scan at write time; byte-preserving edit; mandatory tests.
+striking the wrong span after ordinal/offset drift among duplicate identical tokens;
+encoding/line-ending changes. Mitigation: re-scan at write time, resolve by `id` +
+`contextAnchor` (ordinal only authoritative when `scanFingerprint` matches),
+zero-match → `removed` vs. any ambiguity/mismatch/IO → `stale`, byte-preserving atomic
+edit; mandatory tests.
 
 **LLM advice:** **Claude Opus 4.8, thinking high — non-negotiable here.** This is the
 markdown-integrity / data-loss surface the repo guards most heavily
@@ -404,22 +481,43 @@ markdown-integrity review skill over the diff.
 
 **Scope:**
 - Add `tauri-plugin-single-instance` (or equivalent) to the app. Default-action click
-  in the daemon spawns `eskerra --open-reminder <noteUri> <caretPos>`; if the app is
-  already running, single-instance forwards argv to the live instance.
-- App handles the open command: select/open the note, scroll into view, set caret
-  **immediately after the token** (reuse `dateTokenAtPosition` to find the token end,
-  consistent with the existing date-token click routing in `dateTokenClick.ts` /
-  `noteMarkdownPointerLinks.ts`).
+  in the daemon spawns `eskerra --open-reminder <noteUri> <reminderId>`, with an
+  **optional** `--caret-hint <pos>`; if the app is already running, single-instance
+  forwards argv to the live instance.
+- **Never trust a stale `caretPos` as the source of truth.** The caret position is
+  derived in-app at open time, not dictated by the daemon. The open command carries
+  `reminderId` (authoritative) plus an optional `caretHint` (the index's advisory
+  last-scan offset, used only as a starting guess). On open, the app:
+  1. opens the note and resolves the live token by the **same lookup-then-resolve rule
+     as the writer** (Phase 4): look up the stored index entry by `reminderId`, then
+     collect live candidates by its `normalizedTokenText`, prefer a unique
+     `contextAnchor` match, and use `occurrenceOrdinal` only as a tie-break when
+     `scanFingerprint` proves the file unchanged — **never** by recomputing `id` from
+     current ordinals (so it survives edits since the last scan);
+  2. on a unique match, places the caret **immediately after that token** (reuse
+     `dateTokenAtPosition` to find the token end, consistent with the existing
+     date-token click routing in `dateTokenClick.ts` / `noteMarkdownPointerLinks.ts`)
+     and scrolls it into view;
+  3. **Fallbacks when the token cannot be found safely** (zero match — already struck,
+     edited, or removed; or ambiguous match): do **not** jump to a guessed/stale
+     offset. Open the note at top (or, if `caretHint` is present and still inside the
+     document bounds, scroll near it without asserting a caret-after-token), and do not
+     fail the open. A `removed`/missing token simply opens the note; never throw or
+     place the caret at a position that no longer corresponds to a token.
 - Cold-start path: if the app was not running, it boots, then applies the pending open
   command after vault hydration (respect the first-render-sacred invariant: queue the
-  navigation, don't block startup).
+  navigation, don't block startup). Token resolution (above) runs after hydration when
+  the note text is actually loaded, so the rescan always sees real current content.
 
-**Deliverables:** clicking the OS notification opens the right note at the right caret,
-whether or not the app was already running.
+**Deliverables:** clicking the OS notification opens the right note and, when the token
+still exists, places the caret right after it; when it does not, opens the note
+gracefully without a stale/guessed caret jump — whether or not the app was already
+running.
 
 **Risks:** focus-stealing/raise behavior on GNOME/Wayland; race between boot hydration
 and the queued open command (reuse the existing deferred-restore pattern in
-`useInboxShellRestore`).
+`useInboxShellRestore`); never resolving caret from `caretHint` alone — it is only a
+scroll hint, the rescan is authoritative.
 
 **LLM advice:** **Claude Sonnet 4.6, thinking medium** for the app-side navigation/caret
 (well-trodden editor code with existing helpers), escalate to **Opus 4.8 thinking
@@ -465,10 +563,22 @@ refs are exactly its failure mode.
 - Integration tests: token on disk → index → notification fire → snooze → remove →
   strikethrough → index drops it → pane updates → dot clears. Daemon-edits-open-note
   reconcile test. Missed/grace + overdue test. Vault-switch test.
-- Write-back fail-closed tests: token already struck/edited/gone before remove (no
-  write, resolves as removed); byte mismatch at resolved span (no write, `stale`);
-  ambiguous duplicate match (no write, `stale`); duplicate-identical-token ordinal
-  disambiguation. Assert no wrong-span and no partial writes in every case.
+- Write-back fail-closed tests: token already struck/edited/gone before remove
+  (zero-match → `removed`, no write); byte mismatch at resolved span (no write,
+  `stale`); ambiguous duplicate match (no write, `stale`); **duplicate-identical-token
+  ordinal drift** — insert/delete an identical token above the target between scan and
+  remove so the ordinal shifts, assert resolution by `contextAnchor` and, when context
+  is also identical with a changed `duplicateCount`/`scanFingerprint`, fail-closed to
+  `stale` rather than striking the wrong occurrence. Assert no wrong-span and no
+  partial writes in every case.
+- Suspend/resume tests: a `fireAt` that elapses during a simulated suspend fires once
+  on the `PrepareForSleep(false)` resume edge when still `< dueAt`; one whose `dueAt`
+  elapsed becomes overdue/`due` with no stale popup; full re-arm from recomputed
+  wall-clock times; fallback reconciliation tick when `login1` is unavailable.
+- Click-to-open tests: token present → caret immediately after token; token
+  struck/edited/removed → note opens gracefully with no stale/guessed caret jump;
+  `caretHint` used only as a scroll hint, never as caret source of truth; cold-start
+  resolves the token after hydration against current content.
 - Config/vault edge-case tests: no vault idle; missing vault path preserves index and
   does not fire; invalid `reminderd.json` keeps last-known-good; restart-before-app-ran
   rebuilds from disk; clear-all leaves reminder rows untouched.
