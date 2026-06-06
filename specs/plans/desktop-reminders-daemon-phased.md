@@ -37,7 +37,7 @@ Turn the existing `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` date tokens into **reminder
 | Topic | Decision |
 |---|---|
 | Process model | **Separate headless daemon** (systemd user service) is the single owner of scanning, OS notifications, and all reminder-driven disk writes. The Tauri app **reads** the index and renders; it never writes strikethrough itself. |
-| Date-only tokens (`@2026-11-27`) | Get a **fixed reminder time, default 09:00 local** (configurable). They fire the 5-min-before OS notification and count for the dot exactly like timed reminders. |
+| Date-only tokens (`@2026-11-27`) | Get a **fixed reminder time, default 09:00 local** (configurable). They fire the configured-lead OS notification and count for the dot exactly like timed reminders. |
 | Scan scope | **Whole vault**, every `.md`, excluding hard-excluded / ignored directories (reuse `is_vault_tree_hard_excluded_directory_name` / `is_vault_tree_ignored_entry_name` from `vault_search`). |
 | OS notification tech | **Native `org.freedesktop.Notifications` via D-Bus** (`zbus`), with action buttons + callbacks. `tauri-plugin-notification` is insufficient for persistent action buttons on Linux. |
 | Token grammar | Unchanged. Single source of truth stays `dateToken.ts`; the Rust side ports the same grammar and both cite this plan + the date-token spec. |
@@ -131,8 +131,10 @@ token span, so the reconcile/merge logic sees a minimal diff.
   violate the "source of truth is the note text" model.
 - Schema (per reminder): stable `id` (see **Reminder identity** below — **never**
   derived from byte offsets), `noteUri`, `dueAtMs` (the reminder time itself),
-  `fireAtMs` (T-5min or snoozed override), `state` (`scheduled` | `due` | `notified`
-  | `removed` | `stale`), `lastNotifiedMs`.
+  `fireAtMs` (`dueAtMs - leadMinutes`, unless a snooze override is active), `state`
+  (`scheduled` | `due` | `notified` | `stale`), `lastNotifiedMs`. (`removed` is a
+  transient result/outcome; removed reminders are dropped from the index, never
+  persisted.)
 - **Byte spans vs. UI positions (must not be confused):** the scanner records the
   token's **byte span** `tokenByteFrom`/`tokenByteTo` (UTF-8 byte indexes into the
   file). These are the **only** spans the daemon may use for disk write-back. Any
@@ -278,13 +280,13 @@ uncertain, the system prefers a clean re-derivation over a wrong-line state carr
 
 The daemon must know the active vault before it can scan, including right after login
 before the app runs. The app writes the active vault root (+ vault hash + reminder
-settings like the date-only default time) to a fixed config path the daemon reads and
-watches: `~/.config/eskerra/reminderd.json`. The daemon watches this file for **both**
+settings like `dateOnlyDefaultTime` and `leadMinutes`) to a fixed config path the daemon
+reads and watches: `~/.config/eskerra/reminderd.json`. The daemon watches this file for **both**
 vault-root changes **and** settings-only changes (the file is the same source for both).
 On vault switch the app rewrites it; the daemon reloads and re-scans. On a **settings-only
-change** (same `vaultRoot`/`vaultHash`, but e.g. a changed date-only default time) the
-daemon reloads config and re-derives the affected reminders **without** a vault switch —
-see *Settings-only config change* below.
+change** (same `vaultRoot`/`vaultHash`, but e.g. changed `dateOnlyDefaultTime` or
+`leadMinutes`) the daemon reloads config and re-derives the affected reminders
+**without** a vault switch — see *Settings-only config change* below.
 
 ### Vault / config edge cases (daemon must fail safe)
 
@@ -308,31 +310,36 @@ vault that is not currently active. Required behavior:
   (mirrors `vault_watch.rs` stale-session dropping). Each vault has its own index file,
   so switching back is cheap and non-destructive.
 - **Settings-only config change while daemon is running (no vault switch):** the config
-  file changes but `vaultRoot`/`vaultHash` are unchanged — only a setting like the
-  date-only default time differs. This is **not** a vault switch (do **not** bump the
-  session id or tear down the index), but it **must** re-derive config-dependent fields,
-  because otherwise unchanged `@YYYY-MM-DD` tokens keep stale `dueAtMs`/`fireAtMs`
-  indefinitely. On such a change the daemon:
-  1. **Reloads config** and detects that the date-only default time (or any other
-     `dueAt`-affecting setting) changed.
-  2. **Re-derives `dueAtMs` and `fireAtMs` for every date-only token** (`@YYYY-MM-DD`,
-     no `_HHMM`) in the **active** vault, using the new default time. This needs **no**
-     token-text change and **does not change reminder `id`s** (`id` is path + normalized
-     token text + ordinal — none depend on the default time), so existing reminders keep
-     their identity and merge cleanly: the same date-only `id` simply gets new
-     `dueAtMs`/`fireAtMs`.
-  3. **Treats the new `dueAtMs`/`fireAtMs` as a schedule change** for each re-derived
-     reminder: re-evaluate its state from the new times and **reset/recompute the mutable
-     notification state** (`state`, `lastNotifiedMs`, any per-`fireAt` fire-event id) so a
-     prior `notified`/`lastNotifiedMs` for the **old** time can **never** suppress the new
-     fire. A reminder already notified at the old 09:00 must still fire at, say, a new
-     08:00 (or be classified per the missed/grace discovery rules for the new time).
-  4. **Re-arms the scheduler** from the recomputed `fireAt`s (drop the stale timers, arm
-     the new ones).
-  - **Explicit timed tokens `@YYYY-MM-DD_HHMM` are unaffected** by a date-only default
-    time change — their `dueAt` comes from the token itself, so their `dueAtMs`/`fireAtMs`
-    and notification state are left untouched (no spurious re-fire). Only date-only tokens
-    are re-derived.
+  file changes but `vaultRoot`/`vaultHash` are unchanged — for example
+  `dateOnlyDefaultTime` or `leadMinutes` differs. This is **not** a vault switch (do
+  **not** bump the session id or tear down the index), but it **must** re-derive
+  config-dependent fields, because otherwise unchanged tokens keep stale
+  `dueAtMs`/`fireAtMs` indefinitely. On such a change the daemon:
+  1. **Reloads config** and detects which reminder-time settings changed.
+  2. **For `dateOnlyDefaultTime` changes, re-derives `dueAtMs` and default-derived
+     `fireAtMs` for every date-only token** (`@YYYY-MM-DD`, no `_HHMM`) in the **active**
+     vault, using the new default time. Explicit timed tokens `@YYYY-MM-DD_HHMM` are not
+     affected by `dateOnlyDefaultTime` because their `dueAt` comes from the token itself.
+  3. **For `leadMinutes` changes, keeps `dueAtMs` unchanged and re-derives
+     default-derived `fireAtMs`** as `dueAtMs - leadMinutes` for reminders whose fire time
+     comes from the default lead. This applies to both date-only tokens and explicit timed
+     tokens, because explicit timed tokens still compute `fireAtMs` from their explicit
+     `dueAtMs`.
+  4. **Preserves active snooze overrides.** If a reminder has an active snoozed
+     `fireAtMs`, the snooze remains authoritative; a global `leadMinutes` change does not
+     overwrite it. The daemon still keeps the same `id` and re-arms from the active
+     snoozed `fireAtMs`.
+  5. These re-derivations need **no** token-text change and **do not change reminder
+     `id`s** (`id` is path + normalized token text + ordinal — none depend on these
+     settings), so existing reminders keep their identity and merge cleanly.
+  6. **Treats every changed `dueAtMs`/`fireAtMs` as a schedule change**: re-evaluate its
+     state from the new times and **reset/recompute the mutable notification state**
+     (`state`, `lastNotifiedMs`, any per-`fireAt` fire-event id) so a prior
+     `notified`/`lastNotifiedMs` for the **old** time can **never** suppress the new fire.
+     A reminder already notified at the old 09:00 must still fire at, say, a new 08:00 (or
+     be classified per the missed/grace discovery rules for the new time).
+  7. **Re-arms the scheduler** from the active `fireAt`s (drop stale timers, arm the new
+     ones).
 - **Invalid `reminderd.json`** (unparseable, missing required fields, or schema
   version mismatch): do **not** crash and do **not** act on partial data. Keep the
   last-known-good config in memory, log the parse failure, and keep watching the file
@@ -403,9 +410,9 @@ Three evaluation contexts must be kept distinct — they have **different** outc
 **Discovery on scan / restart / minute-tick (classification only):**
 
 - `now < fireAt` → schedule normally (arms a future scheduled-fire event).
-- `fireAt ≤ now < dueAt` → the daemon was off through the T-5min lead but it is still
-  before the due time → fire the 5-min notification **immediately, once** (guarded by
-  `lastNotifiedMs`).
+- `fireAt ≤ now < dueAt` → the daemon was off through the configured lead interval but it
+  is still before the due time → fire the lead notification **immediately, once** (guarded
+  by `lastNotifiedMs`).
 - `now ≥ dueAt` and the reminder is **first discovered here** (fresh scan, daemon
   restart, or vault switch, with no prior scheduled fire executed for it) → mark `due`
   (counts for dot, shows in pane) but **do not** pop a stale OS notification. "Missed,
@@ -586,7 +593,7 @@ TS reference, so a cheaper fast model is low-risk; keep Opus for the merge logic
 **Scope:**
 - New binary `eskerra-reminderd`. Reads `~/.config/eskerra/reminderd.json` for vault
   root + settings; watches that config file for **both** live vault switches **and
-  settings-only changes** (e.g. the date-only default time), applying the
+  settings-only changes** (e.g. `dateOnlyDefaultTime` or `leadMinutes`), applying the
   *Settings-only config change* re-derive path for the latter without a session bump.
 - File watching: extract the reusable parts of `vault_watch.rs` (debounce,
   recommended+poll backends, coarse fallback, ignored-dir filtering) into a shared
@@ -602,10 +609,14 @@ the <1s latency budget on disk changes from any source. No notifications yet.
 Must implement and test the **Vault / config edge cases** (no vault, missing path,
 vault switch, **settings-only change**, invalid config, restart-before-app-ran) with
 their fail-safe behavior, and use atomic temp+rename for both the index and any
-app-written config. The **settings-only change** test must assert that changing the
-date-only default time re-derives `dueAtMs`/`fireAtMs` for date-only tokens **without**
-a session bump or index teardown, **keeps the same reminder `id`s**, leaves explicit
-timed `@…_HHMM` tokens untouched, and re-arms the scheduler from the new times.
+app-written config. The **settings-only change** tests must assert that changing
+`dateOnlyDefaultTime` re-derives `dueAtMs` and default-derived `fireAtMs` for date-only
+tokens **without** a session bump or index teardown, **keeps the same reminder `id`s**,
+and leaves explicit timed `@…_HHMM` tokens' `dueAtMs` untouched; changing `leadMinutes`
+with the same `vaultRoot`/`vaultHash` re-derives default-derived `fireAtMs` without
+changing `id`s or tearing down the index; explicit timed tokens are affected by
+`leadMinutes`; date-only tokens are affected by both settings; and active snooze
+overrides are preserved.
 
 **Risks:** double watcher (app + daemon both watching the same vault) — acceptable
 (independent processes), but document it and keep both debounced. Watcher extraction
@@ -623,8 +634,9 @@ the app watcher — use the strongest model and keep the existing watcher tests 
   index change. Minute-tick to flip `scheduled → due` and update missed/grace state.
   A scheduled-fire timer event **executes** a fire (per *scheduled-fire execution*),
   separately from discovery-context classification — see *Missed / grace semantics*.
-- `zbus` client for `org.freedesktop.Notifications`: fire at T-5min with body =
-  note title + reminder text context; actions: `snooze-3`, `snooze-1`, `snooze-0`,
+- `zbus` client for `org.freedesktop.Notifications`: fire at the configured lead time
+  with body = note title + reminder text context; actions: `snooze-3`, `snooze-1`,
+  `snooze-0`,
   `remove`, plus default action (click). Localized/clear button labels
   ("Remind at T-3 min", …).
 - Action handling per *Snooze action handling (including expired snooze)*. snooze-N
@@ -1099,22 +1111,36 @@ refs are exactly its failure mode.
 - Config/vault edge-case tests: no vault idle; missing vault path preserves index and
   does not fire; invalid `reminderd.json` keeps last-known-good; restart-before-app-ran
   rebuilds from disk; clear-all leaves reminder rows untouched.
-- Settings-only config-change tests (date-only default time re-derive, end-to-end):
-  - **Re-derive on settings-only update:** with a date-only token `@YYYY-MM-DD` indexed
+- Settings-only config-change tests (date-only default time and lead re-derive,
+  end-to-end):
+  - **Date-only default-time re-derive:** with a date-only token `@YYYY-MM-DD` indexed
     against a 09:00 default, rewrite `reminderd.json` with the **same** `vaultRoot`/
     `vaultHash` but a new default time (e.g. 08:00). Assert the daemon reloads config and
     re-derives without a vault switch (no session bump, no index teardown), the **same
-    reminder `id`** now carries the **new** `dueAtMs`/`fireAtMs`, and the scheduler
-    re-arms from the new `fireAt`.
+    reminder `id`** now carries the **new** `dueAtMs` and default-derived `fireAtMs`, and
+    the scheduler re-arms from the new `fireAt`.
+  - **Lead-minute re-derive:** with the same `vaultRoot`/`vaultHash`, change
+    `leadMinutes` only. Assert `dueAtMs` stays unchanged, default-derived `fireAtMs`
+    recomputes as `dueAtMs - leadMinutes`, reminder `id`s are unchanged, the index is not
+    torn down, and the scheduler re-arms from the new `fireAt`.
+  - **Explicit timed tokens follow lead changes:** an explicit `@YYYY-MM-DD_HHMM`
+    reminder keeps its explicit `dueAtMs` across both settings, is unaffected by
+    `dateOnlyDefaultTime`, but recomputes default-derived `fireAtMs` when `leadMinutes`
+    changes.
+  - **Date-only tokens follow both settings:** a date-only reminder recomputes `dueAtMs`
+    on `dateOnlyDefaultTime` changes and recomputes default-derived `fireAtMs` on both
+    `dateOnlyDefaultTime` and `leadMinutes` changes, with the same reminder `id`.
+  - **Active snooze survives global lead changes:** a snoozed reminder keeps its active
+    snoozed `fireAtMs` when `leadMinutes` changes; the daemon keeps the same `id`, does
+    not tear down the index, and re-arms from the snoozed `fireAtMs` rather than
+    overwriting it with `dueAtMs - leadMinutes`.
   - **Old notified state does not suppress the new fire:** the date-only reminder was
-    already `notified`/`lastNotifiedMs` at the old 09:00; after the default time changes
-    to an earlier-but-still-future 08:00, assert the stale `notified`/`lastNotifiedMs` is
+    already `notified`/`lastNotifiedMs` at the old 09:00; after either setting change
+    creates a new effective `fireAtMs`, assert the stale `notified`/`lastNotifiedMs` is
     reset/recomputed for the new time so the reminder fires again at the new time (and is
     not swallowed as already-notified). Conversely a guard against double-firing the
-    **new** `fireAt` still holds.
-  - **Timed tokens unaffected:** an explicit `@YYYY-MM-DD_HHMM` reminder in the same vault
-    keeps its `dueAtMs`/`fireAtMs` and notification state unchanged across the default-time
-    change (no re-derive, no spurious re-fire).
+    **new** `fireAt` still holds. A lead change that leaves an active snooze `fireAtMs`
+    unchanged must not reset the guard for that unchanged snoozed fire.
 - Observability: scan duration, reminder counts, notification send success/fail,
   D-Bus unavailability, `RemoveReminder` transport-failure (`remove-unavailable`) rate
   and best-effort-restart outcomes, watcher coarse-invalidation (mirror the app's Sentry
@@ -1163,5 +1189,5 @@ integration + reconcile tests (the hard part is asserting the data-loss invarian
 - Whether the daemon should also own a tiny tray entry, or stay fully headless
   (current plan: fully headless; app launched on click is enough).
 - Notification grouping/coalescing policy when many reminders fire close together.
-- Settings surface for the date-only default time (09:00) — where it lives in app
-  settings and how it reaches `reminderd.json`.
+- Settings surface for `dateOnlyDefaultTime` (09:00) and `leadMinutes` (5) — where they
+  live in app settings and how they reach `reminderd.json`.
