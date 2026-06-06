@@ -160,9 +160,13 @@ impl Daemon {
         };
         let root = active.root.clone();
 
-        // Decide full vs incremental. Coarse → full. A touched directory → full
-        // (conservative: we don't track which files it contains). Otherwise
-        // incremental over the changed file paths under the vault root.
+        // Decide full vs incremental. Coarse → full. A still-existing touched
+        // directory → full (conservative: we don't track which files it
+        // contains). Otherwise incremental over the changed paths under the
+        // vault root. NOTE: `is_dir()` is best-effort — a *deleted* directory no
+        // longer reports as one, so it falls through to the incremental path;
+        // `rescan_changed_files` drops prior reminders by prefix there, so that
+        // race cannot leave stale entries for files under a removed directory.
         let abs_paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
         let touches_directory = abs_paths.iter().any(|p| p.is_dir());
         let full = coarse || touches_directory;
@@ -601,5 +605,30 @@ mod tests {
         assert_eq!(a.normalized_token_text, "@2026-06-06_1100");
         // b.md unchanged.
         assert!(index.reminders.iter().any(|r| r.normalized_token_text == "@2026-07-07_1000"));
+    }
+
+    #[test]
+    fn deleted_directory_in_incremental_batch_drops_stale_reminders() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_note("Inbox/b.md", "@2026-07-07_1000");
+        h.write_note("Notes/keep.md", "@2026-08-08_1200");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        assert_eq!(d.reload_config(NOW), Outcome::VaultSwitched { reminder_count: 3 });
+
+        // Delete the whole Inbox/ directory, then deliver a precise (non-coarse)
+        // batch carrying only the now-missing directory path. is_dir() is false
+        // (it's gone), so this lands on the incremental path — which must still
+        // drop both Inbox/ reminders rather than leave them stale.
+        std::fs::remove_dir_all(h.vault.join("Inbox")).unwrap();
+        let changed = vec![h.vault.join("Inbox").to_string_lossy().into_owned()];
+        let outcome = d.on_watch_batch(false, &changed, NOW + 1);
+        assert_eq!(outcome, Outcome::Rescanned { reminder_count: 1, full: false });
+
+        let index = ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap()).unwrap();
+        assert_eq!(index.reminders.len(), 1);
+        assert_eq!(index.reminders[0].vault_relative_path, "Notes/keep.md");
     }
 }

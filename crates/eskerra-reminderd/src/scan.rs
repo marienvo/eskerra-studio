@@ -132,8 +132,14 @@ fn walk(root: &Path, dir: &Path, default_time: DefaultTime, lead_minutes: u32, o
 /// struck, edited away) simply drop. The caller still runs `merge_reminders`
 /// over the result to carry state forward safely.
 ///
-/// Only file paths are handled here; the daemon falls back to a full
-/// [`scan_vault`] when a batch touches a directory or is coarse.
+/// A changed path that is (or *was*) a **directory** drops every prior reminder
+/// beneath it as well: a deleted directory arrives in a watch batch as a single
+/// path that no longer exists on disk, so neither the daemon nor we can prove it
+/// was a directory via `is_dir()`. Filtering by prefix here keeps the index from
+/// retaining stale reminders for files inside a directory the user just removed,
+/// regardless of that race. The daemon still falls back to a full [`scan_vault`]
+/// when it *can* see a directory in the batch (or the batch is coarse); this is
+/// the belt-and-suspenders for the case it cannot.
 pub fn rescan_changed_files(
     root: &Path,
     prior: &[Reminder],
@@ -141,7 +147,7 @@ pub fn rescan_changed_files(
     default_time: DefaultTime,
     lead_minutes: u32,
 ) -> Vec<Reminder> {
-    // Vault-relative paths of the changed files (those under the root).
+    // Vault-relative paths of the changed entries (those under the root).
     let changed_rel: BTreeSet<String> = changed_abs_paths
         .iter()
         .filter_map(|p| vault_relative(root, p))
@@ -149,7 +155,7 @@ pub fn rescan_changed_files(
 
     let mut fresh: Vec<Reminder> = prior
         .iter()
-        .filter(|r| !changed_rel.contains(&r.vault_relative_path))
+        .filter(|r| !is_changed_or_under_changed(&r.vault_relative_path, &changed_rel))
         .cloned()
         .collect();
 
@@ -160,6 +166,20 @@ pub fn rescan_changed_files(
 
     sort_reminders(&mut fresh);
     fresh
+}
+
+/// True when `rel` is one of the changed paths, or lives under one of them (a
+/// changed *directory*). A changed file matches only by exact equality — no
+/// prior reminder is ever addressed as `<file>/...`, so the prefix arm never
+/// over-drops for files — while a changed/deleted directory matches every
+/// reminder beneath it.
+fn is_changed_or_under_changed(rel: &str, changed_rel: &BTreeSet<String>) -> bool {
+    if changed_rel.contains(rel) {
+        return true;
+    }
+    changed_rel
+        .iter()
+        .any(|c| rel.strip_prefix(c.as_str()).is_some_and(|rest| rest.starts_with('/')))
 }
 
 fn sort_reminders(reminders: &mut [Reminder]) {
@@ -244,6 +264,46 @@ mod tests {
 
         assert_eq!(fresh.len(), 1);
         assert_eq!(fresh[0].vault_relative_path, "Inbox/b.md");
+    }
+
+    #[test]
+    fn incremental_rescan_drops_reminders_under_deleted_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(root, "Inbox/a.md", "@2026-06-06_0900");
+        write(root, "Inbox/sub/c.md", "@2026-08-08_1200");
+        write(root, "Notes/keep.md", "@2026-07-07_1000");
+        let prior = scan_vault(root, DefaultTime::DEFAULT_NINE_AM, 5);
+        assert_eq!(prior.len(), 3);
+
+        // The user deletes the whole Inbox/ directory. The watch batch carries
+        // only the (now non-existent) directory path — is_dir() can no longer
+        // prove it was a directory.
+        fs::remove_dir_all(root.join("Inbox")).unwrap();
+        let changed = vec![root.join("Inbox")];
+        let fresh = rescan_changed_files(root, &prior, &changed, DefaultTime::DEFAULT_NINE_AM, 5);
+
+        // Both reminders that lived under Inbox/ are gone; Notes/ untouched.
+        assert_eq!(fresh.len(), 1);
+        assert_eq!(fresh[0].vault_relative_path, "Notes/keep.md");
+    }
+
+    #[test]
+    fn incremental_rescan_prefix_does_not_over_drop_sibling_directories() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(root, "Inbox/a.md", "@2026-06-06_0900");
+        // "Inbox2" shares the "Inbox" string prefix but is not under it.
+        write(root, "Inbox2/b.md", "@2026-07-07_1000");
+        let prior = scan_vault(root, DefaultTime::DEFAULT_NINE_AM, 5);
+
+        fs::remove_dir_all(root.join("Inbox")).unwrap();
+        let changed = vec![root.join("Inbox")];
+        let fresh = rescan_changed_files(root, &prior, &changed, DefaultTime::DEFAULT_NINE_AM, 5);
+
+        // Inbox2/b.md must survive — "Inbox2/b.md" is not under "Inbox/".
+        assert_eq!(fresh.len(), 1);
+        assert_eq!(fresh[0].vault_relative_path, "Inbox2/b.md");
     }
 
     #[test]

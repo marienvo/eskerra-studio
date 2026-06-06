@@ -53,18 +53,25 @@ mod tests {
         );
     }
 
+    /// Serialises every test that reads or mutates process env vars. The test
+    /// harness runs tests on multiple threads in one process, so an unguarded
+    /// set_var/remove_var pair can race with any other env-touching test and
+    /// produce intermittent failures or wrong assertions.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn xdg_env_overrides_home() {
-        // Exercised via the public helpers with a scoped env override.
+        // Exercised via the public helpers with a scoped env override. Capture
+        // the result while holding the lock, restore env, then assert — so a
+        // failed assertion never leaves XDG_DATA_HOME clobbered for other tests.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev = std::env::var_os("XDG_DATA_HOME");
         std::env::set_var("XDG_DATA_HOME", "/custom/data");
-        assert_eq!(
-            reminders_data_dir(),
-            Some(PathBuf::from("/custom/data/eskerra/reminders"))
-        );
+        let result = reminders_data_dir();
         match prev {
             Some(v) => std::env::set_var("XDG_DATA_HOME", v),
             None => std::env::remove_var("XDG_DATA_HOME"),
         }
+        assert_eq!(result, Some(PathBuf::from("/custom/data/eskerra/reminders")));
     }
 }
