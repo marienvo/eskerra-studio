@@ -196,11 +196,15 @@ function syncDesktopReleaseArtifacts(version) {
   // [[package]] version in the single root lockfile; stamp both.
   let cargoLock = readFileSync(DESKTOP_CARGO_LOCK, 'utf8');
   cargoLock = applySemverToCargoLockPackageVersion(cargoLock, 'app', version);
-  cargoLock = applySemverToCargoLockPackageVersion(
-    cargoLock,
+  // Workspace-versioned internal crates (version.workspace = true) each carry
+  // their own [[package]] version in the single root lockfile; stamp them all.
+  for (const crate of [
     'eskerra-reminder-core',
-    version,
-  );
+    'eskerra-vault-watch',
+    'eskerra-reminderd',
+  ]) {
+    cargoLock = applySemverToCargoLockPackageVersion(cargoLock, crate, version);
+  }
   writeFileSync(DESKTOP_CARGO_LOCK, cargoLock, 'utf8');
   const meta = readFileSync(DESKTOP_METAINFO, 'utf8');
   writeFileSync(

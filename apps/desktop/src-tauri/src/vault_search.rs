@@ -78,14 +78,13 @@ pub struct VaultSearchDonePayload {
     pub progress: VaultSearchProgressDto,
 }
 
-/// Dot-prefixed only (parity with `vaultVisibility.ts`); `_autosync-backup-*` etc. stay visible.
-pub(crate) fn is_vault_tree_ignored_entry_name(name: &str) -> bool {
-    name.starts_with('.')
-}
-
-pub(crate) fn is_vault_tree_hard_excluded_directory_name(name: &str) -> bool {
-    matches!(name, "Assets" | "Excalidraw" | "Scripts" | "Templates")
-}
+// Vault-tree exclusion rules now live in the shared `eskerra-vault-watch` crate
+// so the watcher, the app's walkers, and the daemon share one definition
+// (Phase 2). Re-exported here so this module's existing call sites and the
+// other modules importing `crate::vault_search::is_vault_tree_*` are unchanged.
+pub(crate) use eskerra_vault_watch::{
+    is_vault_tree_hard_excluded_directory_name, is_vault_tree_ignored_entry_name,
+};
 
 fn is_sync_conflict_file_name(name: &str) -> bool {
     name.to_lowercase().contains(SYNC_CONFLICT_MARKER)
