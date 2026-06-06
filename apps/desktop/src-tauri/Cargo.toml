@@ -38,14 +38,9 @@ tauri-plugin-prevent-default = { version = "4", default-features = false }
 # Disable zstd (optional codec) to avoid zstd-sys build breakage on some toolchains.
 tantivy = { version = "0.26", default-features = false, features = ["mmap"] }
 
-# Vendored patch: persist size/position when WM reports maximized but geometry is not fullscreen
-# (tiling / Wayland false positives). See vendor/tauri-plugin-window-state/src/lib.rs.
-#
-# RUSTSEC-2024-0429: the GTK3 / webkit2gtk stack requires glib ^0.18; we vendor glib 0.18.5 with the
-# upstream `VariantStrIter` out-pointer fix (`&mut p` for variadic `g_variant_get_child`).
-[patch.crates-io]
-tauri-plugin-window-state = { path = "vendor/tauri-plugin-window-state" }
-glib = { path = "vendor/glib" }
+# Vendored patches (tauri-plugin-window-state, glib — RUSTSEC-2024-0429) now live
+# in [patch.crates-io] at the workspace root Cargo.toml, since patches are
+# workspace-wide and this crate is a workspace member.
 
 [dev-dependencies]
 tempfile = "3"

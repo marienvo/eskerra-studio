@@ -31,7 +31,8 @@ function readCargoTomlPackageVersion(path) {
 }
 
 function readCargoLockPackageVersion(crateName) {
-  const lock = readFileSync(join(ROOT, 'apps', 'desktop', 'src-tauri', 'Cargo.lock'), 'utf8');
+  // Workspace root lockfile (apps/desktop/src-tauri is a workspace member).
+  const lock = readFileSync(join(ROOT, 'Cargo.lock'), 'utf8');
   const re = new RegExp(
     `\\[\\[package\\]\\]\\s*\\nname = "${crateName}"\\s*\\nversion = "([^"]*)"`,
     'm',

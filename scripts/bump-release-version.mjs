@@ -37,13 +37,9 @@ const DESKTOP_CARGO_TOML = join(
   'src-tauri',
   'Cargo.toml',
 );
-const DESKTOP_CARGO_LOCK = join(
-  ROOT,
-  'apps',
-  'desktop',
-  'src-tauri',
-  'Cargo.lock',
-);
+// Lives at the workspace root (apps/desktop/src-tauri is now a workspace
+// member; cargo resolves/locks the whole workspace from one root lockfile).
+const DESKTOP_CARGO_LOCK = join(ROOT, 'Cargo.lock');
 const DESKTOP_METAINFO = join(
   ROOT,
   'apps',
