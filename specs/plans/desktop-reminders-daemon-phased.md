@@ -505,12 +505,14 @@ daemon stays lean), the finalized **index + `reminderd.json` schema**, the
 the **observability fields list**, and the **locked `RemoveReminder` failure contract**
 (`removed` / `stale` / app-side `remove-unavailable`). No runtime code was written.
 
-**Scope:** This document + an ADR for "separate reminder daemon" (under `specs/adrs/`)
-+ decide cargo layout: split `src-tauri` into a `lib` + two `bin` targets (`app`,
-`reminderd`) sharing a reminder-core module, **or** a new workspace crate
-`crates/eskerra-reminder-core`. Recommendation: a shared **library module/crate** for
-token grammar + scanning + index schema, consumed by both the app and the daemon, so
-the grammar is ported exactly once on the Rust side.
+**Scope:** This document + [ADR 003](../adrs/003-adr-reminder-daemon.md). Phase 0
+locks the separate-daemon architecture and cargo workspace layout before runtime code
+is written. Implementation phases must follow the ADR-locked layout: a workspace root
+`Cargo.toml`, the existing app crate at `apps/desktop/src-tauri/`, a pure shared core
+crate at `crates/eskerra-reminder-core/`, and a separate slim daemon crate at
+`crates/eskerra-reminderd/`. The previously considered `lib + two bins` split inside
+`src-tauri` is explicitly rejected by ADR 003 because it would couple the always-on
+daemon to the Tauri/GUI dependency graph.
 
 **Deliverables:** ADR, finalized index/IPC schema, systemd unit + autostart packaging
 sketch, observability fields list, and the **locked IPC failure contract** (below). No
