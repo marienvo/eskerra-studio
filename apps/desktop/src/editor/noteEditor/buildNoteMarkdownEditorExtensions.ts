@@ -35,6 +35,11 @@ import {todayHubSectionMarkerExtension} from './todayHubSectionMarkerCodemirror'
 import {linkRichPreviewExtension, type LinkRichPreviewRefs} from './linkRichPreviewCodemirror';
 import {markdownExternalLinkHighlightExtension} from './markdownExternalLinkCodemirror';
 import {markdownRelativeLinkHighlightExtensions} from './markdownRelativeLinkCodemirror';
+import {dateTokenHighlightExtensions} from './dateToken/dateTokenHighlightCodemirror';
+import {
+  dateTokenTriggerExtension,
+  type DateTokenPickerOpenHandler,
+} from './dateToken/dateTokenTrigger';
 import {
   markdownFormattingModKeymap,
   markdownInlineCodeSurroundInputHandler,
@@ -100,6 +105,9 @@ export type NoteMarkdownEditorExtensionsInput = {
   >;
   onMarkdownExternalLinkOpenRef: MutableRefObject<
     (payload: {href: string; at: number}) => void
+  >;
+  onOpenDateTokenPickerRef?: MutableRefObject<
+    DateTokenPickerOpenHandler | undefined
   >;
   onSaveShortcutRef: MutableRefObject<(() => void) | undefined>;
   modEnterSaveWhenNoLinkRef: MutableRefObject<boolean>;
@@ -215,6 +223,7 @@ export function buildNoteMarkdownEditorExtensions(
     onWikiLinkActivateRef,
     onMarkdownRelativeLinkActivateRef,
     onMarkdownExternalLinkOpenRef,
+    onOpenDateTokenPickerRef,
     onSaveShortcutRef,
     modEnterSaveWhenNoLinkRef,
     onDeleteNoteShortcutRef,
@@ -289,6 +298,8 @@ export function buildNoteMarkdownEditorExtensions(
       ),
     ),
     markdownExternalLinkHighlightExtension(),
+    dateTokenHighlightExtensions(),
+    dateTokenTriggerExtension(() => onOpenDateTokenPickerRef?.current),
     eskerraTableParentLinkCompartmentsFacet.of({
       wikiLink: wikiLinkCompartment,
       relativeMarkdownLink: relativeMdLinkCompartment,
