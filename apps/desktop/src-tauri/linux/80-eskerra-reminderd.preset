@@ -1,0 +1,4 @@
+# systemd user preset — enable the Eskerra reminder daemon per-user on first
+# login (ADR 003 §9). Installed at
+# /usr/lib/systemd/user-preset/80-eskerra-reminderd.preset by the RPM.
+enable eskerra-reminderd.service

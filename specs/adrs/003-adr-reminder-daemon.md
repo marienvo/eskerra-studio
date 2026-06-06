@@ -76,10 +76,23 @@ bin` split inside the existing `app` crate.
 
 ```
 <repo root>/Cargo.toml                       # [workspace] root (new); owns [patch.crates-io]
-  apps/desktop/src-tauri/   (crate "app")    # existing Tauri app; gains a dependency on core
+  apps/desktop/src-tauri/   (crate "app")    # existing Tauri app; gains a dependency on core + vault-watch
   crates/eskerra-reminder-core/              # NEW: pure, no-I/O-side-effect core (Phase 1)
+  crates/eskerra-vault-watch/                # NEW: shared filesystem watcher (Phase 2)
   crates/eskerra-reminderd/                  # NEW: daemon binary (Phase 2+)
 ```
+
+**Phase 2 refinement (does not alter the locked contracts below):** the plan's
+Phase 2 mandate to "share one watcher implementation" between the app and the
+daemon is realized as a **third workspace crate, `crates/eskerra-vault-watch`**.
+The pure core stays I/O-free (no filesystem watching), and the daemon must not
+depend on the app, so the watcher cannot live in either; a small dedicated crate
+is the natural home. It holds the dual-backend (`notify` recommended + poll)
+watcher, debounce, cross-backend dedup, coarse fallback, and the vault-tree
+exclusion rules (moved here from the app's `vault_search.rs`, which now
+re-exports them). The app's `vault_watch.rs` became a thin Tauri adapter over it;
+the daemon consumes it directly. This crate touches no locked schema/IPC/failure
+contract.
 
 - **`crates/eskerra-reminder-core`** (Phase 1): token grammar (Rust port of
   `dateToken.ts`), scanner (byte-span producing), index model + serde (de)serialization,
@@ -87,12 +100,17 @@ bin` split inside the existing `app` crate.
   **Pure**: no filesystem watching, no D-Bus, no Tauri. It accepts file *bytes* and a
   vault-relative path. Consumed by **both** the app and the daemon so the grammar is
   ported on the Rust side exactly once.
+- **`crates/eskerra-vault-watch`** (Phase 2): the shared filesystem watcher (dual
+  `notify` backends, debounce, dedup, coarse fallback, exclusion rules). Depends on
+  `notify` only; no `tauri`, no D-Bus, no reminder schema. Consumed by **both** the app
+  (its `vault_watch.rs` is now a thin adapter) and the daemon.
 - **`crates/eskerra-reminderd`** (Phase 2+): the daemon binary. Depends on
-  `eskerra-reminder-core` + `notify` (watcher) + `zbus` (D-Bus). **Must not** depend on
-  `tauri`, `webkit2gtk`, `gtk`, or any GUI stack — keeping the always-on daemon lean.
+  `eskerra-reminder-core` + `eskerra-vault-watch` + (Phase 3) `zbus` (D-Bus). **Must not**
+  depend on `tauri`, `webkit2gtk`, `gtk`, or any GUI stack — keeping the always-on daemon
+  lean.
 - The existing **`app`** crate depends on `eskerra-reminder-core` (so the app can resolve
-  a live token by the same lookup-then-resolve rule for click-to-open, Phase 5) but
-  **does not** depend on `eskerra-reminderd`.
+  a live token by the same lookup-then-resolve rule for click-to-open, Phase 5) and on
+  `eskerra-vault-watch` (shared watcher) but **does not** depend on `eskerra-reminderd`.
 
 **Why not `lib + two bins` in the `app` crate:** a `reminderd` bin inside the `app`
 crate would link `app_lib`, dragging the entire Tauri/webkit2gtk/gtk dependency graph

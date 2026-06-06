@@ -1,10 +1,15 @@
 # Desktop reminders — phased plan (daemon-owned, Rust-level vault monitoring)
 
-Status: **Phase 0 complete** (2026-06-06) — architecture, cargo layout, index/IPC
-schema, systemd/packaging sketch, observability fields, and the `RemoveReminder` failure
-contract are locked in [ADR 003](../adrs/003-adr-reminder-daemon.md). Phases 1–7 not yet
-implemented. Supersedes the "Future reminders (deferred)" section of
-[`specs/architecture/desktop-date-token.md`](../architecture/desktop-date-token.md)
+Status: **Phases 0–2 complete** (2026-06-06). Phase 0 locked architecture, cargo
+layout, index/IPC schema, systemd/packaging sketch, observability fields, and the
+`RemoveReminder` failure contract in [ADR 003](../adrs/003-adr-reminder-daemon.md).
+Phase 1 shipped the pure `eskerra-reminder-core` (grammar, scanner, index, identity,
+duplicate-aware merge). Phase 2 shipped the shared `eskerra-vault-watch` crate (the app's
+`vault_watch.rs` is now a thin adapter over it), the `eskerra-reminderd` daemon
+(config + vault-root discovery + index production with all fail-safe vault/config edge
+cases and the settings-only re-derive path), and the systemd unit + RPM/bump-script
+wiring. Phases 3–7 not yet implemented. Supersedes the "Future reminders (deferred)"
+section of [`specs/architecture/desktop-date-token.md`](../architecture/desktop-date-token.md)
 once shipped.
 
 ## Goal
@@ -537,7 +542,7 @@ local-write fallback and silently breaks the single-writer invariant.
 across an unfamiliar multi-process boundary with hard correctness invariants; this is
 the highest-leverage reasoning phase and benefits most from the strongest model.
 
-### Phase 1 — Shared Rust reminder core (pure, no I/O side effects)
+### Phase 1 — Shared Rust reminder core (pure, no I/O side effects)  ✅ DONE
 
 **Scope:**
 - Port the `dateToken.ts` grammar to Rust (parse/validate, leap-year aware), with a
@@ -604,7 +609,24 @@ well-specified by `dateToken.ts`), escalate to **Opus 4.8 thinking medium** for 
 want speed on the mechanical port* — it is pure, fully test-guarded Rust with an exact
 TS reference, so a cheaper fast model is low-risk; keep Opus for the merge logic.
 
-### Phase 2 — Daemon skeleton: watcher + index production + packaging
+### Phase 2 — Daemon skeleton: watcher + index production + packaging  ✅ DONE (2026-06-06)
+
+**Outcome:** Shipped `crates/eskerra-vault-watch` (dual-backend watcher, debounce,
+cross-backend dedup, coarse fallback, exclusion rules — extracted from the app's
+`vault_watch.rs`, which is now a thin Tauri adapter; the existing watcher tests moved
+with the logic and stay green, and the app's 177 lib tests pass). Shipped
+`crates/eskerra-reminderd`: `reminderd.json` config (fail-safe parse, last-known-good),
+XDG vault-root/index path discovery, full scan + incremental rescan keyed by changed
+paths via the shared watcher, atomic index writes, and `merge_reminders` carry-forward.
+All **Vault / config edge cases** are implemented and unit-tested (no vault → idle;
+missing path → index preserved, no scan/notify; vault switch → teardown + full-scan +
+merge + re-arm; **settings-only change** → date-only re-derive with no session bump / no
+teardown, same `id`s, timed tokens untouched, stale `notified` reset; invalid config →
+last-known-good; restart-before-app-ran → rebuild from disk with snooze/notified surviving
+via the index). systemd `--user` unit + user preset are wired into the RPM `files` list,
+the daemon is built before `tauri build`, and the bump/assert version tooling stamps both
+new crates. No notifications/D-Bus yet (Phase 3). ADR §2 updated to record the
+`eskerra-vault-watch` crate.
 
 **Scope:**
 - New binary `eskerra-reminderd`. Reads `~/.config/eskerra/reminderd.json` for vault

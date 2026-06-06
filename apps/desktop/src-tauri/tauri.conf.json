@@ -72,6 +72,9 @@
       "rpm": {
         "desktopTemplate": "linux/eskerra.desktop.hbs",
         "files": {
+          "/usr/bin/eskerra-reminderd": "../../../target/release/eskerra-reminderd",
+          "/usr/lib/systemd/user/eskerra-reminderd.service": "linux/eskerra-reminderd.service",
+          "/usr/lib/systemd/user-preset/80-eskerra-reminderd.preset": "linux/80-eskerra-reminderd.preset",
           "/usr/share/applications/com.eskerra.desktop.desktop": "linux/com.eskerra.desktop.desktop",
           "/usr/share/icons/hicolor/32x32/apps/com.eskerra.desktop.png": "icons/32x32.png",
           "/usr/share/icons/hicolor/64x64/apps/com.eskerra.desktop.png": "icons/64x64.png",

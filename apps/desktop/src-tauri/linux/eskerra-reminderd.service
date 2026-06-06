@@ -1,0 +1,21 @@
+# Eskerra reminder daemon — systemd --user service (ADR 003 §9).
+#
+# Installed at /usr/lib/systemd/user/eskerra-reminderd.service by the RPM (see
+# tauri.conf.json bundle.linux.rpm.files). Runs headless, outliving the GUI
+# window so reminders fire and notes are rewritten while the app is closed.
+# Enabled per-user via the shipped systemd user preset
+# (80-eskerra-reminderd.preset); the app's best-effort `systemctl --user start`
+# recovery path covers the "installed but not yet running" case.
+[Unit]
+Description=Eskerra reminder daemon
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/eskerra-reminderd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

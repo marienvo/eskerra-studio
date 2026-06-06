@@ -76,6 +76,14 @@ function main() {
       'Cargo.lock (package eskerra-reminder-core)',
       readCargoLockPackageVersion('eskerra-reminder-core'),
     ],
+    [
+      'Cargo.lock (package eskerra-vault-watch)',
+      readCargoLockPackageVersion('eskerra-vault-watch'),
+    ],
+    [
+      'Cargo.lock (package eskerra-reminderd)',
+      readCargoLockPackageVersion('eskerra-reminderd'),
+    ],
   ];
 
   const bad = checks.filter(([, actual]) => actual !== expected);

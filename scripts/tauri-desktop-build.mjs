@@ -47,6 +47,16 @@ execFileSync(process.execPath, [BUMP_RELEASE_VERSION], {
   stdio: 'inherit',
 });
 
+// Build the reminder daemon (release) into the workspace target dir so the RPM
+// `files` map can install /usr/bin/eskerra-reminderd
+// (= ../../../target/release/eskerra-reminderd, relative to src-tauri). The
+// daemon ships in the same RPM as the app (ADR 003 §2/§9); `tauri build` only
+// builds the app binary, so we build the daemon here first.
+execFileSync('cargo', ['build', '--release', '-p', 'eskerra-reminderd'], {
+  cwd: ROOT,
+  stdio: 'inherit',
+});
+
 const release = computeRpmRelease();
 const overlay = {
   bundle: {

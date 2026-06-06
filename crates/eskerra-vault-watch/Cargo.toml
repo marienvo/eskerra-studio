@@ -1,0 +1,22 @@
+[package]
+name = "eskerra-vault-watch"
+# Inherited from [workspace.package] in the root Cargo.toml so the release bump
+# drives it automatically (see that file's comment); never drifts from the app.
+version.workspace = true
+description = "Shared vault filesystem watcher: dual notify backends (recommended + poll), debounce, cross-backend dedup, coarse fallback, and ignored-dir filtering. Tauri-free; consumed by both the eskerra app and the eskerra-reminderd daemon so there is one watcher implementation."
+authors = ["Eskerra contributors"]
+license = "AGPL-3.0-only"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+[lib]
+name = "eskerra_vault_watch"
+
+[dependencies]
+# Same major as the app already uses (6.1.1 in Cargo.lock) so the workspace
+# resolves a single notify version across the app and the daemon.
+notify = "6"
+
+[dev-dependencies]
+tempfile = "3"
