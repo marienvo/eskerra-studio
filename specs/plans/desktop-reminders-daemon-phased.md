@@ -318,16 +318,21 @@ vault that is not currently active. Required behavior:
 
 ### Missed / grace semantics
 
-Two evaluation contexts must be kept distinct — they have **different** outcomes for
+Three evaluation contexts must be kept distinct — they have **different** outcomes for
 `now ≥ dueAt`, and conflating them is the snooze-0 bug:
 
 1. **Scheduled-fire execution** — the scheduler's own timer event firing for a
    reminder that was already scheduled (its `fireAt` known to a running daemon before
    `fireAt` arrived). This *executes* a fire.
-2. **Discovery on scan / restart / minute-tick reconcile** — the daemon first learning
-   a reminder's state by reading disk (initial scan, vault switch, daemon restart,
-   resume reconcile, or a stale catch-up scan). This *classifies* state; it does not
-   resurrect missed OS popups.
+2. **Resume catch-up** — on the `PrepareForSleep(false)` wake edge, re-evaluating a
+   reminder **that was already scheduled before suspend** and whose `fireAt` elapsed
+   *while suspended*. This is a deferred scheduled fire, **not** discovery: it *executes*
+   a fire once if still within the grace window (rules below), so a brief laptop suspend
+   does not silently downgrade an armed reminder to an in-app overdue row.
+3. **Discovery on scan / restart / minute-tick** — the daemon first learning a
+   reminder's state by reading disk (initial scan, vault switch, daemon restart, or a
+   stale catch-up scan). This *classifies* state; it does not resurrect missed OS popups.
+   Resume is **not** in this set.
 
 **Scheduled-fire execution (timer event for an already-scheduled reminder):**
 
@@ -349,16 +354,30 @@ Two evaluation contexts must be kept distinct — they have **different** outcom
   `fireAt`: re-arming, reconcile ticks, and resume re-evaluation all check this before
   firing.
 
+**Resume catch-up (wake edge re-evaluation of already-scheduled reminders):**
+
+- Applies **only** to reminders that were **already scheduled before suspend** and whose
+  `fireAt` elapsed *while the system was suspended*. It does **not** apply to reminders
+  first discovered on the wake-edge scan — those follow the discovery rules below.
+- On resume, if `now ≥ fireAt && now ≤ dueAt + schedulerGraceMs` and the reminder has
+  **not** already fired for that `fireAt` (guarded by `lastNotifiedMs` / per-`fireAt`
+  fire-event id), fire the OS notification **once**. This is the deferred scheduled fire
+  executing late on wake (covers snooze-0 / at-time across a short suspend).
+- If `now > dueAt + schedulerGraceMs` (the fire elapsed beyond the grace window during a
+  longer suspend), do **not** pop a stale OS notification — mark `due`/overdue **in-app
+  only**, exactly like an overdue row.
+
 **Discovery on scan / restart / minute-tick (classification only):**
 
 - `now < fireAt` → schedule normally (arms a future scheduled-fire event).
 - `fireAt ≤ now < dueAt` → the daemon was off through the T-5min lead but it is still
   before the due time → fire the 5-min notification **immediately, once** (guarded by
   `lastNotifiedMs`).
-- `now ≥ dueAt` and the reminder is **first discovered here** (no prior scheduled fire
-  executed for it) → mark `due` (counts for dot, shows in pane) but **do not** pop a
-  stale OS notification. "Missed, surfaced in-app only." This suppression applies to
-  *stale discovery*, never to a live scheduled fire (above).
+- `now ≥ dueAt` and the reminder is **first discovered here** (fresh scan, daemon
+  restart, or vault switch, with no prior scheduled fire executed for it) → mark `due`
+  (counts for dot, shows in pane) but **do not** pop a stale OS notification. "Missed,
+  surfaced in-app only." This suppression applies to *stale discovery*, never to a live
+  scheduled fire or a **resume catch-up** of an already-scheduled reminder (both above).
 
 **Overdue tokens (explicit rule):** Past, non-struck-through tokens are treated as
 overdue reminders. They appear in the Notifications pane and count toward the unread
@@ -374,34 +393,44 @@ daemon.
 A snooze action arrives from a still-visible OS notification. Because GNOME can leave a
 notification on screen well past T-3 / T-1 / at-time, the action may be chosen when its
 target fire time is already in the past. The action must never move a reminder backwards
-in time, immediately re-pop another OS notification, or loop. Rules:
+in time, immediately re-pop a *re-snoozed future* notification, or loop. The two
+relative snoozes (snooze-3 / snooze-1) and the at-time snooze (snooze-0) have **distinct**
+outcomes at the boundary `now == dueAt`, so they are specified separately. Rules:
 
 1. **Compute the target.** A snooze-N action computes `targetFireAt = dueAt − N min`
    (snooze-3 → `dueAt − 3min`, snooze-1 → `dueAt − 1min`, snooze-0 → `dueAt`).
 2. **Future target → schedule normally.** If `targetFireAt > now`, persist the snooze
    override (`fireAt = targetFireAt`) in the index and arm that future scheduled fire
    like any other (it later fires via *scheduled-fire execution*, guarded by
-   `lastNotifiedMs`).
-3. **Expired target → no-op for scheduling.** If `targetFireAt ≤ now`, the snooze action
-   is **expired**. It must **not** immediately fire another OS notification, must **not**
-   loop, and must **not** move the reminder backwards in time (it never rewrites `fireAt`
-   to a past instant). The reminder keeps its current `state`; the only side effect is
-   closing/dismissing the OS notification per GNOME action behavior. Nothing alarming is
-   surfaced.
-4. **At/after due time.** If `now ≥ dueAt`, every snooze action is expired by definition
-   (all targets are `≤ dueAt ≤ now`) and is ignored per rule 3. The reminder remains (or
-   remaps) to `due` **in-app only** — it does not OS-fire — unless the user instead
-   chooses **remove** or opens the note via the default click.
-5. **snooze-0 stays valid only at/ before `dueAt`.** `snooze-0` (`fireAt = dueAt`) is
-   valid only when `now ≤ dueAt`: either executed by a scheduled-fire event reaching
-   `dueAt` (the exact-at-time rule in *scheduled-fire execution*) or selected at/before
-   the at-time so its target is still `≥ now`. It must **not** resurrect a stale
-   notification after `dueAt`; once `now > dueAt` it is an expired no-op like any other
-   snooze.
+   `lastNotifiedMs`). This is the normal path for snooze-3 / snooze-1 chosen before
+   `dueAt − N min`, and for snooze-0 chosen before `dueAt` (rule 4).
+3. **snooze-3 / snooze-1 with `targetFireAt ≤ now` → expired no-op.** A *relative* snooze
+   whose target is already in the past is **expired**. It must **not** fire another OS
+   notification, must **not** loop, and must **not** move the reminder backwards in time
+   (it never rewrites `fireAt` to a past instant). The reminder keeps its current
+   `state`; the only side effect is closing/dismissing the OS notification per GNOME
+   action behavior. Nothing alarming is surfaced. (snooze-0 is **not** covered by this
+   rule — see rules 4–6.)
+4. **snooze-0 with `now < dueAt` → schedule the at-time fire.** Persist
+   `fireAt = dueAt` and arm the at-time scheduled fire (rule 2 with `N = 0`). It later
+   fires exactly at `dueAt` via the *scheduled-fire execution* exact-at-time rule.
+5. **snooze-0 with `now == dueAt` → fire once now (NOT a no-op).** This is the explicit
+   exact-at-time case: fire the OS notification **immediately, once** through the
+   *scheduled-fire execution* / exact-at-time path, guarded by `lastNotifiedMs` (or a
+   per-`fireAt` fire-event id) so it cannot double-fire. `targetFireAt == now` here is a
+   deliberate at-time fire, **not** an expired action — do not close without firing.
+6. **snooze-0 with `now > dueAt` → expired no-op.** Past the due time the at-time fire is
+   genuinely missed: do **not** resurrect a stale OS notification, keep the reminder
+   `due` **in-app only**. It behaves like the relative expired case (rule 3).
+7. **At/after due time, in-app fallback.** When a snooze action is expired (rule 3, or
+   rule 6 for snooze-0 past `dueAt`), the reminder remains (or remaps) to `due` **in-app
+   only** — it does not OS-fire — unless the user instead chooses **remove** or opens the
+   note via the default click.
 
-This is symmetric with the missed/grace discovery rules: a snooze whose target has
-already passed is treated as discovery of an overdue reminder (in-app only, no stale
-popup), never as a fresh fire.
+This is symmetric with the missed/grace discovery rules: an *expired relative* snooze, or
+a snooze-0 chosen after `dueAt`, is treated as discovery of an overdue reminder (in-app
+only, no stale popup), never as a fresh fire — while snooze-0 **at** `dueAt` is a genuine
+scheduled fire and pops once.
 
 ---
 
@@ -550,31 +579,39 @@ the app watcher — use the strongest model and keep the existing watcher tests 
   note title + reminder text context; actions: `snooze-3`, `snooze-1`, `snooze-0`,
   `remove`, plus default action (click). Localized/clear button labels
   ("Remind at T-3 min", …).
-- Action handling: snooze-N computes `targetFireAt = dueAt − N min`. If
-  `targetFireAt > now`, it reschedules a new `fireAt = targetFireAt` and persists the
-  override in the index; if `targetFireAt ≤ now` the snooze is **expired** and is a
-  no-op for scheduling per *Snooze action handling (including expired snooze)* — no
-  immediate re-fire, no loop, no backwards move, only the OS notification closes.
-  `remove` triggers Phase 4 write + closes; default click triggers Phase 5 open.
+- Action handling per *Snooze action handling (including expired snooze)*. snooze-N
+  computes `targetFireAt = dueAt − N min`. For **snooze-3 / snooze-1**: if
+  `targetFireAt > now` reschedule `fireAt = targetFireAt` and persist the override; if
+  `targetFireAt ≤ now` the relative snooze is **expired** — a scheduling no-op (no
+  re-fire, no loop, no backwards move, only the OS notification closes). For **snooze-0**
+  the equality boundary is **not** a no-op: `now < dueAt` persists `fireAt = dueAt` and
+  schedules the at-time fire; `now == dueAt` **fires once immediately** via the
+  exact-at-time scheduled-fire path (guarded by `lastNotifiedMs` / per-`fireAt` id);
+  `now > dueAt` is expired (no stale popup). `remove` triggers Phase 4 write + closes;
+  default click triggers Phase 5 open.
 - **snooze-0 (`fireAt = dueAt`) must fire at-time.** Because the override is an
   intentional scheduled fire, the scheduler fires it once at `dueAt` (exact-at-time
   case) with the small `schedulerGraceMs` late tolerance; it is **not** swallowed by
   the overdue/stale-discovery suppression. Every fire is guarded against duplicates by
   `lastNotifiedMs` (or a per-`fireAt` fire-event id) so re-arm / reconcile / resume
   cannot double-fire the same `fireAt`.
-- Missed/grace semantics from the architecture section (scheduled-fire execution vs.
-  stale discovery — keep the two contexts distinct in the implementation).
+- Missed/grace semantics from the architecture section — keep the **three** contexts
+  distinct in the implementation: scheduled-fire execution, resume catch-up (deferred
+  scheduled fire on wake), and stale discovery (classification only).
 - **Linux suspend/resume handling (mandatory).** A `Duration`-based sleep-until-next
   timer does not advance across system suspend, and the wall clock can jump on resume,
   so a fire scheduled before suspend can be silently late or skipped. Subscribe to the
   `PrepareForSleep(bool)` signal on `org.freedesktop.login1` (D-Bus, via `zbus` — same
   client stack as notifications). On the `false` (waking) edge, **immediately**: (a)
   recompute "now" from the wall clock, (b) re-evaluate every reminder's
-  missed/grace/overdue state using the *scheduled-fire execution* rule (an
-  already-scheduled reminder whose `fireAt`/at-time elapsed during suspend fires once on
-  resume if still within `now ≤ dueAt + schedulerGraceMs` and it has not already fired
-  for that `fireAt`; beyond that window it is marked `due`/overdue with no stale popup),
-  honoring `lastNotifiedMs` so resume never double-fires, and (c) fully re-arm the
+  missed/grace/overdue state using the *resume catch-up* rule (an already-scheduled
+  reminder whose `fireAt`/at-time elapsed during suspend fires once on resume if still
+  within `now ≤ dueAt + schedulerGraceMs` and it has not already fired for that `fireAt`;
+  beyond that window it is marked `due`/overdue with no stale popup) — resume catch-up is
+  a deferred scheduled fire, **not** stale discovery, so a brief suspend never downgrades
+  an armed reminder to an in-app-only overdue row; reminders *first discovered* on the
+  wake-edge scan still follow stale discovery. Honor `lastNotifiedMs` so resume never
+  double-fires, and (c) fully re-arm the
   scheduler from the recomputed times rather than resuming the pre-suspend timer. Also re-evaluate on
   the same path for wall-clock jumps/timezone changes where detectable. If
   `login1`/`PrepareForSleep` is unavailable, fall back to a periodic wall-clock
@@ -594,12 +631,18 @@ required):
   `fireAt` backwards, and leaves the reminder's `state` unchanged (only the notification
   closes).
 - **expired snooze-1 is a no-op:** same assertion for snooze-1 when `now ≥ dueAt − 1min`.
-- **snooze-0 only fires via the at-time scheduled-fire rule:** snooze-0 with `now ≤ dueAt`
-  fires once exactly at `dueAt` through the exact-at-time scheduled-fire path; snooze-0
-  chosen when `now > dueAt` is an expired no-op (no stale popup).
-- **no immediate-notification loop:** repeatedly choosing an expired snooze never
-  produces a second/duplicate immediate notification (guarded by the expired-no-op rule
-  and `lastNotifiedMs`).
+- **snooze-0 before due schedules at-time:** snooze-0 with `now < dueAt` persists
+  `fireAt = dueAt` and fires once exactly at `dueAt` via the exact-at-time scheduled-fire
+  path.
+- **snooze-0 at exactly `dueAt` fires once (NOT a no-op):** snooze-0 chosen when
+  `now == dueAt` fires the OS notification **immediately, once** through the exact-at-time
+  scheduled-fire path, records `lastNotifiedMs`, and is **not** closed-without-firing as
+  an expired action. A second snooze-0 at the same instant does not double-fire.
+- **snooze-0 after due is expired:** snooze-0 chosen when `now > dueAt` is an expired
+  no-op (no stale popup), `due` in-app only.
+- **no immediate-notification loop:** repeatedly choosing an *expired* snooze (relative
+  snooze-3/-1 past target, or snooze-0 past `dueAt`) never produces a second/duplicate
+  immediate notification (guarded by the expired-no-op rule and `lastNotifiedMs`).
 
 **Risks:** D-Bus action callbacks require the sender to stay alive (the daemon does);
 notification daemon quirks across GNOME versions; clock changes / suspend-resume
@@ -921,15 +964,22 @@ refs are exactly its failure mode.
     notification lingered past T-3 / T-1) each fire **no** OS notification, do not move
     `fireAt` backwards, leave `state` unchanged, and produce no duplicate/immediate
     notification loop on repeated clicks; the reminder stays in-app only.
-  - **snooze-0 at-time vs. after due:** snooze-0 with `now ≤ dueAt` fires once only
-    through the explicit at-time scheduled-fire rule; snooze-0 chosen after `dueAt` is an
-    expired no-op with no stale popup.
-- Suspend/resume tests: a scheduled fire whose at-time/`fireAt` elapses during a
-  simulated suspend fires once on the `PrepareForSleep(false)` resume edge when still
-  within `now ≤ dueAt + schedulerGraceMs` and not already fired (covers snooze-0 across
-  a short suspend); one elapsed beyond that window becomes overdue/`due` with no stale
-  popup; full re-arm from recomputed wall-clock times; fallback reconciliation tick when
-  `login1` is unavailable.
+  - **snooze-0 boundary cases (equality fires, not no-op):** snooze-0 chosen with
+    `now < dueAt` persists `fireAt = dueAt` and fires once at `dueAt`; snooze-0 chosen at
+    exactly `now == dueAt` fires the OS notification **once immediately** through the
+    exact-at-time scheduled-fire path (records `lastNotifiedMs`) and is **not** treated as
+    an expired no-op; snooze-0 chosen after `dueAt` is an expired no-op with no stale
+    popup. Assert the equality case fires exactly once (a repeated snooze-0 at the same
+    instant does not double-fire).
+- Suspend/resume tests (**resume catch-up**, distinct from stale discovery): an
+  **already-scheduled** reminder whose at-time/`fireAt` elapses during a simulated suspend
+  fires once on the `PrepareForSleep(false)` resume edge when still within
+  `now ≤ dueAt + schedulerGraceMs` and not already fired (covers snooze-0 across a short
+  suspend) — assert a brief suspend does **not** silently downgrade it to an in-app-only
+  overdue row; one elapsed beyond that window becomes overdue/`due` with no stale popup; a
+  reminder **first discovered** on the wake-edge scan (not scheduled before suspend) still
+  follows stale discovery (in-app only, no popup); full re-arm from recomputed wall-clock
+  times; fallback reconciliation tick when `login1` is unavailable.
 - Daemon-unavailable IPC tests: with the daemon down / service unregistered / call
   timing out, `RemoveReminder` returns a transport error → the app performs **no local
   write**, keeps the reminder row visible in `remove-unavailable` (distinct from
