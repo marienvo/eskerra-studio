@@ -1,10 +1,17 @@
-//! Process wiring: build the [`Daemon`], arm the vault watcher and a
-//! config-file watcher, and run the single-threaded event loop. All threads
-//! funnel into one mpsc channel so the `Daemon` (which owns no threads) is
-//! driven from one place.
+//! Process wiring: build the [`Daemon`], arm the vault watcher, the config-file
+//! watcher, the D-Bus notifier + its action listener, and the login1
+//! suspend/resume listener, then run the single-threaded event loop. All
+//! threads funnel into one mpsc channel so the `Daemon` (which owns no threads)
+//! is driven from one place.
+//!
+//! The loop uses `recv_timeout` driven by [`Daemon::next_wakeup_ms`] so it
+//! sleeps until the next armed fire (capped by a periodic safety/reconciliation
+//! tick), then runs a scheduler tick. Suspend/resume is handled via
+//! `org.freedesktop.login1`'s `PrepareForSleep` signal, with the periodic tick
+//! as the fallback when login1 is unavailable.
 
 use std::path::Path;
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,17 +20,24 @@ use eskerra_vault_watch::{VaultWatchEngine, WatchBatch};
 use notify::{Config as NotifyConfig, Event, RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::daemon::Daemon;
+use crate::notify::{Notifier, NullNotifier};
 use crate::paths::{config_dir, config_path, reminders_data_dir};
+use crate::scheduler::{Action, ActionOutcome};
 use crate::watch_control::EngineWatchControl;
 
-/// Backoff cadence for re-checking an unavailable vault (unmounted drive,
-/// deleted folder) and as a slow self-heal if a config/watch signal is missed.
-const RETRY_TICK: Duration = Duration::from_secs(30);
+/// Periodic safety / wall-clock reconciliation tick. Bounds how long the loop
+/// ever sleeps even with a far-future (or no) armed fire, so a missed wake,
+/// clock jump, or unavailable `login1` still self-heals within this interval.
+/// Also doubles as the unavailable-vault backoff re-check.
+const SAFETY_TICK: Duration = Duration::from_secs(30);
 
 enum DaemonEvent {
     ConfigChanged,
     Vault { coarse: bool, paths: Vec<String> },
-    RetryTick,
+    /// An OS-notification action fired (snooze / remove / open).
+    Action { reminder_id: String, action: Action },
+    /// `PrepareForSleep(false)` wake edge — resume catch-up.
+    Resume,
 }
 
 fn now_ms() -> i64 {
@@ -50,7 +64,11 @@ pub fn run() -> Result<(), String> {
     })));
     let watch = Box::new(EngineWatchControl::new(Arc::clone(&engine)));
 
-    let mut daemon = Daemon::new(config_path.clone(), data_dir, watch);
+    // OS-notification notifier (+ its action listener) and suspend/resume.
+    let notifier = build_notifier(tx.clone());
+    spawn_suspend_listener(tx.clone());
+
+    let mut daemon = Daemon::new(config_path.clone(), data_dir, watch, notifier);
 
     // Initial config load from disk (restart-before-app-ran reconstructs purely
     // from disk; absent config → idle).
@@ -61,36 +79,140 @@ pub fn run() -> Result<(), String> {
     // replacements are seen).
     let _config_watcher = spawn_config_watcher(&config_path, tx.clone());
 
-    // Backoff / self-heal tick.
-    spawn_retry_ticker(tx.clone());
-
-    for event in rx {
-        match event {
-            DaemonEvent::ConfigChanged => {
+    loop {
+        let timeout = compute_timeout(&daemon);
+        match rx.recv_timeout(timeout) {
+            Ok(DaemonEvent::ConfigChanged) => {
                 let outcome = daemon.reload_config(now_ms());
                 eprintln!("[reminderd] config reload: {outcome:?}");
             }
-            DaemonEvent::Vault { coarse, paths } => {
+            Ok(DaemonEvent::Vault { coarse, paths }) => {
                 let outcome = daemon.on_watch_batch(coarse, &paths, now_ms());
                 eprintln!("[reminderd] watch batch: {outcome:?}");
             }
-            DaemonEvent::RetryTick => {
-                // Only meaningful when a vault is unavailable; otherwise a cheap
-                // re-evaluation that returns NoChange.
+            Ok(DaemonEvent::Action { reminder_id, action }) => {
+                let outcome = daemon.on_action(&reminder_id, action, now_ms());
+                eprintln!("[reminderd] action {action:?} on {reminder_id}: {outcome:?}");
+                handle_action_followup(&reminder_id, &outcome);
+            }
+            Ok(DaemonEvent::Resume) => {
+                let fired = daemon.on_resume(now_ms());
+                eprintln!("[reminderd] resume catch-up: fired {fired}");
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // Either the next armed fire is due, or the safety tick elapsed.
                 if matches!(daemon.state(), crate::daemon::DaemonStateKind::VaultUnavailable) {
                     let outcome = daemon.retry(now_ms());
                     eprintln!("[reminderd] retry tick: {outcome:?}");
+                } else {
+                    daemon.on_tick(now_ms());
                 }
             }
+            Err(RecvTimeoutError::Disconnected) => break, // all senders gone
         }
     }
     Ok(())
 }
 
+/// How long to block in `recv_timeout`: until the next armed fire, capped by the
+/// periodic [`SAFETY_TICK`]. With nothing armed, just the safety tick.
+fn compute_timeout(daemon: &Daemon) -> Duration {
+    let safety_ms = SAFETY_TICK.as_millis() as i64;
+    let ms = match daemon.next_wakeup_ms() {
+        Some(at) => (at - now_ms()).clamp(0, safety_ms),
+        None => safety_ms,
+    };
+    Duration::from_millis(ms as u64)
+}
+
+/// Phase 4 / Phase 5 hooks for `remove` (strikethrough write-back) and the
+/// default click (open the note in the app). Not yet wired — logged so the
+/// behavior is observable and the integration point is explicit.
+fn handle_action_followup(reminder_id: &str, outcome: &ActionOutcome) {
+    match outcome {
+        ActionOutcome::RemoveRequested => {
+            eprintln!("[reminderd] remove requested for {reminder_id} (Phase 4 write-back not yet wired)");
+        }
+        ActionOutcome::OpenRequested => {
+            eprintln!("[reminderd] open requested for {reminder_id} (Phase 5 app-open not yet wired)");
+        }
+        _ => {}
+    }
+}
+
+/// Build the D-Bus notifier, falling back to a no-op (click-only) notifier when
+/// the session bus / notification service is unavailable (ADR 003 §6).
+#[cfg(target_os = "linux")]
+fn build_notifier(tx: Sender<DaemonEvent>) -> Box<dyn Notifier> {
+    let on_action = Box::new(move |reminder_id: String, action: Action| {
+        let _ = tx.send(DaemonEvent::Action { reminder_id, action });
+    });
+    match crate::notify::ZbusNotifier::new(on_action) {
+        Ok(n) => Box::new(n),
+        Err(err) => {
+            eprintln!("[reminderd] notifications unavailable ({err}); falling back to click-only");
+            Box::new(NullNotifier)
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn build_notifier(_tx: Sender<DaemonEvent>) -> Box<dyn Notifier> {
+    Box::new(NullNotifier)
+}
+
+/// Subscribe to `org.freedesktop.login1`'s `PrepareForSleep(b)` on the system
+/// bus; on the `false` (waking) edge, send [`DaemonEvent::Resume`] so the daemon
+/// runs resume catch-up. Best-effort: if login1 is unavailable the loop's
+/// periodic [`SAFETY_TICK`] still reconciles missed fires.
+#[cfg(target_os = "linux")]
+fn spawn_suspend_listener(tx: Sender<DaemonEvent>) {
+    use zbus::blocking::{Connection, Proxy};
+    std::thread::spawn(move || {
+        let conn = match Connection::system() {
+            Ok(c) => c,
+            Err(err) => {
+                eprintln!("[reminderd] login1 unavailable ({err}); relying on periodic reconciliation");
+                return;
+            }
+        };
+        let proxy = match Proxy::new(
+            &conn,
+            "org.freedesktop.login1",
+            "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager",
+        ) {
+            Ok(p) => p,
+            Err(err) => {
+                eprintln!("[reminderd] login1 proxy failed ({err})");
+                return;
+            }
+        };
+        let signals = match proxy.receive_signal("PrepareForSleep") {
+            Ok(s) => s,
+            Err(err) => {
+                eprintln!("[reminderd] login1 PrepareForSleep subscribe failed ({err})");
+                return;
+            }
+        };
+        for msg in signals {
+            // PrepareForSleep(BOOLEAN start): true = about to sleep, false = woke.
+            if let Ok((start,)) = msg.body().deserialize::<(bool,)>() {
+                if !start && tx.send(DaemonEvent::Resume).is_err() {
+                    return; // receiver gone; daemon shutting down
+                }
+            }
+        }
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn spawn_suspend_listener(_tx: Sender<DaemonEvent>) {}
+
 /// Watch the config directory for changes to `reminderd.json`. Returns the
 /// watcher handle (dropping it stops watching). Best-effort: if the directory
 /// cannot be watched (e.g. does not exist yet), logs and returns `None`; the
-/// retry ticker still re-reads config periodically as a fallback.
+/// safety tick still re-reads config periodically as a fallback.
 fn spawn_config_watcher(config_path: &Path, tx: Sender<DaemonEvent>) -> Option<RecommendedWatcher> {
     let dir = config_dir()?;
     // Create the config dir so we can watch it before the app first writes.
@@ -122,13 +244,4 @@ fn spawn_config_watcher(config_path: &Path, tx: Sender<DaemonEvent>) -> Option<R
         return None;
     }
     Some(watcher)
-}
-
-fn spawn_retry_ticker(tx: Sender<DaemonEvent>) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(RETRY_TICK);
-        if tx.send(DaemonEvent::RetryTick).is_err() {
-            return; // receiver gone; process shutting down
-        }
-    });
 }

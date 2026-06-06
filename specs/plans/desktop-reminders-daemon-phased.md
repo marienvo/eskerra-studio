@@ -1,6 +1,6 @@
 # Desktop reminders — phased plan (daemon-owned, Rust-level vault monitoring)
 
-Status: **Phases 0–2 complete** (2026-06-06). Phase 0 locked architecture, cargo
+Status: **Phases 0–3 complete** (2026-06-06). Phase 0 locked architecture, cargo
 layout, index/IPC schema, systemd/packaging sketch, observability fields, and the
 `RemoveReminder` failure contract in [ADR 003](../adrs/003-adr-reminder-daemon.md).
 Phase 1 shipped the pure `eskerra-reminder-core` (grammar, scanner, index, identity,
@@ -8,7 +8,13 @@ duplicate-aware merge). Phase 2 shipped the shared `eskerra-vault-watch` crate (
 `vault_watch.rs` is now a thin adapter over it), the `eskerra-reminderd` daemon
 (config + vault-root discovery + index production with all fail-safe vault/config edge
 cases and the settings-only re-derive path), and the systemd unit + RPM/bump-script
-wiring. Phases 3–7 not yet implemented. Supersedes the "Future reminders (deferred)"
+wiring. Phase 3 shipped the pure `scheduler` (three missed/grace contexts + full snooze
+boundary table, double-fire-guarded), the `notify` layer (native GNOME
+`org.freedesktop.Notifications` via `zbus` with snooze/remove/click actions + an action
+listener), daemon scheduling integration (`on_tick`/`on_action`/`on_resume`, discovery
+arming, `next_wakeup_ms`), and the `login1` `PrepareForSleep` resume catch-up with a
+periodic reconciliation fallback (`remove`/click are Phase 4/5 hooks). Phases 4–7 not yet
+implemented. Supersedes the "Future reminders (deferred)"
 section of [`specs/architecture/desktop-date-token.md`](../architecture/desktop-date-token.md)
 once shipped.
 
@@ -667,7 +673,37 @@ code (`vault_watch.rs`) under strict invariants (coarse fallback, debounce ceili
 session scoping, Sentry observability). High blast radius if the extraction regresses
 the app watcher — use the strongest model and keep the existing watcher tests green.
 
-### Phase 3 — Scheduler + GNOME D-Bus notifications with actions
+### Phase 3 — Scheduler + GNOME D-Bus notifications with actions  ✅ DONE (2026-06-06)
+
+**Outcome:** Shipped the pure `crates/eskerra-reminderd/src/scheduler.rs`
+(`discover` / `run_timers` / `apply_action` / `next_wakeup_ms`) keeping the **three**
+missed/grace contexts distinct — scheduled-fire execution (with `SCHEDULER_GRACE_MS`
+late tolerance), resume catch-up (deferred scheduled fire on wake), and stale discovery
+(classification only, overdue → `due` in-app, **no** stale popup) — and the full snooze
+boundary table: future snooze-3/-1 schedule one fire; expired relative snooze is a
+no-op; snooze-0 before `dueAt` schedules the at-time fire; snooze-0 **at** `dueAt` fires
+once; snooze-0 after `dueAt` is an expired no-op. Every fire is double-fire-guarded by
+`lastNotifiedMs`. All mandated Phase 3 tests are green (scheduler/action-level, no live
+GNOME). Shipped `notify.rs`: a `Notifier` trait (testable fake + `NullNotifier`
+fallback) and a real `ZbusNotifier` over native `org.freedesktop.Notifications` (`zbus` 5
+**blocking** API, verified against the 5.15 docs) firing summary/body with
+`snooze-3`/`snooze-1`/`snooze-0`/`remove` + default-click actions, plus an
+`ActionInvoked`/`NotificationClosed` listener routing actions back to the originating
+reminder. The `Daemon` now owns the notifier, the grace bound, and `next_wakeup_ms`:
+every index change runs a discovery pass (fire the immediate lead window, mark overdue
+`due` in-app, arm future fires) and `on_tick`/`on_action`/`on_resume` drive scheduled
+fires, snooze/remove/open handling, and resume catch-up. The run loop sleeps until the
+next armed fire via `recv_timeout` (capped by a 30s safety/reconciliation tick),
+forwards D-Bus actions, and subscribes to `org.freedesktop.login1` `PrepareForSleep` for
+resume catch-up, falling back to the periodic tick when `login1` is unavailable.
+`remove` and the default click are explicit Phase 4 / Phase 5 hooks (logged, not yet
+writing/opening). **Deviation note:** the index schema in code still lacks the ADR §3
+`fireSource` / `snoozedFireAtMs` fields (omitted back in Phase 1); snooze overrides are
+persisted via `fireAtMs` + the `lastNotifiedMs` guard, consistent with the existing
+`merge_reminders` convention (which already preserves whole-minute snoozes across
+rescans). Reconciling the schema to add the explicit fields — which would let the
+settings-only `leadMinutes` re-derive preserve an active snooze precisely — is carried
+forward as a Phase 4 cleanup, not silently bundled here.
 
 **Scope:**
 - Scheduler: min-heap / sorted timer of `fireAt` times; sleep-until-next; re-arm on
