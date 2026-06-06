@@ -81,7 +81,10 @@ impl NotificationRequest {
 /// Note title = the file stem of the vault-relative path (drop directories and
 /// the `.md` extension), falling back to the full path if there is no stem.
 fn note_title(vault_relative_path: &str) -> String {
-    let last = vault_relative_path.rsplit('/').next().unwrap_or(vault_relative_path);
+    let last = vault_relative_path
+        .rsplit('/')
+        .next()
+        .unwrap_or(vault_relative_path);
     last.strip_suffix(".md").unwrap_or(last).to_string()
 }
 
@@ -102,7 +105,10 @@ pub struct NullNotifier;
 
 impl Notifier for NullNotifier {
     fn send(&self, req: &NotificationRequest) -> Result<u32, String> {
-        eprintln!("[reminderd] (no notifier) would notify: {} — {}", req.summary, req.body);
+        eprintln!(
+            "[reminderd] (no notifier) would notify: {} — {}",
+            req.summary, req.body
+        );
         Ok(0)
     }
 }
@@ -135,10 +141,11 @@ mod zbus_impl {
     pub type ActionCallback = Box<dyn Fn(String, Action) + Send>;
 
     /// Real notifier over `org.freedesktop.Notifications`. Holds a blocking
-    /// session-bus connection and an id→reminder map so the background signal
-    /// listener can route `ActionInvoked` back to the originating reminder.
+    /// notification-service proxy and an id→reminder map so the background
+    /// signal listener can route `ActionInvoked` back to the originating
+    /// reminder.
     pub struct ZbusNotifier {
-        conn: Connection,
+        proxy: Proxy<'static>,
         /// notification id (from `Notify`) → reminder id.
         map: Arc<Mutex<HashMap<u32, String>>>,
     }
@@ -149,20 +156,18 @@ mod zbus_impl {
         /// recognized action on a notification we sent.
         pub fn new(on_action: ActionCallback) -> zbus::Result<Self> {
             let conn = Connection::session()?;
+            let proxy = Proxy::new_owned(conn.clone(), NOTIFY_DEST, NOTIFY_PATH, NOTIFY_IFACE)?;
             let map: Arc<Mutex<HashMap<u32, String>>> = Arc::new(Mutex::new(HashMap::new()));
 
             spawn_action_listener(conn.clone(), Arc::clone(&map), on_action);
             spawn_closed_listener(conn.clone(), Arc::clone(&map));
 
-            Ok(Self { conn, map })
+            Ok(Self { proxy, map })
         }
     }
 
     impl Notifier for ZbusNotifier {
         fn send(&self, req: &NotificationRequest) -> Result<u32, String> {
-            let proxy = Proxy::new(&self.conn, NOTIFY_DEST, NOTIFY_PATH, NOTIFY_IFACE)
-                .map_err(|e| format!("proxy: {e}"))?;
-
             // Flat action array: [key, label, key, label, …], plus the implicit
             // "default" action so a plain click opens the note (Phase 5).
             let mut actions: Vec<String> = Vec::new();
@@ -178,7 +183,8 @@ mod zbus_impl {
             let hints: HashMap<String, zbus::zvariant::Value> = HashMap::new();
             let expire_timeout: i32 = 0;
 
-            let id: u32 = proxy
+            let id: u32 = self
+                .proxy
                 .call(
                     "Notify",
                     &(
@@ -194,7 +200,10 @@ mod zbus_impl {
                 )
                 .map_err(|e| format!("Notify: {e}"))?;
 
-            self.map.lock().unwrap().insert(id, req.reminder_id.clone());
+            self.map
+                .lock()
+                .map_err(|e| format!("map lock poisoned: {e}"))?
+                .insert(id, req.reminder_id.clone());
             Ok(id)
         }
     }
@@ -224,7 +233,13 @@ mod zbus_impl {
                 let Ok((id, key)) = msg.body().deserialize::<(u32, String)>() else {
                     continue;
                 };
-                let reminder_id = map.lock().unwrap().get(&id).cloned();
+                let reminder_id = match map.lock() {
+                    Ok(map) => map.get(&id).cloned(),
+                    Err(e) => {
+                        eprintln!("[reminderd] action listener map lock poisoned: {e}");
+                        return;
+                    }
+                };
                 if let (Some(reminder_id), Some(action)) = (reminder_id, parse_action_key(&key)) {
                     on_action(reminder_id, action);
                 }
@@ -245,7 +260,15 @@ mod zbus_impl {
             for msg in signals {
                 // NotificationClosed(UINT32 id, UINT32 reason)
                 if let Ok((id, _reason)) = msg.body().deserialize::<(u32, u32)>() {
-                    map.lock().unwrap().remove(&id);
+                    match map.lock() {
+                        Ok(mut map) => {
+                            map.remove(&id);
+                        }
+                        Err(e) => {
+                            eprintln!("[reminderd] closed listener map lock poisoned: {e}");
+                            return;
+                        }
+                    }
                 }
             }
         });
@@ -273,9 +296,18 @@ mod tests {
 
     #[test]
     fn parses_known_action_keys() {
-        assert_eq!(parse_action_key(ACTION_SNOOZE_3), Some(Action::Snooze { minutes: 3 }));
-        assert_eq!(parse_action_key(ACTION_SNOOZE_1), Some(Action::Snooze { minutes: 1 }));
-        assert_eq!(parse_action_key(ACTION_SNOOZE_0), Some(Action::Snooze { minutes: 0 }));
+        assert_eq!(
+            parse_action_key(ACTION_SNOOZE_3),
+            Some(Action::Snooze { minutes: 3 })
+        );
+        assert_eq!(
+            parse_action_key(ACTION_SNOOZE_1),
+            Some(Action::Snooze { minutes: 1 })
+        );
+        assert_eq!(
+            parse_action_key(ACTION_SNOOZE_0),
+            Some(Action::Snooze { minutes: 0 })
+        );
         assert_eq!(parse_action_key(ACTION_REMOVE), Some(Action::Remove));
         assert_eq!(parse_action_key(ACTION_DEFAULT), Some(Action::Open));
         assert_eq!(parse_action_key("bogus"), None);
@@ -301,6 +333,8 @@ mod tests {
     fn null_notifier_never_fails() {
         let n = NullNotifier;
         let r = a_reminder();
-        assert!(n.send(&NotificationRequest::for_reminder(&r, FireKind::AtTime)).is_ok());
+        assert!(n
+            .send(&NotificationRequest::for_reminder(&r, FireKind::AtTime))
+            .is_ok());
     }
 }

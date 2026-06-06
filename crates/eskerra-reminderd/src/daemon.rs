@@ -156,7 +156,7 @@ impl Daemon {
             Err(err) => {
                 eprintln!("[reminderd] config read error: {err}");
                 // Transient read error: keep whatever we have rather than churn.
-                return self.keep_or_idle("parse");
+                return self.keep_or_idle("read_error");
             }
         };
 
@@ -874,6 +874,33 @@ mod tests {
             Outcome::InvalidConfigKeptLastKnownGood { reason: "parse" }
         );
         // Still active, index and watcher undisturbed.
+        assert_eq!(d.state(), DaemonStateKind::Active);
+        assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), index_before);
+        assert_eq!(h.log(), log_before);
+    }
+
+    #[test]
+    fn config_read_error_uses_distinct_reason_tag_and_keeps_last_known_good() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        assert!(matches!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { .. }
+        ));
+        let index_before = std::fs::read(h.index_path("vh1")).unwrap();
+        let log_before = h.log();
+
+        std::fs::remove_file(&h.config_path).unwrap();
+        std::fs::create_dir(&h.config_path).unwrap();
+        assert_eq!(
+            d.reload_config(NOW + 1),
+            Outcome::InvalidConfigKeptLastKnownGood {
+                reason: "read_error"
+            }
+        );
         assert_eq!(d.state(), DaemonStateKind::Active);
         assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), index_before);
         assert_eq!(h.log(), log_before);
