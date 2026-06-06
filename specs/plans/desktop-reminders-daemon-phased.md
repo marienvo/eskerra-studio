@@ -219,13 +219,31 @@ merge would move a snooze/`stale`/`notified` state to the wrong line or silently
 the real reminder. The write-time `contextAnchor` rules guard *writes only*; merge needs
 its own duplicate-aware rules. The merge is therefore:
 
-1. **Exact `id` match → preserve normally.** If a prior entry's `id` still exists in the
-   fresh scan, carry its `state`/snooze/`lastNotifiedMs` across unchanged. (This is the
-   common, non-duplicate case and the edit-elsewhere case.)
-2. **Never carry duplicate state by ordinal-derived `id` alone.** For tokens that are
-   byte-identical within a note, an `id` equality is *not* sufficient evidence of the
-   same occurrence — it must be corroborated by the anchor/fingerprint rules below
-   before any state is migrated.
+0. **Classify each content key as duplicate or non-duplicate first.** A **duplicate
+   content key** is a `noteUri` + `normalizedTokenText` pair that appears **more than
+   once** in *either* the prior index *or* the fresh scan. Everything else is a
+   **non-duplicate content key**. This classification gates which carry rule applies and
+   must be computed before any state is migrated, because the duplicate hazard exists
+   whenever the count is >1 on either side (an insert makes the fresh side a duplicate; a
+   delete makes the prior side a duplicate).
+1. **Exact `id` carry — non-duplicate content keys only.** If a prior entry's `id` still
+   exists in the fresh scan **and its content key is non-duplicate on both sides**, carry
+   its `state`/snooze/`lastNotifiedMs` across unchanged. This blind, automatic carry is
+   the common case (a unique token, including the edit-elsewhere case). It must **not**
+   be applied to a duplicate content key: there, the same ordinal-derived `id` can now
+   refer to a *different* occurrence (e.g. inserting an identical token above ordinal-0
+   leaves the old ordinal-0 `id` present but attached to the new line), so exact-`id`
+   equality alone is not proof of the same occurrence.
+2. **Duplicate content keys → never carry by ordinal-derived `id` alone; require
+   corroboration.** For a duplicate content key, an exact `id` match is **not** sufficient
+   by itself. `state`/snooze/`lastNotifiedMs`/`stale` may be migrated **only** if one of:
+   - the prior entry's `contextAnchor` **uniquely** matches exactly one live candidate
+     (migrate to that candidate's new `id`), **or**
+   - the recomputed content hash equals the stored `scanFingerprint`, proving the file is
+     byte-for-byte unchanged so the ordinal — and thus the ordinal-derived `id` — is still
+     authoritative.
+   If neither holds (the duplicate content key changed and `contextAnchor` is not unique),
+   do **not** migrate state to any candidate — recompute the live reminders fresh (rule 6).
 3. **Lost `id` → recollect candidates by content.** If a prior entry's `id` is absent
    from the fresh scan, collect live candidates by `noteUri` + `normalizedTokenText`
    (the same content key the writer uses). These are the possible new homes for the old
@@ -460,7 +478,14 @@ is computed separately from the byte span; and **duplicate-aware merge** tests:
 (a) exact-`id` carry preserves `state`/snooze for the non-duplicate / edit-elsewhere
 case; (b) a snooze on one of several identical tokens migrates to the correct new `id`
 by **unique `contextAnchor`** after an identical token is inserted above it (ordinal
-drifted); (c) when surrounding context is also identical and
+drifted); (b') **exact-`id` carry is gated for duplicates** — the old ordinal-0
+duplicate has a snooze, an identical token is inserted **above** it, and the old
+ordinal-0 `id` **still exists** in the fresh scan but now points to the **newly inserted
+line**; assert the blind exact-`id` carry does **not** fire for this duplicate content
+key, that the snooze migrates only by **unique `contextAnchor`** to the original line's
+new `id` (or is dropped if the anchor is ambiguous), and that **no**
+snooze/`notified`/`stale` lands on the newly inserted line; (c) when surrounding context
+is also identical and
 `duplicateCount`/`scanFingerprint` changed, state is **not** migrated to any line —
 candidates become fresh reminders rather than carrying snooze/`notified`/`stale` onto
 the wrong occurrence; (d) ordinal-based migration is used only when the recomputed
@@ -838,6 +863,13 @@ refs are exactly its failure mode.
     `id`s change. Because `contextAnchor` uniquely identifies the old reminder, assert
     its `state` / snooze (`fireAtMs`) / `lastNotifiedMs` migrate to the **new `id`** on
     the same line.
+  - **Exact-`id` carry gated for duplicates (old ordinal-0 id survives):** the old
+    ordinal-0 duplicate has a snooze; insert a **new identical token above it** so the
+    old ordinal-0 `id` **still exists** in the fresh scan but now points to the **newly
+    inserted line**. Assert the blind exact-`id` carry does **not** run for this
+    duplicate content key; the snooze migrates only by **unique `contextAnchor`** to the
+    original line's new `id` (or is dropped if ambiguous); and **no**
+    snooze/`notified`/`stale` state lands on the newly inserted line.
   - **Identical-context → no migration:** with duplicates that also share identical
     surrounding context (so `contextAnchor` cannot separate them) and a changed
     `duplicateCount` / `scanFingerprint` after the edit, assert **no** `state` / snooze /
