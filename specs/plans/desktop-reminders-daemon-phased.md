@@ -906,5 +906,3 @@ integration + reconcile tests (the hard part is asserting the data-loss invarian
 - Notification grouping/coalescing policy when many reminders fire close together.
 - Settings surface for the date-only default time (09:00) — where it lives in app
   settings and how it reaches `reminderd.json`.
-</content>
-</invoke>
