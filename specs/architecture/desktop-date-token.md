@@ -43,7 +43,7 @@ Presentational React overlay: [`dateToken/dateTimePicker/`](../../apps/desktop/s
 - **Calendar:** month grid with previous/next month navigation; week rows start on **Monday** (Fedora/GNOME reference).
 - **Today:** prominent button sets the selected date to the current local calendar day.
 - **Time:** hour and minute inputs (24-hour) plus a **No time** toggle. When **No time** is on, time inputs disable and confirm yields a date-only token.
-- **Day pick / Cancel:** clicking a calendar day or **Today** commits immediately and closes the overlay. `Enter` confirms the current selection (for keyboard navigation and time tweaks). `Esc` cancels. Arrow keys move the calendar selection without committing until `Enter` or a day click.
+- **Live apply:** clicking a calendar day, **Today**, or changing time fields (hour, minute, **No time**) updates the document token immediately while the overlay stays open. `Enter` applies the current selection without closing. `Esc` or **Cancel** dismisses the overlay. Arrow keys move the calendar selection without applying until `Enter` or a day click.
 - **Defaults:** today’s date; no time pre-selected on a fresh `@` trigger.
 
 Storybook sandbox: [`dateToken/__sandbox__/DateTimePicker.stories.tsx`](../../apps/desktop/src/editor/noteEditor/dateToken/__sandbox__/DateTimePicker.stories.tsx).
@@ -58,7 +58,8 @@ Orchestration lives in [`NoteMarkdownEditor.tsx`](../../apps/desktop/src/editor/
 | Click existing chip | Entire validated token span | No |
 
 - **Cancel / Esc:** overlay closes; document text is unchanged (the lone `@` or existing token stays as typed).
-- **Commit** (day click, **Today**, or `Enter`): `formatDateToken` result is dispatched as a CodeMirror transaction; editor refocuses.
+- **Apply** (day click, **Today**, time change, or `Enter`): `formatDateToken` result is dispatched as a CodeMirror transaction without closing the overlay.
+- **Dismiss** (`Esc`, **Cancel**, outside pointerdown, editor scroll): overlay closes; applied token text is kept.
 
 Overlay is portaled to `document.body`, positioned with `view.coordsAtPos` (fallback: editor host top-left inset). After mount, measured overlay size is clamped into the viewport (`clampDateTokenPickerOverlayPosition` in [`dateTokenPickerOverlayPosition.ts`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenPickerOverlayPosition.ts)): horizontal inset 8px; prefer below the anchor with a 6px gap, flip above when the bottom would overflow, then clamp top. Editor scroll dismisses the overlay (anchor is not re-followed on scroll).
 

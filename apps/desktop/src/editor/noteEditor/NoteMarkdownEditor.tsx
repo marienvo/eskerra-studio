@@ -88,28 +88,28 @@ function dateTokenOverlayAnchorFromRequest(
 
 function buildDateTokenPickerOverlayState(
   request: DateTokenPickerOpenRequest,
-  close: () => void,
 ): DateTokenPickerOverlayState {
   const insertTrailingSpace = request.initialValue == null;
+  let tokenEnd = request.tokenTo;
   return {
     anchorRect: dateTokenOverlayAnchorFromRequest(request),
     initialValue: request.initialValue ?? null,
     commit: value => {
       const token = formatDateToken(value);
       const replacement = insertTrailingSpace ? `${token} ` : token;
-      const currentDocLength = request.view.state.doc.length;
+      const view = request.view;
+      const currentDocLength = view.state.doc.length;
       const from = Math.max(0, Math.min(request.tokenFrom, currentDocLength));
       const requestedTo = insertTrailingSpace
-        ? request.view.state.selection.main.head
-        : request.tokenTo;
+        ? view.state.selection.main.head
+        : tokenEnd;
       const to = Math.max(from, Math.min(requestedTo, currentDocLength));
-      request.view.dispatch({
+      view.dispatch({
         changes: {from, to, insert: replacement},
         selection: {anchor: from + replacement.length},
         scrollIntoView: true,
       });
-      request.view.focus();
-      close();
+      tokenEnd = from + replacement.length;
     },
   };
 }
@@ -281,11 +281,7 @@ const NoteMarkdownEditorImpl = forwardRef<
 
   useLayoutEffect(() => {
     onOpenDateTokenPickerRef.current = request => {
-      setDateTokenPicker(
-        buildDateTokenPickerOverlayState(request, () =>
-          setDateTokenPicker(null),
-        ),
-      );
+      setDateTokenPicker(buildDateTokenPickerOverlayState(request));
     };
     return () => {
       onOpenDateTokenPickerRef.current = undefined;

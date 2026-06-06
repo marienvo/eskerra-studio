@@ -49,8 +49,17 @@ export function useDateTimePicker({
   }, []);
 
   const commitValue = useCallback(
-    (date: DatePickerDate) => {
-      onConfirm(buildDateTokenValue(date, {noTime, hour, minute}));
+    (
+      date: DatePickerDate,
+      time?: {noTime?: boolean; hour?: number; minute?: number},
+    ) => {
+      onConfirm(
+        buildDateTokenValue(date, {
+          noTime: time?.noTime ?? noTime,
+          hour: time?.hour ?? hour,
+          minute: time?.minute ?? minute,
+        }),
+      );
     },
     [hour, minute, noTime, onConfirm],
   );
@@ -131,13 +140,31 @@ export function useDateTimePicker({
     [handleConfirm, onCancel, shiftSelectedDay],
   );
 
-  const setHourClamped = useCallback((value: number) => {
-    setHour(clampHour(value));
-  }, []);
+  const setNoTimeWithCommit = useCallback(
+    (value: boolean) => {
+      setNoTime(value);
+      commitValue(selected, {noTime: value});
+    },
+    [commitValue, selected],
+  );
 
-  const setMinuteClamped = useCallback((value: number) => {
-    setMinute(clampMinute(value));
-  }, []);
+  const setHourClamped = useCallback(
+    (value: number) => {
+      const next = clampHour(value);
+      setHour(next);
+      commitValue(selected, {hour: next});
+    },
+    [commitValue, selected],
+  );
+
+  const setMinuteClamped = useCallback(
+    (value: number) => {
+      const next = clampMinute(value);
+      setMinute(next);
+      commitValue(selected, {minute: next});
+    },
+    [commitValue, selected],
+  );
 
   return {
     rootRef,
@@ -148,7 +175,7 @@ export function useDateTimePicker({
     hour,
     minute,
     calendarCells,
-    setNoTime,
+    setNoTime: setNoTimeWithCommit,
     setHour: setHourClamped,
     setMinute: setMinuteClamped,
     selectDate,

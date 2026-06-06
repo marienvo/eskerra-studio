@@ -113,7 +113,7 @@ describe('DateTimePicker', () => {
     expect(payload.minute).toBeUndefined();
   });
 
-  it('confirms with time when No time is off', () => {
+  it('commits time changes without requiring a calendar day click', () => {
     const onConfirm = vi.fn();
     render(
       <DateTimePicker
@@ -131,9 +131,8 @@ describe('DateTimePicker', () => {
     fireEvent.change(screen.getByRole('spinbutton', {name: 'Minute'}), {
       target: {value: '52'},
     });
-    fireEvent.click(screen.getByRole('gridcell', {name: '6 June 2026'}));
 
-    expect(onConfirm).toHaveBeenCalledWith({
+    expect(onConfirm).toHaveBeenLastCalledWith({
       year: 2026,
       month: 6,
       day: 6,

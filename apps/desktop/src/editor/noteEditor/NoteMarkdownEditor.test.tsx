@@ -229,9 +229,7 @@ describe('NoteMarkdownEditor', () => {
     const expectedToken = formatDateToken(today);
     expect(view.state.doc.toString()).toBe(`${expectedToken} `);
     expect(onMarkdownChange).toHaveBeenLastCalledWith(`${expectedToken} `);
-    expect(
-      screen.queryByRole('dialog', {name: 'Pick date and time'}),
-    ).toBeNull();
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
   });
 
   it('reopens the date token picker on chip click and replaces the whole token without a trailing space', () => {
@@ -265,9 +263,7 @@ describe('NoteMarkdownEditor', () => {
     const expectedMarkdown = `Due ${formatDateToken({year: 2026, month: 12, day: 15})} please`;
     expect(view.state.doc.toString()).toBe(expectedMarkdown);
     expect(onMarkdownChange).toHaveBeenLastCalledWith(expectedMarkdown);
-    expect(
-      screen.queryByRole('dialog', {name: 'Pick date and time'}),
-    ).toBeNull();
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
   });
 
   it('dismisses the date token picker on outside pointerdown', () => {
