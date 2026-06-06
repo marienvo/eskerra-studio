@@ -107,10 +107,11 @@ the `~~…~~` mutation locally — deleting from the pane calls the daemon's
 processes racing on the same bytes.
 
 **Removal IPC never accepts byte ranges.** `RemoveReminder` takes only the stable
-reminder `id` (plus `noteUri` for routing) — never a `tokenFrom`/`tokenTo`, offset, or
-any byte range. The caller cannot dictate *where* to write; the daemon alone resolves
-the span by re-scanning at write time (Phase 4). Any range the app holds is advisory
-UI state and is never sent over IPC, so a stale offset can never drive a write.
+reminder `id` (plus `noteUri` for routing) — never a byte span (`tokenByteFrom`/
+`tokenByteTo`), a `uiCaretHint`, or any offset. The caller cannot dictate *where* to
+write; the daemon alone resolves the byte span by re-scanning at write time (Phase 4).
+Any position the app holds is advisory UI state and is never sent over IPC, so a stale
+offset can never drive a write.
 
 When the daemon rewrites a note that is **open in the editor**, it is — by design —
 indistinguishable from any other external on-disk edit. It therefore must flow through
@@ -128,10 +129,15 @@ token span, so the reconcile/merge logic sees a minimal diff.
 - Schema (per reminder): stable `id` (see **Reminder identity** below — **never**
   derived from byte offsets), `noteUri`, `dueAtMs` (the reminder time itself),
   `fireAtMs` (T-5min or snoozed override), `state` (`scheduled` | `due` | `notified`
-  | `removed` | `stale`), `lastNotifiedMs`. `tokenFrom`/`tokenTo` are stored **only**
-  as a last-scan hint for fast UI caret placement and are treated as advisory — they
-  are re-derived by re-scanning before any write (Phase 4) and are never the basis of
-  identity or of locating the span to strike.
+  | `removed` | `stale`), `lastNotifiedMs`.
+- **Byte spans vs. UI positions (must not be confused):** the scanner records the
+  token's **byte span** `tokenByteFrom`/`tokenByteTo` (UTF-8 byte indexes into the
+  file). These are the **only** spans the daemon may use for disk write-back. Any
+  editor-facing position is stored separately and named `uiCaretHint` — an **advisory
+  UI position**, last-scan only, never a write position. The app converts a byte span
+  to its editor position model itself (Phase 5); the daemon never converts or uses UI
+  positions for slicing. Even the byte span is re-derived by re-scanning before any
+  write (Phase 4) and is never the basis of identity.
 
 ### Reminder identity (offset-independent)
 
@@ -275,9 +281,23 @@ token grammar + scanning + index schema, consumed by both the app and the daemon
 the grammar is ported exactly once on the Rust side.
 
 **Deliverables:** ADR, finalized index/IPC schema, systemd unit + autostart packaging
-sketch, observability fields list. No runtime code.
+sketch, observability fields list, and the **locked IPC failure contract** (below). No
+runtime code.
 
-**Risks:** getting the index/IPC schema wrong forces churn later — pin it here.
+**Locked decision — `RemoveReminder` failure contract (must be pinned before Phase 0
+closes):** Define the full result space of the removal IPC and pin it in the ADR:
+(a) success → `removed`; (b) daemon received but refused to write safely → `stale`;
+(c) **daemon unreachable** (not running / service not registered / timeout / any
+transport-level bus error) → app-side `remove-unavailable`, **never** local strikethrough
+and **never** recorded as daemon `stale`. The app keeps the row visible with retry +
+open-note recovery and may best-effort (re)start the systemd `--user` daemon off the UI
+thread. Full rules in the Phase 4 *IPC-unavailable contract*; this phase exists to lock
+that behavioral contract before any code is written.
+
+**Risks:** getting the index/IPC schema wrong forces churn later — pin it here. The
+single highest-risk omission to resolve here is the daemon-unavailable transport-error
+path (above): an unhandled transport error is exactly the kind of gap that tempts a
+local-write fallback and silently breaks the single-writer invariant.
 
 **LLM advice:** **Claude Opus 4.8, thinking high.** Pure architecture/trade-off work
 across an unfamiliar multi-process boundary with hard correctness invariants; this is
@@ -289,8 +309,14 @@ the highest-leverage reasoning phase and benefits most from the strongest model.
 - Port the `dateToken.ts` grammar to Rust (parse/validate, leap-year aware), with a
   test vector shared conceptually with the TS tests (same valid/invalid cases incl.
   `@2026-02-29`, `@…_2560`, and the struck-through `@~~…~~` → no match case).
-- Scanner: given file bytes + vault-relative path, return reminder spans (char
-  offsets) + parsed datetime, ignoring struck-through tokens.
+- Scanner: given file bytes + vault-relative path, return for every token its
+  **byte span** `tokenByteFrom`/`tokenByteTo` (UTF-8 byte indexes into the file) +
+  parsed datetime, ignoring struck-through tokens. Byte spans are mandatory because
+  Phase 4 verifies and replaces a byte slice; the scanner must **not** return character
+  offsets for write use. Because the token grammar is ASCII and is matched inside valid
+  UTF-8 markdown, `tokenByteFrom`/`tokenByteTo` always land on valid UTF-8 boundaries.
+  Any editor-facing position (`uiCaretHint`) is derived separately and clearly marked
+  advisory; it is never used for slicing.
 - Index model + (de)serialization (serde), stable `id` derivation per the
   **Reminder identity** rules (path + normalized token text + occurrence ordinal;
   never offsets), atomic write helper, merge logic (preserve `state`/snooze across
@@ -300,8 +326,13 @@ the highest-leverage reasoning phase and benefits most from the strongest model.
 **Deliverables:** `eskerra-reminder-core` with thorough `cargo test`, including:
 identity stability when text above a token is inserted/deleted; correct ordinal
 disambiguation of duplicate identical tokens; new-`id`-on-token-edit; struck-through
-`@~~…~~` excluded from scan. No watcher, no D-Bus, no real filesystem watching yet
-(scanning provided bytes is fine).
+`@~~…~~` excluded from scan; and a **non-ASCII-before-token** test — a note containing
+multi-byte UTF-8 (e.g. emoji / accented text) on lines above and on the same line
+before the token, asserting that slicing `[tokenByteFrom, tokenByteTo)` yields exactly
+the token bytes (no panic on a non-boundary slice, no off-by-bytes), that the byte span
+diverges from the character offset as expected, and that the `uiCaretHint` conversion
+is computed separately from the byte span. No watcher, no D-Bus, no real filesystem
+watching yet (scanning provided bytes is fine).
 
 **Risks:** identity must be offset-independent (see Reminder identity); the only
 residual ambiguity is multiple byte-identical tokens in one file, disambiguated by the
@@ -416,8 +447,10 @@ action semantics are version-sensitive.
    - **Collect live candidates by `normalizedTokenText`** in the target note (every
      live token whose normalized text equals the stored entry's `normalizedTokenText`).
    - **Prefer a unique `contextAnchor` match** among those candidates: if exactly one
-     candidate's containing-line anchor equals the stored `contextAnchor`, that is the
-     target span.
+     candidate's containing-line anchor equals the stored `contextAnchor`, its freshly
+     scanned **byte span** `[tokenByteFrom, tokenByteTo)` is the target span. The write
+     path operates exclusively on this byte span — never on character offsets or any
+     `uiCaretHint`.
    - **Use `occurrenceOrdinal` only as a tie-breaker, and only when `scanFingerprint`
      proves the file is unchanged** since the entry was scanned. If the file is
      unchanged, the stored ordinal still indexes the same occurrence and may break a
@@ -437,13 +470,18 @@ action semantics are version-sensitive.
      **byte mismatch** (rule 4 fails), **IO/read/write error**, or any other situation
      where the daemon cannot identify *exactly one* correct span with confidence →
      mark **`stale`**, write nothing.
-4. **Verify the bytes at the resolved span are exactly the expected token.** Before
-   editing, assert the slice `[from, to)` equals the normalized token text. If it does
-   not (drift/corruption/encoding surprise) → no write → `stale` (rule 3).
-5. **Byte-preserving, minimal edit.** Replace only `[from, to)` with the struck form,
-   leaving every other byte — including line endings, trailing whitespace, BOM, and
-   final-newline state — untouched. No reformatting, no re-serialization of the
-   document.
+4. **Verify the bytes at the resolved byte span are exactly the expected token.**
+   Before editing, assert the byte slice `[tokenByteFrom, tokenByteTo)` of the
+   on-disk file equals the normalized token text (ASCII bytes). This slice uses the
+   **byte span only** — never a character offset (in UTF-8, character offsets diverge
+   from byte indexes whenever non-ASCII text precedes the token, which would slice the
+   wrong bytes or panic on a non-boundary). If the slice does not equal the expected
+   token (drift/corruption/encoding surprise) → no write → `stale` (rule 3).
+5. **Byte-preserving, minimal edit.** Replace only the byte slice
+   `[tokenByteFrom, tokenByteTo)` with the struck form, leaving every other byte —
+   including all preceding/following multi-byte UTF-8, line endings, trailing
+   whitespace, BOM, and final-newline state — untouched. No reformatting, no
+   re-serialization of the document.
 6. **Atomic write.** Write to a temp file in the same directory and `rename` over the
    original, so a reader never sees a partial file and the app's watcher sees one clean
    external edit.
@@ -460,16 +498,55 @@ action semantics are version-sensitive.
    machinery (AGENTS.md *Vault disk sync invariants* + *Note body cache*), which must
    not clobber the user's draft.
 
+**IPC-unavailable contract (daemon not reachable — distinct from `stale`):**
+
+`RemoveReminder` is a D-Bus method call that can fail at the **transport** level —
+before the daemon ever evaluates the request — when the daemon is not running, the
+`dev.eskerra.Reminders1` service is not registered, the call times out, or the bus
+returns any other transport error. This is categorically different from a `stale`
+result and must be handled by the **app**, not the daemon:
+
+1. **The single-writer invariant still holds — no local fallback write, ever.** The app
+   must **never** strike the token itself when the daemon is unreachable. There is no
+   "write locally if IPC fails" path; that would reintroduce a second writer and defeat
+   the entire model.
+2. **Classify by origin, not just failure.** A transport-level failure (unreachable /
+   missing service / timeout / bus error) is surfaced as a **UI-level remove failure**
+   — call it `remove-unavailable` — on the app side only. It is **not** written into the
+   index as daemon `stale`. `stale` is reserved for "daemon received the request and
+   refused to write safely"; `remove-unavailable` means "the daemon could not be
+   reached at all". The index is owned by the daemon, so an unreachable daemon by
+   definition cannot have produced a `stale` entry for this attempt.
+3. **Keep the row, offer recovery.** The reminder row stays visible and active
+   (unchanged on disk, still firing per its schedule). The pane row shows a
+   `remove-unavailable` affordance with a **Retry** action (re-issues `RemoveReminder`)
+   and an **Open note** fallback for manual resolution. Nothing is silently dropped.
+4. **Best-effort daemon (re)start, never blocking the UI.** On a transport failure the
+   app *may* attempt to start/restart the daemon via its systemd `--user` service
+   (e.g. `systemctl --user start eskerra-reminderd`) if that is available, then retry
+   `RemoveReminder` after a short delay. This is strictly best-effort: it runs
+   off the UI thread, must not block or freeze the pane, and on continued failure the
+   row simply remains in `remove-unavailable` for the user to retry later.
+5. **Recovery is seamless.** Once the daemon is reachable again (manual retry, the
+   best-effort restart, or a later user action), a successful `RemoveReminder` proceeds
+   through the normal write-back rules and the row resolves (`removed`, or `stale` if
+   the daemon now refuses for a safety reason). No app restart required.
+
 **Deliverables:** removing a reminder (from OS notification or app pane) either reliably
-strikes the exact token on disk (surviving concurrent edits elsewhere in the file) or
-fails closed into a visible `stale` state — never a wrong-span or partial write.
+strikes the exact token on disk (surviving concurrent edits elsewhere in the file),
+fails closed into a visible daemon `stale` state (received but unsafe), or — when the
+daemon cannot be reached — leaves the row visible in a UI-level `remove-unavailable`
+state with retry/open-note recovery; in no case does the app perform a local write or
+strike a wrong/partial span.
 
 **Risks (highest data-loss surface in the whole plan):** clobbering concurrent edits;
 striking the wrong span after ordinal/offset drift among duplicate identical tokens;
-encoding/line-ending changes. Mitigation: re-scan at write time, resolve by `id` +
-`contextAnchor` (ordinal only authoritative when `scanFingerprint` matches),
-zero-match → `removed` vs. any ambiguity/mismatch/IO → `stale`, byte-preserving atomic
-edit; mandatory tests.
+slicing the wrong bytes when character offsets are used on non-ASCII text;
+encoding/line-ending changes. Mitigation: re-scan at write time, resolve by index
+lookup + `contextAnchor` (ordinal only authoritative when `scanFingerprint` matches),
+operate strictly on the token **byte span** `[tokenByteFrom, tokenByteTo)` (never
+character offsets), zero-match → `removed` vs. any ambiguity/mismatch/IO → `stale`,
+byte-preserving atomic edit; mandatory tests.
 
 **LLM advice:** **Claude Opus 4.8, thinking high — non-negotiable here.** This is the
 markdown-integrity / data-loss surface the repo guards most heavily
@@ -482,25 +559,30 @@ markdown-integrity review skill over the diff.
 **Scope:**
 - Add `tauri-plugin-single-instance` (or equivalent) to the app. Default-action click
   in the daemon spawns `eskerra --open-reminder <noteUri> <reminderId>`, with an
-  **optional** `--caret-hint <pos>`; if the app is already running, single-instance
+  **optional** `--ui-caret-hint <pos>`; if the app is already running, single-instance
   forwards argv to the live instance.
-- **Never trust a stale `caretPos` as the source of truth.** The caret position is
-  derived in-app at open time, not dictated by the daemon. The open command carries
-  `reminderId` (authoritative) plus an optional `caretHint` (the index's advisory
-  last-scan offset, used only as a starting guess). On open, the app:
+- **Never trust a stale position as the source of truth, and never use a byte span as a
+  CodeMirror position.** The open command carries `reminderId` (authoritative) plus an
+  optional `uiCaretHint` (an advisory UI position from the index's last scan, used only
+  as a scroll starting guess — never the daemon's byte span). A daemon/index **byte
+  span** (`tokenByteFrom`/`tokenByteTo`) is a UTF-8 file offset, not a CodeMirror
+  position, and must **never** be fed directly to the editor; the app derives the editor
+  position itself. On open, the app:
   1. opens the note and resolves the live token by the **same lookup-then-resolve rule
      as the writer** (Phase 4): look up the stored index entry by `reminderId`, then
      collect live candidates by its `normalizedTokenText`, prefer a unique
      `contextAnchor` match, and use `occurrenceOrdinal` only as a tie-break when
      `scanFingerprint` proves the file unchanged — **never** by recomputing `id` from
      current ordinals (so it survives edits since the last scan);
-  2. on a unique match, places the caret **immediately after that token** (reuse
-     `dateTokenAtPosition` to find the token end, consistent with the existing
-     date-token click routing in `dateTokenClick.ts` / `noteMarkdownPointerLinks.ts`)
-     and scrolls it into view;
+  2. on a unique match, computes the editor caret position from the resolved token in
+     the editor's own document model (converting from the token's location to the
+     CodeMirror position the editor expects — not reusing a raw byte span) and places
+     the caret **immediately after that token** (reuse `dateTokenAtPosition` to find the
+     token end, consistent with the existing date-token click routing in
+     `dateTokenClick.ts` / `noteMarkdownPointerLinks.ts`) and scrolls it into view;
   3. **Fallbacks when the token cannot be found safely** (zero match — already struck,
      edited, or removed; or ambiguous match): do **not** jump to a guessed/stale
-     offset. Open the note at top (or, if `caretHint` is present and still inside the
+     position. Open the note at top (or, if `uiCaretHint` is present and still inside the
      document bounds, scroll near it without asserting a caret-after-token), and do not
      fail the open. A `removed`/missing token simply opens the note; never throw or
      place the caret at a position that no longer corresponds to a token.
@@ -516,8 +598,9 @@ running.
 
 **Risks:** focus-stealing/raise behavior on GNOME/Wayland; race between boot hydration
 and the queued open command (reuse the existing deferred-restore pattern in
-`useInboxShellRestore`); never resolving caret from `caretHint` alone — it is only a
-scroll hint, the rescan is authoritative.
+`useInboxShellRestore`); never resolving caret from `uiCaretHint` alone — it is only a
+scroll hint, the rescan is authoritative; never feeding a daemon/index byte span to
+CodeMirror as a position.
 
 **LLM advice:** **Claude Sonnet 4.6, thinking medium** for the app-side navigation/caret
 (well-trodden editor code with existing helpers), escalate to **Opus 4.8 thinking
@@ -532,6 +615,18 @@ medium** for the cold-start ordering vs. the startup-performance invariant. Veri
   with a `reminder` source; preserve existing dismiss/clear/highlight behavior).
 - Click a reminder row → Phase 5 navigation (in-app path, no OS round-trip).
 - Delete a reminder row → `RemoveReminder` IPC (Phase 4), **not** a local write.
+- **Daemon-unavailable rendering (`remove-unavailable`):** the IPC call can fail at the
+  transport level when the daemon is down (Phase 4 *IPC-unavailable contract*). On such
+  a failure the app keeps the reminder row visible and renders an inline
+  `remove-unavailable` state — distinct in copy from daemon `stale` (e.g. "Couldn't
+  reach the reminder service" vs. `stale`'s "Couldn't remove safely — open the note").
+  The row exposes a **Retry** affordance (re-issues `RemoveReminder`) and an **Open
+  note** fallback. The optional best-effort daemon (re)start runs off the UI thread and
+  must not block the pane; while it is in flight the row may show a transient
+  "retrying…" hint but stays interactive. `remove-unavailable` is **app-local UI state
+  only** — it is never written to the daemon-owned index, and it clears automatically
+  once a retry succeeds. The single-writer invariant is preserved: no local strikethrough
+  is ever attempted on this path.
 - **Clear-all (locked decision):** "Clear all" clears **only transient session
   notifications** and never reminders. Removing a reminder mutates note content (the
   strikethrough write) and must be an explicit, per-row action via `RemoveReminder`.
@@ -548,8 +643,12 @@ in-app lifecycle (view, open, delete) working with the daemon as backend.
 
 **Risks:** mixing reminder rows with transient session rows (dedupe, ordering;
 clear-all semantics are locked above). Stale-closure / minute tick correctness (this
-repo has a dedicated `review-state-consistency` skill). `stale` reminder rows (failed
-removal, Phase 4) must render distinctly and link to the note for manual resolution.
+repo has a dedicated `review-state-consistency` skill). Three failure renderings must
+stay distinct: daemon `stale` (received-but-unsafe; index-backed; link to note),
+app-local `remove-unavailable` (daemon unreachable; retry + open-note; never index-backed
+and never a local write), and normal `removed` (disappears). Conflating
+`remove-unavailable` with `stale` would mislead the user about whether the daemon ever
+saw the request.
 
 **LLM advice:** **Claude Sonnet 4.6, thinking medium** for the pane rendering/wiring
 (matches existing `useSessionNotifications` patterns). Escalate the **dot/minute-tick
@@ -564,26 +663,41 @@ refs are exactly its failure mode.
   strikethrough → index drops it → pane updates → dot clears. Daemon-edits-open-note
   reconcile test. Missed/grace + overdue test. Vault-switch test.
 - Write-back fail-closed tests: token already struck/edited/gone before remove
-  (zero-match → `removed`, no write); byte mismatch at resolved span (no write,
-  `stale`); ambiguous duplicate match (no write, `stale`); **duplicate-identical-token
-  ordinal drift** — insert/delete an identical token above the target between scan and
-  remove so the ordinal shifts, assert resolution by `contextAnchor` and, when context
-  is also identical with a changed `duplicateCount`/`scanFingerprint`, fail-closed to
+  (zero-match → `removed`, no write); byte mismatch at resolved byte span (no write,
+  `stale`); ambiguous duplicate match (no write, `stale`); **non-ASCII-before-token
+  write** — strike a token in a note with multi-byte UTF-8 before it, asserting the
+  edit replaces exactly `[tokenByteFrom, tokenByteTo)` and leaves all surrounding bytes
+  intact (proving byte spans, not character offsets, drive the write);
+  **duplicate-identical-token ordinal drift** — insert/delete an identical token above
+  the target between scan and remove so the ordinal shifts, assert resolution by
+  `contextAnchor` and, when context is also identical with a changed
+  `duplicateCount`/`scanFingerprint`, fail-closed to
   `stale` rather than striking the wrong occurrence. Assert no wrong-span and no
   partial writes in every case.
 - Suspend/resume tests: a `fireAt` that elapses during a simulated suspend fires once
   on the `PrepareForSleep(false)` resume edge when still `< dueAt`; one whose `dueAt`
   elapsed becomes overdue/`due` with no stale popup; full re-arm from recomputed
   wall-clock times; fallback reconciliation tick when `login1` is unavailable.
+- Daemon-unavailable IPC tests: with the daemon down / service unregistered / call
+  timing out, `RemoveReminder` returns a transport error → the app performs **no local
+  write**, keeps the reminder row visible in `remove-unavailable` (distinct from
+  `stale`), and renders Retry + Open-note. Assert the on-disk note is byte-unchanged.
+  Then bring the daemon back and assert a retried `RemoveReminder` succeeds end-to-end
+  (token struck on disk, row resolves to `removed`). Assert the best-effort restart
+  attempt does not block the UI and that `remove-unavailable` is never written into the
+  index.
 - Click-to-open tests: token present → caret immediately after token; token
   struck/edited/removed → note opens gracefully with no stale/guessed caret jump;
-  `caretHint` used only as a scroll hint, never as caret source of truth; cold-start
-  resolves the token after hydration against current content.
+  `uiCaretHint` used only as a scroll hint, never as caret source of truth; a daemon
+  byte span is never used directly as a CodeMirror position (including a non-ASCII note
+  where the byte span and the editor position diverge); cold-start resolves the token
+  after hydration against current content.
 - Config/vault edge-case tests: no vault idle; missing vault path preserves index and
   does not fire; invalid `reminderd.json` keeps last-known-good; restart-before-app-ran
   rebuilds from disk; clear-all leaves reminder rows untouched.
 - Observability: scan duration, reminder counts, notification send success/fail,
-  D-Bus unavailability, watcher coarse-invalidation (mirror the app's Sentry
+  D-Bus unavailability, `RemoveReminder` transport-failure (`remove-unavailable`) rate
+  and best-effort-restart outcomes, watcher coarse-invalidation (mirror the app's Sentry
   discipline); add/extend an observability spec.
 - Docs: rewrite the "Future reminders (deferred)" section of
   `desktop-date-token.md` to point at this implemented feature; update AGENTS.md
@@ -620,6 +734,10 @@ integration + reconcile tests (the hard part is asserting the data-loss invarian
 
 ## Open items to confirm during Phase 0
 
+- **Resolved (locked in Phase 0):** the `RemoveReminder` daemon-unavailable / transport-error
+  contract — see the Phase 0 *Locked decision* and the Phase 4 *IPC-unavailable
+  contract*. App-side `remove-unavailable` with retry + open-note, best-effort daemon
+  restart, never a local write, never recorded as daemon `stale`.
 - Exact systemd packaging story in the existing RPM build (enable on install?
   user-service template path).
 - Whether the daemon should also own a tiny tray entry, or stay fully headless
