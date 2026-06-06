@@ -38,7 +38,7 @@ Implementation: [`dateTokenTrigger.ts`](../../apps/desktop/src/editor/noteEditor
 
 ## Picker UI
 
-Presentational React overlay: [`DateTimePicker.tsx`](../../apps/desktop/src/editor/noteEditor/dateToken/DateTimePicker.tsx).
+Presentational React overlay: [`dateToken/dateTimePicker/`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTimePicker/) (public import via [`DateTimePicker.tsx`](../../apps/desktop/src/editor/noteEditor/dateToken/DateTimePicker.tsx) re-export).
 
 - **Calendar:** month grid with previous/next month navigation; week rows start on **Monday** (Fedora/GNOME reference).
 - **Today:** prominent button sets the selected date to the current local calendar day.

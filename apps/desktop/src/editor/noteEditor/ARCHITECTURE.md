@@ -50,4 +50,5 @@ Spec: [`specs/architecture/desktop-date-token.md`](../../../../specs/architectur
 | [`dateToken/dateTokenHighlightCodemirror.ts`](dateToken/dateTokenHighlightCodemirror.ts) | ViewPlugin mark decoration (`cm-date-token`) |
 | [`dateToken/dateTokenTrigger.ts`](dateToken/dateTokenTrigger.ts) | `@` at word boundary → open picker |
 | [`dateToken/dateTokenClick.ts`](dateToken/dateTokenClick.ts) | Click chip → reopen picker pre-filled |
-| [`dateToken/DateTimePicker.tsx`](dateToken/DateTimePicker.tsx) | Calendar + time overlay UI (DS primitives) |
+| [`dateToken/DateTimePicker.tsx`](dateToken/DateTimePicker.tsx) | Public re-export of picker UI |
+| [`dateToken/dateTimePicker/`](dateToken/dateTimePicker/) | Calendar + time overlay: `calendar.ts`, `useDateTimePicker.ts`, presentational subcomponents |
