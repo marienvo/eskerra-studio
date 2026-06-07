@@ -19,11 +19,12 @@ use chrono::Utc;
 use eskerra_vault_watch::{VaultWatchEngine, WatchBatch};
 use notify::{Config as NotifyConfig, Event, RecommendedWatcher, RecursiveMode, Watcher};
 
-use crate::daemon::Daemon;
+use crate::daemon::{Daemon, RemoveTarget};
 use crate::notify::{Notifier, NullNotifier};
 use crate::paths::{config_dir, config_path, reminders_data_dir};
 use crate::scheduler::{Action, ActionOutcome};
 use crate::watch_control::EngineWatchControl;
+use crate::writeback::{RemoveResult, Remover};
 
 /// Periodic safety / wall-clock reconciliation tick. Bounds how long the loop
 /// ever sleeps even with a far-future (or no) armed fire, so a missed wake,
@@ -31,7 +32,7 @@ use crate::watch_control::EngineWatchControl;
 /// Also doubles as the unavailable-vault backoff re-check.
 const SAFETY_TICK: Duration = Duration::from_secs(30);
 
-enum DaemonEvent {
+pub(crate) enum DaemonEvent {
     ConfigChanged,
     Vault {
         coarse: bool,
@@ -46,6 +47,20 @@ enum DaemonEvent {
     },
     /// `PrepareForSleep(false)` wake edge — resume catch-up.
     Resume,
+    /// A write-back worker needs the data to strike reminder `id`, read from the
+    /// run-loop-owned index. `None` reply → no such reminder (already gone).
+    RemoveLookup {
+        id: String,
+        reply: Sender<Option<RemoveTarget>>,
+    },
+    /// A write-back worker finished; record the outcome in the index and `ack`
+    /// so the worker releases its per-note lock only after the index update
+    /// (write-back rule 0).
+    RemoveApply {
+        id: String,
+        result: RemoveResult,
+        reply: Sender<()>,
+    },
 }
 
 fn now_ms() -> i64 {
@@ -76,6 +91,15 @@ pub fn run() -> Result<(), String> {
     let notifier = build_notifier(tx.clone());
     spawn_suspend_listener(tx.clone());
 
+    // The single strikethrough writer, shared between the OS-notification
+    // `remove` action path and the `RemoveReminder` D-Bus service so both honor
+    // the same per-note write lock (single-writer, serialized per note).
+    let remover = Arc::new(Remover::new());
+    // D-Bus `dev.eskerra.Reminders1.RemoveReminder` server. Best-effort: if the
+    // session bus / name is unavailable it logs and the app pane will surface a
+    // transport-level `remove-unavailable` (ADR §8) — never a local write.
+    let _remove_service = crate::service::spawn_remove_service(Arc::clone(&remover), tx.clone());
+
     let mut daemon = Daemon::new(config_path.clone(), data_dir, watch, notifier);
 
     // Initial config load from disk (restart-before-app-ran reconstructs purely
@@ -105,11 +129,19 @@ pub fn run() -> Result<(), String> {
             }) => {
                 let outcome = daemon.on_action(&reminder_id, notification_id, action, now_ms());
                 eprintln!("[reminderd] action {action:?} on {reminder_id}: {outcome:?}");
-                handle_action_followup(&reminder_id, &outcome);
+                handle_action_followup(reminder_id, &outcome, &remover, &tx);
             }
             Ok(DaemonEvent::Resume) => {
                 let fired = daemon.on_resume(now_ms());
                 eprintln!("[reminderd] resume catch-up: fired {fired}");
+            }
+            Ok(DaemonEvent::RemoveLookup { id, reply }) => {
+                // Read-only index lookup for an off-loop write-back worker.
+                let _ = reply.send(daemon.remove_target(&id));
+            }
+            Ok(DaemonEvent::RemoveApply { id, result, reply }) => {
+                daemon.apply_remove_result(&id, result, now_ms());
+                let _ = reply.send(());
             }
             Err(RecvTimeoutError::Timeout) => {
                 let now = now_ms();
@@ -175,15 +207,24 @@ fn plan_timeout(next_wakeup_ms: Option<i64>, now_ms: i64) -> LoopTimeout {
     }
 }
 
-/// Phase 4 / Phase 5 hooks for `remove` (strikethrough write-back) and the
-/// default click (open the note in the app). Not yet wired — logged so the
-/// behavior is observable and the integration point is explicit.
-fn handle_action_followup(reminder_id: &str, outcome: &ActionOutcome) {
+/// Route an action's follow-up effect. `RemoveRequested` (Phase 4) runs the
+/// strikethrough write-back **off the run loop** so the loop never holds a
+/// per-note lock and removes to different notes run in parallel; `OpenRequested`
+/// is still a Phase 5 hook.
+fn handle_action_followup(
+    reminder_id: String,
+    outcome: &ActionOutcome,
+    remover: &Arc<Remover>,
+    tx: &Sender<DaemonEvent>,
+) {
     match outcome {
         ActionOutcome::RemoveRequested => {
-            eprintln!(
-                "[reminderd] remove requested for {reminder_id} (Phase 4 write-back not yet wired)"
-            );
+            let remover = Arc::clone(remover);
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                let result = perform_remove(&reminder_id, &remover, &tx);
+                eprintln!("[reminderd] remove (notification) {reminder_id}: {result:?}");
+            });
         }
         ActionOutcome::OpenRequested => {
             eprintln!(
@@ -192,6 +233,58 @@ fn handle_action_followup(reminder_id: &str, outcome: &ActionOutcome) {
         }
         _ => {}
     }
+}
+
+/// Run one `RemoveReminder` write-back off the run loop, shared by the
+/// OS-notification `remove` action and the D-Bus `RemoveReminder` method. Asks
+/// the loop for the target (index read), strikes the token under the shared
+/// per-note lock, and records the outcome back in the loop-owned index (under
+/// the lock, via the `record` closure — write-back rule 0). Returns the locked
+/// result (`Removed` | `Stale`); a lost run loop yields `Stale` (we never write
+/// blind).
+pub(crate) fn perform_remove(
+    id: &str,
+    remover: &Remover,
+    tx: &Sender<DaemonEvent>,
+) -> RemoveResult {
+    // 1. Resolve the target against the loop-owned index.
+    let (reply_tx, reply_rx) = mpsc::channel();
+    if tx
+        .send(DaemonEvent::RemoveLookup {
+            id: id.to_string(),
+            reply: reply_tx,
+        })
+        .is_err()
+    {
+        return RemoveResult::Stale; // run loop gone → never write blind
+    }
+    let target = match reply_rx.recv() {
+        Ok(Some(target)) => target,
+        Ok(None) => return RemoveResult::Removed, // no index entry → already gone
+        Err(_) => return RemoveResult::Stale,
+    };
+
+    // 2. Strike under the per-note lock; record the outcome in the index while
+    //    the lock is still held.
+    let apply_tx = tx.clone();
+    remover.remove(
+        &target.note_abs_path,
+        &target.lock_key,
+        &target.stored,
+        move |result| {
+            let (ack_tx, ack_rx) = mpsc::channel();
+            if apply_tx
+                .send(DaemonEvent::RemoveApply {
+                    id: id.to_string(),
+                    result,
+                    reply: ack_tx,
+                })
+                .is_ok()
+            {
+                let _ = ack_rx.recv();
+            }
+        },
+    )
 }
 
 /// Build the D-Bus notifier, falling back to a no-op (click-only) notifier when
@@ -337,7 +430,10 @@ mod tests {
         // merely because of the clamp.
         let plan = plan_timeout(Some(NOW + 5 * 60_000), NOW);
         assert_eq!(plan.kind, TimeoutKind::ScheduledWake);
-        assert_eq!(plan.duration, SAFETY_TICK, "sleep is capped at the safety tick");
+        assert_eq!(
+            plan.duration, SAFETY_TICK,
+            "sleep is capped at the safety tick"
+        );
     }
 
     #[test]

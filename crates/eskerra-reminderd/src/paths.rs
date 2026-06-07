@@ -9,11 +9,16 @@
 use std::path::PathBuf;
 
 fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from).filter(|p| !p.as_os_str().is_empty())
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
 }
 
 fn xdg_dir(env_var: &str, home_relative: &str) -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os(env_var).map(PathBuf::from).filter(|p| !p.as_os_str().is_empty()) {
+    if let Some(dir) = std::env::var_os(env_var)
+        .map(PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
+    {
         return Some(dir);
     }
     home_dir().map(|home| home.join(home_relative))
@@ -72,6 +77,9 @@ mod tests {
             Some(v) => std::env::set_var("XDG_DATA_HOME", v),
             None => std::env::remove_var("XDG_DATA_HOME"),
         }
-        assert_eq!(result, Some(PathBuf::from("/custom/data/eskerra/reminders")));
+        assert_eq!(
+            result,
+            Some(PathBuf::from("/custom/data/eskerra/reminders"))
+        );
     }
 }

@@ -154,19 +154,19 @@ mod tests {
 
     #[test]
     fn no_vault_when_root_present_but_hash_missing() {
-        let cfg = ReminderdConfig::from_json(
-            r#"{"schemaVersion":1,"vaultRoot":"/home/me/vault"}"#,
-        )
-        .unwrap();
-        assert!(!cfg.has_vault(), "a root without a hash cannot key an index");
+        let cfg = ReminderdConfig::from_json(r#"{"schemaVersion":1,"vaultRoot":"/home/me/vault"}"#)
+            .unwrap();
+        assert!(
+            !cfg.has_vault(),
+            "a root without a hash cannot key an index"
+        );
     }
 
     #[test]
     fn empty_strings_normalize_to_none() {
-        let cfg = ReminderdConfig::from_json(
-            r#"{"schemaVersion":1,"vaultRoot":"","vaultHash":""}"#,
-        )
-        .unwrap();
+        let cfg =
+            ReminderdConfig::from_json(r#"{"schemaVersion":1,"vaultRoot":"","vaultHash":""}"#)
+                .unwrap();
         assert_eq!(cfg.vault_root, None);
         assert_eq!(cfg.vault_hash, None);
         assert!(!cfg.has_vault());
@@ -191,15 +191,11 @@ mod tests {
     #[test]
     fn rejects_invalid_time_field() {
         assert!(matches!(
-            ReminderdConfig::from_json(
-                r#"{"schemaVersion":1,"dateOnlyDefaultTime":"25:99"}"#
-            ),
+            ReminderdConfig::from_json(r#"{"schemaVersion":1,"dateOnlyDefaultTime":"25:99"}"#),
             Err(ConfigError::InvalidField(_))
         ));
         assert!(matches!(
-            ReminderdConfig::from_json(
-                r#"{"schemaVersion":1,"dateOnlyDefaultTime":"nope"}"#
-            ),
+            ReminderdConfig::from_json(r#"{"schemaVersion":1,"dateOnlyDefaultTime":"nope"}"#),
             Err(ConfigError::InvalidField(_))
         ));
     }

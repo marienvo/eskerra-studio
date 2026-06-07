@@ -30,6 +30,6 @@ notify = "6"
 # tauri-plugin-opener) so this adds no new D-Bus stack version. We use the
 # blocking API, matching the daemon's thread-per-source model.
 zbus = "5"
-
-[dev-dependencies]
+# Note write-back uses temp files in the note directory and preserves Unix mode
+# before atomic replacement.
 tempfile = "3"

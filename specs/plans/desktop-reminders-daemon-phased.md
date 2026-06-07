@@ -1,6 +1,6 @@
 # Desktop reminders — phased plan (daemon-owned, Rust-level vault monitoring)
 
-Status: **Phases 0–3 complete** (2026-06-06). Phase 0 locked architecture, cargo
+Status: **Phases 0–4 complete** (2026-06-06). Phase 0 locked architecture, cargo
 layout, index/IPC schema, systemd/packaging sketch, observability fields, and the
 `RemoveReminder` failure contract in [ADR 003](../adrs/003-adr-reminder-daemon.md).
 Phase 1 shipped the pure `eskerra-reminder-core` (grammar, scanner, index, identity,
@@ -13,8 +13,14 @@ boundary table, double-fire-guarded), the `notify` layer (native GNOME
 `org.freedesktop.Notifications` via `zbus` with snooze/remove/click actions + an action
 listener), daemon scheduling integration (`on_tick`/`on_action`/`on_resume`, discovery
 arming, `next_wakeup_ms`), and the `login1` `PrepareForSleep` resume catch-up with a
-periodic reconciliation fallback (`remove`/click are Phase 4/5 hooks). Phases 4–7 not yet
-implemented. Supersedes the "Future reminders (deferred)"
+periodic reconciliation fallback (`remove`/click are Phase 4/5 hooks). Phase 4 shipped the
+sole-writer strikethrough write-back: the pure duplicate-safe resolver
+(`eskerra-reminder-core::resolve_live_token`, reused by Phase 5), the daemon `writeback`
+module (per-note write lock, byte-preserving minimal edit, atomic temp+rename, fail-closed
+`removed`/`stale`), the `dev.eskerra.Reminders1` `RemoveReminder` D-Bus service, and the
+off-loop worker wiring so the `remove` action and the IPC share one per-note lock and
+removes to different notes run in parallel. Phases 5–7 not yet implemented. Supersedes the
+"Future reminders (deferred)"
 section of [`specs/architecture/desktop-date-token.md`](../architecture/desktop-date-token.md)
 once shipped.
 
@@ -792,7 +798,56 @@ current `zbus` + `org.freedesktop.Notifications` API against docs** (use the mod
 web/doc access) rather than relying on memory, since the API surface and notification
 action semantics are version-sensitive.
 
-### Phase 4 — Strikethrough write-back (sole writer) + app→daemon IPC
+### Phase 4 — Strikethrough write-back (sole writer) + app→daemon IPC  ✅ DONE (2026-06-06)
+
+**Outcome:** Shipped the sole-writer strikethrough write-back end to end.
+- **Pure resolver** in the shared core: `eskerra-reminder-core::resolve_live_token`
+  (`Gone` / `Resolved{token_index}` / `Ambiguous`) implements write-back rules 1–3 —
+  collect live candidates by `normalizedTokenText`, prefer a **unique** `contextAnchor`
+  match, fall back to `occurrenceOrdinal` **only** when the recomputed `scanFingerprint`
+  proves the file byte-for-byte unchanged, else fail closed. It is deliberately reused by
+  Phase 5 click-to-open (ADR §2), so identity resolution is defined once.
+- **Daemon `writeback` module:** the `Remover` is the single strikethrough writer. It
+  acquires a **keyed per-note write lock** (rule 0, keyed by the canonical vault-relative
+  path) and holds it across re-read → re-scan → `resolve_live_token` → byte-span
+  verification (rule 4) → byte-preserving `splice` (rule 5: only the token slice changes;
+  all preceding/following multi-byte UTF-8, line endings, BOM, final newline preserved) →
+  atomic temp+rename (rule 6, via the core `write_atomic`) → index update (in the caller's
+  `record` closure, still under the lock). Zero-match / struck / edited-away / missing
+  file → `removed` (no write); ambiguity / byte mismatch / non-UTF-8 / IO error → `stale`
+  (no write). `RemoveResult::{Removed,Stale}` carries the locked `removed`/`stale` IPC
+  wire strings.
+- **`dev.eskerra.Reminders1` D-Bus service** (`service.rs`, `zbus` 5 blocking server):
+  `RemoveReminder(IN s noteUri, IN s id, OUT s result)`. `noteUri` is routing context
+  only — resolution is **by `id`** against the daemon-owned index, never by a
+  caller-supplied offset. Best-effort registration (falls back like the notifier; an
+  unreachable service is the app's `remove-unavailable`, never produced here).
+- **Run-loop wiring:** a single `Arc<Remover>` is shared between the OS-notification
+  `remove` action path and the D-Bus service. Both run the write-back **off the run loop**
+  in a worker (`perform_remove`), so the loop never holds a per-note lock and removes to
+  **different notes run in parallel**; the worker consults the loop only for a read-only
+  index lookup (`remove_target`) and to record the outcome (`apply_remove_result`,
+  dropping the reminder on `removed` / marking it `stale`). Same-note removes serialize on
+  the shared per-note lock, so the second re-reads the first's on-disk strikethrough.
+- **Tests (all green):** the mandatory **concurrent same-note no-lost-update** test (two
+  different tokens in one note, removed concurrently → both strikethroughs survive) and
+  **different-notes-in-parallel** test (barrier proves the per-note lock does not serialize
+  across notes), plus the resolver matrix (unique anchor migrate, identical-context
+  ambiguous vs. ordinal-when-unchanged, edited-line fail-closed, edit-elsewhere still
+  resolves), writer fail-closed cases (already-struck → `removed`, missing file →
+  `removed`, non-UTF-8 → `stale`, ambiguous duplicate → `stale`), the non-ASCII-before-token
+  byte-span strike, and the daemon integration (`remove_target`, `apply_remove_result`
+  removed/stale, end-to-end strike + drop + rescan-stays-gone).
+- **App-side IPC call + `remove-unavailable` UI are Phase 6**, not here: Phase 4 only
+  *exposes* the method; the app's *calling* it and the daemon-unreachable rendering land
+  with the pane work.
+- **Deviation carried forward:** the ADR §3 `fireSource` / `snoozedFireAtMs` schema fields
+  remain unimplemented (omitted since Phase 1; snooze overrides still persist via
+  `fireAtMs` + the `lastNotifiedMs` guard). The write-back resolves by
+  `contextAnchor`/`scanFingerprint`/`occurrenceOrdinal` and does **not** depend on those
+  fields, so this phase did not require them; reconciling the schema stays a separate,
+  explicitly-scoped cleanup rather than being silently bundled into the data-loss-critical
+  write path.
 
 **Scope:**
 - Strikethrough writer that converts the exact token span `@2026-11-27_2300` →

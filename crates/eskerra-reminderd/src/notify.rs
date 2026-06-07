@@ -476,7 +476,10 @@ mod tests {
     fn route_action_ignores_unknown_id_and_unknown_key() {
         let reg = NotificationRegistry::new();
         reg.register(7, "rem-1".to_string()).unwrap();
-        assert!(reg.route_action(99, ACTION_SNOOZE_3).is_none(), "unknown id");
+        assert!(
+            reg.route_action(99, ACTION_SNOOZE_3).is_none(),
+            "unknown id"
+        );
         assert!(reg.route_action(7, "bogus").is_none(), "unknown key");
     }
 }

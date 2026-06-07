@@ -125,7 +125,10 @@ pub fn discover(reminders: &mut [Reminder], now: i64) -> Vec<FireRequest> {
             // interval but it is still before due → fire the lead once.
             r.state = ReminderState::Notified;
             r.last_notified_ms = Some(r.fire_at_ms);
-            fires.push(FireRequest { reminder_id: r.id.clone(), kind: FireKind::Lead });
+            fires.push(FireRequest {
+                reminder_id: r.id.clone(),
+                kind: FireKind::Lead,
+            });
         } else {
             // now ≥ dueAt, first discovered overdue → in-app only, no popup.
             r.state = ReminderState::Due;
@@ -156,7 +159,10 @@ pub fn run_timers(reminders: &mut [Reminder], now: i64, grace: i64) -> Vec<FireR
             } else {
                 FireKind::Lead
             };
-            fires.push(FireRequest { reminder_id: r.id.clone(), kind });
+            fires.push(FireRequest {
+                reminder_id: r.id.clone(),
+                kind,
+            });
         } else {
             r.state = ReminderState::Due;
         }
@@ -217,7 +223,9 @@ fn apply_snooze(r: &mut Reminder, minutes: u32, now: i64) -> ActionOutcome {
             // Before due → schedule the at-time fire (fires later at dueAt).
             Less => {
                 reschedule(r, r.due_at_ms);
-                ActionOutcome::Rescheduled { fire_at_ms: r.due_at_ms }
+                ActionOutcome::Rescheduled {
+                    fire_at_ms: r.due_at_ms,
+                }
             }
             // Exactly at due → fire once now (NOT a no-op), guarded so a second
             // snooze-0 at the same instant cannot double-fire.
@@ -324,7 +332,10 @@ mod tests {
     fn discovery_overdue_marks_due_without_popup() {
         let mut rs = vec![reminder_at(DUE)];
         let fires = discover(&mut rs, DUE + 60_000);
-        assert!(fires.is_empty(), "overdue discovery must not pop a stale notification");
+        assert!(
+            fires.is_empty(),
+            "overdue discovery must not pop a stale notification"
+        );
         assert_eq!(rs[0].state, ReminderState::Due);
         assert_eq!(rs[0].last_notified_ms, None);
     }
@@ -399,7 +410,12 @@ mod tests {
         rs[0].last_notified_ms = Some(FIRE);
         let now = DUE - 4 * MS_PER_MINUTE; // before dueAt-3min
         let out = apply_action(&mut rs, &rid(), Action::Snooze { minutes: 3 }, now);
-        assert_eq!(out, ActionOutcome::Rescheduled { fire_at_ms: DUE - 3 * MS_PER_MINUTE });
+        assert_eq!(
+            out,
+            ActionOutcome::Rescheduled {
+                fire_at_ms: DUE - 3 * MS_PER_MINUTE
+            }
+        );
         assert_eq!(rs[0].state, ReminderState::Scheduled);
         assert_eq!(rs[0].fire_at_ms, DUE - 3 * MS_PER_MINUTE);
         // Exactly one armed fire scheduled.
@@ -414,7 +430,12 @@ mod tests {
         let mut rs = vec![reminder_at(DUE)];
         let now = DUE - 5 * MS_PER_MINUTE;
         let out = apply_action(&mut rs, &rid(), Action::Snooze { minutes: 1 }, now);
-        assert_eq!(out, ActionOutcome::Rescheduled { fire_at_ms: DUE - MS_PER_MINUTE });
+        assert_eq!(
+            out,
+            ActionOutcome::Rescheduled {
+                fire_at_ms: DUE - MS_PER_MINUTE
+            }
+        );
         assert_eq!(rs[0].fire_at_ms, DUE - MS_PER_MINUTE);
     }
 
@@ -519,8 +540,14 @@ mod tests {
     fn remove_and_open_are_routed_outcomes() {
         let mut rs = vec![reminder_at(DUE)];
         let id = rid();
-        assert_eq!(apply_action(&mut rs, &id, Action::Remove, DUE), ActionOutcome::RemoveRequested);
-        assert_eq!(apply_action(&mut rs, &id, Action::Open, DUE), ActionOutcome::OpenRequested);
+        assert_eq!(
+            apply_action(&mut rs, &id, Action::Remove, DUE),
+            ActionOutcome::RemoveRequested
+        );
+        assert_eq!(
+            apply_action(&mut rs, &id, Action::Open, DUE),
+            ActionOutcome::OpenRequested
+        );
     }
 
     #[test]
@@ -535,7 +562,12 @@ mod tests {
         let mut rs = vec![reminder_at(DUE)];
         rs[0].state = ReminderState::Stale;
         let before = rs[0].clone();
-        let out = apply_action(&mut rs, &rid(), Action::Snooze { minutes: 3 }, DUE - 10 * MS_PER_MINUTE);
+        let out = apply_action(
+            &mut rs,
+            &rid(),
+            Action::Snooze { minutes: 3 },
+            DUE - 10 * MS_PER_MINUTE,
+        );
         assert_eq!(out, ActionOutcome::ExpiredNoOp);
         assert_eq!(rs[0], before);
     }
