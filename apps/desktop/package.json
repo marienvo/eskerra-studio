@@ -2,7 +2,7 @@
   "name": "@eskerra/desktop",
   "private": true,
   "license": "AGPL-3.0-only",
-  "version": "0.66.0",
+  "version": "0.67.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
