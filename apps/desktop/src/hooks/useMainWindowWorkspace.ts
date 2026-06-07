@@ -145,6 +145,10 @@ export type UseMainWindowWorkspaceResult = {
   tabsController: WorkspaceTabsController;
   todayHubController: WorkspaceTodayHubController;
   frontmatterController: WorkspaceFrontmatterController;
+  openMarkdownInEditor: (
+    uri: string,
+    options?: OpenMarkdownInEditorOptions,
+  ) => Promise<void>;
   /** Test-only shadow model for the workspaceModel migration bridge. */
   workspaceShadowModelForTests?: WorkspaceModel;
   /**
@@ -1268,6 +1272,7 @@ export function useMainWindowWorkspace(options: {
       applyFrontmatterInnerChange,
       syncFrontmatterStateFromDisk,
     },
+    openMarkdownInEditor,
     workspaceShadowModelForTests:
       import.meta.env.MODE === 'test' ? workspaceShadowModel : undefined,
     ...(import.meta.env.MODE === 'test'

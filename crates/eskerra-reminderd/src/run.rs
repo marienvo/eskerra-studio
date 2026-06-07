@@ -210,7 +210,8 @@ fn plan_timeout(next_wakeup_ms: Option<i64>, now_ms: i64) -> LoopTimeout {
 /// Route an action's follow-up effect. `RemoveRequested` (Phase 4) runs the
 /// strikethrough write-back **off the run loop** so the loop never holds a
 /// per-note lock and removes to different notes run in parallel; `OpenRequested`
-/// is still a Phase 5 hook.
+/// (Phase 5) spawns `eskerra --open-reminder <noteUri> <reminderId>` so the app
+/// opens the note and places the caret after the live token.
 fn handle_action_followup(
     reminder_id: String,
     outcome: &ActionOutcome,
@@ -226,13 +227,30 @@ fn handle_action_followup(
                 eprintln!("[reminderd] remove (notification) {reminder_id}: {result:?}");
             });
         }
-        ActionOutcome::OpenRequested => {
-            eprintln!(
-                "[reminderd] open requested for {reminder_id} (Phase 5 app-open not yet wired)"
-            );
+        ActionOutcome::OpenRequested {
+            note_uri,
+            ui_caret_hint,
+        } => {
+            let mut cmd = std::process::Command::new("eskerra");
+            cmd.arg("--open-reminder").arg(note_uri).arg(&reminder_id);
+            if let Some(hint) = ui_caret_hint {
+                cmd.arg("--ui-caret-hint").arg(hint.to_string());
+            }
+            match spawn_and_reap_open_reminder(cmd) {
+                Ok(_) => eprintln!("[reminderd] spawned eskerra --open-reminder for {reminder_id}"),
+                Err(e) => eprintln!("[reminderd] failed to spawn eskerra for {reminder_id}: {e}"),
+            }
         }
         _ => {}
     }
+}
+
+fn spawn_and_reap_open_reminder(mut cmd: std::process::Command) -> std::io::Result<()> {
+    let mut child = cmd.spawn()?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 /// Run one `RemoveReminder` write-back off the run loop, shared by the

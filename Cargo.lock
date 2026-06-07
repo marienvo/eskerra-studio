@@ -55,9 +55,10 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "app"
-version = "0.64.0"
+version = "0.64.1"
 dependencies = [
  "base64 0.22.1",
+ "eskerra-reminder-core",
  "eskerra-vault-watch",
  "fs2",
  "gdk",
@@ -77,6 +78,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-prevent-default",
+ "tauri-plugin-single-instance",
  "tauri-plugin-store",
  "tauri-plugin-window-state",
  "tempfile",
@@ -1093,7 +1095,7 @@ checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
 
 [[package]]
 name = "eskerra-reminder-core"
-version = "0.64.0"
+version = "0.64.1"
 dependencies = [
  "chrono",
  "serde",
@@ -1104,7 +1106,7 @@ dependencies = [
 
 [[package]]
 name = "eskerra-reminderd"
-version = "0.64.0"
+version = "0.64.1"
 dependencies = [
  "chrono",
  "eskerra-reminder-core",
@@ -1119,7 +1121,7 @@ dependencies = [
 
 [[package]]
 name = "eskerra-vault-watch"
-version = "0.64.0"
+version = "0.64.1"
 dependencies = [
  "notify",
  "tempfile",
@@ -4539,6 +4541,21 @@ dependencies = [
  "strum",
  "tauri",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "tauri-plugin-single-instance"
+version = "2.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c8f29386f5e9fdc699182388a33ee80a56de436d91b67459e86afef426282af"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.18",
+ "tracing",
+ "windows-sys 0.60.2",
+ "zbus",
 ]
 
 [[package]]

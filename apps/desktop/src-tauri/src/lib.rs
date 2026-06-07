@@ -2,6 +2,7 @@ mod crash_log;
 mod link_rich_metadata;
 #[cfg(target_os = "linux")]
 mod linux_app_identity;
+mod open_reminder;
 mod r2_http;
 mod startup_theme;
 mod tiling;
@@ -15,6 +16,7 @@ mod vault_search;
 mod vault_search_index;
 mod vault_watch;
 
+use open_reminder::PendingOpenReminder;
 use vault::VaultRootState;
 use vault_frontmatter_index::VaultFrontmatterIndexState;
 use vault_search::VaultSearchSessionState;
@@ -57,11 +59,18 @@ pub fn early_linux_webkit_prerun() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Parse startup args before Tauri builder takes over argv.
+    let startup_args: Vec<String> = std::env::args().collect();
+    let startup_pending = open_reminder::parse_open_reminder_args(&startup_args);
+
     let mut builder = tauri::Builder::default()
         .manage(VaultRootState::default())
         .manage(VaultSearchSessionState::default())
         .manage(VaultSearchIndexState::default())
-        .manage(VaultFrontmatterIndexState::default());
+        .manage(VaultFrontmatterIndexState::default())
+        .manage(open_reminder::pending_open_reminder_from_startup(
+            startup_pending,
+        ));
 
     #[cfg(not(mobile))]
     {
@@ -69,6 +78,19 @@ pub fn run() {
     }
 
     builder
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            use tauri::{Emitter, Manager};
+            if let Some(req) = open_reminder::parse_open_reminder_args(&argv) {
+                let pending = app.state::<PendingOpenReminder>();
+                open_reminder::store_pending_open_reminder(&pending, req.clone());
+                let _ = app.emit("open-reminder", &req);
+            }
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -128,6 +150,9 @@ pub fn run() {
             vault_git_sync::commands::vault_git_stage_plan,
             vault_git_sync::commands::vault_git_sync_run,
             crash_log::eskerra_append_crash_log,
+            open_reminder::reminders_take_pending_open,
+            open_reminder::reminders_resolve_position_in_markdown,
+            open_reminder::reminders_resolve_position,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
