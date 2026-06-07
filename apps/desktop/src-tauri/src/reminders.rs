@@ -84,8 +84,47 @@ pub fn reminders_write_config(vault_root: String, vault_hash: String) -> bool {
         root_json = serde_json::to_string(&vault_root).unwrap_or_default(),
         hash_json = serde_json::to_string(&vault_hash).unwrap_or_default(),
     );
-    write_atomic(&config_path, json.as_bytes()).is_ok()
+    let written = write_atomic(&config_path, json.as_bytes()).is_ok();
+    if written {
+        ensure_daemon_running();
+    }
+    written
 }
+
+/// Best-effort recovery for the "installed but not running in this session"
+/// case: the RPM enables the user unit so it autostarts at every login (see
+/// linux/rpm-postinstall.sh), but root can't start it inside an already-running
+/// session, and AppImage/.deb ship no scriptlet at all. So whenever the app
+/// touches the vault we nudge the daemon up via `systemctl --user start`.
+/// Idempotent (starting a running unit is a no-op) and fire-and-forget on a
+/// detached thread — never blocks the command or surfaces an error: a missing
+/// systemctl or absent unit just leaves the reminder pane in its existing
+/// daemon-unavailable degradation.
+///
+/// The thread `spawn()`s systemctl and then `wait()`s on the child rather than
+/// dropping it: on Unix a dropped `Child` is never reaped, so the exited
+/// systemctl would linger as a zombie until the app exits, and since
+/// ensure_daemon_running runs on every vault open / settings write a normal
+/// session would accumulate them. We keep it off the caller thread (a hung
+/// systemd or unresponsive D-Bus session socket parks only this background
+/// thread, not the Tauri command) and wait there to reap the child.
+#[cfg(target_os = "linux")]
+fn ensure_daemon_running() {
+    std::thread::spawn(|| {
+        if let Ok(mut child) = std::process::Command::new("systemctl")
+            .args(["--user", "start", "eskerra-reminderd.service"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            let _ = child.wait();
+        }
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn ensure_daemon_running() {}
 
 /// Calls `dev.eskerra.Reminders1.RemoveReminder(noteUri, id)` on the session
 /// D-Bus. Returns the daemon's result string (`"removed"` or `"stale"`) on
