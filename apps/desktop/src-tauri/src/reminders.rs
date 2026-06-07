@@ -96,24 +96,31 @@ pub fn reminders_write_config(vault_root: String, vault_hash: String) -> bool {
 /// linux/rpm-postinstall.sh), but root can't start it inside an already-running
 /// session, and AppImage/.deb ship no scriptlet at all. So whenever the app
 /// touches the vault we nudge the daemon up via `systemctl --user start`.
-/// Idempotent (starting a running unit is a no-op) and fire-and-forget — never
-/// blocks the command or surfaces an error: a missing systemctl or absent unit
-/// just leaves the reminder pane in its existing daemon-unavailable degradation.
+/// Idempotent (starting a running unit is a no-op) and fire-and-forget on a
+/// detached thread — never blocks the command or surfaces an error: a missing
+/// systemctl or absent unit just leaves the reminder pane in its existing
+/// daemon-unavailable degradation.
 ///
-/// We `spawn()` and drop the child rather than `output()`: a hung systemd or
-/// unresponsive D-Bus session socket would otherwise park the calling thread
-/// until the child exits, and since we don't keep the handle the thread could
-/// never be cancelled — repeated vault opens would accumulate blocked threads
-/// for the lifetime of the process. Dropping the child matches the
-/// fire-and-forget intent.
+/// The thread `spawn()`s systemctl and then `wait()`s on the child rather than
+/// dropping it: on Unix a dropped `Child` is never reaped, so the exited
+/// systemctl would linger as a zombie until the app exits, and since
+/// ensure_daemon_running runs on every vault open / settings write a normal
+/// session would accumulate them. We keep it off the caller thread (a hung
+/// systemd or unresponsive D-Bus session socket parks only this background
+/// thread, not the Tauri command) and wait there to reap the child.
 #[cfg(target_os = "linux")]
 fn ensure_daemon_running() {
-    let _ = std::process::Command::new("systemctl")
-        .args(["--user", "start", "eskerra-reminderd.service"])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
+    std::thread::spawn(|| {
+        if let Ok(mut child) = std::process::Command::new("systemctl")
+            .args(["--user", "start", "eskerra-reminderd.service"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            let _ = child.wait();
+        }
+    });
 }
 
 #[cfg(not(target_os = "linux"))]
