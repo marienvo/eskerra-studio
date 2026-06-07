@@ -27,6 +27,13 @@ export type Reminder = {
   contextAnchor: string;
   duplicateCount: number;
   scanFingerprint: string;
+  /**
+   * The token's containing line cleaned for display: token text removed,
+   * leading list-marker / blockquote / heading prefix stripped, interior
+   * whitespace collapsed. Empty string (or absent on older index) when the
+   * line held only the token. Treat `undefined` as an empty string.
+   */
+  displayLine?: string;
 };
 
 /** Top-level index document — one per vault, keyed by `vaultHash`. */

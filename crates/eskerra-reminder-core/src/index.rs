@@ -79,6 +79,13 @@ pub struct Reminder {
     /// produced this entry. The **only** proof of "provably unchanged";
     /// `len`/`mtime` are optional pre-checks, never proof.
     pub scan_fingerprint: String,
+    /// The token's containing line cleaned for display: token text removed,
+    /// leading list-marker / blockquote / heading prefix stripped, interior
+    /// whitespace collapsed. Empty string when the line held only the token.
+    /// Scan-derived, never identity. `serde(default)` so older index files
+    /// without this field still parse (additive, no schema-version bump).
+    #[serde(default)]
+    pub display_line: String,
 }
 
 /// Top-level index document — one per vault (keyed by `vaultHash`), written
@@ -284,6 +291,7 @@ pub fn fresh_reminder_from_scan(
         context_anchor: token.context_anchor.clone(),
         duplicate_count: token.duplicate_count,
         scan_fingerprint: scan_fingerprint.to_string(),
+        display_line: token.display_line.clone(),
     })
 }
 
@@ -423,6 +431,8 @@ mod tests {
         assert_eq!(reminder.state, ReminderState::Scheduled);
         assert_eq!(reminder.due_at_ms - reminder.fire_at_ms, 5 * 60_000);
         assert_eq!(reminder.last_notified_ms, None);
+        // display_line: token removed from "meet @2026-06-06_0900 soon" → "meet soon"
+        assert_eq!(reminder.display_line, "meet soon");
     }
 
     #[test]
@@ -442,10 +452,42 @@ mod tests {
         let json = index.to_json_pretty().unwrap();
         assert!(json.contains("\"schemaVersion\": 1"));
         assert!(json.contains("\"normalizedTokenText\""));
+        assert!(json.contains("\"displayLine\""), "displayLine must be serialized");
 
         let parsed = ReminderIndex::from_json(&json).unwrap();
         assert_eq!(parsed, index);
         assert_eq!(parsed.reminders[0], reminder);
+    }
+
+    #[test]
+    fn index_without_display_line_parses_with_empty_default() {
+        // An older index written before displayLine was added must still parse
+        // successfully (schemaVersion stays 1; additive field only).
+        let json = r#"{
+            "schemaVersion": 1,
+            "vaultHash": "abc",
+            "vaultRelativeRootMarker": null,
+            "generatedAtMs": 0,
+            "reminders": [{
+                "id": "rid",
+                "noteUri": "file:///vault/a.md",
+                "vaultRelativePath": "a.md",
+                "normalizedTokenText": "@2026-06-06_0900",
+                "occurrenceOrdinal": 0,
+                "dueAtMs": 1000,
+                "fireAtMs": 700,
+                "state": "scheduled",
+                "lastNotifiedMs": null,
+                "tokenByteFrom": 0,
+                "tokenByteTo": 16,
+                "uiCaretHint": null,
+                "contextAnchor": "anchor",
+                "duplicateCount": 1,
+                "scanFingerprint": "fp"
+            }]
+        }"#;
+        let index = ReminderIndex::from_json(json).unwrap();
+        assert_eq!(index.reminders[0].display_line, "", "serde(default) yields empty string");
     }
 
     #[test]
