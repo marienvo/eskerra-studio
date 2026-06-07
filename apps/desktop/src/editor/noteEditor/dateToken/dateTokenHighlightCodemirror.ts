@@ -3,25 +3,56 @@ import {
   Decoration,
   EditorView,
   ViewPlugin,
+  WidgetType,
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
 
-import {DATE_TOKEN_PATTERN, parseDateToken} from './dateToken';
+import {computeMarkerFocusLineStarts} from '../markdownMarkerFocusLine';
+
+import {DATE_TOKEN_PATTERN, formatDateTokenPretty, parseDateToken} from './dateToken';
 
 import './dateTokenHighlight.css';
 
-/** Mark class for valid date tokens in the capture editor. */
+/** Mark class for date tokens shown raw on the focused line. */
 export const CM_DATE_TOKEN_CLASS = 'cm-date-token';
+
+/** Class for the pretty pill that replaces a token on non-focused lines. */
+export const CM_DATE_TOKEN_PILL_CLASS = 'cm-date-token-pill';
 
 const dateTokenMark = Decoration.mark({
   class: CM_DATE_TOKEN_CLASS,
   attributes: {'data-date-token': ''},
 });
 
+/** Pretty `🔔 <label>` pill rendered in place of the raw token text. */
+class DateTokenPillWidget extends WidgetType {
+  constructor(readonly label: string) {
+    super();
+  }
+
+  eq(other: DateTokenPillWidget): boolean {
+    return other.label === this.label;
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span');
+    span.className = CM_DATE_TOKEN_PILL_CLASS;
+    span.setAttribute('data-date-token', '');
+    span.textContent = `🔔 ${this.label}`;
+    return span;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
 function collectDateTokenRangesForLine(
   doc: EditorView['state']['doc'],
   lineNumber: number,
+  isFocusedLine: boolean,
+  now: Date,
 ): Range<Decoration>[] {
   const ranges: Range<Decoration>[] = [];
   const line = doc.line(lineNumber);
@@ -30,73 +61,46 @@ function collectDateTokenRangesForLine(
   let match = DATE_TOKEN_PATTERN.exec(text);
   while (match) {
     const token = match[1]!;
-    if (parseDateToken(token) !== null) {
-      const tokenStartInLine =
-        match.index + match[0].length - token.length;
+    const value = parseDateToken(token);
+    if (value !== null) {
+      const tokenStartInLine = match.index + match[0].length - token.length;
       const from = line.from + tokenStartInLine;
       const to = from + token.length;
-      ranges.push(dateTokenMark.range(from, to));
+      if (isFocusedLine) {
+        ranges.push(dateTokenMark.range(from, to));
+      } else {
+        const widget = new DateTokenPillWidget(formatDateTokenPretty(value, now));
+        ranges.push(Decoration.replace({widget}).range(from, to));
+      }
     }
     match = DATE_TOKEN_PATTERN.exec(text);
   }
   return ranges;
 }
 
-/** Scans one document line for valid date-token chip decorations. */
-export function buildDateTokenDecorationsForLine(
-  doc: EditorView['state']['doc'],
-  lineNumber: number,
-): Range<Decoration>[] {
-  return collectDateTokenRangesForLine(doc, lineNumber);
-}
-
-/** Scans a document line span for valid date-token chip decorations. */
-export function buildDateTokenDecorationsForLineRange(
-  doc: EditorView['state']['doc'],
-  from: number,
-  to: number,
-): Range<Decoration>[] {
-  const startLine = doc.lineAt(from).number;
-  const endLine = doc.lineAt(to).number;
+/**
+ * Builds date-token decorations: an editable monospace chip on the focused
+ * line, a pretty `🔔` pill everywhere else. Exported for tests.
+ */
+export function buildDateTokenDecorations(
+  view: EditorView,
+  now: Date = new Date(),
+): DecorationSet {
+  const {doc, selection} = view.state;
+  const focusLineStarts = view.hasFocus
+    ? new Set(computeMarkerFocusLineStarts(doc, selection))
+    : new Set<number>();
   const ranges: Range<Decoration>[] = [];
-  for (let lineNumber = startLine; lineNumber <= endLine; lineNumber++) {
-    ranges.push(...collectDateTokenRangesForLine(doc, lineNumber));
+  for (let lineNumber = 1; lineNumber <= doc.lines; lineNumber++) {
+    const isFocusedLine = focusLineStarts.has(doc.line(lineNumber).from);
+    ranges.push(
+      ...collectDateTokenRangesForLine(doc, lineNumber, isFocusedLine, now),
+    );
   }
-  return ranges;
-}
-
-/** Builds date-token chip decorations; exported for tests. */
-export function buildDateTokenDecorations(view: EditorView): DecorationSet {
-  const ranges = buildDateTokenDecorationsForLineRange(
-    view.state.doc,
-    0,
-    view.state.doc.length,
-  );
   return ranges.length ? Decoration.set(ranges, true) : Decoration.none;
 }
 
-/** Incrementally refreshes chip decorations after a document change. */
-export function updateDateTokenDecorationsForDocChange(
-  decorations: DecorationSet,
-  update: ViewUpdate,
-): DecorationSet {
-  let next = decorations.map(update.changes);
-  update.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
-    const doc = update.state.doc;
-    const lineFrom = doc.lineAt(fromB).from;
-    const lineTo = doc.lineAt(toB).to;
-    const fresh = buildDateTokenDecorationsForLineRange(doc, lineFrom, lineTo);
-    next = next.update({
-      filterFrom: lineFrom,
-      filterTo: lineTo,
-      filter: () => false,
-      add: fresh,
-    });
-  });
-  return next;
-}
-
-/** Highlights valid `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` tokens as editable chips. */
+/** Highlights valid `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` tokens as chips or pills. */
 export function dateTokenHighlightExtensions(): Extension {
   const plugin = ViewPlugin.fromClass(
     class {
@@ -107,11 +111,8 @@ export function dateTokenHighlightExtensions(): Extension {
       }
 
       update(update: ViewUpdate) {
-        if (update.docChanged) {
-          this.decorations = updateDateTokenDecorationsForDocChange(
-            this.decorations,
-            update,
-          );
+        if (update.docChanged || update.selectionSet || update.focusChanged) {
+          this.decorations = buildDateTokenDecorations(update.view);
         }
       }
     },

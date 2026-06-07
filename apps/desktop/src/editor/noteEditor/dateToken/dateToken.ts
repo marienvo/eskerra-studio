@@ -90,6 +90,22 @@ export function nowTimeParts(
   };
 }
 
+/**
+ * Current time rounded up to the next 5-minute boundary. Wraps past midnight
+ * back to 00:00 (the picker keeps the selected calendar date unchanged).
+ */
+export function roundTimeUpToFiveMinutes(
+  now: Date,
+): Pick<Required<DateTokenValue>, 'hour' | 'minute'> {
+  let hour = now.getHours();
+  let minute = Math.ceil(now.getMinutes() / 5) * 5;
+  if (minute >= 60) {
+    minute = 0;
+    hour = (hour + 1) % 24;
+  }
+  return {hour, minute};
+}
+
 export function formatDateToken(value: DateTokenValue): string {
   const date = `@${pad4(value.year)}-${pad2(value.month)}-${pad2(value.day)}`;
   if (value.hour === undefined || value.minute === undefined) {
@@ -127,4 +143,98 @@ export function parseDateToken(text: string): DateTokenValue | null {
   }
 
   return {year, month, day, hour, minute};
+}
+
+const PRETTY_WEEKDAYS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const;
+
+const PRETTY_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
+function localMidnight(date: {year: number; month: number; day: number}): Date {
+  return new Date(date.year, date.month - 1, date.day);
+}
+
+/** Whole days between two local midnights (target − base). */
+function dayDifference(target: Date, base: Date): number {
+  return Math.round((target.getTime() - base.getTime()) / 86_400_000);
+}
+
+/** Local midnight of the Monday starting the week `date` belongs to. */
+function mondayOfWeek(date: Date): Date {
+  const weekday = (date.getDay() + 6) % 7; // Mon = 0 … Sun = 6
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - weekday);
+}
+
+/** Whole Monday-based weeks between two dates (target − base). */
+function weekDifference(target: Date, base: Date): number {
+  const diffMs = mondayOfWeek(target).getTime() - mondayOfWeek(base).getTime();
+  return Math.round(diffMs / (7 * 86_400_000));
+}
+
+function prettyTimeSuffix(value: DateTokenValue): string {
+  if (value.hour === undefined || value.minute === undefined) {
+    return '';
+  }
+  return ` at ${pad2(value.hour)}:${pad2(value.minute)}`;
+}
+
+function prettyAbsoluteDate(value: DateTokenValue, now: Date): string {
+  const month = PRETTY_MONTHS[value.month - 1]!;
+  const yearSuffix = value.year === now.getFullYear() ? '' : ` ${value.year}`;
+  return `${value.day} ${month}${yearSuffix}`;
+}
+
+/**
+ * Friendly label for a date token, without the bell. Future dates within two
+ * weeks render relatively (Today / Tomorrow / weekday this week / "Next
+ * <Weekday>" the following week); everything else is an absolute `28 Dec`
+ * (with year when not the current one). Time, when present, is appended as
+ * `at HH:MM`.
+ */
+export function formatDateTokenPretty(value: DateTokenValue, now: Date): string {
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetMidnight = localMidnight(value);
+  const diffDays = dayDifference(targetMidnight, todayMidnight);
+  const time = prettyTimeSuffix(value);
+
+  let datePart: string;
+  if (diffDays === 0) {
+    datePart = 'Today';
+  } else if (diffDays === 1) {
+    datePart = 'Tomorrow';
+  } else if (diffDays >= 2 && diffDays <= 13) {
+    const weekDiff = weekDifference(targetMidnight, todayMidnight);
+    const weekday = PRETTY_WEEKDAYS[targetMidnight.getDay()]!;
+    if (weekDiff <= 0) {
+      datePart = weekday;
+    } else if (weekDiff === 1) {
+      datePart = `Next ${weekday}`;
+    } else {
+      datePart = prettyAbsoluteDate(value, now);
+    }
+  } else {
+    datePart = prettyAbsoluteDate(value, now);
+  }
+
+  return `${datePart}${time}`;
 }

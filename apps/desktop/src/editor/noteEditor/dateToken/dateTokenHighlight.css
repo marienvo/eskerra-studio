@@ -17,3 +17,31 @@
     var(--color-interactive-text) 30%
   );
 }
+
+.note-markdown-editor-host .cm-date-token-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  font-size: 0.92em;
+  background-color: color-mix(
+    in srgb,
+    var(--color-interactive-text) 12%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--color-interactive-text) 28%, transparent);
+  border-radius: 999px;
+  padding: 0.05em 0.55em;
+  color: var(--color-interactive-text);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.note-markdown-editor-host .cm-date-token-pill:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--color-interactive-text) 22%,
+    transparent
+  );
+}

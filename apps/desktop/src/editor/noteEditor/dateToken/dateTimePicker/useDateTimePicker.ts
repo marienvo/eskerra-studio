@@ -1,16 +1,8 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
 
-import {todayDateParts} from '../dateToken';
+import {roundTimeUpToFiveMinutes, todayDateParts} from '../dateToken';
 
 import {
-  addDays,
   buildCalendarGrid,
   buildDateTokenValue,
   clampHour,
@@ -23,7 +15,6 @@ import type {DatePickerDate, DateTimePickerProps} from './types';
 export function useDateTimePicker({
   initialValue,
   onConfirm,
-  onCancel,
   now,
 }: DateTimePickerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -43,10 +34,6 @@ export function useDateTimePicker({
     () => buildCalendarGrid(viewYear, viewMonth),
     [viewMonth, viewYear],
   );
-
-  useEffect(() => {
-    rootRef.current?.focus();
-  }, []);
 
   const commitValue = useCallback(
     (
@@ -80,15 +67,6 @@ export function useDateTimePicker({
     selectDate(today.year, today.month, today.day);
   }, [selectDate, stableNow]);
 
-  const shiftSelectedDay = useCallback((delta: number) => {
-    setSelected(current => {
-      const next = addDays(current.year, current.month, current.day, delta);
-      setViewYear(next.year);
-      setViewMonth(next.month);
-      return next;
-    });
-  }, []);
-
   const goToPreviousMonth = useCallback(() => {
     const prev = shiftMonth(viewYear, viewMonth, -1);
     setViewYear(prev.year);
@@ -101,51 +79,20 @@ export function useDateTimePicker({
     setViewMonth(next.month);
   }, [viewMonth, viewYear]);
 
-  const handleConfirm = useCallback(() => {
-    commitValue(selected);
-  }, [commitValue, selected]);
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onCancel();
-        return;
-      }
-
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        handleConfirm();
-        return;
-      }
-
-      if (event.target instanceof HTMLInputElement) {
-        return;
-      }
-
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        shiftSelectedDay(-1);
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        shiftSelectedDay(1);
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        shiftSelectedDay(-7);
-      } else if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        shiftSelectedDay(7);
-      }
-    },
-    [handleConfirm, onCancel, shiftSelectedDay],
-  );
-
   const setNoTimeWithCommit = useCallback(
     (value: boolean) => {
       setNoTime(value);
+      if (!value) {
+        // Enabling time: prefill the current time rounded up to the next 5 min.
+        const rounded = roundTimeUpToFiveMinutes(stableNow);
+        setHour(rounded.hour);
+        setMinute(rounded.minute);
+        commitValue(selected, {noTime: false, ...rounded});
+        return;
+      }
       commitValue(selected, {noTime: value});
     },
-    [commitValue, selected],
+    [commitValue, selected, stableNow],
   );
 
   const setHourClamped = useCallback(
@@ -182,6 +129,5 @@ export function useDateTimePicker({
     goToToday,
     goToPreviousMonth,
     goToNextMonth,
-    handleKeyDown,
   };
 }

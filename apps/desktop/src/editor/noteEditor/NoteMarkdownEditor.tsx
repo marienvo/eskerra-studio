@@ -372,6 +372,22 @@ const NoteMarkdownEditorImpl = forwardRef<
     };
   }, [dateTokenPicker]);
 
+  useEffect(() => {
+    if (!dateTokenPicker) {
+      return;
+    }
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setDateTokenPicker(null);
+      }
+    };
+    document.addEventListener('keydown', onDocumentKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', onDocumentKeyDown, true);
+    };
+  }, [dateTokenPicker]);
+
   useImperativeHandle(
     ref,
     () => createNoteMarkdownEditorHandle(shell, applyMarkdownLoadNow),

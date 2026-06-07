@@ -1,4 +1,4 @@
-import {DsButton, DsSurface} from '@eskerra/ds-desktop';
+import {DsSurface} from '@eskerra/ds-desktop';
 
 import {DateTimePickerDayGrid} from './DateTimePickerDayGrid';
 import {DateTimePickerHeader} from './DateTimePickerHeader';
@@ -27,17 +27,10 @@ export function DateTimePicker(props: DateTimePickerProps) {
     goToToday,
     goToPreviousMonth,
     goToNextMonth,
-    handleKeyDown,
   } = useDateTimePicker(props);
 
   return (
-    <div
-      ref={rootRef}
-      role="dialog"
-      aria-label="Pick date and time"
-      tabIndex={-1}
-      onKeyDown={handleKeyDown}
-    >
+    <div ref={rootRef} role="dialog" aria-label="Pick date and time" tabIndex={-1}>
       <DsSurface className={styles.root}>
         <DateTimePickerHeader
           viewYear={viewYear}
@@ -59,11 +52,6 @@ export function DateTimePicker(props: DateTimePickerProps) {
           onHourChange={setHour}
           onMinuteChange={setMinute}
         />
-        <div className={styles.actions}>
-          <DsButton type="button" variant="secondary" onClick={props.onCancel}>
-            Cancel
-          </DsButton>
-        </div>
       </DsSurface>
     </div>
   );
