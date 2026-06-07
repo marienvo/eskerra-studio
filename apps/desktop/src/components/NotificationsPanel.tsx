@@ -220,32 +220,76 @@ function ReminderRow({
       id={`desktop-notif-${row.id}`}
       className={reminderRowClass(row, nowMs)}
     >
-      <div className="notifications-panel__reminder-body">
-        {/* Clickable header: note name (+ folded time) and the reminder line */}
-        <button
-          type="button"
-          className="notifications-panel__reminder-header"
-          onClick={() => onOpen(row.noteUri, row.reminderId, row.uiCaretHint)}
-        >
-          <span className="notifications-panel__reminder-note">{headerText}</span>
-          {hasLine ? (
-            <span className="notifications-panel__reminder-line muted">
-              {`${row.displayLine} (${timeLabel})`}
-            </span>
-          ) : null}
-        </button>
+      <div className="notifications-panel__reminder-top">
+        <div className="notifications-panel__reminder-body">
+          {/* Clickable header: note name (+ folded time) and the reminder line */}
+          <button
+            type="button"
+            className="notifications-panel__reminder-header"
+            onClick={() => onOpen(row.noteUri, row.reminderId, row.uiCaretHint)}
+          >
+            <span className="notifications-panel__reminder-note">{headerText}</span>
+            {hasLine ? (
+              <span className="notifications-panel__reminder-line muted">
+                {`${row.displayLine} (${timeLabel})`}
+              </span>
+            ) : null}
+          </button>
 
-        {/* Status line */}
-        <ReminderStatusLine
-          row={row}
-          nowMs={nowMs}
-          onOpen={onOpen}
-        />
+          {/* Status line */}
+          <ReminderStatusLine
+            row={row}
+            nowMs={nowMs}
+            onOpen={onOpen}
+          />
+        </div>
+
+        {/* Remove / retry actions */}
+        <div className="notifications-panel__reminder-actions">
+          {isUnavailable ? (
+            <>
+              <button
+                type="button"
+                className="notifications-panel__reminder-action-btn small app-tooltip-trigger"
+                data-tooltip="Retry remove"
+                data-tooltip-placement="inline-start"
+                onClick={() => void onRemove(row.noteUri, row.reminderId)}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="notifications-panel__dismiss icon-btn-ghost app-tooltip-trigger"
+                aria-label="Open note"
+                data-tooltip="Open note"
+                data-tooltip-placement="inline-start"
+                onClick={() => onOpen(row.noteUri, row.reminderId, row.uiCaretHint)}
+              >
+                <MaterialIcon name="open_in_new" size={12} aria-hidden />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="notifications-panel__dismiss icon-btn-ghost app-tooltip-trigger"
+              aria-label={isRemoving ? 'Removing…' : 'Remove reminder'}
+              data-tooltip={isRemoving ? 'Removing…' : 'Remove'}
+              data-tooltip-placement="inline-start"
+              disabled={isRemoving || isStale}
+              onClick={() => void onRemove(row.noteUri, row.reminderId)}
+            >
+              {isRemoving ? (
+                <MaterialIcon name="hourglass_empty" size={12} aria-hidden />
+              ) : (
+                <MaterialIcon name="close" size={12} aria-hidden />
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="notifications-panel__reminder-actions">
-        {snoozeOptions.length > 0 ? (
+      {snoozeOptions.length > 0 ? (
+        <div className="notifications-panel__reminder-snooze">
           <SnoozeMenu
             options={snoozeOptions}
             onOpenChange={open => {
@@ -258,47 +302,8 @@ function ReminderRow({
               void onSnooze(row.noteUri, row.reminderId, minutes);
             }}
           />
-        ) : null}
-        {isUnavailable ? (
-          <>
-            <button
-              type="button"
-              className="notifications-panel__reminder-action-btn small app-tooltip-trigger"
-              data-tooltip="Retry remove"
-              data-tooltip-placement="inline-start"
-              onClick={() => void onRemove(row.noteUri, row.reminderId)}
-            >
-              Retry
-            </button>
-            <button
-              type="button"
-              className="notifications-panel__dismiss icon-btn-ghost app-tooltip-trigger"
-              aria-label="Open note"
-              data-tooltip="Open note"
-              data-tooltip-placement="inline-start"
-              onClick={() => onOpen(row.noteUri, row.reminderId, row.uiCaretHint)}
-            >
-              <MaterialIcon name="open_in_new" size={12} aria-hidden />
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="notifications-panel__dismiss icon-btn-ghost app-tooltip-trigger"
-            aria-label={isRemoving ? 'Removing…' : 'Remove reminder'}
-            data-tooltip={isRemoving ? 'Removing…' : 'Remove'}
-            data-tooltip-placement="inline-start"
-            disabled={isRemoving || isStale}
-            onClick={() => void onRemove(row.noteUri, row.reminderId)}
-          >
-            {isRemoving ? (
-              <MaterialIcon name="hourglass_empty" size={12} aria-hidden />
-            ) : (
-              <MaterialIcon name="close" size={12} aria-hidden />
-            )}
-          </button>
-        )}
-      </div>
+        </div>
+      ) : null}
     </li>
   );
 }

@@ -89,6 +89,24 @@ describe('NotificationsPanel reminder row', () => {
   it('hides the Snooze menu when the reminder is fully overdue (no live snoozes)', () => {
     renderPanel(row({dueAtMs: Date.now() - 60_000}));
     expect(screen.queryByRole('button', {name: 'Snooze reminder'})).toBeNull();
+    expect(document.querySelector('.notifications-panel__reminder-snooze')).toBeNull();
+  });
+
+  it('styles overdue reminder rows with muted blue-grey like past date pills', () => {
+    const {container} = render(
+      <NotificationsPanel
+        appSurface="capture"
+        items={[row({dueAtMs: Date.now() - 60_000})]}
+        highlightId={null}
+        onDismiss={vi.fn()}
+        onClearAll={vi.fn()}
+        onOpenReminder={vi.fn()}
+        onRemoveReminder={vi.fn().mockResolvedValue(undefined)}
+        onSnoozeReminder={vi.fn()}
+      />,
+    );
+    const reminderRow = container.querySelector('.notifications-panel__row--reminder-due');
+    expect(reminderRow).toBeTruthy();
   });
 
   it('hides the Snooze menu for a stale reminder', () => {
