@@ -16,6 +16,7 @@ pub mod config;
 pub mod daemon;
 pub mod index_store;
 pub mod notify;
+pub mod obs;
 pub mod paths;
 pub mod rederive;
 pub mod run;

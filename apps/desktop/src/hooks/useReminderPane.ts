@@ -18,6 +18,7 @@ import {listen} from '@tauri-apps/api/event';
 import {invoke, isTauri} from '@tauri-apps/api/core';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
+import {captureObservabilityMessage} from '../observability/captureObservabilityMessage';
 import {hasDueRemindersNow, parseReminderIndex, type Reminder} from '../lib/reminderIndex';
 import {
   reminderToPaneRow,
@@ -27,6 +28,23 @@ import {
 
 const POLL_INTERVAL_MS = 15_000;
 const MINUTE_TICK_MS = 60_000;
+
+/**
+ * Sentry signal for a `RemoveReminder` transport failure (daemon unreachable →
+ * app-side `remove-unavailable`). Counts the daemon-down rate without leaking
+ * PII (vault identity is the hash; the reminder id embeds a path, so it is
+ * intentionally not tagged). See specs/observability/desktop-reminderd.md.
+ */
+const REMOVE_UNAVAILABLE_EVENT = 'eskerra.desktop.reminder_remove_unavailable';
+
+function reportRemoveUnavailable(vaultHash: string | null): void {
+  captureObservabilityMessage({
+    message: REMOVE_UNAVAILABLE_EVENT,
+    level: 'warning',
+    fingerprint: [REMOVE_UNAVAILABLE_EVENT],
+    tags: {obs_surface: 'reminders', vault_root_hash: vaultHash ?? 'unknown'},
+  });
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -205,6 +223,7 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
           }
         } else {
           // 'remove-unavailable': daemon unreachable — keep row, show retry.
+          reportRemoveUnavailable(vaultHashRef.current);
           setRowStates(prev => {
             const next = new Map(prev);
             next.set(reminderId, 'remove-unavailable');
@@ -212,6 +231,7 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
           });
         }
       } catch {
+        reportRemoveUnavailable(vaultHashRef.current);
         setRowStates(prev => {
           const next = new Map(prev);
           next.set(reminderId, 'remove-unavailable');

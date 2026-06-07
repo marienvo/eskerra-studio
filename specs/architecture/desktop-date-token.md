@@ -99,13 +99,39 @@ Registered in [`buildNoteMarkdownEditorExtensions.ts`](../../apps/desktop/src/ed
 
 **Out of scope (current):** Eskerra table cell editors (`noteMarkdownCellEditor.ts`) do not register the trigger or highlight extensions.
 
-## Future reminders (deferred)
+## Reminders (shipped — see the daemon plan)
 
-Parsing helpers in `dateToken.ts` are intentionally reusable so a later **reminder index** or notification layer can consume the same grammar. This spec does **not** define:
+The reminder layer that this grammar feeds is **implemented**. A separate headless
+daemon (`eskerra-reminderd`, systemd `--user`) monitors all vault `.md` files for
+these tokens, owns scanning/scheduling/OS notifications and the strikethrough
+write-back, and writes a device-local reminder index that the desktop app reads
+and renders in the Notifications pane. The Rust grammar in
+`crates/eskerra-reminder-core` is a direct port of `dateToken.ts` (the canonical
+source of the on-disk token format remains this document + `dateToken.ts`).
 
-- Reminder persistence or metadata
-- Today Hub rows or hub canvas integration
-- Mobile rendering (Android has no vault editor)
-- Read-only / preview surfaces outside the capture editor (read-only capture mounts skip picker open and commit)
+Authoritative contracts now live in:
 
-When reminder behavior ships, extend or supersede this document with storage and UX contracts rather than changing the on-disk token format silently.
+- [`specs/plans/desktop-reminders-daemon-phased.md`](../plans/desktop-reminders-daemon-phased.md)
+  — architecture, reminder identity, index/IPC schema, merge/state-migration,
+  missed/grace + snooze semantics, and the phased build (Phases 0–7).
+- [`specs/adrs/003-adr-reminder-daemon.md`](../adrs/003-adr-reminder-daemon.md)
+  — the separate-daemon decision, cargo workspace layout, and the
+  `RemoveReminder` failure contract.
+- [`specs/observability/desktop-reminderd.md`](../observability/desktop-reminderd.md)
+  — daemon + app observability signals.
+
+What that layer adds on top of this grammar: reminder persistence/identity (path
++ normalized token text + occurrence ordinal, never byte offsets), date-only →
+`dueAt` resolution via a configurable default time, the Notifications-pane dot
+rule (due/overdue only; future reminders excluded), strikethrough removal
+(`@~~…~~`), and click-to-open with caret-after-token. The **on-disk token format
+is unchanged** — striking a token is the documented "no longer a reminder"
+mutation, and the grammar already excludes `@~~…~~`.
+
+Still out of scope here: Today Hub rows / hub canvas integration, mobile
+rendering (Android has no vault editor), and read-only / preview surfaces outside
+the capture editor (read-only capture mounts skip picker open and commit).
+
+Any change to the on-disk token format must update this document **and**
+`dateToken.ts` **and** the Rust `eskerra-reminder-core` grammar together — never
+silently.

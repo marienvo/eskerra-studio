@@ -219,6 +219,19 @@ Applies to: `apps/desktop/src-tauri/src/vault_watch.rs`, `apps/desktop/src/hooks
 - Keep Sentry alerting active for coarse invalidation burst rate per watch session; if telemetry tags/fingerprints change, update `specs/observability/desktop-vault-watch-coarse-alert.md` in the same change.
 - Do not remove or dilute existing reconcile safeguards without updating `specs/architecture/desktop-editor.md` and adding regression tests for selected-note reload/conflict behavior.
 
+## Desktop: Reminder daemon (single-writer + reconcile)
+
+Applies to: `crates/eskerra-reminder-core/`, `crates/eskerra-reminderd/`, `apps/desktop/src/hooks/useReminderPane.ts`, `apps/desktop/src/hooks/useOpenReminderNavigation*.ts`, `apps/desktop/src/lib/reminder*.ts`. Authoritative spec: `specs/plans/desktop-reminders-daemon-phased.md` + `specs/adrs/003-adr-reminder-daemon.md`.
+
+- **Single writer:** the daemon (`eskerra-reminderd`) is the **only** process that writes the `@~~…~~` strikethrough mutation. The app **never** writes it locally — deleting from the pane calls the `dev.eskerra.Reminders1.RemoveReminder(noteUri, id)` IPC. A daemon-unreachable transport error becomes app-local `remove-unavailable` (keep the row, Retry + Open-note) — **never** a local write and never recorded as daemon `stale`. Do not add a local-write fallback on any failure path.
+- **Daemon writes are external edits:** when the daemon strikes a token in a note open in the editor, it is by design indistinguishable from any other on-disk edit and must flow through the existing `vault-files-changed` → reconcile path. The writer does a byte-preserving read-modify-write (only the token span changes) so reconcile sees a minimal diff.
+- **Removal IPC never accepts byte ranges or UI positions** — only the stable `id` (+ `noteUri` for routing). The daemon re-resolves the byte span by re-scanning at write time; a stale offset can never drive a write.
+- **Offset-independent identity:** a reminder `id` is `hash(vaultRelativePath \0 normalizedTokenText \0 occurrenceOrdinal)` — never byte offsets. Duplicate identical tokens are matched by `contextAnchor` (ordinal only when the recomputed content hash equals `scanFingerprint`); ambiguity **fails safe** (merge → fresh reminders; write → `stale`). `len`+`mtime` is never proof of "unchanged".
+- **The daemon is the index's sole writer; the app treats it read-only.** Index lives in the XDG data dir (`~/.local/share/eskerra/reminders/<hash>.json`), **never** in the synced vault `.eskerra/`.
+- **Dot rule:** the notifications dot counts a reminder only once `now ≥ dueAt` (due/overdue) and it is not `stale`; purely future reminders are excluded. Re-evaluate on a minute tick + index change.
+- **Tests are mandatory in the same change** for any edit to the write-back path, scheduler/missed-grace/snooze math, the merge/state-migration rules, or the IPC failure contract (`cargo test` for Rust, Vitest for the app). These are data-loss-class surfaces.
+- **Observability on degradation:** the daemon emits structured stderr events (`obs::emit`) and the app emits `eskerra.desktop.reminder_remove_unavailable` via `captureObservabilityMessage`. If event names/tags change, update `specs/observability/desktop-reminderd.md` in the same change.
+
 ## Desktop: Editor interactive links
 
 Applies to: `apps/desktop/src/editor/noteEditor/**`, `apps/desktop/src/App.css`.
