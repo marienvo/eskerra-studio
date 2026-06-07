@@ -1060,8 +1060,8 @@ a:focus:not(:focus-visible) {
 
 /* Reminder rows */
 .notifications-panel__row--reminder {
-  flex-direction: column;
-  gap: 0.2rem;
+  flex-direction: row;
+  align-items: flex-start;
 }
 
 .notifications-panel__row--reminder-due {
@@ -1070,16 +1070,6 @@ a:focus:not(:focus-visible) {
 
 .notifications-panel__row--reminder-stale {
   opacity: 0.8;
-}
-
-.notifications-panel__reminder-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.notifications-panel__row--reminder {
-  flex-direction: row;
-  align-items: flex-start;
 }
 
 .notifications-panel__reminder-body {

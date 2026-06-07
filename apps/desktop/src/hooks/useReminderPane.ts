@@ -105,6 +105,7 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
   // index may be fresher after this event.
   useEffect(() => {
     if (!vaultRoot) return;
+    let cancelled = false;
     let unlisten: (() => void) | null = null;
     listen('vault-files-changed', () => {
       const hash = vaultHashRef.current;
@@ -113,10 +114,14 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
       }
     })
       .then(fn => {
-        unlisten = fn;
+        // If the effect already tore down (e.g. vault switch) before listen()
+        // resolved, unsubscribe immediately so no ghost listener survives.
+        if (cancelled) fn();
+        else unlisten = fn;
       })
       .catch(() => undefined);
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, [vaultRoot]);

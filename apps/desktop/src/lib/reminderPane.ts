@@ -89,6 +89,9 @@ export function reminderDueLabel(dueAtMs: number, nowMs: number): string {
   }
   const diffMs = dueAtMs - nowMs;
   const diffMin = Math.round(diffMs / 60_000);
+  if (diffMin < 1) {
+    return 'in < 1 min';
+  }
   if (diffMin < 60) {
     return `in ${diffMin} min`;
   }
