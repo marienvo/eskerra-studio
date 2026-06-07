@@ -61,6 +61,7 @@ type DateTokenPickerOverlayState = {
   readonly anchorRect: DateTokenPickerOverlayAnchor;
   readonly initialValue: DateTokenValue | null;
   readonly commit: (value: DateTokenValue) => void;
+  readonly returnFocus: () => void;
 };
 
 function fallbackDateTokenAnchorRect(view: EditorView): DateTokenPickerOverlayAnchor {
@@ -113,6 +114,9 @@ function buildDateTokenPickerOverlayState(
         scrollIntoView: true,
       });
       tokenEnd = from + replacement.length;
+    },
+    returnFocus: () => {
+      request.view.focus();
     },
   };
 }
@@ -477,6 +481,7 @@ const NoteMarkdownEditorImpl = forwardRef<
               <DateTimePicker
                 initialValue={dateTokenPicker.initialValue}
                 onConfirm={dateTokenPicker.commit}
+                onReturnFocus={dateTokenPicker.returnFocus}
                 onCancel={() => setDateTokenPicker(null)}
               />
             </div>,

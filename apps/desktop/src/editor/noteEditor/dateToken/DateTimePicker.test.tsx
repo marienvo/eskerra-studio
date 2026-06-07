@@ -168,6 +168,45 @@ describe('DateTimePicker', () => {
     });
   });
 
+  it('returns focus after Today, a calendar day, and toggling time', () => {
+    const onReturnFocus = vi.fn();
+    render(
+      <DateTimePicker
+        initialValue={{year: 2026, month: 6, day: 6}}
+        now={FIXED_NOW}
+        onConfirm={vi.fn()}
+        onReturnFocus={onReturnFocus}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', {name: 'Today'}));
+    fireEvent.click(screen.getByRole('gridcell', {name: '15 June 2026'}));
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onReturnFocus).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not return focus while editing the hour or minute fields', () => {
+    const onReturnFocus = vi.fn();
+    render(
+      <DateTimePicker
+        initialValue={{year: 2026, month: 6, day: 6, hour: 9, minute: 15}}
+        now={FIXED_NOW}
+        onConfirm={vi.fn()}
+        onReturnFocus={onReturnFocus}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('spinbutton', {name: 'Hour'}), {
+      target: {value: '23'},
+    });
+    fireEvent.change(screen.getByRole('spinbutton', {name: 'Minute'}), {
+      target: {value: '52'},
+    });
+    expect(onReturnFocus).not.toHaveBeenCalled();
+  });
+
   it('prefills the rounded-up current time when time is enabled', () => {
     const onConfirm = vi.fn();
     render(

@@ -15,6 +15,7 @@ import type {DatePickerDate, DateTimePickerProps} from './types';
 export function useDateTimePicker({
   initialValue,
   onConfirm,
+  onReturnFocus,
   now,
 }: DateTimePickerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -58,8 +59,9 @@ export function useDateTimePicker({
       setViewYear(year);
       setViewMonth(month);
       commitValue(next);
+      onReturnFocus?.();
     },
-    [commitValue],
+    [commitValue, onReturnFocus],
   );
 
   const goToToday = useCallback(() => {
@@ -88,11 +90,12 @@ export function useDateTimePicker({
         setHour(rounded.hour);
         setMinute(rounded.minute);
         commitValue(selected, {noTime: false, ...rounded});
-        return;
+      } else {
+        commitValue(selected, {noTime: value});
       }
-      commitValue(selected, {noTime: value});
+      onReturnFocus?.();
     },
-    [commitValue, selected, stableNow],
+    [commitValue, onReturnFocus, selected, stableNow],
   );
 
   const setHourClamped = useCallback(
