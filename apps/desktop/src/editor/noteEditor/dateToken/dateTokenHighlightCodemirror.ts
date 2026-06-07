@@ -96,6 +96,66 @@ function collectDateTokenRangesForLine(
   return ranges;
 }
 
+/** Line `from` offsets for lines that should show the raw editable chip. */
+export function computeDateTokenFocusLineStarts(view: EditorView): Set<number> {
+  if (!view.hasFocus) {
+    return new Set<number>();
+  }
+  return new Set(
+    computeMarkerFocusLineStarts(view.state.doc, view.state.selection),
+  );
+}
+
+function focusLineStartsEqual(
+  left: Set<number>,
+  right: Set<number>,
+): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const start of left) {
+    if (!right.has(start)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Scans one document line for date-token decorations. */
+export function buildDateTokenDecorationsForLine(
+  doc: EditorView['state']['doc'],
+  lineNumber: number,
+  focusLineStarts: Set<number>,
+  now: Date = new Date(),
+): Range<Decoration>[] {
+  const isFocusedLine = focusLineStarts.has(doc.line(lineNumber).from);
+  return collectDateTokenRangesForLine(doc, lineNumber, isFocusedLine, now);
+}
+
+/** Scans a document line span for date-token decorations. */
+export function buildDateTokenDecorationsForLineRange(
+  doc: EditorView['state']['doc'],
+  from: number,
+  to: number,
+  focusLineStarts: Set<number>,
+  now: Date = new Date(),
+): Range<Decoration>[] {
+  const startLine = doc.lineAt(from).number;
+  const endLine = doc.lineAt(to).number;
+  const ranges: Range<Decoration>[] = [];
+  for (let lineNumber = startLine; lineNumber <= endLine; lineNumber++) {
+    ranges.push(
+      ...buildDateTokenDecorationsForLine(
+        doc,
+        lineNumber,
+        focusLineStarts,
+        now,
+      ),
+    );
+  }
+  return ranges;
+}
+
 /**
  * Builds date-token decorations: an editable monospace chip on the focused
  * line, a pretty `🔔` pill everywhere else. Exported for tests.
@@ -104,18 +164,88 @@ export function buildDateTokenDecorations(
   view: EditorView,
   now: Date = new Date(),
 ): DecorationSet {
-  const {doc, selection} = view.state;
-  const focusLineStarts = view.hasFocus
-    ? new Set(computeMarkerFocusLineStarts(doc, selection))
-    : new Set<number>();
-  const ranges: Range<Decoration>[] = [];
-  for (let lineNumber = 1; lineNumber <= doc.lines; lineNumber++) {
-    const isFocusedLine = focusLineStarts.has(doc.line(lineNumber).from);
-    ranges.push(
-      ...collectDateTokenRangesForLine(doc, lineNumber, isFocusedLine, now),
-    );
-  }
+  const {doc} = view.state;
+  const focusLineStarts = computeDateTokenFocusLineStarts(view);
+  const ranges = buildDateTokenDecorationsForLineRange(
+    doc,
+    0,
+    doc.length,
+    focusLineStarts,
+    now,
+  );
   return ranges.length ? Decoration.set(ranges, true) : Decoration.none;
+}
+
+/** Incrementally refreshes chip/pill decorations after a document change. */
+export function updateDateTokenDecorationsForDocChange(
+  decorations: DecorationSet,
+  update: ViewUpdate,
+  focusLineStarts: Set<number>,
+  now: Date = new Date(),
+): DecorationSet {
+  let next = decorations.map(update.changes);
+  update.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+    const doc = update.state.doc;
+    const lineFrom = doc.lineAt(fromB).from;
+    const lineTo = doc.lineAt(toB).to;
+    const fresh = buildDateTokenDecorationsForLineRange(
+      doc,
+      lineFrom,
+      lineTo,
+      focusLineStarts,
+      now,
+    );
+    next = next.update({
+      filterFrom: lineFrom,
+      filterTo: lineTo,
+      filter: () => false,
+      add: fresh,
+    });
+  });
+  return next;
+}
+
+/** Refreshes chip/pill decorations on lines whose focus state changed. */
+export function updateDateTokenDecorationsForFocusChange(
+  decorations: DecorationSet,
+  view: EditorView,
+  previousFocusLineStarts: Set<number>,
+  nextFocusLineStarts: Set<number>,
+  now: Date = new Date(),
+): DecorationSet {
+  const affectedLineStarts = new Set<number>();
+  for (const start of previousFocusLineStarts) {
+    if (!nextFocusLineStarts.has(start)) {
+      affectedLineStarts.add(start);
+    }
+  }
+  for (const start of nextFocusLineStarts) {
+    if (!previousFocusLineStarts.has(start)) {
+      affectedLineStarts.add(start);
+    }
+  }
+  if (affectedLineStarts.size === 0) {
+    return decorations;
+  }
+
+  const {doc} = view.state;
+  let next = decorations;
+  for (const lineStart of affectedLineStarts) {
+    const line = doc.lineAt(lineStart);
+    const fresh = buildDateTokenDecorationsForLine(
+      doc,
+      line.number,
+      nextFocusLineStarts,
+      now,
+    );
+    next = next.update({
+      filterFrom: line.from,
+      filterTo: line.to,
+      filter: () => false,
+      add: fresh,
+    });
+  }
+  return next;
 }
 
 /** Highlights valid `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` tokens as chips or pills. */
@@ -123,14 +253,37 @@ export function dateTokenHighlightExtensions(): Extension {
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      focusLineStarts: Set<number>;
 
       constructor(view: EditorView) {
+        this.focusLineStarts = computeDateTokenFocusLineStarts(view);
         this.decorations = buildDateTokenDecorations(view);
       }
 
       update(update: ViewUpdate) {
-        if (update.docChanged || update.selectionSet || update.focusChanged) {
-          this.decorations = buildDateTokenDecorations(update.view);
+        const nextFocusLineStarts = computeDateTokenFocusLineStarts(update.view);
+
+        if (update.docChanged) {
+          this.decorations = updateDateTokenDecorationsForDocChange(
+            this.decorations,
+            update,
+            nextFocusLineStarts,
+          );
+          this.focusLineStarts = nextFocusLineStarts;
+          return;
+        }
+
+        if (
+          (update.selectionSet || update.focusChanged)
+          && !focusLineStartsEqual(this.focusLineStarts, nextFocusLineStarts)
+        ) {
+          this.decorations = updateDateTokenDecorationsForFocusChange(
+            this.decorations,
+            update.view,
+            this.focusLineStarts,
+            nextFocusLineStarts,
+          );
+          this.focusLineStarts = nextFocusLineStarts;
         }
       }
     },

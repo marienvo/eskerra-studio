@@ -293,6 +293,34 @@ describe('NoteMarkdownEditor', () => {
     expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
   });
 
+  it('dismisses the date token picker on Escape without collapsing editor selection', () => {
+    const {container} = render(
+      <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+
+    act(() => {
+      view.dispatch({selection: EditorSelection.range(0, 1)});
+    });
+
+    act(() => {
+      fireEvent.keyDown(document, {key: 'Escape', code: 'Escape'});
+    });
+
+    expect(
+      screen.queryByRole('dialog', {name: 'Pick date and time'}),
+    ).toBeNull();
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(1);
+  });
+
   it('dismisses the date token picker on outside pointerdown', () => {
     const {container} = render(
       <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,

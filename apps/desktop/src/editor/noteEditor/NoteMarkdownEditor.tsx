@@ -384,6 +384,7 @@ const NoteMarkdownEditorImpl = forwardRef<
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        event.stopPropagation();
         setDateTokenPicker(null);
       }
     };

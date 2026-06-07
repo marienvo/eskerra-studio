@@ -91,8 +91,9 @@ export function nowTimeParts(
 }
 
 /**
- * Current time rounded up to the next 5-minute boundary. Wraps past midnight
- * back to 00:00 (the picker keeps the selected calendar date unchanged).
+ * Current time rounded up to the nearest 5-minute boundary at or after the
+ * current time. Wraps past midnight back to 00:00 (the picker keeps the
+ * selected calendar date unchanged).
  */
 export function roundTimeUpToFiveMinutes(
   now: Date,
