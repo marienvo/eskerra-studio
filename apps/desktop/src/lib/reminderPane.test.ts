@@ -7,6 +7,7 @@ import {
   reminderTimeLabel,
   isLockedSnoozeMinutes,
   liveSnoozeOptions,
+  snoozeMenuOptions,
   reminderToPaneRow,
 } from './reminderPane';
 
@@ -172,5 +173,26 @@ describe('liveSnoozeOptions', () => {
   it('offers nothing once now is past dueAt', () => {
     expect(liveSnoozeOptions(due, due + 1)).toEqual([]);
     expect(liveSnoozeOptions(due, due + min)).toEqual([]);
+  });
+});
+
+describe('snoozeMenuOptions', () => {
+  const due = 1_000_000_000_000;
+  const min = 60_000;
+
+  it('offers nothing before the T-3 window opens', () => {
+    expect(snoozeMenuOptions(due, due - 4 * min)).toEqual([]);
+    expect(snoozeMenuOptions(due, due - 3 * min - 1)).toEqual([]);
+  });
+
+  it('offers live offsets from T-3 through dueAt', () => {
+    expect(snoozeMenuOptions(due, due - 3 * min)).toEqual([1, 0]);
+    expect(snoozeMenuOptions(due, due - 2 * min)).toEqual([1, 0]);
+    expect(snoozeMenuOptions(due, due - min)).toEqual([0]);
+    expect(snoozeMenuOptions(due, due)).toEqual([0]);
+  });
+
+  it('offers nothing once now is past dueAt', () => {
+    expect(snoozeMenuOptions(due, due + 1)).toEqual([]);
   });
 });

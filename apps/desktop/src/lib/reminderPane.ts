@@ -116,6 +116,9 @@ export function reminderTimeLabel(dueAtMs: number): string {
 export const SNOOZE_MINUTES = [3, 1, 0] as const;
 export type SnoozeMinutes = (typeof SNOOZE_MINUTES)[number];
 
+/** Lead time before `dueAt` when snooze first becomes actionable (T-3). */
+export const SNOOZE_MENU_LEAD_MS = 3 * 60_000;
+
 /** Whether `minutes` is in the locked snooze action set (daemon + D-Bus contract). */
 export function isLockedSnoozeMinutes(minutes: number): minutes is SnoozeMinutes {
   return (SNOOZE_MINUTES as readonly number[]).includes(minutes);
@@ -131,6 +134,18 @@ export function liveSnoozeOptions(dueAtMs: number, nowMs: number): SnoozeMinutes
   return SNOOZE_MINUTES.filter(minutes =>
     minutes === 0 ? nowMs <= dueAtMs : dueAtMs - minutes * 60_000 > nowMs,
   );
+}
+
+/**
+ * Snooze choices for the notifications pane menu. Empty while the reminder is
+ * still too far in the future (before the T-3 window), fully overdue, or every
+ * offset has expired.
+ */
+export function snoozeMenuOptions(dueAtMs: number, nowMs: number): SnoozeMinutes[] {
+  if (nowMs < dueAtMs - SNOOZE_MENU_LEAD_MS) {
+    return [];
+  }
+  return liveSnoozeOptions(dueAtMs, nowMs);
 }
 
 /** Human-readable due-time label for a reminder row. */

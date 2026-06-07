@@ -1,5 +1,7 @@
 import {DsText} from '@eskerra/ds-desktop';
 
+import {DATE_TOKEN_TIME_MINUTE_STEP} from '../dateToken';
+
 import styles from './DateTimePicker.module.css';
 
 type DateTimePickerTimeSectionProps = {
@@ -47,7 +49,8 @@ export function DateTimePickerTimeSection({
           className={styles.timeInput}
           type="number"
           min={0}
-          max={59}
+          max={55}
+          step={DATE_TOKEN_TIME_MINUTE_STEP}
           aria-label="Minute"
           disabled={noTime}
           value={minute}

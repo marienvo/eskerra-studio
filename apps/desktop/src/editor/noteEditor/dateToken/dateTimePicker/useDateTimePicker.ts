@@ -1,6 +1,6 @@
 import {useCallback, useMemo, useRef, useState} from 'react';
 
-import {roundTimeUpToFiveMinutes, todayDateParts} from '../dateToken';
+import {defaultDateTokenTimeFromNow, todayDateParts} from '../dateToken';
 
 import {
   buildCalendarGrid,
@@ -85,8 +85,8 @@ export function useDateTimePicker({
     (value: boolean) => {
       setNoTime(value);
       if (!value) {
-        // Enabling time: prefill the current time rounded up to the next 5 min.
-        const rounded = roundTimeUpToFiveMinutes(stableNow);
+        // Enabling time: prefill now + 15 min, snapped to the 5-minute grid.
+        const rounded = defaultDateTokenTimeFromNow(stableNow);
         setHour(rounded.hour);
         setMinute(rounded.minute);
         commitValue(selected, {noTime: false, ...rounded});

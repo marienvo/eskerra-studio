@@ -1,4 +1,10 @@
-import {daysInMonth, todayDateParts, type DateTokenValue} from '../dateToken';
+import {
+  daysInMonth,
+  snapMinuteFieldToFiveMinuteGrid,
+  snapTimeToFiveMinuteGrid,
+  todayDateParts,
+  type DateTokenValue,
+} from '../dateToken';
 
 import type {CalendarCell, DatePickerDate} from './types';
 
@@ -85,6 +91,9 @@ export function resolveInitialState(
   const selected = initialValue ?? todayDateParts(now);
   const hasTime =
     initialValue?.hour !== undefined && initialValue.minute !== undefined;
+  const time = hasTime
+    ? snapTimeToFiveMinuteGrid(initialValue!.hour!, initialValue!.minute!)
+    : {hour: 0, minute: 0};
   return {
     selected: {
       year: selected.year,
@@ -94,8 +103,8 @@ export function resolveInitialState(
     viewYear: selected.year,
     viewMonth: selected.month,
     noTime: !hasTime,
-    hour: initialValue?.hour ?? 0,
-    minute: initialValue?.minute ?? 0,
+    hour: time.hour,
+    minute: time.minute,
   };
 }
 
@@ -104,7 +113,7 @@ export function clampHour(value: number): number {
 }
 
 export function clampMinute(value: number): number {
-  return Math.min(59, Math.max(0, value));
+  return snapMinuteFieldToFiveMinuteGrid(value);
 }
 
 export function buildDateTokenValue(

@@ -137,7 +137,7 @@ describe('DateTimePicker', () => {
       month: 6,
       day: 6,
       hour: 23,
-      minute: 52,
+      minute: 50,
     });
   });
 
@@ -207,7 +207,7 @@ describe('DateTimePicker', () => {
     expect(onReturnFocus).not.toHaveBeenCalled();
   });
 
-  it('prefills the rounded-up current time when time is enabled', () => {
+  it('prefills now plus 15 minutes snapped to 5 when time is enabled', () => {
     const onConfirm = vi.fn();
     render(
       <DateTimePicker
@@ -226,7 +226,7 @@ describe('DateTimePicker', () => {
       month: 6,
       day: 6,
       hour: 14,
-      minute: 35,
+      minute: 45,
     });
 
     const hourInput = screen.getByRole('spinbutton', {
@@ -236,6 +236,6 @@ describe('DateTimePicker', () => {
       name: 'Minute',
     }) as HTMLInputElement;
     expect(hourInput.value).toBe('14');
-    expect(minuteInput.value).toBe('35');
+    expect(minuteInput.value).toBe('45');
   });
 });
