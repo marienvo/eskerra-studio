@@ -106,6 +106,89 @@ function protectHighlightsInLine(
   return {line: out, nextIndex: trailing.nextIndex};
 }
 
+/** Matches desktop date tokens; keep aligned with `DATE_TOKEN_PATTERN` in dateToken.ts. */
+const DATE_TOKEN_IN_PLAIN_TEXT = /(^|\s)(@\d{4}-\d{2}-\d{2}(?:_\d{4})?)/g;
+
+function protectDateTokensInPlainText(
+  text: string,
+  tokens: Map<string, string>,
+  startIndex: number,
+): {line: string; nextIndex: number} {
+  let index = startIndex;
+  const line = text.replace(
+    DATE_TOKEN_IN_PLAIN_TEXT,
+    (_m, leading: string, token: string) => {
+      const placeholder = `DATETOKENTOKEN${String(index++).padStart(8, '0')}END`;
+      tokens.set(placeholder, token);
+      return `${leading}${placeholder}`;
+    },
+  );
+  return {line, nextIndex: index};
+}
+
+function protectDateTokensInLine(
+  line: string,
+  tokens: Map<string, string>,
+  startIndex: number,
+): {line: string; nextIndex: number} {
+  const codeRanges = collectInlineCodeRanges(line);
+  if (codeRanges.length === 0) {
+    return protectDateTokensInPlainText(line, tokens, startIndex);
+  }
+
+  let index = startIndex;
+  let cursor = 0;
+  let out = '';
+  for (const range of codeRanges) {
+    const plain = protectDateTokensInPlainText(line.slice(cursor, range.from), tokens, index);
+    out += plain.line;
+    index = plain.nextIndex;
+    out += line.slice(range.from, range.to);
+    cursor = range.to;
+  }
+
+  const trailing = protectDateTokensInPlainText(line.slice(cursor), tokens, index);
+  out += trailing.line;
+  return {line: out, nextIndex: trailing.nextIndex};
+}
+
+export function protectDateTokens(text: string): {text: string; tokens: Map<string, string>} {
+  const tokens = new Map<string, string>();
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let inFence = false;
+  let fenceChar = '';
+  let fenceLen = 0;
+  let index = 0;
+
+  for (const line of lines) {
+    const fence = getFence(line);
+    if (fence && !inFence) {
+      inFence = true;
+      fenceChar = fence.char;
+      fenceLen = fence.len;
+      out.push(line);
+      continue;
+    }
+    if (fence && inFence && fence.char === fenceChar && fence.len >= fenceLen) {
+      inFence = false;
+      out.push(line);
+      continue;
+    }
+
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+
+    const {line: replaced, nextIndex} = protectDateTokensInLine(line, tokens, index);
+    index = nextIndex;
+    out.push(replaced);
+  }
+
+  return {text: out.join('\n'), tokens};
+}
+
 export function protectHighlights(text: string): {text: string; tokens: Map<string, string>} {
   const tokens = new Map<string, string>();
   const lines = text.split('\n');
@@ -216,5 +299,9 @@ export function restoreIssueNumberHashes(text: string, tokens: Map<string, strin
 }
 
 export function restoreBlockquoteAdmonitions(text: string, tokens: Map<string, string>): string {
+  return restoreTokenPlaceholders(text, tokens);
+}
+
+export function restoreDateTokens(text: string, tokens: Map<string, string>): string {
   return restoreTokenPlaceholders(text, tokens);
 }
