@@ -61,6 +61,7 @@ type DateTokenPickerOverlayState = {
   readonly anchorRect: DateTokenPickerOverlayAnchor;
   readonly initialValue: DateTokenValue | null;
   readonly commit: (value: DateTokenValue) => void;
+  readonly returnFocus: () => void;
 };
 
 function fallbackDateTokenAnchorRect(view: EditorView): DateTokenPickerOverlayAnchor {
@@ -113,6 +114,9 @@ function buildDateTokenPickerOverlayState(
         scrollIntoView: true,
       });
       tokenEnd = from + replacement.length;
+    },
+    returnFocus: () => {
+      request.view.focus();
     },
   };
 }
@@ -194,7 +198,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       todayHubPerfEnabled() && !showFoldGutter ? performance.now() : 0;
 
     const paste = pasteHandlersRef.current;
-    const {onEditorClick, onEditorMiddleClick} =
+    const {onEditorClick, onEditorMiddleClick, onEditorMouseUp} =
       createNoteMarkdownPointerLinkHandlers({
         onOpenDateTokenPicker: () => onOpenDateTokenPickerRef.current,
         onWikiLinkActivate: p => shell.onWikiLinkActivateRef.current(p),
@@ -241,6 +245,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       armMiddleClickPasteBlock: paste.armMiddleClickPasteBlock,
       onEditorMiddleClick,
       onEditorClick,
+      onEditorMouseUp,
     });
 
     shell.codemirrorBootExtensionsRef.current = extensions;
@@ -372,6 +377,23 @@ const NoteMarkdownEditorImpl = forwardRef<
     };
   }, [dateTokenPicker]);
 
+  useEffect(() => {
+    if (!dateTokenPicker) {
+      return;
+    }
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setDateTokenPicker(null);
+      }
+    };
+    document.addEventListener('keydown', onDocumentKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', onDocumentKeyDown, true);
+    };
+  }, [dateTokenPicker]);
+
   useImperativeHandle(
     ref,
     () => createNoteMarkdownEditorHandle(shell, applyMarkdownLoadNow),
@@ -461,6 +483,7 @@ const NoteMarkdownEditorImpl = forwardRef<
               <DateTimePicker
                 initialValue={dateTokenPicker.initialValue}
                 onConfirm={dateTokenPicker.commit}
+                onReturnFocus={dateTokenPicker.returnFocus}
                 onCancel={() => setDateTokenPicker(null)}
               />
             </div>,

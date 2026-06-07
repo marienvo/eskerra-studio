@@ -30,6 +30,12 @@ export type DateTimePickerProps = {
   readonly initialValue: DateTokenValue | null;
   readonly onConfirm: (value: DateTokenValue) => void;
   readonly onCancel: () => void;
+  /**
+   * Return focus to the editor (caret right after the tag) after a discrete
+   * pick — Today, a calendar day, or toggling time. Not fired while editing the
+   * hour/minute fields so those stay focused for typing.
+   */
+  readonly onReturnFocus?: () => void;
   /** Injectable clock for Today and defaults (tests use 2026-06-06). */
   readonly now?: Date;
 };

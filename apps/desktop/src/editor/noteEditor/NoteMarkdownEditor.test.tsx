@@ -1,5 +1,5 @@
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import type {Transaction} from '@codemirror/state';
+import {EditorSelection, type Transaction} from '@codemirror/state';
 import {createRef} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
@@ -264,6 +264,61 @@ describe('NoteMarkdownEditor', () => {
     expect(view.state.doc.toString()).toBe(expectedMarkdown);
     expect(onMarkdownChange).toHaveBeenLastCalledWith(expectedMarkdown);
     expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+  });
+
+  it('opens the date token picker on first pill click when the token line is not focused', () => {
+    const initialMarkdown = 'line one\nDue @2026-12-28 please';
+    const {container} = render(
+      <NoteMarkdownEditor {...baseProps({initialMarkdown})} />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+    const tokenFrom = initialMarkdown.indexOf('@2026-12-28');
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(tokenFrom);
+
+    act(() => {
+      view.dispatch({selection: EditorSelection.cursor(0)});
+      view.focus();
+    });
+
+    const pill = container.querySelector('.cm-date-token-pill');
+    if (!(pill instanceof HTMLElement)) {
+      throw new Error('Missing date token pill');
+    }
+
+    act(() => {
+      fireEvent.click(pill, {clientX: 100, clientY: 100, button: 0});
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+  });
+
+  it('dismisses the date token picker on Escape without collapsing editor selection', () => {
+    const {container} = render(
+      <NoteMarkdownEditor {...baseProps({initialMarkdown: ''})} />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+
+    act(() => {
+      expect(dispatchEditorInput(view, 0, '@')).toBe(true);
+    });
+
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+
+    act(() => {
+      view.dispatch({selection: EditorSelection.range(0, 1)});
+    });
+
+    act(() => {
+      fireEvent.keyDown(document, {key: 'Escape', code: 'Escape'});
+    });
+
+    expect(
+      screen.queryByRole('dialog', {name: 'Pick date and time'}),
+    ).toBeNull();
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(1);
   });
 
   it('dismisses the date token picker on outside pointerdown', () => {

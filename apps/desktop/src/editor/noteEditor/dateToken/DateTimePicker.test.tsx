@@ -168,18 +168,74 @@ describe('DateTimePicker', () => {
     });
   });
 
-  it('calls onCancel on Escape', () => {
-    const onCancel = vi.fn();
+  it('returns focus after Today, a calendar day, and toggling time', () => {
+    const onReturnFocus = vi.fn();
     render(
       <DateTimePicker
-        initialValue={null}
+        initialValue={{year: 2026, month: 6, day: 6}}
         now={FIXED_NOW}
         onConfirm={vi.fn()}
-        onCancel={onCancel}
+        onReturnFocus={onReturnFocus}
+        onCancel={vi.fn()}
       />,
     );
 
-    fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
-    expect(onCancel).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', {name: 'Today'}));
+    fireEvent.click(screen.getByRole('gridcell', {name: '15 June 2026'}));
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onReturnFocus).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not return focus while editing the hour or minute fields', () => {
+    const onReturnFocus = vi.fn();
+    render(
+      <DateTimePicker
+        initialValue={{year: 2026, month: 6, day: 6, hour: 9, minute: 15}}
+        now={FIXED_NOW}
+        onConfirm={vi.fn()}
+        onReturnFocus={onReturnFocus}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('spinbutton', {name: 'Hour'}), {
+      target: {value: '23'},
+    });
+    fireEvent.change(screen.getByRole('spinbutton', {name: 'Minute'}), {
+      target: {value: '52'},
+    });
+    expect(onReturnFocus).not.toHaveBeenCalled();
+  });
+
+  it('prefills the rounded-up current time when time is enabled', () => {
+    const onConfirm = vi.fn();
+    render(
+      <DateTimePicker
+        initialValue={{year: 2026, month: 6, day: 6}}
+        now={new Date(2026, 5, 6, 14, 31, 0, 0)}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    // Token has no time → "No time" starts checked. Unchecking enables time.
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    expect(onConfirm).toHaveBeenLastCalledWith({
+      year: 2026,
+      month: 6,
+      day: 6,
+      hour: 14,
+      minute: 35,
+    });
+
+    const hourInput = screen.getByRole('spinbutton', {
+      name: 'Hour',
+    }) as HTMLInputElement;
+    const minuteInput = screen.getByRole('spinbutton', {
+      name: 'Minute',
+    }) as HTMLInputElement;
+    expect(hourInput.value).toBe('14');
+    expect(minuteInput.value).toBe('35');
   });
 });

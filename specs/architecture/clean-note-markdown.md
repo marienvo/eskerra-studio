@@ -29,7 +29,7 @@ Cleaning is skipped when a **blocking disk conflict** applies to the open note (
 ## Behavior summary
 
 1. **Preprocess (line-based, fence-aware):** CRLF → LF, trim ends, heading/list/link/wiki-link spacing, optional hyphenated line-break join, inner space collapse.
-2. **Token protection:** `[[wikilinks]]`, `==highlights==`, issue-style `#123` / `\#123`, and blockquote admonition markers (`[!note]`, etc.) are tokenized so `remark` does not corrupt them.
+2. **Token protection:** `[[wikilinks]]`, `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` date tokens, `==highlights==`, issue-style `#123` / `\#123`, and blockquote admonition markers (`[!note]`, etc.) are tokenized so `remark` does not corrupt them.
 3. **Remark:** `remark-parse` + `remark-gfm` → AST tweaks (optional H1 from filename stem, optional heading depth cap, link trim, optional empty list item removal) → `remark-stringify` with configurable markers.
 4. **Restore tokens** → optional **emoji VS16** normalization (`emojiVariation.ts` + generated `emojiVariationBases.generated.ts`).
 5. **Postprocess:** list spacing, optional tab indent for nested lists, blank lines between list items, blank lines around blocks, collapse duplicate blanks.

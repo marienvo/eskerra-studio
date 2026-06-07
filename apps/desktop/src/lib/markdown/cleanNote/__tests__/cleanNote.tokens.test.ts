@@ -88,4 +88,21 @@ describe('cleanNoteMarkdownBody tokens', () => {
     expect(output).toContain('- ==inside fence==');
     expect(output).not.toContain('\\==inside fence==');
   });
+
+  it('preserves date tokens with optional time suffix', () => {
+    const input = [
+      '# T',
+      '',
+      'Due @2026-12-28_1200 tomorrow',
+      'Also @2026-06-06_0930',
+      'Date only @2026-12-28',
+    ].join('\n');
+    const once = clean(input, '/tmp/DateTokens.md');
+    const twice = clean(once, '/tmp/DateTokens.md');
+    expect(once).toContain('Due @2026-12-28_1200 tomorrow');
+    expect(once).toContain('Also @2026-06-06_0930');
+    expect(once).toContain('Date only @2026-12-28');
+    expect(once).not.toContain('\\_');
+    expect(twice).toBe(once);
+  });
 });

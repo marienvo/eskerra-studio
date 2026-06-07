@@ -6,10 +6,12 @@ import {preprocessMarkdown} from './preprocess';
 import {getMarkdownProcessor, resetMarkdownProcessorCache} from './processor';
 import {
   protectBlockquoteAdmonitions,
+  protectDateTokens,
   protectHighlights,
   protectIssueNumberHashes,
   protectWikiLinks,
   restoreBlockquoteAdmonitions,
+  restoreDateTokens,
   restoreHighlights,
   restoreIssueNumberHashes,
   restoreWikiLinks,
@@ -40,12 +42,14 @@ export function cleanNoteMarkdownBody(
     protectIssueNumberHashes(protectedInput);
   const {text: admonitionProtectedInput, tokens: admonitionTokens} =
     protectBlockquoteAdmonitions(issueProtectedInput);
+  const {text: remarkInput, tokens: dateTokens} =
+    protectDateTokens(admonitionProtectedInput);
   const fileStem = fileStemFromPath(filepath);
 
   const processor = getMarkdownProcessor(resolved);
   const file = processor.processSync({
     path: filepath,
-    value: admonitionProtectedInput,
+    value: remarkInput,
     data: {fileStem},
   });
 
@@ -55,7 +59,8 @@ export function cleanNoteMarkdownBody(
     : unhighlighted;
   const restoredWiki = restoreWikiLinks(afterEmoji, wikiTokens);
   const restoredIssues = restoreIssueNumberHashes(restoredWiki, issueTokens);
-  const restored = restoreBlockquoteAdmonitions(restoredIssues, admonitionTokens);
+  const restoredAdmonitions = restoreBlockquoteAdmonitions(restoredIssues, admonitionTokens);
+  const restored = restoreDateTokens(restoredAdmonitions, dateTokens);
   return postprocessMarkdown(restored, {preserveLeadingBlankLine}, resolved);
 }
 

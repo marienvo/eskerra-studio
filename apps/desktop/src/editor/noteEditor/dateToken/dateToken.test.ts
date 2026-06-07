@@ -4,12 +4,15 @@ import {
   DATE_TOKEN_PATTERN,
   DATE_TOKEN_PREFIX_PATTERN,
   formatDateToken,
+  formatDateTokenPretty,
   formatTodayDateToken,
+  isDateTokenInPast,
   isValidCalendarDate,
   nowTimeParts,
   pad2,
   pad4,
   parseDateToken,
+  roundTimeUpToFiveMinutes,
   todayDateParts,
   type DateTokenValue,
 } from './dateToken';
@@ -77,6 +80,119 @@ describe('todayDateParts and nowTimeParts', () => {
 
   test('formatTodayDateToken formats date-only token for today', () => {
     expect(formatTodayDateToken(fixedNow)).toBe('@2026-06-06');
+  });
+});
+
+describe('roundTimeUpToFiveMinutes', () => {
+  test('rounds up to the next 5-minute boundary', () => {
+    expect(roundTimeUpToFiveMinutes(new Date(2026, 5, 6, 23, 52))).toEqual({
+      hour: 23,
+      minute: 55,
+    });
+    expect(roundTimeUpToFiveMinutes(new Date(2026, 5, 6, 10, 1))).toEqual({
+      hour: 10,
+      minute: 5,
+    });
+  });
+
+  test('keeps an exact boundary unchanged', () => {
+    expect(roundTimeUpToFiveMinutes(new Date(2026, 5, 6, 10, 0))).toEqual({
+      hour: 10,
+      minute: 0,
+    });
+  });
+
+  test('wraps past midnight to 00:00', () => {
+    expect(roundTimeUpToFiveMinutes(new Date(2026, 5, 6, 23, 58))).toEqual({
+      hour: 0,
+      minute: 0,
+    });
+  });
+});
+
+describe('formatDateTokenPretty', () => {
+  // 2026-06-06 is a Saturday.
+  const now = new Date(2026, 5, 6, 12, 0);
+
+  test('today and tomorrow', () => {
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 6}, now)).toBe(
+      'Today',
+    );
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 7}, now)).toBe(
+      'Tomorrow',
+    );
+  });
+
+  test('this-week vs next-week weekday', () => {
+    // 2026-06-08 (Mon) starts the following Monday-based week.
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 8}, now)).toBe(
+      'Next Monday',
+    );
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
+      'Next Thursday',
+    );
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 14}, now)).toBe(
+      'Next Sunday',
+    );
+  });
+
+  test('beyond the relative window falls back to absolute', () => {
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 15}, now)).toBe(
+      '15 Jun',
+    );
+    expect(formatDateTokenPretty({year: 2026, month: 12, day: 28}, now)).toBe(
+      '28 Dec',
+    );
+  });
+
+  test('past dates are absolute', () => {
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 5}, now)).toBe(
+      '5 Jun',
+    );
+  });
+
+  test('absolute dates include the year when not the current one', () => {
+    expect(formatDateTokenPretty({year: 2027, month: 1, day: 15}, now)).toBe(
+      '15 Jan 2027',
+    );
+  });
+
+  test('appends the time when present, omits it otherwise', () => {
+    expect(
+      formatDateTokenPretty(
+        {year: 2026, month: 6, day: 6, hour: 9, minute: 5},
+        now,
+      ),
+    ).toBe('Today at 09:05');
+    expect(
+      formatDateTokenPretty(
+        {year: 2026, month: 6, day: 11, hour: 15, minute: 0},
+        now,
+      ),
+    ).toBe('Next Thursday at 15:00');
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
+      'Next Thursday',
+    );
+  });
+});
+
+describe('isDateTokenInPast', () => {
+  // 2026-06-06 14:30.
+  const now = new Date(2026, 5, 6, 14, 30);
+
+  test('timed tokens compare to the exact clock', () => {
+    expect(
+      isDateTokenInPast({year: 2026, month: 6, day: 6, hour: 14, minute: 29}, now),
+    ).toBe(true);
+    expect(
+      isDateTokenInPast({year: 2026, month: 6, day: 6, hour: 14, minute: 31}, now),
+    ).toBe(false);
+  });
+
+  test('date-only tokens are past only once the day is over', () => {
+    expect(isDateTokenInPast({year: 2026, month: 6, day: 5}, now)).toBe(true);
+    expect(isDateTokenInPast({year: 2026, month: 6, day: 6}, now)).toBe(false);
+    expect(isDateTokenInPast({year: 2026, month: 6, day: 7}, now)).toBe(false);
   });
 });
 
