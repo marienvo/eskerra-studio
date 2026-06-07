@@ -67,7 +67,10 @@ impl NoteLocks {
     /// `Arc<Mutex<()>>` is locked by the caller for the critical section; the
     /// brief outer `Mutex` only guards the map, never a file write.
     fn for_note(&self, key: &str) -> Arc<Mutex<()>> {
-        let mut map = self.locks.lock().unwrap_or_else(|poison| poison.into_inner());
+        let mut map = self
+            .locks
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         Arc::clone(
             map.entry(key.to_string())
                 .or_insert_with(|| Arc::new(Mutex::new(()))),
@@ -116,7 +119,9 @@ impl Remover {
         record: F,
     ) -> RemoveResult {
         let note_lock = self.locks.for_note(lock_key);
-        let _guard = note_lock.lock().unwrap_or_else(|poison| poison.into_inner());
+        let _guard = note_lock
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         if let Some(hook) = &self.on_locked {
             hook(lock_key);
         }
@@ -270,7 +275,11 @@ mod tests {
 
         let result = Remover::new().remove(&path, "Inbox/n.md", &stored, |_| {});
         assert_eq!(result, RemoveResult::Removed);
-        assert_eq!(std::fs::read(&path).unwrap(), before, "no write on zero-match");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            before,
+            "no write on zero-match"
+        );
     }
 
     #[test]
@@ -308,7 +317,11 @@ mod tests {
 
         let result = Remover::new().remove(&path, "Inbox/n.md", &stored, |_| {});
         assert_eq!(result, RemoveResult::Stale);
-        assert_eq!(std::fs::read(&path).unwrap(), before, "no write on ambiguity");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            before,
+            "no write on ambiguity"
+        );
     }
 
     #[test]

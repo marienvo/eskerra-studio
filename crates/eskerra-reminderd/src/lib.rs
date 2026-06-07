@@ -26,6 +26,6 @@ pub mod watch_control;
 pub mod writeback;
 
 pub use daemon::{Daemon, DaemonStateKind, Outcome, RemoveTarget, WatchControl};
-pub use notify::{Notifier, NotificationRequest, NullNotifier};
+pub use notify::{NotificationRequest, Notifier, NullNotifier};
 pub use scheduler::{Action, ActionOutcome};
 pub use writeback::{RemoveResult, Remover};

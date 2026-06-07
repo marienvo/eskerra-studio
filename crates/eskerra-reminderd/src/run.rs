@@ -38,9 +38,11 @@ pub(crate) enum DaemonEvent {
         coarse: bool,
         paths: Vec<String>,
     },
-    /// An OS-notification action fired (snooze / remove / open).
+    /// An OS-notification action fired (snooze / remove / open). Carries the
+    /// platform notification id so an at-time `FiredNow` can replace it in place.
     Action {
         reminder_id: String,
+        notification_id: u32,
         action: Action,
     },
     /// `PrepareForSleep(false)` wake edge — resume catch-up.
@@ -110,8 +112,8 @@ pub fn run() -> Result<(), String> {
     let _config_watcher = spawn_config_watcher(&config_path, tx.clone());
 
     loop {
-        let timeout = compute_timeout(&daemon);
-        match rx.recv_timeout(timeout) {
+        let plan = plan_timeout(daemon.next_wakeup_ms(), now_ms());
+        match rx.recv_timeout(plan.duration) {
             Ok(DaemonEvent::ConfigChanged) => {
                 let outcome = daemon.reload_config(now_ms());
                 eprintln!("[reminderd] config reload: {outcome:?}");
@@ -122,9 +124,10 @@ pub fn run() -> Result<(), String> {
             }
             Ok(DaemonEvent::Action {
                 reminder_id,
+                notification_id,
                 action,
             }) => {
-                let outcome = daemon.on_action(&reminder_id, action, now_ms());
+                let outcome = daemon.on_action(&reminder_id, notification_id, action, now_ms());
                 eprintln!("[reminderd] action {action:?} on {reminder_id}: {outcome:?}");
                 handle_action_followup(reminder_id, &outcome, &remover, &tx);
             }
@@ -147,10 +150,12 @@ pub fn run() -> Result<(), String> {
                 if fired > 0 {
                     eprintln!("[reminderd] scheduler tick: fired {fired}");
                 }
-                if timeout >= SAFETY_TICK {
+                if plan.kind == TimeoutKind::SafetyTick {
                     // Slow self-heal for missed config watcher events, config
                     // watcher startup failure, unavailable vaults, and failed
-                    // vault-watch rearming. Unchanged config returns NoChange.
+                    // vault-watch rearming. Only on a genuine safety tick — not
+                    // merely because a scheduled wake was clamped to the cap.
+                    // Unchanged config returns NoChange.
                     let outcome = daemon.reload_config(now);
                     eprintln!("[reminderd] retry tick: {outcome:?}");
                 }
@@ -161,15 +166,45 @@ pub fn run() -> Result<(), String> {
     Ok(())
 }
 
-/// How long to block in `recv_timeout`: until the next armed fire, capped by the
-/// periodic [`SAFETY_TICK`]. With nothing armed, just the safety tick.
-fn compute_timeout(daemon: &Daemon) -> Duration {
+/// Why the run loop woke from `recv_timeout`, so it can tell a real periodic
+/// reconciliation from a normal (possibly clamped) scheduled-fire sleep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TimeoutKind {
+    /// Nothing armed — the loop slept the full [`SAFETY_TICK`] as a periodic
+    /// safety / wall-clock reconciliation tick. The loop reloads config after it.
+    SafetyTick,
+    /// The loop slept until an armed fire. The sleep is capped at [`SAFETY_TICK`],
+    /// but that clamp does **not** make the wake a reconciliation tick, so config
+    /// is not reloaded merely because a far-future fire was clamped to the cap.
+    ScheduledWake,
+}
+
+/// How long to block in `recv_timeout`, and why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LoopTimeout {
+    duration: Duration,
+    kind: TimeoutKind,
+}
+
+/// Plan the next `recv_timeout`: sleep until the next armed fire (capped by the
+/// periodic [`SAFETY_TICK`]); with nothing armed, sleep the safety tick. The
+/// `kind` lets the loop reconcile config only on a genuine safety tick — not
+/// when a scheduled wake merely got clamped to the 30s cap.
+fn plan_timeout(next_wakeup_ms: Option<i64>, now_ms: i64) -> LoopTimeout {
     let safety_ms = SAFETY_TICK.as_millis() as i64;
-    let ms = match daemon.next_wakeup_ms() {
-        Some(at) => (at - now_ms()).clamp(0, safety_ms),
-        None => safety_ms,
-    };
-    Duration::from_millis(ms as u64)
+    match next_wakeup_ms {
+        None => LoopTimeout {
+            duration: Duration::from_millis(safety_ms as u64),
+            kind: TimeoutKind::SafetyTick,
+        },
+        Some(at) => {
+            let ms = (at - now_ms).clamp(0, safety_ms);
+            LoopTimeout {
+                duration: Duration::from_millis(ms as u64),
+                kind: TimeoutKind::ScheduledWake,
+            }
+        }
+    }
 }
 
 /// Route an action's follow-up effect. `RemoveRequested` (Phase 4) runs the
@@ -256,10 +291,11 @@ pub(crate) fn perform_remove(
 /// the session bus / notification service is unavailable (ADR 003 §6).
 #[cfg(target_os = "linux")]
 fn build_notifier(tx: Sender<DaemonEvent>) -> Box<dyn Notifier> {
-    let on_action = Box::new(move |reminder_id: String, action: Action| {
+    let on_action = Box::new(move |event: crate::notify::ActionEvent| {
         let _ = tx.send(DaemonEvent::Action {
-            reminder_id,
-            action,
+            reminder_id: event.reminder_id,
+            notification_id: event.notification_id,
+            action: event.action,
         });
     });
     match crate::notify::ZbusNotifier::new(on_action) {
@@ -364,4 +400,47 @@ fn spawn_config_watcher(config_path: &Path, tx: Sender<DaemonEvent>) -> Option<R
         return None;
     }
     Some(watcher)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const NOW: i64 = 1_700_000_000_000;
+
+    #[test]
+    fn no_armed_reminder_is_a_safety_tick_that_reloads_config() {
+        let plan = plan_timeout(None, NOW);
+        assert_eq!(plan.kind, TimeoutKind::SafetyTick);
+        assert_eq!(plan.duration, SAFETY_TICK);
+    }
+
+    #[test]
+    fn armed_within_cap_is_a_scheduled_wake_no_reload() {
+        // Fire 10s away (< 30s cap): sleep exactly 10s, wake to fire, no reload.
+        let plan = plan_timeout(Some(NOW + 10_000), NOW);
+        assert_eq!(plan.kind, TimeoutKind::ScheduledWake);
+        assert_eq!(plan.duration, Duration::from_millis(10_000));
+    }
+
+    #[test]
+    fn armed_beyond_cap_is_clamped_but_still_a_scheduled_wake() {
+        // Fire 5 min away: sleep is clamped to the 30s cap, but the wake is a
+        // scheduled wake — not a reconciliation tick — so config is not reloaded
+        // merely because of the clamp.
+        let plan = plan_timeout(Some(NOW + 5 * 60_000), NOW);
+        assert_eq!(plan.kind, TimeoutKind::ScheduledWake);
+        assert_eq!(
+            plan.duration, SAFETY_TICK,
+            "sleep is capped at the safety tick"
+        );
+    }
+
+    #[test]
+    fn overdue_armed_reminder_wakes_immediately_as_a_scheduled_wake() {
+        // Past its fire time but not yet fired → wake now (0ms), still scheduled.
+        let plan = plan_timeout(Some(NOW - 1_000), NOW);
+        assert_eq!(plan.kind, TimeoutKind::ScheduledWake);
+        assert_eq!(plan.duration, Duration::ZERO);
+    }
 }

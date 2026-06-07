@@ -44,7 +44,9 @@ mod imp {
                 Ok(tx) => tx.clone(),
                 Err(poison) => poison.into_inner().clone(),
             };
-            perform_remove(id, &self.remover, &tx).as_ipc_str().to_string()
+            perform_remove(id, &self.remover, &tx)
+                .as_ipc_str()
+                .to_string()
         }
     }
 
