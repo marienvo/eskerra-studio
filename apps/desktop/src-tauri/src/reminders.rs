@@ -110,19 +110,57 @@ pub async fn reminders_remove(_note_uri: String, _reminder_id: String) -> String
     "remove-unavailable".to_string()
 }
 
-// ── D-Bus helper (Linux only) ─────────────────────────────────────────────────
+/// Calls `dev.eskerra.Reminders1.SnoozeReminder(noteUri, id, minutes)` on the
+/// session D-Bus. Returns the daemon's result string (`"rescheduled"` |
+/// `"fired"` | `"expired"` | `"unknown"`) on success, or `"snooze-unavailable"`
+/// on any transport/registry error (daemon not running, call timed out, etc.).
+/// Like `reminders_remove`, never writes to disk itself.
+///
+/// Linux only. On other targets always returns `"snooze-unavailable"` so the TS
+/// side degrades gracefully without conditional imports.
+fn is_locked_snooze_minutes(minutes: u32) -> bool {
+    matches!(minutes, 3 | 1 | 0)
+}
 
 #[cfg(target_os = "linux")]
-const DBUS_REMOVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+#[tauri::command]
+pub async fn reminders_snooze(note_uri: String, reminder_id: String, minutes: u32) -> String {
+    if !is_locked_snooze_minutes(minutes) {
+        return "unknown".to_string();
+    }
+    match dbus_snooze_reminder(&note_uri, &reminder_id, minutes).await {
+        Ok(result) => result,
+        Err(_) => "snooze-unavailable".to_string(),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub async fn reminders_snooze(
+    _note_uri: String,
+    _reminder_id: String,
+    minutes: u32,
+) -> String {
+    if !is_locked_snooze_minutes(minutes) {
+        return "unknown".to_string();
+    }
+    "snooze-unavailable".to_string()
+}
+
+// ── D-Bus helper (Linux only) ─────────────────────────────────────────────────
+
+/// Bound on a single D-Bus round-trip to the reminders daemon, shared by the
+/// remove and snooze calls so neither button hangs on its spinner for zbus's
+/// ~25s default reply timeout when the daemon is hung (not crashed).
+#[cfg(target_os = "linux")]
+const DBUS_CALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[cfg(target_os = "linux")]
 async fn dbus_remove_reminder(note_uri: &str, reminder_id: &str) -> zbus::Result<String> {
     let conn = zbus::Connection::session().await?;
-    // Bound the call so a hung (not crashed) daemon doesn't hold the remove
-    // button in its "Removing…" spinner for zbus's ~25s default reply timeout;
-    // on timeout the caller surfaces "remove-unavailable" and offers Retry.
+    // On timeout the caller surfaces "remove-unavailable" and offers Retry.
     let reply = tokio::time::timeout(
-        DBUS_REMOVE_TIMEOUT,
+        DBUS_CALL_TIMEOUT,
         conn.call_method(
             Some("dev.eskerra.Reminders1"),
             "/dev/eskerra/Reminders1",
@@ -133,6 +171,29 @@ async fn dbus_remove_reminder(note_uri: &str, reminder_id: &str) -> zbus::Result
     )
     .await
     .map_err(|_| zbus::Error::Failure("RemoveReminder D-Bus call timed out".to_string()))??;
+    let result: String = reply.body().deserialize()?;
+    Ok(result)
+}
+
+#[cfg(target_os = "linux")]
+async fn dbus_snooze_reminder(
+    note_uri: &str,
+    reminder_id: &str,
+    minutes: u32,
+) -> zbus::Result<String> {
+    let conn = zbus::Connection::session().await?;
+    let reply = tokio::time::timeout(
+        DBUS_CALL_TIMEOUT,
+        conn.call_method(
+            Some("dev.eskerra.Reminders1"),
+            "/dev/eskerra/Reminders1",
+            Some("dev.eskerra.Reminders1"),
+            "SnoozeReminder",
+            &(note_uri, reminder_id, minutes),
+        ),
+    )
+    .await
+    .map_err(|_| zbus::Error::Failure("SnoozeReminder D-Bus call timed out".to_string()))??;
     let result: String = reply.body().deserialize()?;
     Ok(result)
 }

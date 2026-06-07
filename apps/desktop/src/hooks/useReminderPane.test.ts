@@ -70,6 +70,7 @@ function indexJson(reminders: Reminder[]): string {
 function mockInvoke(opts: {
   index: Reminder[];
   remove?: string | (() => never);
+  snooze?: string | (() => never);
 }): void {
   tauriTest.state.invoke.mockImplementation((cmd: string) => {
     switch (cmd) {
@@ -82,6 +83,9 @@ function mockInvoke(opts: {
       case 'reminders_remove':
         if (typeof opts.remove === 'function') return Promise.reject(new Error('transport down'));
         return Promise.resolve(opts.remove ?? 'removed');
+      case 'reminders_snooze':
+        if (typeof opts.snooze === 'function') return Promise.reject(new Error('transport down'));
+        return Promise.resolve(opts.snooze ?? 'rescheduled');
       default:
         return Promise.resolve(null);
     }
@@ -166,5 +170,75 @@ describe('useReminderPane.removeReminder', () => {
       await result.current.removeReminder('file:///vault/a.md', 'rem-1');
     });
     expect(result.current.rows).toHaveLength(0);
+  });
+});
+
+describe('useReminderPane.snoozeReminder', () => {
+  beforeEach(() => {
+    tauriTest.reset();
+  });
+
+  it('invokes reminders_snooze with the right minutes and re-reads the index on success', async () => {
+    mockInvoke({index: [reminder()], snooze: 'rescheduled'});
+    const {result} = renderHook(() => useReminderPane('/vault'));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+
+    tauriTest.state.invoke.mockClear();
+    await act(async () => {
+      await result.current.snoozeReminder('file:///vault/a.md', 'rem-1', 3);
+    });
+
+    expect(tauriTest.state.invoke).toHaveBeenCalledWith('reminders_snooze', {
+      noteUri: 'file:///vault/a.md',
+      reminderId: 'rem-1',
+      minutes: 3,
+    });
+    // A re-read of the index follows the snooze so the row reflects the new
+    // schedule immediately.
+    expect(tauriTest.state.invoke).toHaveBeenCalledWith('reminders_read_index', {vaultHash: 'vh1'});
+    expect(result.current.rows).toHaveLength(1);
+  });
+
+  it('does not mutate the note and keeps the row interactive on snooze-unavailable', async () => {
+    mockInvoke({
+      index: [reminder()],
+      snooze: () => {
+        throw new Error('transport down');
+      },
+    });
+    const {result} = renderHook(() => useReminderPane('/vault'));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.snoozeReminder('file:///vault/a.md', 'rem-1', 1);
+    });
+
+    // The row stays put (no local write) and carries no failure state — snooze
+    // surfaces a brief inline hint (ADR §8) and lets the user retry from the menu.
+    expect(result.current.rows).toHaveLength(1);
+    expect(result.current.rows[0]?.reminderState).toBe('notified');
+    expect(result.current.rows[0]?.removeState).toBe('idle');
+    expect(result.current.rows[0]?.snoozeUnavailableHint).toBe(true);
+
+    await waitFor(
+      () => expect(result.current.rows[0]?.snoozeUnavailableHint).toBe(false),
+      {timeout: 4_000},
+    );
+  });
+
+  it('does not invoke reminders_snooze for unsupported minute offsets', async () => {
+    mockInvoke({index: [reminder()]});
+    const {result} = renderHook(() => useReminderPane('/vault'));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    tauriTest.state.invoke.mockClear();
+
+    await act(async () => {
+      await result.current.snoozeReminder('file:///vault/a.md', 'rem-1', 2);
+    });
+
+    const snoozeCalls = tauriTest.state.invoke.mock.calls.filter(
+      ([cmd]) => cmd === 'reminders_snooze',
+    );
+    expect(snoozeCalls).toHaveLength(0);
   });
 });

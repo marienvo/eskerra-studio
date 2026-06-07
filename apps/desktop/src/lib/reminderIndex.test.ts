@@ -64,6 +64,37 @@ describe('parseReminderIndex', () => {
   });
 });
 
+describe('displayLine backward compatibility', () => {
+  it('parses an index that contains displayLine', () => {
+    const r = reminder({displayLine: 'Call dentist'});
+    const parsed = parseReminderIndex(indexJson([r]));
+    expect(parsed?.reminders[0]?.displayLine).toBe('Call dentist');
+  });
+
+  it('parses an index without displayLine (older daemon) and leaves field absent', () => {
+    // Serialize without displayLine to simulate an old index file.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- intentionally discarded to build old-format fixture
+    const {displayLine, ...withoutDisplayLine} = reminder();
+    const json = JSON.stringify({
+      schemaVersion: 1,
+      vaultHash: 'vh1',
+      vaultRelativeRootMarker: null,
+      generatedAtMs: 0,
+      reminders: [withoutDisplayLine],
+    });
+    const parsed = parseReminderIndex(json);
+    expect(parsed?.reminders[0]?.displayLine).toBeUndefined();
+    // Consumers must treat undefined as empty — verify the field simply isn't set.
+    expect('displayLine' in (parsed?.reminders[0] ?? {})).toBe(false);
+  });
+
+  it('parses an index with an empty displayLine', () => {
+    const r = reminder({displayLine: ''});
+    const parsed = parseReminderIndex(indexJson([r]));
+    expect(parsed?.reminders[0]?.displayLine).toBe('');
+  });
+});
+
 describe('hasDueRemindersNow (notifications dot logic)', () => {
   const states: ReminderState[] = ['scheduled', 'due', 'notified'];
 

@@ -1,8 +1,15 @@
-import {useEffect, useState} from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import {useCallback, useEffect, useState} from 'react';
 
 import type {SessionNotification} from '../lib/sessionNotifications';
-import type {PaneNotification, ReminderPaneRow} from '../lib/reminderPane';
-import {reminderNoteName, reminderDueLabel} from '../lib/reminderPane';
+import type {PaneNotification, ReminderPaneRow, SnoozeMinutes} from '../lib/reminderPane';
+import {
+  reminderNoteName,
+  reminderDueLabel,
+  reminderTimeLabel,
+  liveSnoozeOptions,
+  REMINDER_SNOOZE_UNAVAILABLE_TEXT,
+} from '../lib/reminderPane';
 
 import {MaterialIcon} from './MaterialIcon';
 
@@ -15,7 +22,38 @@ type NotificationsPanelProps = {
   onClearAll: () => void;
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
   onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
+
+const MINUTE_TICK_MS = 60_000;
+
+/** Menu label for each snooze offset. */
+function snoozeOptionLabel(minutes: SnoozeMinutes): string {
+  return minutes === 0 ? 'At due time' : `${minutes} min before`;
+}
+
+/** Wall-clock `nowMs` with an aligned minute tick and an on-demand refresh. */
+function useMinuteNowMs(): {nowMs: number; refreshNowMs: () => void} {
+  const [nowMs, setNowMs] = useState(Date.now);
+  const refreshNowMs = useCallback(() => setNowMs(Date.now()), []);
+  useEffect(() => {
+    const tick = () => setNowMs(Date.now());
+    tick();
+    const msUntilNextMinute = MINUTE_TICK_MS - (Date.now() % MINUTE_TICK_MS);
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    const timeoutId = setTimeout(() => {
+      tick();
+      intervalId = setInterval(tick, MINUTE_TICK_MS);
+    }, msUntilNextMinute);
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId !== undefined) {
+        clearInterval(intervalId);
+      }
+    };
+  }, []);
+  return {nowMs, refreshNowMs};
+}
 
 export function NotificationsPanel({
   appSurface,
@@ -25,17 +63,9 @@ export function NotificationsPanel({
   onClearAll,
   onOpenReminder,
   onRemoveReminder,
+  onSnoozeReminder,
 }: NotificationsPanelProps) {
-  // Minute tick so due-time labels stay current. useState(Date.now) is the
-  // accepted initializer-function pattern; the setInterval callback is in an
-  // effect (not during render) so it avoids the impure-function-in-render rule.
-  const [nowMs, setNowMs] = useState(Date.now);
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setNowMs(Date.now());
-    }, 60_000);
-    return () => clearInterval(tick);
-  }, []);
+  const {nowMs, refreshNowMs} = useMinuteNowMs();
 
   useEffect(() => {
     if (!highlightId) {
@@ -81,8 +111,10 @@ export function NotificationsPanel({
                   key={item.id}
                   row={item}
                   nowMs={nowMs}
+                  onRefreshNowMs={refreshNowMs}
                   onOpen={onOpenReminder}
                   onRemove={onRemoveReminder}
+                  onSnooze={onSnoozeReminder}
                 />
               ) : (
                 <SessionRow
@@ -154,18 +186,34 @@ function reminderRowClass(row: ReminderPaneRow, nowMs: number): string {
 function ReminderRow({
   row,
   nowMs,
+  onRefreshNowMs,
   onOpen,
   onRemove,
+  onSnooze,
 }: {
   row: ReminderPaneRow;
   nowMs: number;
+  onRefreshNowMs: () => void;
   onOpen: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
   onRemove: (noteUri: string, reminderId: string) => Promise<void>;
+  onSnooze: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 }) {
   const noteName = reminderNoteName(row.vaultRelativePath);
   const isStale = row.reminderState === 'stale';
   const isRemoving = row.removeState === 'removing';
   const isUnavailable = row.removeState === 'remove-unavailable';
+
+  // The reminder line + its compact (HH:MM) echo. When the cleaned line is
+  // empty (the source line held only the token) the time folds onto the
+  // note-name header and no second line is rendered — mirrors the GNOME body.
+  const timeLabel = reminderTimeLabel(row.dueAtMs);
+  const hasLine = row.displayLine.trim().length > 0;
+  const headerText = hasLine ? noteName : `${noteName} (${timeLabel})`;
+
+  // Snooze is offered only for non-expired offsets, and never on a stale or
+  // in-flight-remove row (the daemon would no-op it anyway).
+  const snoozeOptions =
+    isStale || isRemoving || isUnavailable ? [] : liveSnoozeOptions(row.dueAtMs, nowMs);
 
   return (
     <li
@@ -173,16 +221,18 @@ function ReminderRow({
       className={reminderRowClass(row, nowMs)}
     >
       <div className="notifications-panel__reminder-body">
-        {/* Clickable header: note name + token */}
+        {/* Clickable header: note name (+ folded time) and the reminder line */}
         <button
           type="button"
           className="notifications-panel__reminder-header"
           onClick={() => onOpen(row.noteUri, row.reminderId, row.uiCaretHint)}
         >
-          <span className="notifications-panel__reminder-note">{noteName}</span>
-          <span className="notifications-panel__reminder-token muted">
-            {row.normalizedTokenText}
-          </span>
+          <span className="notifications-panel__reminder-note">{headerText}</span>
+          {hasLine ? (
+            <span className="notifications-panel__reminder-line muted">
+              {`${row.displayLine} (${timeLabel})`}
+            </span>
+          ) : null}
         </button>
 
         {/* Status line */}
@@ -195,6 +245,20 @@ function ReminderRow({
 
       {/* Action buttons */}
       <div className="notifications-panel__reminder-actions">
+        {snoozeOptions.length > 0 ? (
+          <SnoozeMenu
+            options={snoozeOptions}
+            onOpenChange={open => {
+              if (open) onRefreshNowMs();
+            }}
+            onSnooze={minutes => {
+              if (!liveSnoozeOptions(row.dueAtMs, Date.now()).includes(minutes)) {
+                return;
+              }
+              void onSnooze(row.noteUri, row.reminderId, minutes);
+            }}
+          />
+        ) : null}
         {isUnavailable ? (
           <>
             <button
@@ -239,6 +303,56 @@ function ReminderRow({
   );
 }
 
+/**
+ * Compact `[Snooze ▾]` dropdown offering the live snooze offsets. Built on the
+ * shared Radix `DropdownMenu` so it is keyboard-navigable and dismissible
+ * (Escape / outside click) for free.
+ */
+function SnoozeMenu({
+  options,
+  onOpenChange,
+  onSnooze,
+}: {
+  options: readonly SnoozeMinutes[];
+  onOpenChange: (open: boolean) => void;
+  onSnooze: (minutes: SnoozeMinutes) => void;
+}) {
+  return (
+    <DropdownMenu.Root modal={false} onOpenChange={onOpenChange}>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="notifications-panel__reminder-action-btn small app-tooltip-trigger"
+          aria-label="Snooze reminder"
+          aria-haspopup="menu"
+          data-tooltip="Snooze"
+          data-tooltip-placement="inline-start"
+        >
+          Snooze ▾
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="notifications-panel__snooze-menu note-list-context-menu"
+          sideOffset={4}
+          align="end"
+          collisionPadding={8}
+        >
+          {options.map(minutes => (
+            <DropdownMenu.Item
+              key={minutes}
+              className="note-list-context-menu__item"
+              onSelect={() => onSnooze(minutes)}
+            >
+              {snoozeOptionLabel(minutes)}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
 function ReminderStatusLine({
   row,
   nowMs,
@@ -266,6 +380,13 @@ function ReminderStatusLine({
     return (
       <p className="notifications-panel__reminder-status notifications-panel__reminder-status--unavailable small muted">
         {"Couldn't reach the reminder service"}
+      </p>
+    );
+  }
+  if (row.snoozeUnavailableHint) {
+    return (
+      <p className="notifications-panel__reminder-status notifications-panel__reminder-status--unavailable small muted">
+        {REMINDER_SNOOZE_UNAVAILABLE_TEXT}
       </p>
     );
   }

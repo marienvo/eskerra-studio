@@ -4,9 +4,10 @@ import type {Reminder, ReminderState} from './reminderIndex';
 import {
   reminderDueLabel,
   reminderNoteName,
+  reminderTimeLabel,
+  isLockedSnoozeMinutes,
+  liveSnoozeOptions,
   reminderToPaneRow,
-  type ReminderPaneRow,
-  type ReminderRemoveState,
 } from './reminderPane';
 
 function reminder(overrides: Partial<Reminder> = {}): Reminder {
@@ -30,21 +31,6 @@ function reminder(overrides: Partial<Reminder> = {}): Reminder {
   };
 }
 
-function prevRow(removeState: ReminderRemoveState): ReminderPaneRow {
-  return {
-    id: 'id-1',
-    source: 'reminder',
-    noteUri: 'file:///vault/Inbox/a.md',
-    reminderId: 'id-1',
-    dueAtMs: 1_000,
-    normalizedTokenText: '@2026-06-06_0900',
-    vaultRelativePath: 'Inbox/a.md',
-    reminderState: 'scheduled',
-    uiCaretHint: 16,
-    removeState,
-  };
-}
-
 describe('reminderToPaneRow', () => {
   it('maps the daemon reminder fields onto the pane row', () => {
     const row = reminderToPaneRow(reminder(), undefined);
@@ -65,22 +51,34 @@ describe('reminderToPaneRow', () => {
     expect(reminderToPaneRow(reminder(), undefined).removeState).toBe('idle');
   });
 
+  it('carries the displayLine from the daemon reminder', () => {
+    const row = reminderToPaneRow(reminder({displayLine: 'Call the dentist back'}), undefined);
+    expect(row.displayLine).toBe('Call the dentist back');
+  });
+
+  it('treats an absent displayLine (older index) as an empty string', () => {
+    // The base factory omits displayLine, mirroring an index written before the
+    // field existed.
+    expect(reminder().displayLine).toBeUndefined();
+    expect(reminderToPaneRow(reminder(), undefined).displayLine).toBe('');
+  });
+
   it('keeps a `removing` spinner across index re-reads while not stale', () => {
-    const row = reminderToPaneRow(reminder({state: 'notified'}), prevRow('removing'));
+    const row = reminderToPaneRow(reminder({state: 'notified'}), 'removing');
     expect(row.removeState).toBe('removing');
   });
 
   it('clears `removing` back to idle once the daemon reports stale', () => {
     // A stale daemon result means the remove failed safely → surface the stale
     // affordance, not a stuck spinner.
-    const row = reminderToPaneRow(reminder({state: 'stale'}), prevRow('removing'));
+    const row = reminderToPaneRow(reminder({state: 'stale'}), 'removing');
     expect(row.removeState).toBe('idle');
     expect(row.reminderState).toBe('stale');
   });
 
   it('preserves `remove-unavailable` regardless of daemon state (app-local UI only)', () => {
     for (const state of ['scheduled', 'due', 'notified', 'stale'] as ReminderState[]) {
-      const row = reminderToPaneRow(reminder({state}), prevRow('remove-unavailable'));
+      const row = reminderToPaneRow(reminder({state}), 'remove-unavailable');
       expect(row.removeState).toBe('remove-unavailable');
     }
   });
@@ -124,5 +122,55 @@ describe('reminderDueLabel', () => {
     const label = reminderDueLabel(now + 3 * 24 * 60 * 60_000, now);
     expect(label).not.toMatch(/^in /);
     expect(label).not.toBe('overdue');
+  });
+});
+
+describe('reminderTimeLabel', () => {
+  it('formats the local time as zero-padded 24-hour HH:MM', () => {
+    // Build an instant from local Y/M/D h:m so the assertion is timezone-stable.
+    const due = new Date(2026, 5, 6, 9, 5).getTime();
+    expect(reminderTimeLabel(due)).toBe('09:05');
+    const late = new Date(2026, 10, 27, 23, 0).getTime();
+    expect(reminderTimeLabel(late)).toBe('23:00');
+    const midnight = new Date(2026, 0, 1, 0, 0).getTime();
+    expect(reminderTimeLabel(midnight)).toBe('00:00');
+  });
+});
+
+describe('isLockedSnoozeMinutes', () => {
+  it('accepts only the locked action set', () => {
+    expect(isLockedSnoozeMinutes(3)).toBe(true);
+    expect(isLockedSnoozeMinutes(1)).toBe(true);
+    expect(isLockedSnoozeMinutes(0)).toBe(true);
+    expect(isLockedSnoozeMinutes(2)).toBe(false);
+    expect(isLockedSnoozeMinutes(999)).toBe(false);
+  });
+});
+
+describe('liveSnoozeOptions', () => {
+  const due = 1_000_000_000_000;
+  const min = 60_000;
+
+  it('offers all three before the T-3 boundary', () => {
+    expect(liveSnoozeOptions(due, due - 4 * min)).toEqual([3, 1, 0]);
+  });
+
+  it('drops T-3 once now is at/after dueAt-3min', () => {
+    expect(liveSnoozeOptions(due, due - 3 * min)).toEqual([1, 0]);
+    expect(liveSnoozeOptions(due, due - 2 * min)).toEqual([1, 0]);
+  });
+
+  it('leaves only at-due between T-1 and due', () => {
+    expect(liveSnoozeOptions(due, due - min)).toEqual([0]);
+    expect(liveSnoozeOptions(due, due - 30_000)).toEqual([0]);
+  });
+
+  it('offers at-due exactly at dueAt (daemon FiredNow boundary)', () => {
+    expect(liveSnoozeOptions(due, due)).toEqual([0]);
+  });
+
+  it('offers nothing once now is past dueAt', () => {
+    expect(liveSnoozeOptions(due, due + 1)).toEqual([]);
+    expect(liveSnoozeOptions(due, due + min)).toEqual([]);
   });
 });

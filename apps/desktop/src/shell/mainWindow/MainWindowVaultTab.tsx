@@ -36,6 +36,7 @@ type MainWindowVaultTabProps = {
   hasDueReminders: boolean;
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
   onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
   playbackTransport: ComponentProps<typeof VaultTab>['playbackController']['playbackTransport'];
   toolbarNowPlaying: ComponentProps<typeof VaultTab>['playbackController']['toolbarNowPlaying'];
   podcastCatalog: {
@@ -82,6 +83,7 @@ export function MainWindowVaultTab({
   hasDueReminders,
   onOpenReminder,
   onRemoveReminder,
+  onSnoozeReminder,
   playbackTransport,
   toolbarNowPlaying,
   podcastCatalog,
@@ -243,6 +245,7 @@ export function MainWindowVaultTab({
         hasDueReminders,
         onOpenReminder,
         onRemoveReminder,
+        onSnoozeReminder,
       }}
       todayHubController={{
         showTodayHubCanvas: todayHubController.showTodayHubCanvas,

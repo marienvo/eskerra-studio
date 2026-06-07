@@ -176,6 +176,7 @@ as read-only.
 | `contextAnchor` | `string` | Hash of the token's **containing line with the token text masked out**. Re-finds *this* occurrence by content after ordinals shift. Matching aid, not identity. |
 | `duplicateCount` | `u32` | Count of byte-identical tokens in the file at last scan. A change between scan and write signals possible ordinal drift. |
 | `scanFingerprint` | `string` | **Authoritative content hash** (SHA-256 of file bytes) at the scan that produced this entry. `len`+`mtime` may be kept as an optional perf pre-check only — **never** accepted as proof. "Provably unchanged" always means recomputed content hash == stored `scanFingerprint`. |
+| `displayLine` | `string` (optional / `#[serde(default)]`) | The token’s containing line cleaned for display: the token text removed by byte span, a single leading list-marker / blockquote `"> "` / heading `"# "` prefix stripped, interior whitespace collapsed to single spaces. Empty string when the line held only the token (e.g. `- @date`). **Scan-derived, cosmetic, never identity.** Produced once by the Rust scanner (`clean_reminder_line` in `eskerra-reminder-core`) so both GNOME notifications and the app pane render byte-identical copy from the same stored value. `serde(default)` — an old reader ignores it; a new reader treats an absent field as an empty string and the daemon re-derives it on the next rescan. Additive at `schemaVersion: 1`; no version bump. |
 
 **Byte spans vs. UI positions must never be confused.** `tokenByteFrom`/`tokenByteTo`
 are UTF-8 byte indexes and are the sole spans used for disk write-back; the byte span is
@@ -273,12 +274,20 @@ temp + rename); the daemon reloads and re-scans.
 Native **`org.freedesktop.Notifications`** via D-Bus (`zbus`), with action buttons +
 callbacks. `tauri-plugin-notification` is insufficient for persistent action buttons on
 Linux. Actions: `snooze-3`, `snooze-1`, `snooze-0` ("Remind at T-3 / T-1 / at time"),
-`remove`, plus default action (click). Suspend/resume handled via `PrepareForSleep` on
-`org.freedesktop.login1` (same `zbus` stack), with a periodic wall-clock reconciliation
-fallback. The three evaluation contexts (scheduled-fire execution, resume catch-up,
-discovery) and snooze-boundary semantics are pinned in the plan §*Missed / grace
-semantics* and §*Snooze action handling* — this ADR does not restate them. `zbus` API is
-version-sensitive: Phase 3 must verify against current docs, not model memory.
+`remove`, plus default action (click).
+
+Reminder notifications include the standard Freedesktop `sound-name` hint with
+`alarm-clock-elapsed`, so GNOME can play the user's themed alarm sound when the
+notification pops up. This is intentionally best-effort and desktop-owned: GNOME, the
+notification server, Do Not Disturb, muted output, or user sound settings may suppress
+it, and the daemon does **not** start a separate audio playback path.
+
+Suspend/resume handled via `PrepareForSleep` on `org.freedesktop.login1` (same `zbus`
+stack), with a periodic wall-clock reconciliation fallback. The three evaluation
+contexts (scheduled-fire execution, resume catch-up, discovery) and snooze-boundary
+semantics are pinned in the plan §*Missed / grace semantics* and §*Snooze action
+handling* — this ADR does not restate them. `zbus` API is version-sensitive: Phase 3
+must verify against current docs, not model memory.
 
 ### 7. IPC — LOCKED interface
 
@@ -294,6 +303,21 @@ D-Bus service owned by the daemon:
     re-scanning at write time. Any position the app holds is advisory UI state and is
     never sent over IPC, so a stale offset can never drive a write.
   - Backs both the app pane's "delete" and the OS notification `remove` action.
+- **Method:** `SnoozeReminder(IN s noteUri, IN s id, IN u minutes, OUT s result)`
+  - `result` ∈ `{ "rescheduled", "fired", "expired", "unknown" }`, the IPC string
+    mapping of the shared `ActionOutcome`: `Rescheduled → "rescheduled"`,
+    `FiredNow → "fired"`, `ExpiredNoOp → "expired"`, `Unknown → "unknown"`.
+  - Resolution is **by `id`** against the daemon-owned index (`noteUri` is routing
+    context only), exactly as `RemoveReminder`. `minutes` ∈ `{3, 1, 0}` (T-3 / T-1 /
+    at-due) per the locked action set.
+  - Runs the **same `scheduler::apply_action(Snooze)` path** as the GNOME notification
+    snooze (no second snooze model). The app passes notification id `0` (no popup to
+    replace); a snooze-0 at exactly due still fires the at-time notification once,
+    guarded against a double-fire. Unlike `RemoveReminder`, snooze mutates only the
+    in-memory index + re-arms the scheduler (no filesystem write-back, no per-note
+    lock), so it runs **on** the daemon run loop rather than an off-loop worker.
+  - Backs the app pane's per-row **Snooze** menu, so snooze is reachable after the
+    GNOME popup is gone (including right after clicking it to open the app).
 
 **Click-to-open is process spawn, not D-Bus** (Phase 5): the daemon spawns
 `eskerra --open-reminder <noteUri> <reminderId>` with an **optional**
@@ -313,6 +337,7 @@ local-write fallback:
 | **`removed`** | Token resolved to exactly one live span (or zero-match: already struck/edited/deleted, or no index entry for `id`). | Daemon | Daemon strikes the token (or no-op for zero-match) and drops the reminder from the index. Zero-match is a *success-equivalent*, not an error. |
 | **`stale`** | Daemon **received** the request but **refused to write safely**: ambiguous duplicate resolution, byte mismatch at the resolved span, IO error, or any case where it cannot identify *exactly one* correct span. | Daemon | **No write.** Daemon records `stale` in the index. App shows "could not remove — open the note" (links to note). `stale` reminders stop firing OS notifications but stay visible until resolved. |
 | **`remove-unavailable`** | Daemon **could not be reached at all**: not running, `dev.eskerra.Reminders1` not registered, call timeout, or any transport-level bus error — i.e. the D-Bus method call failed *before* the daemon evaluated anything. | **App only** | **Never** a local strikethrough. **Never** recorded as daemon `stale` (an unreachable daemon by definition produced no `stale` entry). App keeps the row visible & active (note unchanged on disk, still firing per schedule), renders a **Retry** affordance + **Open note** fallback, and **may** best-effort `systemctl --user start eskerra-reminderd` off the UI thread, then retry. App-local UI state only; never written to the daemon-owned index; clears automatically on a successful retry. |
+| **`snooze-unavailable`** | The `SnoozeReminder` transport-failure parallel: daemon unreachable / unregistered / call timeout / bus error — the call failed *before* the daemon evaluated anything. | **App only** | **Never** a local write. App surfaces a brief, transient hint and leaves the row interactive so the user can retry the snooze from the menu (no persistent per-row failure state — snooze, unlike remove, carries no `stale`/`removing` lifecycle). App-local UI only; never written to the daemon-owned index. |
 
 This is the single highest-risk omission the plan calls out: an unhandled transport error
 is exactly the gap that tempts a local-write fallback and silently breaks the
@@ -386,7 +411,7 @@ Daemon events:
 | `eskerra.reminderd.scan_completed` | extras: `scan_duration_ms`, `reminder_count`, `changed_paths_count`, `full_scan` (bool) |
 | `eskerra.reminderd.watch_coarse_invalidation` | tag `coarse_reason` (parallels the app's watcher coarse alert) |
 | `eskerra.reminderd.watch_backend_error` | tag `backend=<recommended\|poll>`; raw error in extras only |
-| `eskerra.reminderd.notification_send` | tag `result=<sent\|failed>`; `failure_reason` in extras |
+| `eskerra.reminderd.notification_send` | tag `result=<sent\|failed>`; tag `sound_name=<alarm-clock-elapsed\|none>`; `failure_reason` in extras |
 | `eskerra.reminderd.dbus_unavailable` | tag `surface=<notifications\|login1\|service_register>` |
 | `eskerra.reminderd.remove_result` | tag `result=<removed\|stale>`; on `stale`, tag `stale_reason=<ambiguous\|byte_mismatch\|io>` |
 | `eskerra.reminderd.write_failed` | IO/atomic-write failure on the strikethrough path |

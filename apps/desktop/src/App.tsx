@@ -351,6 +351,7 @@ export default function App() {
       hasDueReminders={reminderPane.hasDueReminders}
       onOpenReminder={onOpenReminder}
       onRemoveReminder={reminderPane.removeReminder}
+      onSnoozeReminder={reminderPane.snoozeReminder}
     />
   );
 }

@@ -22,7 +22,7 @@ mod imp {
     use std::sync::{Arc, Mutex};
     use std::thread::JoinHandle;
 
-    use crate::run::{perform_remove, DaemonEvent};
+    use crate::run::{perform_remove, perform_snooze, DaemonEvent};
     use crate::writeback::Remover;
 
     const SERVICE_NAME: &str = "dev.eskerra.Reminders1";
@@ -40,13 +40,32 @@ mod imp {
     impl RemoveService {
         /// `RemoveReminder(IN s noteUri, IN s id, OUT s result)`.
         fn remove_reminder(&self, _note_uri: &str, id: &str) -> String {
-            let tx = match self.tx.lock() {
-                Ok(tx) => tx.clone(),
-                Err(poison) => poison.into_inner().clone(),
-            };
-            perform_remove(id, &self.remover, &tx)
+            perform_remove(id, &self.remover, &self.sender())
                 .as_ipc_str()
                 .to_string()
+        }
+
+        /// `SnoozeReminder(IN s noteUri, IN s id, IN u minutes, OUT s result)`.
+        /// Resolution is **by `id`** (the daemon-owned index), `noteUri` is
+        /// routing context only — mirroring `RemoveReminder`. Unlike remove,
+        /// snooze runs on the run loop (index-only, no write-back) and returns
+        /// the mapped outcome string (`rescheduled` | `fired` | `expired` |
+        /// `unknown`).
+        fn snooze_reminder(&self, _note_uri: &str, id: &str, minutes: u32) -> String {
+            if !crate::scheduler::is_locked_snooze_minutes(minutes) {
+                return "unknown".to_string();
+            }
+            perform_snooze(id, minutes, &self.sender())
+        }
+    }
+
+    impl RemoveService {
+        /// Clone a cheap sender out, never holding the lock across the call.
+        fn sender(&self) -> Sender<DaemonEvent> {
+            match self.tx.lock() {
+                Ok(tx) => tx.clone(),
+                Err(poison) => poison.into_inner().clone(),
+            }
         }
     }
 

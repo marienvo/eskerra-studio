@@ -32,7 +32,7 @@ path. Reminder ids embed a vault-relative path, so they are **not** emitted.
 |---|---|---|
 | `eskerra.reminderd.scan_completed` | A full or incremental vault scan finished | `vault_hash`, `reminder_count`, `full` (`true`/`false`), `coarse` (`true`/`false`), `duration_ms` |
 | `eskerra.reminderd.watch_coarse_invalidation` | A watch batch arrived **coarse** (precise backend dropped events → forced full rescan) | `vault_hash`, `path_count` |
-| `eskerra.reminderd.notification_send` | One OS notification send attempt resolved | `result` (`ok`/`error`), `error` (on failure) |
+| `eskerra.reminderd.notification_send` | One OS notification send attempt resolved | `result` (`ok`/`error`), `sound_name` (`alarm-clock-elapsed`/`none`), `error` (on failure) |
 | `eskerra.reminderd.dbus_unavailable` | A required D-Bus subsystem is unavailable (degraded fallback active) | `subsystem` (`notifications`/`login1`), `error` |
 | `eskerra.reminderd.remove_result` | A `RemoveReminder` write-back resolved on the daemon side | `vault_hash`, `result` (`removed`/`stale`) |
 
@@ -48,6 +48,9 @@ path. Reminder ids embed a vault-relative path, so they are **not** emitted.
   same triage as the app runbook (backend errors, ulimit/inotify exhaustion).
 - **`notification_send result=error`** — GNOME/D-Bus notification delivery is
   failing. A burst usually accompanies `dbus_unavailable subsystem=notifications`.
+  `sound_name` records the requested Freedesktop notification sound hint, not proof
+  that GNOME actually played audio; user sound settings, mute state, or Do Not
+  Disturb may still suppress it.
 - **`dbus_unavailable subsystem=login1`** — suspend/resume catch-up cannot use
   `PrepareForSleep`; the daemon falls back to the periodic reconciliation tick
   (a missed wake still self-heals, just less promptly).
@@ -62,6 +65,7 @@ path. Reminder ids embed a vault-relative path, so they are **not** emitted.
 | `message` (Sentry) | When | Tags |
 |---|---|---|
 | `eskerra.desktop.reminder_remove_unavailable` | The app's `RemoveReminder` IPC failed at the transport level (daemon unreachable) → app-side `remove-unavailable` | `obs_surface=reminders`, `vault_root_hash` |
+| `eskerra.desktop.reminder_snooze_unavailable` | The app's `SnoozeReminder` IPC failed at the transport level (daemon unreachable) → app-side `snooze-unavailable` | `obs_surface=reminders`, `vault_root_hash` |
 
 Emission path:
 [`apps/desktop/src/hooks/useReminderPane.ts`](../../apps/desktop/src/hooks/useReminderPane.ts)
@@ -81,6 +85,6 @@ path) — the `vault_root_hash` tag is the only vault identifier.
   `dbus_unavailable subsystem=notifications` → notifications are broken.
 - `watch_coarse_invalidation` rate climbing → watcher degradation (same as the
   app coarse-invalidation alert).
-- `reminder_remove_unavailable` rate climbing → the daemon is down / not
-  registered for a population of users (also watch for it correlating with the
-  daemon process not running).
+- `reminder_remove_unavailable` / `reminder_snooze_unavailable` rate climbing →
+  the daemon is down / not registered for a population of users (also watch for
+  it correlating with the daemon process not running).

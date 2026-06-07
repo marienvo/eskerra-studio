@@ -86,6 +86,7 @@ export function VaultTabSideColumn({
     onClearAllNotifications,
     onOpenReminder,
     onRemoveReminder,
+    onSnoozeReminder,
   } = notificationsController;
   const editorActiveMarkdownUri = selectedUri;
 
@@ -98,6 +99,7 @@ export function VaultTabSideColumn({
       onClearAll={onClearAllNotifications}
       onOpenReminder={onOpenReminder}
       onRemoveReminder={onRemoveReminder}
+      onSnoozeReminder={onSnoozeReminder}
     />
   );
 

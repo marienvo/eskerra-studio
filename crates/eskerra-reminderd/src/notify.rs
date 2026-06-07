@@ -15,6 +15,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use chrono::{Local, TimeZone};
 use eskerra_reminder_core::Reminder;
 
 use crate::scheduler::{Action, FireKind};
@@ -29,6 +30,9 @@ pub const ACTION_SNOOZE_0: &str = "snooze-0";
 pub const ACTION_REMOVE: &str = "remove";
 /// The freedesktop "default" action — invoked by a plain click on the body.
 pub const ACTION_DEFAULT: &str = "default";
+/// Themeable Freedesktop sound name GNOME should play when a reminder
+/// notification pops up. Notification servers may ignore this hint.
+pub const REMINDER_SOUND_NAME: &str = "alarm-clock-elapsed";
 
 /// Map an `ActionInvoked` key back to a scheduler [`Action`]. Unknown keys
 /// (forward-compat) yield `None` and are ignored by the caller.
@@ -56,24 +60,39 @@ pub struct NotificationRequest {
     /// atomically replace the triggering notification rather than spawn a
     /// duplicate live notification for the same reminder.
     pub replaces_id: u32,
+    /// Optional Freedesktop `sound-name` hint. This is best-effort: the
+    /// notification server, user sound settings, mute state, or Do Not Disturb
+    /// may suppress it.
+    pub sound_name: Option<String>,
 }
 
 impl NotificationRequest {
     /// Build the notification copy for a reminder fire. `summary` is the note
-    /// title (file stem), `body` describes the reminder and fire kind. Defaults
-    /// to a fresh notification (`replaces_id = 0`); use [`Self::replacing`] to
-    /// supersede an existing one.
-    pub fn for_reminder(reminder: &Reminder, kind: FireKind) -> Self {
+    /// title (file stem), `body` is the reminder line + `(HH:MM)` in local
+    /// time. Both Lead and AtTime fires use the same body shape. When
+    /// `display_line` is empty (the line was only the token), the time moves
+    /// onto the title instead so there is no bare `(HH:MM)` second line.
+    /// Defaults to a fresh notification (`replaces_id = 0`); use
+    /// [`Self::replacing`] to supersede an existing one.
+    pub fn for_reminder(reminder: &Reminder, _kind: FireKind) -> Self {
         let title = note_title(&reminder.vault_relative_path);
-        let body = match kind {
-            FireKind::Lead => format!("Reminder {} — {}", reminder.normalized_token_text, title),
-            FireKind::AtTime => format!("Now: {} — {}", reminder.normalized_token_text, title),
-        };
-        Self {
-            reminder_id: reminder.id.clone(),
-            summary: title,
-            body,
-            replaces_id: 0,
+        let hhmm = hhmm_local(reminder.due_at_ms);
+        if reminder.display_line.is_empty() {
+            Self {
+                reminder_id: reminder.id.clone(),
+                summary: format!("{title} ({hhmm})"),
+                body: String::new(),
+                replaces_id: 0,
+                sound_name: Some(REMINDER_SOUND_NAME.to_string()),
+            }
+        } else {
+            Self {
+                reminder_id: reminder.id.clone(),
+                summary: title,
+                body: format!("{} ({})", reminder.display_line, hhmm),
+                replaces_id: 0,
+                sound_name: Some(REMINDER_SOUND_NAME.to_string()),
+            }
         }
     }
 
@@ -84,16 +103,27 @@ impl NotificationRequest {
         self
     }
 
-    /// The standard action set + labels for a reminder notification, in display
-    /// order, as `(key, label)` pairs.
-    pub fn actions() -> [(&'static str, &'static str); 4] {
+    /// The outgoing action set + labels for a reminder notification, in display
+    /// order, as `(key, label)` pairs. GNOME Shell caps visible buttons at 3,
+    /// so snooze-3 is dropped from the outgoing set to ensure Remove is always
+    /// visible. `parse_action_key` still accepts `snooze-3` for
+    /// backward-compat with lingering old popups.
+    pub fn actions() -> [(&'static str, &'static str); 3] {
         [
-            (ACTION_SNOOZE_3, "Remind at T-3 min"),
-            (ACTION_SNOOZE_1, "Remind at T-1 min"),
+            (ACTION_SNOOZE_1, "Remind 1 min before"),
             (ACTION_SNOOZE_0, "Remind at due time"),
             (ACTION_REMOVE, "Remove"),
         ]
     }
+}
+
+/// Render `due_at_ms` (epoch milliseconds) as local `HH:MM` (24-hour).
+fn hhmm_local(due_at_ms: i64) -> String {
+    Local
+        .timestamp_millis_opt(due_at_ms)
+        .single()
+        .map(|dt| dt.format("%H:%M").to_string())
+        .unwrap_or_else(|| "??:??".to_string())
 }
 
 /// Note title = the file stem of the vault-relative path (drop directories and
@@ -237,6 +267,7 @@ mod zbus_impl {
     use std::sync::Arc;
 
     use zbus::blocking::{Connection, Proxy};
+    use zbus::zvariant::Value;
 
     use super::{ActionCallback, NotificationRegistry, NotificationRequest, Notifier};
 
@@ -280,9 +311,9 @@ mod zbus_impl {
                 actions.push(label.to_string());
             }
 
-            // No hints today; expire_timeout = 0 keeps the notification (and its
-            // action buttons) resident until the user acts, as the feature needs.
-            let hints: HashMap<String, zbus::zvariant::Value> = HashMap::new();
+            // expire_timeout = 0 keeps the notification (and its action buttons)
+            // resident until the user acts, as the feature needs.
+            let hints = build_hints(req);
             let expire_timeout: i32 = 0;
 
             let id: u32 = self
@@ -305,6 +336,17 @@ mod zbus_impl {
             self.registry.register(id, req.reminder_id.clone())?;
             Ok(id)
         }
+    }
+
+    pub(super) fn build_hints(req: &NotificationRequest) -> HashMap<String, Value<'static>> {
+        let mut hints = HashMap::new();
+        if let Some(sound_name) = req.sound_name.as_deref() {
+            hints.insert(
+                "sound-name".to_string(),
+                Value::from(sound_name.to_string()),
+            );
+        }
+        hints
     }
 
     /// One thread, both signals. Routing `ActionInvoked` and `NotificationClosed`
@@ -366,10 +408,25 @@ mod zbus_impl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Local, TimeZone};
     use eskerra_reminder_core::{fresh_reminder_from_scan, scan, DefaultTime};
 
     fn a_reminder() -> Reminder {
         let out = scan(b"meet @2026-06-06_0900 soon").unwrap();
+        let token = out.tokens.into_iter().next().unwrap();
+        fresh_reminder_from_scan(
+            "Inbox/Daily note.md",
+            "file:///Inbox/Daily note.md",
+            &token,
+            &out.scan_fingerprint,
+            DefaultTime::DEFAULT_NINE_AM,
+            5,
+        )
+        .unwrap()
+    }
+
+    fn a_token_only_reminder() -> Reminder {
+        let out = scan(b"@2026-06-06_0900").unwrap();
         let token = out.tokens.into_iter().next().unwrap();
         fresh_reminder_from_scan(
             "Inbox/Daily note.md",
@@ -414,7 +471,77 @@ mod tests {
         let req = NotificationRequest::for_reminder(&r, FireKind::Lead);
         assert_eq!(req.reminder_id, r.id);
         assert_eq!(req.summary, "Daily note");
-        assert!(req.body.contains("@2026-06-06_0900"));
+        assert_eq!(req.sound_name.as_deref(), Some(REMINDER_SOUND_NAME));
+        // Body is "meet soon (HH:MM)" — no raw token, no "Now:" / "Reminder " prefix.
+        assert!(
+            !req.body.contains("@2026-06-06_0900"),
+            "token must not appear in body"
+        );
+        assert!(!req.body.contains("Now:"), "old prefix must be gone");
+        assert!(!req.body.contains("Reminder "), "old prefix must be gone");
+        assert!(
+            req.body.starts_with("meet soon ("),
+            "body must start with display_line"
+        );
+        assert!(req.body.ends_with(')'), "body must end with closing paren");
+    }
+
+    #[test]
+    fn body_contains_display_line_and_local_hhmm() {
+        let r = a_reminder();
+        let expected_hhmm = Local
+            .timestamp_millis_opt(r.due_at_ms)
+            .single()
+            .unwrap()
+            .format("%H:%M")
+            .to_string();
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        assert_eq!(req.summary, "Daily note");
+        assert_eq!(req.body, format!("meet soon ({})", expected_hhmm));
+    }
+
+    #[test]
+    fn empty_display_line_moves_time_to_title() {
+        let r = a_token_only_reminder();
+        assert!(
+            r.display_line.is_empty(),
+            "fixture must have empty display_line"
+        );
+        let expected_hhmm = Local
+            .timestamp_millis_opt(r.due_at_ms)
+            .single()
+            .unwrap()
+            .format("%H:%M")
+            .to_string();
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        assert_eq!(req.summary, format!("Daily note ({})", expected_hhmm));
+        assert_eq!(
+            req.body, "",
+            "body must be empty when display_line is empty"
+        );
+    }
+
+    #[test]
+    fn actions_has_three_entries_with_remove_and_no_snooze3() {
+        let acts = NotificationRequest::actions();
+        assert_eq!(acts.len(), 3, "exactly 3 outgoing actions (GNOME cap)");
+        let keys: Vec<&str> = acts.iter().map(|(k, _)| *k).collect();
+        assert!(keys.contains(&ACTION_REMOVE), "remove must be present");
+        assert!(
+            !keys.contains(&ACTION_SNOOZE_3),
+            "snooze-3 must be absent from outgoing set"
+        );
+        assert!(keys.contains(&ACTION_SNOOZE_1));
+        assert!(keys.contains(&ACTION_SNOOZE_0));
+    }
+
+    #[test]
+    fn parse_action_key_still_accepts_snooze3_for_compat() {
+        assert_eq!(
+            parse_action_key(ACTION_SNOOZE_3),
+            Some(Action::Snooze { minutes: 3 }),
+            "old popups with snooze-3 button must still route"
+        );
     }
 
     #[test]
@@ -431,7 +558,21 @@ mod tests {
         let r = a_reminder();
         let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
         assert_eq!(req.replaces_id, 0, "fresh notifications default to 0");
-        assert_eq!(req.replacing(42).replaces_id, 42);
+        let replacing = req.replacing(42);
+        assert_eq!(replacing.replaces_id, 42);
+        assert_eq!(replacing.sound_name.as_deref(), Some(REMINDER_SOUND_NAME));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn zbus_hints_include_reminder_sound_name() {
+        let r = a_reminder();
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        let hints = super::zbus_impl::build_hints(&req);
+        let sound_name = hints
+            .get("sound-name")
+            .and_then(|value| String::try_from(value).ok());
+        assert_eq!(sound_name.as_deref(), Some(REMINDER_SOUND_NAME));
     }
 
     // --- registry routing / action-vs-close race --------------------------

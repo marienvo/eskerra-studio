@@ -84,6 +84,7 @@ export type AppVaultReadyRootProps = {
   hasDueReminders: boolean;
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
   onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
 export function AppVaultReadyRoot({
@@ -135,6 +136,7 @@ export function AppVaultReadyRoot({
   hasDueReminders,
   onOpenReminder,
   onRemoveReminder,
+  onSnoozeReminder,
 }: AppVaultReadyRootProps) {
   const {
     notifications: {
@@ -229,6 +231,7 @@ export function AppVaultReadyRoot({
               hasDueReminders={hasDueReminders}
               onOpenReminder={onOpenReminder}
               onRemoveReminder={onRemoveReminder}
+              onSnoozeReminder={onSnoozeReminder}
               playbackTransport={playbackTransport}
               toolbarNowPlaying={toolbarNowPlaying}
               podcastCatalog={podcastCatalog}

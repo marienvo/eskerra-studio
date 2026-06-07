@@ -58,6 +58,14 @@ pub struct FireRequest {
     pub kind: FireKind,
 }
 
+/// Locked snooze offsets (T-3 / T-1 / at-due) per ADR §7.
+pub const LOCKED_SNOOZE_MINUTES: [u32; 3] = [3, 1, 0];
+
+/// Whether `minutes` is in the locked snooze action set.
+pub fn is_locked_snooze_minutes(minutes: u32) -> bool {
+    LOCKED_SNOOZE_MINUTES.contains(&minutes)
+}
+
 /// A user action arriving from an OS notification (or the app pane, for
 /// `Remove`). Snooze minutes are `3` / `1` / `0` per the locked action set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,6 +101,24 @@ pub enum ActionOutcome {
     /// No reminder with that id in the active index (e.g. a stale action after a
     /// vault switch / removal) — ignored.
     Unknown,
+}
+
+impl ActionOutcome {
+    /// Wire string for the `dev.eskerra.Reminders1.SnoozeReminder` OUT arg
+    /// (ADR §7). Only the snooze outcomes are reachable from `SnoozeReminder`
+    /// (the action is always a `Snooze`); the routing-only `RemoveRequested` /
+    /// `OpenRequested` outcomes cannot arise there and map to `"unknown"`
+    /// defensively so this stays total.
+    pub fn as_snooze_ipc_str(&self) -> &'static str {
+        match self {
+            ActionOutcome::Rescheduled { .. } => "rescheduled",
+            ActionOutcome::FiredNow => "fired",
+            ActionOutcome::ExpiredNoOp => "expired",
+            ActionOutcome::Unknown
+            | ActionOutcome::RemoveRequested
+            | ActionOutcome::OpenRequested { .. } => "unknown",
+        }
+    }
 }
 
 /// True when `r` has already fired for its current `fireAt` (the double-fire
@@ -281,6 +307,15 @@ mod tests {
     use eskerra_reminder_core::{fresh_reminder_from_scan, scan, DefaultTime};
 
     const LEAD_MINUTES: u32 = 5;
+
+    #[test]
+    fn locked_snooze_minutes_only_accepts_three_one_zero() {
+        assert!(is_locked_snooze_minutes(3));
+        assert!(is_locked_snooze_minutes(1));
+        assert!(is_locked_snooze_minutes(0));
+        assert!(!is_locked_snooze_minutes(2));
+        assert!(!is_locked_snooze_minutes(999));
+    }
 
     /// Build a single reminder from a token, then override its absolute times so
     /// tests can position `now` precisely relative to `fireAt` / `dueAt` without

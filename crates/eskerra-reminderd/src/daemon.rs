@@ -564,12 +564,20 @@ impl Daemon {
         };
         // Phase 2: send (no active borrow held — distinct field `notifier`).
         for req in &requests {
+            let sound_name = req.sound_name.as_deref().unwrap_or("none");
             match self.notifier.send(req) {
-                Ok(_) => obs::emit(obs::event::NOTIFICATION_SEND, &[("result", "ok")]),
+                Ok(_) => obs::emit(
+                    obs::event::NOTIFICATION_SEND,
+                    &[("result", "ok"), ("sound_name", sound_name)],
+                ),
                 Err(err) => {
                     obs::emit(
                         obs::event::NOTIFICATION_SEND,
-                        &[("result", "error"), ("error", &err)],
+                        &[
+                            ("result", "error"),
+                            ("sound_name", sound_name),
+                            ("error", &err),
+                        ],
                     );
                     eprintln!("[reminderd] notification_send failed: {err}");
                 }
@@ -1489,6 +1497,82 @@ mod tests {
 
         // No notifications were sent for the stubs.
         assert!(h.sent().is_empty());
+    }
+
+    // --- app-driven snooze IPC routing (Phase C) --------------------------
+
+    /// The run loop maps `on_action(id, 0, Snooze{minutes})` → an IPC string via
+    /// `ActionOutcome::as_snooze_ipc_str`. These assert that contract end to end
+    /// against the daemon (the loop wiring is a one-liner over `on_action`).
+
+    #[test]
+    fn app_snooze_future_relative_maps_to_rescheduled() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let (_fire, due) = the_times(&d);
+        let id = only_reminder_id(&d);
+
+        let now = due - 4 * 60_000; // before dueAt-3min → live snooze-3
+        let outcome = d.on_action(&id, 0, Action::Snooze { minutes: 3 }, now);
+        assert_eq!(outcome.as_snooze_ipc_str(), "rescheduled");
+        assert_eq!(d.next_wakeup_ms(), Some(due - 3 * 60_000));
+    }
+
+    #[test]
+    fn app_snooze_0_at_due_with_no_popup_fires_once_then_expired() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let (_fire, due) = the_times(&d);
+        let id = only_reminder_id(&d);
+
+        // Lead fired earlier; app snooze-0 at exactly due fires once. The app
+        // passes notification_id 0 (no popup to replace) — the fire is still
+        // sent exactly once and guarded against a double-fire.
+        d.on_tick(due - 5 * 60_000);
+        assert_eq!(h.sent().len(), 1, "the lead");
+
+        let outcome = d.on_action(&id, 0, Action::Snooze { minutes: 0 }, due);
+        assert_eq!(outcome.as_snooze_ipc_str(), "fired");
+        assert_eq!(h.sent(), vec![id.clone(), id.clone()], "at-time fire sent once");
+        // A fresh notification (replaces_id 0), not a replacement.
+        assert_eq!(h.sent_requests()[1].replaces_id, 0);
+
+        // A second app snooze-0 at the same instant does not double-fire.
+        let again = d.on_action(&id, 0, Action::Snooze { minutes: 0 }, due);
+        assert_eq!(again.as_snooze_ipc_str(), "expired");
+        assert_eq!(h.sent().len(), 2, "no double-fire");
+    }
+
+    #[test]
+    fn app_snooze_unknown_id_maps_to_unknown() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let outcome = d.on_action("no-such-id", 0, Action::Snooze { minutes: 1 }, NOW);
+        assert_eq!(outcome.as_snooze_ipc_str(), "unknown");
+    }
+
+    #[test]
+    fn app_snooze_on_stale_reminder_maps_to_expired() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let id = only_reminder_id(&d);
+        d.apply_remove_result(&id, RemoveResult::Stale, NOW + 1);
+
+        let (_fire, due) = the_times(&d);
+        let outcome = d.on_action(&id, 0, Action::Snooze { minutes: 3 }, due - 10 * 60_000);
+        assert_eq!(outcome.as_snooze_ipc_str(), "expired");
     }
 
     #[test]

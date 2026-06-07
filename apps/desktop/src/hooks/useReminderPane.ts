@@ -21,6 +21,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {captureObservabilityMessage} from '../observability/captureObservabilityMessage';
 import {hasDueRemindersNow, parseReminderIndex, type Reminder} from '../lib/reminderIndex';
 import {
+  isLockedSnoozeMinutes,
   reminderToPaneRow,
   type ReminderPaneRow,
   type ReminderRemoveState,
@@ -28,6 +29,7 @@ import {
 
 const POLL_INTERVAL_MS = 15_000;
 const MINUTE_TICK_MS = 60_000;
+const SNOOZE_UNAVAILABLE_HINT_MS = 3_000;
 
 /**
  * Sentry signal for a `RemoveReminder` transport failure (daemon unreachable →
@@ -37,11 +39,27 @@ const MINUTE_TICK_MS = 60_000;
  */
 const REMOVE_UNAVAILABLE_EVENT = 'eskerra.desktop.reminder_remove_unavailable';
 
+/**
+ * Sentry signal for a `SnoozeReminder` transport failure (daemon unreachable →
+ * app-side `snooze-unavailable`). Parallels `REMOVE_UNAVAILABLE_EVENT`; same
+ * PII-free tagging.
+ */
+const SNOOZE_UNAVAILABLE_EVENT = 'eskerra.desktop.reminder_snooze_unavailable';
+
 function reportRemoveUnavailable(vaultHash: string | null): void {
   captureObservabilityMessage({
     message: REMOVE_UNAVAILABLE_EVENT,
     level: 'warning',
     fingerprint: [REMOVE_UNAVAILABLE_EVENT],
+    tags: {obs_surface: 'reminders', vault_root_hash: vaultHash ?? 'unknown'},
+  });
+}
+
+function reportSnoozeUnavailable(vaultHash: string | null): void {
+  captureObservabilityMessage({
+    message: SNOOZE_UNAVAILABLE_EVENT,
+    level: 'warning',
+    fingerprint: [SNOOZE_UNAVAILABLE_EVENT],
     tags: {obs_surface: 'reminders', vault_root_hash: vaultHash ?? 'unknown'},
   });
 }
@@ -74,6 +92,7 @@ export type UseReminderPaneResult = {
   rows: readonly ReminderPaneRow[];
   hasDueReminders: boolean;
   removeReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  snoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
 export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult {
@@ -82,7 +101,11 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
     new Map(),
   );
   const [hasDueReminders, setHasDueReminders] = useState(false);
+  const [snoozeTransientIds, setSnoozeTransientIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const vaultHashRef = useRef<string | null>(null);
+  const snoozeHintTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Compute vault hash once per vault root and write reminderd.json.
   useEffect(() => {
@@ -165,26 +188,41 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
     return () => clearInterval(timer);
   }, [reminders]);
 
+  useEffect(() => {
+    const timers = snoozeHintTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+      timers.clear();
+    };
+  }, []);
+
+  const flashSnoozeUnavailable = useCallback((reminderId: string) => {
+    setSnoozeTransientIds(prev => new Set(prev).add(reminderId));
+    const existing = snoozeHintTimersRef.current.get(reminderId);
+    if (existing != null) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(() => {
+      snoozeHintTimersRef.current.delete(reminderId);
+      setSnoozeTransientIds(prev => {
+        const next = new Set(prev);
+        next.delete(reminderId);
+        return next;
+      });
+    }, SNOOZE_UNAVAILABLE_HINT_MS);
+    snoozeHintTimersRef.current.set(reminderId, timer);
+  }, []);
+
   // Build pane rows, merging UI-only remove state from rowStates.
   const rows: readonly ReminderPaneRow[] = useMemo(
     () =>
-      reminders.map(r =>
-        reminderToPaneRow(r, rowStates.get(r.id) != null
-          ? {
-              id: r.id,
-              source: 'reminder',
-              noteUri: r.noteUri,
-              reminderId: r.id,
-              dueAtMs: r.dueAtMs,
-              normalizedTokenText: r.normalizedTokenText,
-              vaultRelativePath: r.vaultRelativePath,
-              reminderState: r.state,
-              uiCaretHint: r.uiCaretHint?.utf16Offset,
-              removeState: rowStates.get(r.id) ?? 'idle',
-            }
-          : undefined),
-      ),
-    [reminders, rowStates],
+      reminders.map(r => ({
+        ...reminderToPaneRow(r, rowStates.get(r.id)),
+        snoozeUnavailableHint: snoozeTransientIds.has(r.id),
+      })),
+    [reminders, rowStates, snoozeTransientIds],
   );
 
   const removeReminder = useCallback(
@@ -244,7 +282,43 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
     [],
   );
 
-  return {rows, hasDueReminders, removeReminder};
+  const snoozeReminder = useCallback(
+    async (noteUri: string, reminderId: string, minutes: number): Promise<void> => {
+      if (!isLockedSnoozeMinutes(minutes)) {
+        return;
+      }
+
+      let result: string;
+      try {
+        result = isTauri()
+          ? await invoke<string>('reminders_snooze', {noteUri, reminderId, minutes})
+          : 'snooze-unavailable';
+      } catch {
+        result = 'snooze-unavailable';
+      }
+
+      if (result === 'snooze-unavailable') {
+        // Daemon unreachable: never a local write. Surface observability plus a
+        // brief inline hint (ADR §8); leave the row interactive for menu retry.
+        reportSnoozeUnavailable(vaultHashRef.current);
+        flashSnoozeUnavailable(reminderId);
+        return;
+      }
+
+      // Snooze changed fireAtMs / state on the daemon side; re-read the index so
+      // the row reflects the new schedule immediately (the 15s poll +
+      // vault-files-changed already cover this, but this keeps it responsive).
+      const hash = vaultHashRef.current;
+      if (hash) {
+        const rs = await readIndex(hash);
+        // Bail if the vault switched while the read was in flight.
+        if (vaultHashRef.current === hash) setReminders(rs);
+      }
+    },
+    [flashSnoozeUnavailable],
+  );
+
+  return {rows, hasDueReminders, removeReminder, snoozeReminder};
 }
 
 export function __resetReminderPaneForTests(): void {
