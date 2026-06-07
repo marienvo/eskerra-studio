@@ -356,6 +356,7 @@ mod tests {
             context_anchor: "anchor".to_string(),
             duplicate_count: 1,
             scan_fingerprint: "fingerprint".to_string(),
+            display_line: String::new(),
         }
     }
 

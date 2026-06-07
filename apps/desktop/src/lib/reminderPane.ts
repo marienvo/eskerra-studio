@@ -40,7 +40,16 @@ export type ReminderPaneRow = {
    */
   displayLine: string;
   removeState: ReminderRemoveState;
+  /**
+   * Brief inline flash when snooze IPC failed (ADR §8). Auto-clears; not
+   * persisted across index re-reads.
+   */
+  snoozeUnavailableHint?: boolean;
 };
+
+/** Status-line copy when snooze transport fails (ADR §8 transient hint). */
+export const REMINDER_SNOOZE_UNAVAILABLE_TEXT =
+  "Couldn't reach the reminder service — try snooze again";
 
 /** Union of all row types the notifications pane can display. */
 export type PaneNotification = SessionNotification | ReminderPaneRow;
@@ -61,7 +70,7 @@ function resolveRemoveState(
 /** Maps a raw `Reminder` into a `ReminderPaneRow`, merging existing `removeState`. */
 export function reminderToPaneRow(
   reminder: Reminder,
-  prev: ReminderPaneRow | undefined,
+  prevRemoveState: ReminderRemoveState | undefined,
 ): ReminderPaneRow {
   return {
     id: reminder.id,
@@ -79,7 +88,7 @@ export function reminderToPaneRow(
     // when the daemon confirms `removed` (row disappears) or the index no
     // longer contains this id (also gone). A `stale` daemon state clears
     // `removing` back to idle so the UI shows the stale affordance.
-    removeState: resolveRemoveState(prev?.removeState, reminder.state),
+    removeState: resolveRemoveState(prevRemoveState, reminder.state),
   };
 }
 
@@ -107,15 +116,21 @@ export function reminderTimeLabel(dueAtMs: number): string {
 export const SNOOZE_MINUTES = [3, 1, 0] as const;
 export type SnoozeMinutes = (typeof SNOOZE_MINUTES)[number];
 
+/** Whether `minutes` is in the locked snooze action set (daemon + D-Bus contract). */
+export function isLockedSnoozeMinutes(minutes: number): minutes is SnoozeMinutes {
+  return (SNOOZE_MINUTES as readonly number[]).includes(minutes);
+}
+
 /**
- * Which of the three snoozes are still live at `nowMs`: a snooze-N targets
- * `dueAt − N·min` and is offered only while that target is in the future
- * (`> now`); snooze-0 targets `dueAt` itself. Mirrors the daemon's expired
- * no-op rule so the menu only ever shows snoozes that would actually reschedule
- * a fire. Empty for a fully overdue reminder.
+ * Which of the three snoozes are still live at `nowMs`: relative snoozes (3 / 1)
+ * target `dueAt − N·min` and are offered only while that target is strictly in
+ * the future (`target > now`); snooze-0 targets `dueAt` and stays live while
+ * `now <= dueAt` (the daemon fires at the boundary). Empty once `now > dueAt`.
  */
 export function liveSnoozeOptions(dueAtMs: number, nowMs: number): SnoozeMinutes[] {
-  return SNOOZE_MINUTES.filter(minutes => dueAtMs - minutes * 60_000 > nowMs);
+  return SNOOZE_MINUTES.filter(minutes =>
+    minutes === 0 ? nowMs <= dueAtMs : dueAtMs - minutes * 60_000 > nowMs,
+  );
 }
 
 /** Human-readable due-time label for a reminder row. */

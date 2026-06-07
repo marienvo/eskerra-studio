@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import {useEffect, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 
 import type {SessionNotification} from '../lib/sessionNotifications';
 import type {PaneNotification, ReminderPaneRow, SnoozeMinutes} from '../lib/reminderPane';
@@ -8,6 +8,7 @@ import {
   reminderDueLabel,
   reminderTimeLabel,
   liveSnoozeOptions,
+  REMINDER_SNOOZE_UNAVAILABLE_TEXT,
 } from '../lib/reminderPane';
 
 import {MaterialIcon} from './MaterialIcon';
@@ -24,9 +25,34 @@ type NotificationsPanelProps = {
   onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
+const MINUTE_TICK_MS = 60_000;
+
 /** Menu label for each snooze offset. */
 function snoozeOptionLabel(minutes: SnoozeMinutes): string {
   return minutes === 0 ? 'At due time' : `${minutes} min before`;
+}
+
+/** Wall-clock `nowMs` with an aligned minute tick and an on-demand refresh. */
+function useMinuteNowMs(): {nowMs: number; refreshNowMs: () => void} {
+  const [nowMs, setNowMs] = useState(Date.now);
+  const refreshNowMs = useCallback(() => setNowMs(Date.now()), []);
+  useEffect(() => {
+    const tick = () => setNowMs(Date.now());
+    tick();
+    const msUntilNextMinute = MINUTE_TICK_MS - (Date.now() % MINUTE_TICK_MS);
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    const timeoutId = setTimeout(() => {
+      tick();
+      intervalId = setInterval(tick, MINUTE_TICK_MS);
+    }, msUntilNextMinute);
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId !== undefined) {
+        clearInterval(intervalId);
+      }
+    };
+  }, []);
+  return {nowMs, refreshNowMs};
 }
 
 export function NotificationsPanel({
@@ -39,16 +65,7 @@ export function NotificationsPanel({
   onRemoveReminder,
   onSnoozeReminder,
 }: NotificationsPanelProps) {
-  // Minute tick so due-time labels stay current. useState(Date.now) is the
-  // accepted initializer-function pattern; the setInterval callback is in an
-  // effect (not during render) so it avoids the impure-function-in-render rule.
-  const [nowMs, setNowMs] = useState(Date.now);
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setNowMs(Date.now());
-    }, 60_000);
-    return () => clearInterval(tick);
-  }, []);
+  const {nowMs, refreshNowMs} = useMinuteNowMs();
 
   useEffect(() => {
     if (!highlightId) {
@@ -94,6 +111,7 @@ export function NotificationsPanel({
                   key={item.id}
                   row={item}
                   nowMs={nowMs}
+                  onRefreshNowMs={refreshNowMs}
                   onOpen={onOpenReminder}
                   onRemove={onRemoveReminder}
                   onSnooze={onSnoozeReminder}
@@ -168,12 +186,14 @@ function reminderRowClass(row: ReminderPaneRow, nowMs: number): string {
 function ReminderRow({
   row,
   nowMs,
+  onRefreshNowMs,
   onOpen,
   onRemove,
   onSnooze,
 }: {
   row: ReminderPaneRow;
   nowMs: number;
+  onRefreshNowMs: () => void;
   onOpen: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
   onRemove: (noteUri: string, reminderId: string) => Promise<void>;
   onSnooze: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
@@ -228,7 +248,15 @@ function ReminderRow({
         {snoozeOptions.length > 0 ? (
           <SnoozeMenu
             options={snoozeOptions}
-            onSnooze={minutes => void onSnooze(row.noteUri, row.reminderId, minutes)}
+            onOpenChange={open => {
+              if (open) onRefreshNowMs();
+            }}
+            onSnooze={minutes => {
+              if (!liveSnoozeOptions(row.dueAtMs, Date.now()).includes(minutes)) {
+                return;
+              }
+              void onSnooze(row.noteUri, row.reminderId, minutes);
+            }}
           />
         ) : null}
         {isUnavailable ? (
@@ -282,13 +310,15 @@ function ReminderRow({
  */
 function SnoozeMenu({
   options,
+  onOpenChange,
   onSnooze,
 }: {
   options: readonly SnoozeMinutes[];
+  onOpenChange: (open: boolean) => void;
   onSnooze: (minutes: SnoozeMinutes) => void;
 }) {
   return (
-    <DropdownMenu.Root modal={false}>
+    <DropdownMenu.Root modal={false} onOpenChange={onOpenChange}>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
@@ -350,6 +380,13 @@ function ReminderStatusLine({
     return (
       <p className="notifications-panel__reminder-status notifications-panel__reminder-status--unavailable small muted">
         {"Couldn't reach the reminder service"}
+      </p>
+    );
+  }
+  if (row.snoozeUnavailableHint) {
+    return (
+      <p className="notifications-panel__reminder-status notifications-panel__reminder-status--unavailable small muted">
+        {REMINDER_SNOOZE_UNAVAILABLE_TEXT}
       </p>
     );
   }

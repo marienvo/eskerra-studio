@@ -5,10 +5,9 @@ import {
   reminderDueLabel,
   reminderNoteName,
   reminderTimeLabel,
+  isLockedSnoozeMinutes,
   liveSnoozeOptions,
   reminderToPaneRow,
-  type ReminderPaneRow,
-  type ReminderRemoveState,
 } from './reminderPane';
 
 function reminder(overrides: Partial<Reminder> = {}): Reminder {
@@ -29,22 +28,6 @@ function reminder(overrides: Partial<Reminder> = {}): Reminder {
     duplicateCount: 1,
     scanFingerprint: 'fp',
     ...overrides,
-  };
-}
-
-function prevRow(removeState: ReminderRemoveState): ReminderPaneRow {
-  return {
-    id: 'id-1',
-    source: 'reminder',
-    noteUri: 'file:///vault/Inbox/a.md',
-    reminderId: 'id-1',
-    dueAtMs: 1_000,
-    normalizedTokenText: '@2026-06-06_0900',
-    vaultRelativePath: 'Inbox/a.md',
-    reminderState: 'scheduled',
-    uiCaretHint: 16,
-    displayLine: '',
-    removeState,
   };
 }
 
@@ -81,21 +64,21 @@ describe('reminderToPaneRow', () => {
   });
 
   it('keeps a `removing` spinner across index re-reads while not stale', () => {
-    const row = reminderToPaneRow(reminder({state: 'notified'}), prevRow('removing'));
+    const row = reminderToPaneRow(reminder({state: 'notified'}), 'removing');
     expect(row.removeState).toBe('removing');
   });
 
   it('clears `removing` back to idle once the daemon reports stale', () => {
     // A stale daemon result means the remove failed safely → surface the stale
     // affordance, not a stuck spinner.
-    const row = reminderToPaneRow(reminder({state: 'stale'}), prevRow('removing'));
+    const row = reminderToPaneRow(reminder({state: 'stale'}), 'removing');
     expect(row.removeState).toBe('idle');
     expect(row.reminderState).toBe('stale');
   });
 
   it('preserves `remove-unavailable` regardless of daemon state (app-local UI only)', () => {
     for (const state of ['scheduled', 'due', 'notified', 'stale'] as ReminderState[]) {
-      const row = reminderToPaneRow(reminder({state}), prevRow('remove-unavailable'));
+      const row = reminderToPaneRow(reminder({state}), 'remove-unavailable');
       expect(row.removeState).toBe('remove-unavailable');
     }
   });
@@ -154,6 +137,16 @@ describe('reminderTimeLabel', () => {
   });
 });
 
+describe('isLockedSnoozeMinutes', () => {
+  it('accepts only the locked action set', () => {
+    expect(isLockedSnoozeMinutes(3)).toBe(true);
+    expect(isLockedSnoozeMinutes(1)).toBe(true);
+    expect(isLockedSnoozeMinutes(0)).toBe(true);
+    expect(isLockedSnoozeMinutes(2)).toBe(false);
+    expect(isLockedSnoozeMinutes(999)).toBe(false);
+  });
+});
+
 describe('liveSnoozeOptions', () => {
   const due = 1_000_000_000_000;
   const min = 60_000;
@@ -172,8 +165,12 @@ describe('liveSnoozeOptions', () => {
     expect(liveSnoozeOptions(due, due - 30_000)).toEqual([0]);
   });
 
-  it('offers nothing exactly at due or past due', () => {
-    expect(liveSnoozeOptions(due, due)).toEqual([]);
+  it('offers at-due exactly at dueAt (daemon FiredNow boundary)', () => {
+    expect(liveSnoozeOptions(due, due)).toEqual([0]);
+  });
+
+  it('offers nothing once now is past dueAt', () => {
+    expect(liveSnoozeOptions(due, due + 1)).toEqual([]);
     expect(liveSnoozeOptions(due, due + min)).toEqual([]);
   });
 });

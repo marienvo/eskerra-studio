@@ -336,6 +336,9 @@ pub(crate) fn perform_remove(
 /// it is dead code on non-Linux targets.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn perform_snooze(id: &str, minutes: u32, tx: &Sender<DaemonEvent>) -> String {
+    if !crate::scheduler::is_locked_snooze_minutes(minutes) {
+        return "unknown".to_string();
+    }
     let (reply_tx, reply_rx) = mpsc::channel();
     if tx
         .send(DaemonEvent::Snooze {
