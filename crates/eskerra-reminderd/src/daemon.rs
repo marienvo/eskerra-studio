@@ -14,9 +14,11 @@ use eskerra_reminder_core::{merge_reminders, DefaultTime, ReminderIndex};
 
 use crate::config::ReminderdConfig;
 use crate::index_store::{load_index, write_index, IndexLoadError};
+use crate::notify::{NotificationRequest, Notifier};
 use crate::paths::index_path_in;
 use crate::rederive::rederive_for_settings;
 use crate::scan::{rescan_changed_files, scan_vault};
+use crate::scheduler::{self, Action, ActionOutcome, FireKind, FireRequest, SCHEDULER_GRACE_MS};
 
 /// Injected control over the real vault filesystem watcher, so the daemon's
 /// edge-case logic is testable without spawning `notify` backends. The real
@@ -77,11 +79,18 @@ pub struct Daemon {
     config_path: PathBuf,
     data_dir: PathBuf,
     watch: Box<dyn WatchControl>,
+    notifier: Box<dyn Notifier>,
+    /// Grace tolerance for scheduled fires past `dueAt` (timer jitter / brief
+    /// suspend). Configurable for tests; defaults to [`SCHEDULER_GRACE_MS`].
+    grace_ms: i64,
     last_known_good: Option<ReminderdConfig>,
     active: Option<ActiveVault>,
     /// Set when the active config names a vault whose path is currently missing
     /// (so `retry` knows to re-check without re-reading the file).
     unavailable: bool,
+    /// Earliest instant the run loop should wake to fire/flip a reminder, or
+    /// `None` when nothing is armed. Recomputed after every reminder change.
+    next_wakeup_ms: Option<i64>,
     /// Set when the active vault has a valid index but the filesystem watcher
     /// failed to arm. Retry/config reloads reattempt the watch without forcing
     /// a full rescan.
@@ -89,16 +98,31 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    pub fn new(config_path: PathBuf, data_dir: PathBuf, watch: Box<dyn WatchControl>) -> Self {
+    pub fn new(
+        config_path: PathBuf,
+        data_dir: PathBuf,
+        watch: Box<dyn WatchControl>,
+        notifier: Box<dyn Notifier>,
+    ) -> Self {
         Self {
             config_path,
             data_dir,
             watch,
+            notifier,
+            grace_ms: SCHEDULER_GRACE_MS,
             last_known_good: None,
             active: None,
             unavailable: false,
+            next_wakeup_ms: None,
             watch_needs_rearm: false,
         }
+    }
+
+    /// Earliest armed fire/flip instant (epoch ms), for the run loop's
+    /// sleep-until-next. `None` = nothing armed; the loop falls back to its
+    /// periodic safety tick.
+    pub fn next_wakeup_ms(&self) -> Option<i64> {
+        self.next_wakeup_ms
     }
 
     pub fn state(&self) -> DaemonStateKind {
@@ -132,7 +156,7 @@ impl Daemon {
             Err(err) => {
                 eprintln!("[reminderd] config read error: {err}");
                 // Transient read error: keep whatever we have rather than churn.
-                return self.keep_or_idle("parse");
+                return self.keep_or_idle("read_error");
             }
         };
 
@@ -163,7 +187,12 @@ impl Daemon {
         let Some(active) = self.active.as_ref() else {
             return Outcome::Ignored;
         };
+        // Snapshot what the scan needs, ending the immutable borrow before the
+        // mutable re-borrow / `&mut self` discovery call below.
         let root = active.root.clone();
+        let default_time = active.default_time;
+        let lead_minutes = active.lead_minutes;
+        let prior = active.index.reminders.clone();
 
         // Decide full vs incremental. Coarse → full. A still-existing touched
         // directory → full (conservative: we don't track which files it
@@ -176,25 +205,102 @@ impl Daemon {
         let touches_directory = abs_paths.iter().any(|p| p.is_dir());
         let full = coarse || touches_directory;
 
-        let prior = active.index.reminders.clone();
         let fresh = if full {
-            scan_vault(&root, active.default_time, active.lead_minutes)
+            scan_vault(&root, default_time, lead_minutes)
         } else {
-            rescan_changed_files(
-                &root,
-                &prior,
-                &abs_paths,
-                active.default_time,
-                active.lead_minutes,
-            )
+            rescan_changed_files(&root, &prior, &abs_paths, default_time, lead_minutes)
         };
         let merged = merge_reminders(&prior, fresh);
         let count = merged.len();
-        self.write_active_index(merged, now_ms);
+        if let Some(active) = self.active.as_mut() {
+            active.index.reminders = merged;
+        }
+        // Re-classify against `now` (discovery) and persist + re-arm.
+        self.run_discovery_and_dispatch(now_ms);
         Outcome::Rescanned {
             reminder_count: count,
             full,
         }
+    }
+
+    /// Scheduled-fire / minute-tick: execute armed fires whose `fireAt` arrived
+    /// (with grace), then run a discovery pass to flip overdue reminders to
+    /// `Due` and fire any now-inside-window lead. Persists + re-arms. No-op
+    /// without an active vault.
+    pub fn on_tick(&mut self, now_ms: i64) -> usize {
+        if self.active.is_none() {
+            return 0;
+        }
+        let grace = self.grace_ms;
+        let mut fires = {
+            let active = self.active.as_mut().unwrap();
+            let mut f = scheduler::run_timers(&mut active.index.reminders, now_ms, grace);
+            f.extend(scheduler::discover(&mut active.index.reminders, now_ms));
+            f
+        };
+        let fired = fires.len();
+        // De-dup defensively (a reminder cannot appear in both passes, but keep
+        // the contract that we send each notification at most once per tick).
+        fires.dedup_by(|a, b| a.reminder_id == b.reminder_id);
+        self.dispatch(fires, now_ms);
+        fired
+    }
+
+    /// Resume catch-up on the wake edge (`PrepareForSleep(false)`): re-evaluate
+    /// already-armed reminders as deferred scheduled fires (same rule as a
+    /// timer, honoring `lastNotifiedMs` so a brief suspend never double-fires),
+    /// then discover any reminders first seen on the wake scan. Identical wiring
+    /// to [`Daemon::on_tick`]; kept distinct for observability/clarity.
+    pub fn on_resume(&mut self, now_ms: i64) -> usize {
+        self.on_tick(now_ms)
+    }
+
+    /// Handle a notification action for `reminder_id`, where `notification_id`
+    /// is the platform id of the triggering notification (so an at-time
+    /// `FiredNow` can replace it in place rather than duplicate it). Applies the
+    /// snooze / remove / open rules, persists any state change, re-arms, and (for
+    /// an at-time snooze-0 fire) sends the notification. Returns the outcome for
+    /// logging. `Remove`/`Open` are Phase 4 / Phase 5 hooks here.
+    pub fn on_action(
+        &mut self,
+        reminder_id: &str,
+        notification_id: u32,
+        action: Action,
+        now_ms: i64,
+    ) -> ActionOutcome {
+        if self.active.is_none() {
+            return ActionOutcome::Unknown;
+        }
+        let outcome = {
+            let active = self.active.as_mut().unwrap();
+            scheduler::apply_action(&mut active.index.reminders, reminder_id, action, now_ms)
+        };
+        match &outcome {
+            // These mutate no reminder state. `Unknown` never matched a reminder;
+            // `Remove`/`Open` are Phase 4/5 stubs that only route (they will mutate
+            // state once wired). Skip the dispatch so we don't rewrite the index or
+            // bump `generatedAt` for a no-op.
+            ActionOutcome::Unknown
+            | ActionOutcome::RemoveRequested
+            | ActionOutcome::OpenRequested => {}
+            // snooze-0 at exactly due fires immediately. Replace the triggering
+            // notification (`replaces_id = notification_id`) so the desktop never
+            // shows two live notifications for the same reminder.
+            ActionOutcome::FiredNow => {
+                let fires = vec![FireRequest {
+                    reminder_id: reminder_id.to_string(),
+                    kind: FireKind::AtTime,
+                }];
+                self.dispatch_replacing(fires, notification_id, now_ms);
+            }
+            // Rescheduled / ExpiredNoOp may have changed scheduling state (e.g. a
+            // snooze re-arm or an overdue snooze-0 flipping to `Due`): persist +
+            // re-arm, nothing to send.
+            ActionOutcome::Rescheduled { .. } | ActionOutcome::ExpiredNoOp => {
+                self.dispatch(Vec::new(), now_ms);
+            }
+        }
+        outcome
     }
 
     // --- internals ---
@@ -212,6 +318,7 @@ impl Daemon {
             self.watch.stop();
             self.active = None;
             self.unavailable = true;
+            self.next_wakeup_ms = None;
             self.watch_needs_rearm = false;
             eprintln!(
                 "[reminderd] vault unavailable (path missing): {}",
@@ -229,7 +336,9 @@ impl Daemon {
                     self.rearm_watch_if_needed();
                     return Outcome::NoChange;
                 }
-                // Settings-only re-derive: no session bump, no teardown.
+                // Settings-only re-derive: no session bump, no teardown. Update
+                // the times, then re-run discovery (the changed schedule is a
+                // schedule change) and persist + re-arm.
                 active.default_time = cfg.date_only_default_time;
                 active.lead_minutes = cfg.lead_minutes;
                 let rederived = rederive_for_settings(
@@ -237,11 +346,7 @@ impl Daemon {
                     cfg.date_only_default_time,
                     cfg.lead_minutes,
                 );
-                active.index.generated_at_ms = now_ms;
-                let path = index_path_in(&self.data_dir, &hash);
-                if let Err(err) = write_index(&path, &active.index) {
-                    eprintln!("[reminderd] index write failed: {err}");
-                }
+                self.run_discovery_and_dispatch(now_ms);
                 self.rearm_watch_if_needed();
                 return Outcome::SettingsRederived {
                     rederived_count: rederived,
@@ -250,7 +355,7 @@ impl Daemon {
         }
 
         // Vault switch (or first activation): tear down, load prior index, full
-        // scan, merge, write, re-arm watch.
+        // scan, merge, then discover + write + re-arm watch.
         self.watch.stop();
         self.watch_needs_rearm = false;
         let prior_index = match load_index(&index_path_in(&self.data_dir, &hash)) {
@@ -265,10 +370,6 @@ impl Daemon {
         let merged = merge_reminders(&prior_index.reminders, fresh);
         let count = merged.len();
         let index = ReminderIndex::new(hash.clone(), now_ms, merged);
-        let path = index_path_in(&self.data_dir, &hash);
-        if let Err(err) = write_index(&path, &index) {
-            eprintln!("[reminderd] index write failed: {err}");
-        }
         self.unavailable = false;
         self.active = Some(ActiveVault {
             root: root.clone(),
@@ -283,6 +384,10 @@ impl Daemon {
         } else {
             self.watch_needs_rearm = false;
         }
+        // Discovery classifies the freshly-scanned reminders against `now`
+        // (overdue -> due in-app, in-window -> fire, future -> armed) and writes
+        // the index post-classification.
+        self.run_discovery_and_dispatch(now_ms);
         Outcome::VaultSwitched {
             reminder_count: count,
         }
@@ -306,13 +411,64 @@ impl Daemon {
         }
     }
 
-    fn write_active_index(&mut self, merged: Vec<eskerra_reminder_core::Reminder>, now_ms: i64) {
-        if let Some(active) = self.active.as_mut() {
-            active.index.reminders = merged;
+    /// Run a discovery pass over the active index, then dispatch (send fires +
+    /// persist). The single funnel used after every index change (vault switch,
+    /// settings re-derive, watch rescan).
+    fn run_discovery_and_dispatch(&mut self, now_ms: i64) {
+        if self.active.is_none() {
+            self.next_wakeup_ms = None;
+            return;
+        }
+        let fires = {
+            let active = self.active.as_mut().unwrap();
+            scheduler::discover(&mut active.index.reminders, now_ms)
+        };
+        self.dispatch(fires, now_ms);
+    }
+
+    /// Send the decided notifications, persist the active index, and recompute
+    /// the next wakeup. The reminder state transitions behind `fires` have
+    /// already been applied by the scheduler; sending is best-effort (a D-Bus
+    /// failure is logged, never fatal, and never re-fires thanks to the
+    /// `lastNotifiedMs` guard).
+    fn dispatch(&mut self, fires: Vec<FireRequest>, now_ms: i64) {
+        self.dispatch_replacing(fires, 0, now_ms);
+    }
+
+    /// Like [`Daemon::dispatch`], but the sent notifications replace the platform
+    /// notification `replaces_id` (0 = fresh). Used by [`Daemon::on_action`] for
+    /// an at-time `FiredNow`, which carries exactly one fire, so a single
+    /// `replaces_id` applies cleanly; the normal scheduling paths pass 0.
+    fn dispatch_replacing(&mut self, fires: Vec<FireRequest>, replaces_id: u32, now_ms: i64) {
+        // Phase 1: build requests + persist under the active borrow.
+        let requests: Vec<NotificationRequest> = {
+            let Some(active) = self.active.as_mut() else {
+                self.next_wakeup_ms = None;
+                return;
+            };
+            let requests = fires
+                .iter()
+                .filter_map(|f| {
+                    active
+                        .index
+                        .reminders
+                        .iter()
+                        .find(|r| r.id == f.reminder_id)
+                        .map(|r| NotificationRequest::for_reminder(r, f.kind).replacing(replaces_id))
+                })
+                .collect();
             active.index.generated_at_ms = now_ms;
             let path = index_path_in(&self.data_dir, &active.hash);
             if let Err(err) = write_index(&path, &active.index) {
                 eprintln!("[reminderd] index write failed: {err}");
+            }
+            self.next_wakeup_ms = scheduler::next_wakeup_ms(&active.index.reminders, now_ms);
+            requests
+        };
+        // Phase 2: send (no active borrow held — distinct field `notifier`).
+        for req in &requests {
+            if let Err(err) = self.notifier.send(req) {
+                eprintln!("[reminderd] notification_send failed: {err}");
             }
         }
     }
@@ -321,6 +477,7 @@ impl Daemon {
         self.watch.stop();
         self.active = None;
         self.unavailable = false;
+        self.next_wakeup_ms = None;
         self.watch_needs_rearm = false;
         Outcome::Idle
     }
@@ -334,6 +491,7 @@ impl Daemon {
             self.watch.stop();
             self.active = None;
             self.unavailable = false;
+            self.next_wakeup_ms = None;
             self.watch_needs_rearm = false;
             Outcome::InvalidConfigIdle { reason }
         }
@@ -375,12 +533,28 @@ mod tests {
         }
     }
 
+    /// Records the full notification requests sent, so tests can assert firing
+    /// (reminder id) and replacement (`replaces_id`) without a live D-Bus / GNOME.
+    struct RecordingNotifier {
+        sent: Arc<Mutex<Vec<NotificationRequest>>>,
+    }
+
+    impl crate::notify::Notifier for RecordingNotifier {
+        fn send(&self, req: &NotificationRequest) -> Result<u32, String> {
+            self.sent.lock().unwrap().push(req.clone());
+            // A distinct, non-zero id per send, mimicking the platform handing
+            // back a fresh notification id (used to correlate replacement).
+            Ok(self.sent.lock().unwrap().len() as u32)
+        }
+    }
+
     struct Harness {
         _tmp: tempfile::TempDir,
         config_path: PathBuf,
         data_dir: PathBuf,
         vault: PathBuf,
         log: Arc<Mutex<Vec<String>>>,
+        sent: Arc<Mutex<Vec<NotificationRequest>>>,
         start_failures_remaining: Arc<Mutex<usize>>,
     }
 
@@ -398,6 +572,7 @@ mod tests {
                 data_dir,
                 vault,
                 log: Arc::new(Mutex::new(Vec::new())),
+                sent: Arc::new(Mutex::new(Vec::new())),
                 start_failures_remaining: Arc::new(Mutex::new(0)),
             }
         }
@@ -410,7 +585,23 @@ mod tests {
                     log: Arc::clone(&self.log),
                     start_failures_remaining: Arc::clone(&self.start_failures_remaining),
                 }),
+                Box::new(RecordingNotifier {
+                    sent: Arc::clone(&self.sent),
+                }),
             )
+        }
+
+        fn sent(&self) -> Vec<String> {
+            self.sent
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|r| r.reminder_id.clone())
+                .collect()
+        }
+
+        fn sent_requests(&self) -> Vec<NotificationRequest> {
+            self.sent.lock().unwrap().clone()
         }
 
         fn fail_next_watch_starts(&self, count: usize) {
@@ -643,6 +834,52 @@ mod tests {
     }
 
     #[test]
+    fn settings_rederive_keeps_stale_reminder_stale_and_non_firing() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06"); // date-only
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        // Build the index, then mark the reminder Stale on disk and "restart" so
+        // the merge carries the Stale state across (same config → same dueAt).
+        let mut d1 = h.daemon();
+        assert!(matches!(d1.reload_config(NOW), Outcome::VaultSwitched { .. }));
+        let mut index =
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
+        index.reminders[0].state = ReminderState::Stale;
+        index.reminders[0].last_notified_ms = None;
+        crate::index_store::write_index(&h.index_path("vh1"), &index).unwrap();
+
+        let mut d = h.daemon();
+        assert!(matches!(d.reload_config(NOW), Outcome::VaultSwitched { .. }));
+        assert_eq!(
+            d.active_index().unwrap().reminders[0].state,
+            ReminderState::Stale,
+            "stale carried across restart"
+        );
+        let due_before = d.active_index().unwrap().reminders[0].due_at_ms;
+
+        // Settings-only change (earlier time + longer lead) must NOT resurrect it.
+        h.write_config(&h.config_for("vh1", "08:00", 10));
+        assert_eq!(
+            d.reload_config(NOW + 1),
+            Outcome::SettingsRederived { rederived_count: 0 },
+            "a stale reminder is not a schedule change"
+        );
+        let after = &d.active_index().unwrap().reminders[0];
+        assert_eq!(after.state, ReminderState::Stale, "still stale after rederive");
+        assert_eq!(after.due_at_ms, due_before, "stale times untouched");
+        assert!(h.sent().is_empty(), "settings rederive fired nothing");
+
+        // A subsequent discovery/timer pass well past the (old) due time must
+        // still not fire the stale reminder.
+        let fired = d.on_tick(due_before + 60_000);
+        assert_eq!(fired, 0);
+        assert!(h.sent().is_empty(), "discovery must not fire a stale reminder");
+        assert_eq!(d.active_index().unwrap().reminders[0].state, ReminderState::Stale);
+    }
+
+    #[test]
     fn retry_rearms_watcher_after_start_failure_without_rebuilding_index() {
         let h = Harness::new();
         h.write_note("Inbox/a.md", "@2026-06-06_0900");
@@ -722,6 +959,33 @@ mod tests {
             Outcome::InvalidConfigKeptLastKnownGood { reason: "parse" }
         );
         // Still active, index and watcher undisturbed.
+        assert_eq!(d.state(), DaemonStateKind::Active);
+        assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), index_before);
+        assert_eq!(h.log(), log_before);
+    }
+
+    #[test]
+    fn config_read_error_uses_distinct_reason_tag_and_keeps_last_known_good() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        assert!(matches!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { .. }
+        ));
+        let index_before = std::fs::read(h.index_path("vh1")).unwrap();
+        let log_before = h.log();
+
+        std::fs::remove_file(&h.config_path).unwrap();
+        std::fs::create_dir(&h.config_path).unwrap();
+        assert_eq!(
+            d.reload_config(NOW + 1),
+            Outcome::InvalidConfigKeptLastKnownGood {
+                reason: "read_error"
+            }
+        );
         assert_eq!(d.state(), DaemonStateKind::Active);
         assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), index_before);
         assert_eq!(h.log(), log_before);
@@ -824,5 +1088,192 @@ mod tests {
                 .unwrap();
         assert_eq!(index.reminders.len(), 1);
         assert_eq!(index.reminders[0].vault_relative_path, "Notes/keep.md");
+    }
+
+    // --- scheduler / notification wiring (Phase 3) ------------------------
+
+    /// Helper: the active reminder's (fire_at, due_at), asserting exactly one.
+    fn the_times(d: &Daemon) -> (i64, i64) {
+        let r = &d.active_index().unwrap().reminders[0];
+        (r.fire_at_ms, r.due_at_ms)
+    }
+
+    #[test]
+    fn switch_arms_future_reminder_without_firing() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        assert!(matches!(
+            d.reload_config(NOW),
+            Outcome::VaultSwitched { .. }
+        ));
+        let (fire_at, _due) = the_times(&d);
+        // NOW (2023) is far before the 2026 fire → armed, nothing sent.
+        assert_eq!(
+            d.active_index().unwrap().reminders[0].state,
+            ReminderState::Scheduled
+        );
+        assert!(h.sent().is_empty());
+        assert_eq!(d.next_wakeup_ms(), Some(fire_at));
+    }
+
+    #[test]
+    fn tick_at_fire_time_sends_notification_and_marks_notified() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let (fire_at, _due) = the_times(&d);
+
+        let fired = d.on_tick(fire_at);
+        assert_eq!(fired, 1);
+        let id = d.active_index().unwrap().reminders[0].id.clone();
+        assert_eq!(h.sent(), vec![id]);
+        assert_eq!(
+            d.active_index().unwrap().reminders[0].state,
+            ReminderState::Notified
+        );
+        // Nothing left armed → no further wakeup.
+        assert_eq!(d.next_wakeup_ms(), None);
+        // A second tick does not re-fire.
+        assert_eq!(d.on_tick(fire_at + 1), 0);
+        assert_eq!(h.sent().len(), 1);
+    }
+
+    #[test]
+    fn overdue_at_switch_is_due_in_app_only_no_notification() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let (_fire, due) = the_times(&d);
+
+        // Re-switch with `now` past due (simulate discovery of an overdue token).
+        // A fresh daemon discovering it well after due must not pop a popup.
+        let mut d2 = h.daemon();
+        d2.reload_config(due + 60_000);
+        assert_eq!(
+            d2.active_index().unwrap().reminders[0].state,
+            ReminderState::Due
+        );
+        assert!(h.sent().is_empty(), "overdue discovery must be in-app only");
+    }
+
+    #[test]
+    fn snooze_action_reschedules_and_persists_to_index() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let (fire_at, due) = the_times(&d);
+        let id = d.active_index().unwrap().reminders[0].id.clone();
+
+        // Fire the lead, then snooze-3 before dueAt-3min.
+        d.on_tick(fire_at);
+        let now = due - 4 * 60_000;
+        let outcome = d.on_action(&id, 1, Action::Snooze { minutes: 3 }, now);
+        assert_eq!(
+            outcome,
+            ActionOutcome::Rescheduled {
+                fire_at_ms: due - 3 * 60_000
+            }
+        );
+
+        // Persisted to disk with the new fire time + re-armed.
+        let index =
+            ReminderIndex::from_json(&std::fs::read_to_string(h.index_path("vh1")).unwrap())
+                .unwrap();
+        assert_eq!(index.reminders[0].fire_at_ms, due - 3 * 60_000);
+        assert_eq!(d.next_wakeup_ms(), Some(due - 3 * 60_000));
+
+        // The snoozed fire later executes once.
+        let fired = d.on_tick(due - 3 * 60_000);
+        assert_eq!(fired, 1);
+        assert_eq!(h.sent(), vec![id.clone(), id]);
+    }
+
+    #[test]
+    fn action_for_unknown_reminder_is_ignored_without_rewrite() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let before = std::fs::read(h.index_path("vh1")).unwrap();
+
+        let outcome = d.on_action("no-such-id", 1, Action::Snooze { minutes: 1 }, NOW + 1);
+        assert_eq!(outcome, ActionOutcome::Unknown);
+        // Index untouched (no needless rewrite / generatedAt bump).
+        assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), before);
+    }
+
+    #[test]
+    fn remove_and_open_stubs_do_not_rewrite_index_or_bump_generated_at() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let id = d.active_index().unwrap().reminders[0].id.clone();
+        let generated_before = d.active_index().unwrap().generated_at_ms;
+        let before = std::fs::read(h.index_path("vh1")).unwrap();
+
+        // Remove is a Phase 4 stub: routed but mutates no state → no index write.
+        let outcome = d.on_action(&id, 7, Action::Remove, NOW + 1);
+        assert_eq!(outcome, ActionOutcome::RemoveRequested);
+        assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), before);
+        assert_eq!(d.active_index().unwrap().generated_at_ms, generated_before);
+
+        // Open (default click) is a Phase 5 stub: likewise no index write.
+        let outcome = d.on_action(&id, 7, Action::Open, NOW + 2);
+        assert_eq!(outcome, ActionOutcome::OpenRequested);
+        assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), before);
+        assert_eq!(d.active_index().unwrap().generated_at_ms, generated_before);
+
+        // No notifications were sent for the stubs.
+        assert!(h.sent().is_empty());
+    }
+
+    #[test]
+    fn fired_now_replaces_the_triggering_notification_instead_of_duplicating() {
+        let h = Harness::new();
+        h.write_note("Inbox/a.md", "@2026-06-06_0900");
+        h.write_config(&h.config_for("vh1", "09:00", 5));
+
+        let mut d = h.daemon();
+        d.reload_config(NOW);
+        let (_fire, due) = the_times(&d);
+        let id = d.active_index().unwrap().reminders[0].id.clone();
+
+        // Fire the lead first (this is the "triggering" notification). The fake
+        // notifier hands back id 1 for it.
+        d.on_tick(due - 5 * 60_000);
+        assert_eq!(h.sent_requests().len(), 1);
+        let trigger_id = h.sent_requests()[0].replaces_id;
+        assert_eq!(trigger_id, 0, "the lead is a fresh notification");
+
+        // snooze-0 at exactly due, arriving from notification id 1 → FiredNow,
+        // and the at-time notification must REPLACE notification id 1 rather than
+        // open a second live notification.
+        let outcome = d.on_action(&id, 1, Action::Snooze { minutes: 0 }, due);
+        assert_eq!(outcome, ActionOutcome::FiredNow);
+
+        let reqs = h.sent_requests();
+        assert_eq!(reqs.len(), 2, "exactly one more notification, not a duplicate");
+        assert_eq!(reqs[1].reminder_id, id);
+        assert_eq!(
+            reqs[1].replaces_id, 1,
+            "FiredNow must replace the triggering notification id"
+        );
     }
 }

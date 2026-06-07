@@ -25,6 +25,11 @@ sha2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Config-file watching reuses the same notify major as the shared watcher.
 notify = "6"
+# Native org.freedesktop.Notifications + org.freedesktop.login1 (PrepareForSleep)
+# over D-Bus (Phase 3 / ADR 003 §6). Same major already in the app's tree (via
+# tauri-plugin-opener) so this adds no new D-Bus stack version. We use the
+# blocking API, matching the daemon's thread-per-source model.
+zbus = "5"
 
 [dev-dependencies]
 tempfile = "3"

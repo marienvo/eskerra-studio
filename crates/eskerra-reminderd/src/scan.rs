@@ -8,6 +8,7 @@
 //! detection→index-update stays inside the <1s budget on large vaults.
 
 use std::collections::BTreeSet;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use eskerra_reminder_core::{fresh_reminder_from_scan, scan, DefaultTime, Reminder};
@@ -35,7 +36,15 @@ pub fn is_eligible_markdown_file_name(name: &str) -> bool {
 /// absolute path; the stable identity is `vaultRelativePath`, this is only a
 /// routing convenience and is re-derivable from the vault root + relative path.
 fn note_uri_for(abs_path: &Path) -> String {
-    format!("file://{}", abs_path.to_string_lossy())
+    let mut encoded = String::new();
+    for &byte in abs_path.as_os_str().as_bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'/' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    format!("file://{encoded}")
 }
 
 /// Vault-relative path with `/` separators, or `None` if `abs` is not under
@@ -52,8 +61,16 @@ pub fn vault_relative(root: &Path, abs: &Path) -> Option<String> {
 /// Scan a single file's bytes into fresh reminders. Returns an empty vec for an
 /// ineligible/oversized/unreadable file or one with no live tokens — never an
 /// error (a single bad file must not abort a whole-vault scan).
-fn scan_file(root: &Path, abs_path: &Path, default_time: DefaultTime, lead_minutes: u32) -> Vec<Reminder> {
-    let Some(name) = abs_path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+fn scan_file(
+    root: &Path,
+    abs_path: &Path,
+    default_time: DefaultTime,
+    lead_minutes: u32,
+) -> Vec<Reminder> {
+    let Some(name) = abs_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+    else {
         return Vec::new();
     };
     if !is_eligible_markdown_file_name(&name) {
@@ -102,7 +119,13 @@ pub fn scan_vault(root: &Path, default_time: DefaultTime, lead_minutes: u32) -> 
     reminders
 }
 
-fn walk(root: &Path, dir: &Path, default_time: DefaultTime, lead_minutes: u32, out: &mut Vec<Reminder>) {
+fn walk(
+    root: &Path,
+    dir: &Path,
+    default_time: DefaultTime,
+    lead_minutes: u32,
+    out: &mut Vec<Reminder>,
+) {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(_) => return,
@@ -177,9 +200,10 @@ fn is_changed_or_under_changed(rel: &str, changed_rel: &BTreeSet<String>) -> boo
     if changed_rel.contains(rel) {
         return true;
     }
-    changed_rel
-        .iter()
-        .any(|c| rel.strip_prefix(c.as_str()).is_some_and(|rest| rest.starts_with('/')))
+    changed_rel.iter().any(|c| {
+        rel.strip_prefix(c.as_str())
+            .is_some_and(|rest| rest.starts_with('/'))
+    })
 }
 
 fn sort_reminders(reminders: &mut [Reminder]) {
@@ -215,11 +239,20 @@ mod tests {
         write(root, "Inbox/notes.txt", "ignored @2026-01-05_1000"); // not .md
 
         let reminders = scan_vault(root, DefaultTime::DEFAULT_NINE_AM, 5);
-        let texts: Vec<&str> = reminders.iter().map(|r| r.normalized_token_text.as_str()).collect();
+        let texts: Vec<&str> = reminders
+            .iter()
+            .map(|r| r.normalized_token_text.as_str())
+            .collect();
         assert_eq!(texts, vec!["@2026-06-06_0900", "@2026-12-31"]);
         assert_eq!(reminders[0].vault_relative_path, "Inbox/today.md");
         assert_eq!(reminders[1].vault_relative_path, "Notes/plan.md");
         assert!(reminders[0].note_uri.starts_with("file://"));
+    }
+
+    #[test]
+    fn note_uri_percent_encodes_spaces_and_reserved_path_bytes() {
+        let uri = note_uri_for(Path::new("/home/user/My Vault/Inbox/a#b?.md"));
+        assert_eq!(uri, "file:///home/user/My%20Vault/Inbox/a%23b%3F.md");
     }
 
     #[test]
@@ -238,15 +271,29 @@ mod tests {
 
         let by_path: Vec<(&str, &str)> = fresh
             .iter()
-            .map(|r| (r.vault_relative_path.as_str(), r.normalized_token_text.as_str()))
+            .map(|r| {
+                (
+                    r.vault_relative_path.as_str(),
+                    r.normalized_token_text.as_str(),
+                )
+            })
             .collect();
         assert_eq!(
             by_path,
-            vec![("Inbox/a.md", "@2026-06-06_1100"), ("Inbox/b.md", "@2026-07-07_1000")]
+            vec![
+                ("Inbox/a.md", "@2026-06-06_1100"),
+                ("Inbox/b.md", "@2026-07-07_1000")
+            ]
         );
         // b.md's reminder object was reused verbatim from the prior set.
-        let prior_b = prior.iter().find(|r| r.vault_relative_path == "Inbox/b.md").unwrap();
-        let fresh_b = fresh.iter().find(|r| r.vault_relative_path == "Inbox/b.md").unwrap();
+        let prior_b = prior
+            .iter()
+            .find(|r| r.vault_relative_path == "Inbox/b.md")
+            .unwrap();
+        let fresh_b = fresh
+            .iter()
+            .find(|r| r.vault_relative_path == "Inbox/b.md")
+            .unwrap();
         assert_eq!(prior_b, fresh_b);
     }
 
@@ -309,7 +356,10 @@ mod tests {
     #[test]
     fn vault_relative_rejects_paths_outside_root() {
         let root = Path::new("/vault");
-        assert_eq!(vault_relative(root, Path::new("/vault/Inbox/a.md")).as_deref(), Some("Inbox/a.md"));
+        assert_eq!(
+            vault_relative(root, Path::new("/vault/Inbox/a.md")).as_deref(),
+            Some("Inbox/a.md")
+        );
         assert_eq!(vault_relative(root, Path::new("/elsewhere/a.md")), None);
     }
 }

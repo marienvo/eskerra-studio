@@ -26,6 +26,13 @@ pub fn rederive_for_settings(
 ) -> usize {
     let mut changed = 0;
     for reminder in reminders.iter_mut() {
+        // Never resurrect a stale reminder. Stale entries must stay visible and
+        // non-firing until a real scan/write path safely resolves them; a
+        // settings-only re-derive must not flip them back to `Scheduled` (which
+        // would let discovery arm/fire them). See ADR §5 *stale* invariant.
+        if reminder.state == ReminderState::Stale {
+            continue;
+        }
         let Some(value) = parse_date_token(&reminder.normalized_token_text) else {
             continue;
         };
@@ -115,6 +122,45 @@ mod tests {
         assert_eq!(fire_before - list[0].fire_at_ms, 5 * 60_000);
         assert_eq!(list[0].state, ReminderState::Scheduled);
         assert_eq!(list[0].last_notified_ms, None);
+    }
+
+    #[test]
+    fn stale_reminders_are_not_resurrected_by_settings_rederive() {
+        // A date-only reminder marked Stale (e.g. its note disappeared) must
+        // survive a settings-only re-derive unchanged: still Stale, with its
+        // times untouched, so discovery never arms or fires it.
+        let mut stale = reminder_from(b"@2026-06-06", DefaultTime::new(9, 0).unwrap(), 5);
+        stale.state = ReminderState::Stale;
+        let before = stale.clone();
+
+        let mut list = vec![stale];
+        // Change both default time and lead — neither must touch the stale entry.
+        let changed = rederive_for_settings(&mut list, DefaultTime::new(8, 0).unwrap(), 10);
+
+        assert_eq!(changed, 0, "a stale reminder is not a schedule change");
+        assert_eq!(
+            list[0], before,
+            "stale reminder must remain stale with untouched times"
+        );
+    }
+
+    #[test]
+    fn rederive_touches_non_stale_but_preserves_a_stale_sibling() {
+        // Mixed list: a normal reminder still re-derives while a stale sibling is
+        // left alone.
+        let normal = reminder_from(b"@2026-06-06", DefaultTime::new(9, 0).unwrap(), 5);
+        let mut stale = reminder_from(b"@2026-07-07", DefaultTime::new(9, 0).unwrap(), 5);
+        stale.state = ReminderState::Stale;
+        let stale_before = stale.clone();
+        let normal_due_before = normal.due_at_ms;
+
+        let mut list = vec![normal, stale];
+        let changed = rederive_for_settings(&mut list, DefaultTime::new(8, 0).unwrap(), 5);
+
+        assert_eq!(changed, 1, "only the non-stale reminder re-derived");
+        assert_eq!(list[0].state, ReminderState::Scheduled);
+        assert_eq!(normal_due_before - list[0].due_at_ms, 60 * 60 * 1000);
+        assert_eq!(list[1], stale_before, "the stale sibling is untouched");
     }
 
     #[test]
