@@ -56,12 +56,26 @@ async function navigateToReminder(
 
   await openMarkdownInEditor(notePath);
 
-  const resolved = await invoke<ResolvedReminderPosition | null>('reminders_resolve_position', {
-    noteUri: req.noteUri,
-    reminderId: req.reminderId,
-  }).catch(() => null);
+  let editorMarkdown: string | null = null;
+  try {
+    editorMarkdown = inboxEditorRef.current?.getMarkdown() ?? null;
+  } catch {
+    editorMarkdown = null;
+  }
 
-  const caretPos = resolved?.caretUtf16;
+  const resolved =
+    editorMarkdown != null
+      ? await invoke<ResolvedReminderPosition | null>('reminders_resolve_position_in_markdown', {
+          noteUri: req.noteUri,
+          reminderId: req.reminderId,
+          markdown: editorMarkdown,
+        }).catch(() => null)
+      : await invoke<ResolvedReminderPosition | null>('reminders_resolve_position', {
+          noteUri: req.noteUri,
+          reminderId: req.reminderId,
+        }).catch(() => null);
+
+  const caretPos = resolved?.caretUtf16 ?? req.uiCaretHint;
   if (caretPos == null) {
     return;
   }
@@ -84,8 +98,8 @@ async function navigateToReminder(
  * - Already running: listens for the `open-reminder` Tauri event forwarded by
  *   the single-instance plugin when a second `eskerra --open-reminder` is spawned.
  *
- * In both cases: opens the note, resolves the live token position via
- * `reminders_resolve_position`, then places the CodeMirror caret.
+ * In both cases: opens the note, resolves the live token position against the
+ * editor-visible markdown when possible, then places the CodeMirror caret.
  */
 export function useOpenReminderNavigation({
   openMarkdownInEditor,
@@ -134,6 +148,24 @@ export function useOpenReminderNavigation({
     drainPendingRef.current();
   }, []);
 
+  const drainNativePendingOpenReminders = useCallback(
+    async (isCancelled: () => boolean) => {
+      if (!isTauri() || !initialVaultHydrateAttemptDone) {
+        return;
+      }
+      while (!isCancelled()) {
+        const req = await invoke<OpenReminderRequest | null>('reminders_take_pending_open').catch(
+          () => null,
+        );
+        if (isCancelled() || req == null) {
+          return;
+        }
+        enqueueOpenReminder(req);
+      }
+    },
+    [initialVaultHydrateAttemptDone, enqueueOpenReminder],
+  );
+
   useEffect(() => {
     drainPendingRef.current = drainPending;
     drainPending();
@@ -142,17 +174,12 @@ export function useOpenReminderNavigation({
   // Cold-start path: drain a pending open that was set from startup argv after
   // vault hydration is done (first-render-sacred invariant).
   useEffect(() => {
-    if (!isTauri() || !initialVaultHydrateAttemptDone) {
-      return;
-    }
-    invoke<OpenReminderRequest | null>('reminders_take_pending_open')
-      .then(req => {
-        if (req != null) {
-          enqueueOpenReminder(req);
-        }
-      })
-      .catch(() => undefined);
-  }, [initialVaultHydrateAttemptDone, enqueueOpenReminder]);
+    let cancelled = false;
+    void drainNativePendingOpenReminders(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [drainNativePendingOpenReminders]);
 
   // Already-running path: listen for forwarded argv from single-instance plugin.
   useEffect(() => {
@@ -163,12 +190,14 @@ export function useOpenReminderNavigation({
     let cleanupRequested = false;
     listen<OpenReminderRequest>('open-reminder', event => {
       enqueueOpenReminder(event.payload);
+      void drainNativePendingOpenReminders(() => cleanupRequested);
     })
       .then(fn => {
         if (cleanupRequested) {
           fn();
         } else {
           unlisten = fn;
+          void drainNativePendingOpenReminders(() => cleanupRequested);
         }
       })
       .catch(() => undefined);
@@ -177,5 +206,5 @@ export function useOpenReminderNavigation({
       unlisten?.();
       unlisten = null;
     };
-  }, [enqueueOpenReminder]);
+  }, [enqueueOpenReminder, drainNativePendingOpenReminders]);
 }

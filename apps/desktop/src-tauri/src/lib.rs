@@ -68,7 +68,9 @@ pub fn run() {
         .manage(VaultSearchSessionState::default())
         .manage(VaultSearchIndexState::default())
         .manage(VaultFrontmatterIndexState::default())
-        .manage(PendingOpenReminder(std::sync::Mutex::new(startup_pending)));
+        .manage(open_reminder::pending_open_reminder_from_startup(
+            startup_pending,
+        ));
 
     #[cfg(not(mobile))]
     {
@@ -79,6 +81,8 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             use tauri::{Emitter, Manager};
             if let Some(req) = open_reminder::parse_open_reminder_args(&argv) {
+                let pending = app.state::<PendingOpenReminder>();
+                open_reminder::store_pending_open_reminder(&pending, req.clone());
                 let _ = app.emit("open-reminder", &req);
             }
             if let Some(w) = app.get_webview_window("main") {
@@ -147,6 +151,7 @@ pub fn run() {
             vault_git_sync::commands::vault_git_sync_run,
             crash_log::eskerra_append_crash_log,
             open_reminder::reminders_take_pending_open,
+            open_reminder::reminders_resolve_position_in_markdown,
             open_reminder::reminders_resolve_position,
         ])
         .run(tauri::generate_context!())
