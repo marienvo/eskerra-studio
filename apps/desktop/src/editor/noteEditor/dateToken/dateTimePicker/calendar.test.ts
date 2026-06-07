@@ -84,7 +84,7 @@ describe('dateTimePicker calendar', () => {
       viewMonth: 12,
       noTime: false,
       hour: 23,
-      minute: 52,
+      minute: 50,
     });
   });
 });

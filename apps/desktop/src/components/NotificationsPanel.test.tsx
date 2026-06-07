@@ -24,8 +24,8 @@ beforeAll(() => {
   }
 });
 
-// A due time of 23:00 local, far in the future so all three snoozes are live.
-const DUE_AT = new Date(2099, 10, 27, 23, 0).getTime();
+// Far future due time for row layout tests (outside the T-3 snooze window).
+const FAR_DUE_AT = new Date(2099, 10, 27, 23, 0).getTime();
 
 function row(overrides: Partial<ReminderPaneRow> = {}): ReminderPaneRow {
   return {
@@ -33,7 +33,7 @@ function row(overrides: Partial<ReminderPaneRow> = {}): ReminderPaneRow {
     source: 'reminder',
     noteUri: 'file:///vault/Daily.md',
     reminderId: 'rem-1',
-    dueAtMs: DUE_AT,
+    dueAtMs: FAR_DUE_AT,
     normalizedTokenText: '@2099-11-27_2300',
     vaultRelativePath: 'Daily.md',
     reminderState: 'scheduled',
@@ -60,6 +60,11 @@ function renderPanel(r: ReminderPaneRow, onSnooze = vi.fn()) {
   return {onSnooze};
 }
 
+/** Due time inside the T-3 snooze window relative to `Date.now()`. */
+function dueWithinSnoozeWindow(offsetMs = 2 * 60_000): number {
+  return Date.now() + offsetMs;
+}
+
 describe('NotificationsPanel reminder row', () => {
   it('renders the cleaned line + (HH:MM) and not the raw @ token', () => {
     renderPanel(row());
@@ -75,20 +80,44 @@ describe('NotificationsPanel reminder row', () => {
     expect(screen.queryByText(/^\(23:00\)$/)).toBeNull();
   });
 
-  it('shows the Snooze menu and calls onSnooze with the chosen minutes', async () => {
+  it('hides the Snooze menu before the T-3 window (e.g. due in two weeks)', () => {
+    renderPanel(row());
+    expect(screen.queryByRole('button', {name: 'Snooze reminder'})).toBeNull();
+    expect(document.querySelector('.notifications-panel__reminder-snooze')).toBeNull();
+  });
+
+  it('shows the Snooze menu inside the T-3 window and calls onSnooze with the chosen minutes', async () => {
     const user = userEvent.setup();
-    const {onSnooze} = renderPanel(row());
+    const dueAtMs = dueWithinSnoozeWindow();
+    const {onSnooze} = renderPanel(row({dueAtMs}));
 
     await user.click(screen.getByRole('button', {name: 'Snooze reminder'}));
-    // The menu offers all three live options; pick "1 min before" (snooze-1).
-    await user.click(await screen.findByText('1 min before'));
+    await user.click(await screen.findByText('At due time'));
 
-    expect(onSnooze).toHaveBeenCalledWith('file:///vault/Daily.md', 'rem-1', 1);
+    expect(onSnooze).toHaveBeenCalledWith('file:///vault/Daily.md', 'rem-1', 0);
   });
 
   it('hides the Snooze menu when the reminder is fully overdue (no live snoozes)', () => {
     renderPanel(row({dueAtMs: Date.now() - 60_000}));
     expect(screen.queryByRole('button', {name: 'Snooze reminder'})).toBeNull();
+    expect(document.querySelector('.notifications-panel__reminder-snooze')).toBeNull();
+  });
+
+  it('styles overdue reminder rows with muted blue-grey like past date pills', () => {
+    const {container} = render(
+      <NotificationsPanel
+        appSurface="capture"
+        items={[row({dueAtMs: Date.now() - 60_000})]}
+        highlightId={null}
+        onDismiss={vi.fn()}
+        onClearAll={vi.fn()}
+        onOpenReminder={vi.fn()}
+        onRemoveReminder={vi.fn().mockResolvedValue(undefined)}
+        onSnoozeReminder={vi.fn()}
+      />,
+    );
+    const reminderRow = container.querySelector('.notifications-panel__row--reminder-due');
+    expect(reminderRow).toBeTruthy();
   });
 
   it('hides the Snooze menu for a stale reminder', () => {
@@ -104,17 +133,17 @@ describe('NotificationsPanel reminder row', () => {
   it('refreshes snooze options when the menu opens after a boundary passes', async () => {
     const base = 1_700_000_000_000;
     const dueAtMs = base + 4 * 60_000;
-    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(base);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(base + 2 * 60_000);
 
     renderPanel(row({dueAtMs}));
 
     const user = userEvent.setup();
-    // Past the T-3 boundary but still before T-1.
-    nowSpy.mockReturnValue(base + 2 * 60_000 + 30_000);
+    // Past the T-1 boundary but still before due.
+    nowSpy.mockReturnValue(base + 3 * 60_000 + 30_000);
     await user.click(screen.getByRole('button', {name: 'Snooze reminder'}));
 
     expect(screen.queryByText('3 min before')).toBeNull();
-    expect(screen.getByText('1 min before')).toBeTruthy();
+    expect(screen.queryByText('1 min before')).toBeNull();
     expect(screen.getByText('At due time')).toBeTruthy();
 
     nowSpy.mockRestore();
@@ -123,15 +152,15 @@ describe('NotificationsPanel reminder row', () => {
   it('does not invoke onSnooze when the chosen offset expired before selection', async () => {
     const base = 1_700_000_000_000;
     const dueAtMs = base + 4 * 60_000;
-    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(base);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(base + 2 * 60_000);
     const {onSnooze} = renderPanel(row({dueAtMs}));
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', {name: 'Snooze reminder'}));
-    expect(await screen.findByText('3 min before')).toBeTruthy();
+    expect(await screen.findByText('1 min before')).toBeTruthy();
 
     nowSpy.mockReturnValue(base + 3 * 60_000 + 1);
-    await user.click(screen.getByText('3 min before'));
+    await user.click(screen.getByText('1 min before'));
 
     expect(onSnooze).not.toHaveBeenCalled();
     nowSpy.mockRestore();

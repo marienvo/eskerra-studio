@@ -28,6 +28,8 @@ export const CM_DATE_TOKEN_PILL_CLASS = 'cm-date-token-pill';
 /** Modifier class for pills whose moment has already passed. */
 export const CM_DATE_TOKEN_PILL_PAST_CLASS = 'cm-date-token-pill--past';
 
+const MINUTE_TICK_MS = 60_000;
+
 const dateTokenMark = Decoration.mark({
   class: CM_DATE_TOKEN_CLASS,
   attributes: {'data-date-token': ''},
@@ -248,16 +250,91 @@ export function updateDateTokenDecorationsForFocusChange(
   return next;
 }
 
+/** True when at least one valid date token renders as a pretty pill. */
+export function documentHasVisibleDateTokenPills(view: EditorView): boolean {
+  const {doc} = view.state;
+  const focusLineStarts = computeDateTokenFocusLineStarts(view);
+  for (let lineNumber = 1; lineNumber <= doc.lines; lineNumber++) {
+    const line = doc.line(lineNumber);
+    if (focusLineStarts.has(line.from)) {
+      continue;
+    }
+    const text = line.text;
+    DATE_TOKEN_PATTERN.lastIndex = 0;
+    let match = DATE_TOKEN_PATTERN.exec(text);
+    while (match) {
+      if (parseDateToken(match[1]!) !== null) {
+        return true;
+      }
+      match = DATE_TOKEN_PATTERN.exec(text);
+    }
+  }
+  return false;
+}
+
+function startAlignedMinuteClock(onTick: () => void): () => void {
+  const msUntilNextMinute = MINUTE_TICK_MS - (Date.now() % MINUTE_TICK_MS);
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+  const timeoutId = setTimeout(() => {
+    onTick();
+    intervalId = setInterval(onTick, MINUTE_TICK_MS);
+  }, msUntilNextMinute);
+  return () => {
+    clearTimeout(timeoutId);
+    if (intervalId !== undefined) {
+      clearInterval(intervalId);
+    }
+  };
+}
+
 /** Highlights valid `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` tokens as chips or pills. */
 export function dateTokenHighlightExtensions(): Extension {
   const plugin = ViewPlugin.fromClass(
     class {
+      readonly view: EditorView;
       decorations: DecorationSet;
       focusLineStarts: Set<number>;
+      stopClock: (() => void) | null = null;
+      destroyed = false;
 
       constructor(view: EditorView) {
+        this.view = view;
         this.focusLineStarts = computeDateTokenFocusLineStarts(view);
         this.decorations = buildDateTokenDecorations(view);
+        this.ensureClock();
+      }
+
+      ensureClock() {
+        if (!documentHasVisibleDateTokenPills(this.view)) {
+          this.stopClock?.();
+          this.stopClock = null;
+          return;
+        }
+        if (this.stopClock) {
+          return;
+        }
+        this.stopClock = startAlignedMinuteClock(() => this.refreshForClock());
+      }
+
+      refreshForClock() {
+        if (this.destroyed || !documentHasVisibleDateTokenPills(this.view)) {
+          this.stopClock?.();
+          this.stopClock = null;
+          return;
+        }
+        this.focusLineStarts = computeDateTokenFocusLineStarts(this.view);
+        this.decorations = buildDateTokenDecorations(this.view);
+        queueMicrotask(() => {
+          if (!this.destroyed) {
+            this.view.dispatch({});
+          }
+        });
+      }
+
+      destroy() {
+        this.destroyed = true;
+        this.stopClock?.();
+        this.stopClock = null;
       }
 
       update(update: ViewUpdate) {
@@ -270,6 +347,7 @@ export function dateTokenHighlightExtensions(): Extension {
             nextFocusLineStarts,
           );
           this.focusLineStarts = nextFocusLineStarts;
+          this.ensureClock();
           return;
         }
 
@@ -284,6 +362,7 @@ export function dateTokenHighlightExtensions(): Extension {
             nextFocusLineStarts,
           );
           this.focusLineStarts = nextFocusLineStarts;
+          this.ensureClock();
         }
       }
     },

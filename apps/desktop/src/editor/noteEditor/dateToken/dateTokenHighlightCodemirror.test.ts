@@ -7,7 +7,9 @@ import {
   buildDateTokenDecorations,
   CM_DATE_TOKEN_CLASS,
   CM_DATE_TOKEN_PILL_CLASS,
+  CM_DATE_TOKEN_PILL_PAST_CLASS,
   dateTokenHighlightExtensions,
+  documentHasVisibleDateTokenPills,
   updateDateTokenDecorationsForDocChange,
 } from './dateTokenHighlightCodemirror';
 
@@ -67,6 +69,7 @@ describe('dateTokenHighlightCodemirror', () => {
   let view: EditorView | null = null;
 
   afterEach(() => {
+    vi.useRealTimers();
     view?.destroy();
     view = null;
     document.body.replaceChildren();
@@ -250,6 +253,48 @@ describe('dateTokenHighlightCodemirror', () => {
 
     expect(focusSpy).not.toHaveBeenCalled();
     focusSpy.mockRestore();
+  });
+
+  it('detects visible pills only on non-focused lines with valid tokens', () => {
+    const doc = 'Due @2026-06-06_1200 tomorrow\n@2026-12-28 end';
+    view = mountView(doc);
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(false);
+    expect(documentHasVisibleDateTokenPills(view)).toBe(true);
+
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(true);
+    view.dispatch({selection: EditorSelection.cursor(0)});
+    expect(documentHasVisibleDateTokenPills(view)).toBe(true);
+
+    const secondLineStart = doc.indexOf('\n') + 1;
+    view.dispatch({selection: EditorSelection.cursor(secondLineStart)});
+    expect(documentHasVisibleDateTokenPills(view)).toBe(true);
+
+    view.dispatch({
+      changes: {from: 0, to: view.state.doc.length, insert: 'no tokens here'},
+    });
+    expect(documentHasVisibleDateTokenPills(view)).toBe(false);
+  });
+
+  it('refreshes pill labels when the aligned minute clock fires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 5, 6, 11, 59, 30));
+
+    const doc = 'Due @2026-06-06_1200 tomorrow';
+    view = mountViewWithHighlight(doc);
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(false);
+
+    const pill = () =>
+      view!.dom.querySelector(`.${CM_DATE_TOKEN_PILL_CLASS}`) as HTMLElement | null;
+
+    expect(pill()?.textContent).toBe('🔔 Today at 12:00');
+    expect(pill()?.classList.contains(CM_DATE_TOKEN_PILL_PAST_CLASS)).toBe(false);
+
+    vi.setSystemTime(new Date(2026, 5, 6, 12, 0, 1));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await Promise.resolve();
+
+    expect(pill()?.textContent).toBe('☑️ Today at 12:00');
+    expect(pill()?.classList.contains(CM_DATE_TOKEN_PILL_PAST_CLASS)).toBe(true);
   });
 
   it('swaps chip/pill only on affected lines when focus moves between lines', () => {

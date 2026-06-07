@@ -90,21 +90,48 @@ export function nowTimeParts(
   };
 }
 
+export const DATE_TOKEN_TIME_MINUTE_STEP = 5;
+
+export const DATE_TOKEN_DEFAULT_LEAD_MINUTES = 15;
+
 /**
- * Current time rounded up to the nearest 5-minute boundary at or after the
- * current time. Wraps past midnight back to 00:00 (the picker keeps the
- * selected calendar date unchanged).
+ * Snaps a clock time to the nearest 5-minute boundary. Wraps past midnight back
+ * to 00:00 (the picker keeps the selected calendar date unchanged).
  */
-export function roundTimeUpToFiveMinutes(
+/** Snaps a minute field value to the 5-minute grid (00–55). */
+export function snapMinuteFieldToFiveMinuteGrid(minute: number): number {
+  const clamped = Math.min(59, Math.max(0, minute));
+  const snapped =
+    Math.round(clamped / DATE_TOKEN_TIME_MINUTE_STEP) * DATE_TOKEN_TIME_MINUTE_STEP;
+  return Math.min(55, snapped);
+}
+
+export function snapTimeToFiveMinuteGrid(
+  hour: number,
+  minute: number,
+): Pick<Required<DateTokenValue>, 'hour' | 'minute'> {
+  let totalMinutes = hour * 60 + minute;
+  totalMinutes =
+    Math.round(totalMinutes / DATE_TOKEN_TIME_MINUTE_STEP) *
+    DATE_TOKEN_TIME_MINUTE_STEP;
+  const wrapped = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  return {
+    hour: Math.floor(wrapped / 60),
+    minute: wrapped % 60,
+  };
+}
+
+/**
+ * Default reminder time: now plus 15 minutes, snapped to the nearest 5-minute
+ * boundary.
+ */
+export function defaultDateTokenTimeFromNow(
   now: Date,
 ): Pick<Required<DateTokenValue>, 'hour' | 'minute'> {
-  let hour = now.getHours();
-  let minute = Math.ceil(now.getMinutes() / 5) * 5;
-  if (minute >= 60) {
-    minute = 0;
-    hour = (hour + 1) % 24;
-  }
-  return {hour, minute};
+  const future = new Date(
+    now.getTime() + DATE_TOKEN_DEFAULT_LEAD_MINUTES * 60_000,
+  );
+  return snapTimeToFiveMinuteGrid(future.getHours(), future.getMinutes());
 }
 
 export function formatDateToken(value: DateTokenValue): string {
