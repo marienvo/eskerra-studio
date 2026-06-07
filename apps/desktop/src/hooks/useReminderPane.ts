@@ -201,7 +201,9 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
           const hash = vaultHashRef.current;
           if (hash) {
             const rs = await readIndex(hash);
-            setReminders(rs);
+            // Bail if the vault switched while readIndex was in flight, so we
+            // don't overwrite the new vault's reminders with the old vault's.
+            if (vaultHashRef.current === hash) setReminders(rs);
           }
         } else {
           // 'remove-unavailable': daemon unreachable — keep row, show retry.
