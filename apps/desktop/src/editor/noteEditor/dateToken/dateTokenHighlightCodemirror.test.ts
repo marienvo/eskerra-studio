@@ -1,46 +1,53 @@
-import {EditorState} from '@codemirror/state';
-import {EditorView, ViewPlugin, type ViewUpdate} from '@codemirror/view';
-import {afterEach, describe, expect, it} from 'vitest';
+import {EditorSelection, EditorState} from '@codemirror/state';
+import {EditorView} from '@codemirror/view';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {
   buildDateTokenDecorations,
   CM_DATE_TOKEN_CLASS,
-  dateTokenHighlightExtensions,
-  updateDateTokenDecorationsForDocChange,
+  CM_DATE_TOKEN_PILL_CLASS,
 } from './dateTokenHighlightCodemirror';
 
-type MarkInterval = {
+type DecoInterval = {
   readonly from: number;
   readonly to: number;
+  readonly kind: 'mark' | 'replace';
   readonly class: string | undefined;
-  readonly attributes: Record<string, string> | undefined;
+  readonly pillText: string | undefined;
 };
 
-function collectMarkIntervalsFromSet(
+function collectIntervals(
   view: EditorView,
   set: ReturnType<typeof buildDateTokenDecorations>,
-): MarkInterval[] {
-  const out: MarkInterval[] = [];
+): DecoInterval[] {
+  const out: DecoInterval[] = [];
   set.between(0, view.state.doc.length, (from, to, deco) => {
     const spec =
       typeof deco.spec === 'object' && deco.spec
         ? (deco.spec as {
             class?: string;
-            attributes?: Record<string, string>;
+            widget?: {toDOM: () => HTMLElement};
           })
         : {};
+    const widget = spec.widget;
     out.push({
       from,
       to,
+      kind: widget ? 'replace' : 'mark',
       class: spec.class,
-      attributes: spec.attributes,
+      pillText: widget ? (widget.toDOM().textContent ?? undefined) : undefined,
     });
   });
   return out;
 }
 
-function collectMarkIntervals(view: EditorView): MarkInterval[] {
-  return collectMarkIntervalsFromSet(view, buildDateTokenDecorations(view));
+// 2026-06-06 is a Saturday; tokens far in the future render as absolute pills.
+const NOW = new Date(2026, 5, 6, 12, 0);
+
+function mountView(doc: string): EditorView {
+  const parent = document.createElement('div');
+  document.body.append(parent);
+  return new EditorView({state: EditorState.create({doc}), parent});
 }
 
 describe('dateTokenHighlightCodemirror', () => {
@@ -52,14 +59,12 @@ describe('dateTokenHighlightCodemirror', () => {
     document.body.replaceChildren();
   });
 
-  it('decorates valid date tokens at word boundaries', () => {
+  it('renders pretty pills for valid tokens when no line is focused', () => {
     const doc = 'Due @2026-06-06_1200 tomorrow\n@2026-12-28 end';
-    const parent = document.createElement('div');
-    document.body.append(parent);
-    const state = EditorState.create({doc});
-    view = new EditorView({state, parent});
+    view = mountView(doc);
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(false);
 
-    const intervals = collectMarkIntervals(view);
+    const intervals = collectIntervals(view, buildDateTokenDecorations(view, NOW));
     const withTimeFrom = doc.indexOf('@2026-06-06_1200');
     const dateOnlyFrom = doc.indexOf('@2026-12-28');
 
@@ -67,94 +72,68 @@ describe('dateTokenHighlightCodemirror', () => {
       {
         from: withTimeFrom,
         to: withTimeFrom + '@2026-06-06_1200'.length,
-        class: CM_DATE_TOKEN_CLASS,
-        attributes: {'data-date-token': ''},
+        kind: 'replace',
+        class: undefined,
+        pillText: '🔔 Today at 12:00',
       },
       {
         from: dateOnlyFrom,
         to: dateOnlyFrom + '@2026-12-28'.length,
+        kind: 'replace',
+        class: undefined,
+        pillText: '🔔 28 Dec',
+      },
+    ]);
+  });
+
+  it('shows the raw editable chip on the focused line, pills elsewhere', () => {
+    const doc = 'Due @2026-06-06_1200 tomorrow\n@2026-12-28 end';
+    view = mountView(doc);
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(true);
+    // Put the caret on the first line.
+    view.dispatch({selection: EditorSelection.cursor(0)});
+
+    const intervals = collectIntervals(view, buildDateTokenDecorations(view, NOW));
+    const withTimeFrom = doc.indexOf('@2026-06-06_1200');
+    const dateOnlyFrom = doc.indexOf('@2026-12-28');
+
+    expect(intervals).toEqual([
+      {
+        from: withTimeFrom,
+        to: withTimeFrom + '@2026-06-06_1200'.length,
+        kind: 'mark',
         class: CM_DATE_TOKEN_CLASS,
-        attributes: {'data-date-token': ''},
+        pillText: undefined,
+      },
+      {
+        from: dateOnlyFrom,
+        to: dateOnlyFrom + '@2026-12-28'.length,
+        kind: 'replace',
+        class: undefined,
+        pillText: '🔔 28 Dec',
       },
     ]);
   });
 
   it('does not decorate invalid tokens', () => {
-    const doc = 'bad @2026-13-99 and @2026-02-29';
-    const parent = document.createElement('div');
-    document.body.append(parent);
-    const state = EditorState.create({doc});
-    view = new EditorView({state, parent});
+    view = mountView('bad @2026-13-99 and @2026-02-29');
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(false);
 
-    expect(collectMarkIntervals(view)).toEqual([]);
+    expect(collectIntervals(view, buildDateTokenDecorations(view, NOW))).toEqual(
+      [],
+    );
   });
 
   it('does not decorate tokens without a word boundary', () => {
-    const doc = 'foo@2026-06-06';
-    const parent = document.createElement('div');
-    document.body.append(parent);
-    const state = EditorState.create({doc});
-    view = new EditorView({state, parent});
+    view = mountView('foo@2026-06-06');
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(false);
 
-    expect(collectMarkIntervals(view)).toEqual([]);
+    expect(collectIntervals(view, buildDateTokenDecorations(view, NOW))).toEqual(
+      [],
+    );
   });
 
-  it('incrementally updates decorations to match a full rescan after a line edit', () => {
-    const initialDoc = 'Due @2026-06-06 tomorrow\n@2026-12-28 end';
-    const parent = document.createElement('div');
-    document.body.append(parent);
-    let lastDocChange: ViewUpdate | null = null;
-    const captureUpdate = ViewPlugin.fromClass(
-      class {
-        update(update: ViewUpdate) {
-          if (update.docChanged) {
-            lastDocChange = update;
-          }
-        }
-      },
-    );
-    const state = EditorState.create({
-      doc: initialDoc,
-      extensions: [dateTokenHighlightExtensions(), captureUpdate],
-    });
-    view = new EditorView({state, parent});
-
-    const beforeDecorations = buildDateTokenDecorations(view);
-    const line1End = initialDoc.indexOf('\n');
-
-    view.dispatch({
-      changes: {from: 0, to: line1End, insert: 'Meet @2026-12-15 today'},
-    });
-
-    if (!lastDocChange) {
-      throw new Error('Expected a captured document change update');
-    }
-
-    const incremental = updateDateTokenDecorationsForDocChange(
-      beforeDecorations,
-      lastDocChange,
-    );
-    const fullRescan = buildDateTokenDecorations(view);
-
-    expect(collectMarkIntervalsFromSet(view, incremental)).toEqual(
-      collectMarkIntervalsFromSet(view, fullRescan),
-    );
-    const docText = view.state.doc.toString();
-    const dec15From = docText.indexOf('@2026-12-15');
-    const dec28From = docText.indexOf('@2026-12-28');
-    expect(collectMarkIntervalsFromSet(view, incremental)).toEqual([
-      {
-        from: dec15From,
-        to: dec15From + '@2026-12-15'.length,
-        class: CM_DATE_TOKEN_CLASS,
-        attributes: {'data-date-token': ''},
-      },
-      {
-        from: dec28From,
-        to: dec28From + '@2026-12-28'.length,
-        class: CM_DATE_TOKEN_CLASS,
-        attributes: {'data-date-token': ''},
-      },
-    ]);
+  it('exposes the pill class for styling', () => {
+    expect(CM_DATE_TOKEN_PILL_CLASS).toBe('cm-date-token-pill');
   });
 });

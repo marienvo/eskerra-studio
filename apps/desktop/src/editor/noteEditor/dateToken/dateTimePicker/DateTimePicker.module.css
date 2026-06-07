@@ -147,10 +147,3 @@
 .timeSeparator {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 2px;
-}

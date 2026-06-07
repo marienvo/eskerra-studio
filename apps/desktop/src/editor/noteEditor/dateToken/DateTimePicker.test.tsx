@@ -168,18 +168,35 @@ describe('DateTimePicker', () => {
     });
   });
 
-  it('calls onCancel on Escape', () => {
-    const onCancel = vi.fn();
+  it('prefills the rounded-up current time when time is enabled', () => {
+    const onConfirm = vi.fn();
     render(
       <DateTimePicker
-        initialValue={null}
-        now={FIXED_NOW}
-        onConfirm={vi.fn()}
-        onCancel={onCancel}
+        initialValue={{year: 2026, month: 6, day: 6}}
+        now={new Date(2026, 5, 6, 14, 31, 0, 0)}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
       />,
     );
 
-    fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
-    expect(onCancel).toHaveBeenCalledTimes(1);
+    // Token has no time → "No time" starts checked. Unchecking enables time.
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    expect(onConfirm).toHaveBeenLastCalledWith({
+      year: 2026,
+      month: 6,
+      day: 6,
+      hour: 14,
+      minute: 35,
+    });
+
+    const hourInput = screen.getByRole('spinbutton', {
+      name: 'Hour',
+    }) as HTMLInputElement;
+    const minuteInput = screen.getByRole('spinbutton', {
+      name: 'Minute',
+    }) as HTMLInputElement;
+    expect(hourInput.value).toBe('14');
+    expect(minuteInput.value).toBe('35');
   });
 });
