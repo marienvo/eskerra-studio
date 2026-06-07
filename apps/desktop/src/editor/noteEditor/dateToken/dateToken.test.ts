@@ -6,6 +6,7 @@ import {
   formatDateToken,
   formatDateTokenPretty,
   formatTodayDateToken,
+  isDateTokenInPast,
   isValidCalendarDate,
   nowTimeParts,
   pad2,
@@ -172,6 +173,26 @@ describe('formatDateTokenPretty', () => {
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
       'Next Thursday',
     );
+  });
+});
+
+describe('isDateTokenInPast', () => {
+  // 2026-06-06 14:30.
+  const now = new Date(2026, 5, 6, 14, 30);
+
+  test('timed tokens compare to the exact clock', () => {
+    expect(
+      isDateTokenInPast({year: 2026, month: 6, day: 6, hour: 14, minute: 29}, now),
+    ).toBe(true);
+    expect(
+      isDateTokenInPast({year: 2026, month: 6, day: 6, hour: 14, minute: 31}, now),
+    ).toBe(false);
+  });
+
+  test('date-only tokens are past only once the day is over', () => {
+    expect(isDateTokenInPast({year: 2026, month: 6, day: 5}, now)).toBe(true);
+    expect(isDateTokenInPast({year: 2026, month: 6, day: 6}, now)).toBe(false);
+    expect(isDateTokenInPast({year: 2026, month: 6, day: 7}, now)).toBe(false);
   });
 });
 

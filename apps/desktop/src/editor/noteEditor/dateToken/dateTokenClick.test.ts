@@ -66,6 +66,33 @@ describe('dateTokenClick', () => {
     });
   });
 
+  it('opens from a boundary position when boundaries are forced (pill click)', () => {
+    const doc = 'Due @2026-12-28 please';
+    const from = doc.indexOf('@2026-12-28');
+    view = createView(doc);
+    vi.spyOn(view, 'coordsAtPos').mockReturnValue({
+      left: 10,
+      right: 40,
+      top: 5,
+      bottom: 25,
+    });
+    const onOpen = vi.fn<(request: DateTokenPickerOpenRequest) => void>();
+
+    // pos at the token start is a boundary; without forcing it would not match.
+    expect(
+      openDateTokenPickerAtClickPosition(view, from, new MouseEvent('click'), onOpen, {
+        forceIncludeBoundaries: true,
+      }),
+    ).toBe(true);
+    expect(onOpen).toHaveBeenCalledOnce();
+
+    onOpen.mockClear();
+    expect(
+      openDateTokenPickerAtClickPosition(view, from, new MouseEvent('click'), onOpen),
+    ).toBe(false);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
   it('does nothing outside a valid date token', () => {
     view = createView('Due @2026-13-99 and tomorrow');
     const onOpen = vi.fn<(request: DateTokenPickerOpenRequest) => void>();

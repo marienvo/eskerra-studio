@@ -12,6 +12,7 @@ const down = (partial: Partial<LinkPointerDownSample> & Pick<LinkPointerDownSamp
   y: 200,
   timeStamp: 1000,
   markerFocusLine: false,
+  dateToken: false,
   ...partial,
 });
 
@@ -76,25 +77,27 @@ describe('pickDocPosForLinkPrimaryClick', () => {
     ).toBe(49);
   });
 
-  it('keeps marker-focus state from mousedown when the stored position wins', () => {
+  it('keeps marker-focus and date-token state from mousedown when the stored position wins', () => {
     expect(
       pickPrimaryLinkClickContext(
         49,
         {timeStamp: 1050, clientX: 103, clientY: 202},
-        down({pos: 55, markerFocusLine: false}),
+        down({pos: 55, markerFocusLine: false, dateToken: true}),
         true,
+        false,
       ),
-    ).toEqual({pos: 55, markerFocusLine: false});
+    ).toEqual({pos: 55, markerFocusLine: false, dateToken: true});
   });
 
-  it('falls back to click marker-focus state when the stored position is not used', () => {
+  it('falls back to click marker-focus and date-token state when the stored position is not used', () => {
     expect(
       pickPrimaryLinkClickContext(
         49,
         {timeStamp: 1050, clientX: 120, clientY: 200},
-        down({pos: 55, markerFocusLine: false}),
+        down({pos: 55, markerFocusLine: false, dateToken: true}),
+        true,
         true,
       ),
-    ).toEqual({pos: 49, markerFocusLine: true});
+    ).toEqual({pos: 49, markerFocusLine: true, dateToken: true});
   });
 });

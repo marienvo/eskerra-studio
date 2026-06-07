@@ -10,7 +10,12 @@ import {
 
 import {computeMarkerFocusLineStarts} from '../markdownMarkerFocusLine';
 
-import {DATE_TOKEN_PATTERN, formatDateTokenPretty, parseDateToken} from './dateToken';
+import {
+  DATE_TOKEN_PATTERN,
+  formatDateTokenPretty,
+  isDateTokenInPast,
+  parseDateToken,
+} from './dateToken';
 
 import './dateTokenHighlight.css';
 
@@ -20,29 +25,36 @@ export const CM_DATE_TOKEN_CLASS = 'cm-date-token';
 /** Class for the pretty pill that replaces a token on non-focused lines. */
 export const CM_DATE_TOKEN_PILL_CLASS = 'cm-date-token-pill';
 
+/** Modifier class for pills whose moment has already passed. */
+export const CM_DATE_TOKEN_PILL_PAST_CLASS = 'cm-date-token-pill--past';
+
 const dateTokenMark = Decoration.mark({
   class: CM_DATE_TOKEN_CLASS,
   attributes: {'data-date-token': ''},
 });
 
-/** Pretty `🔔 <label>` pill rendered in place of the raw token text. */
+/** Pretty pill rendered in place of the raw token text on non-focused lines. */
 class DateTokenPillWidget extends WidgetType {
   readonly label: string;
+  readonly past: boolean;
 
-  constructor(label: string) {
+  constructor(label: string, past: boolean) {
     super();
     this.label = label;
+    this.past = past;
   }
 
   eq(other: DateTokenPillWidget): boolean {
-    return other.label === this.label;
+    return other.label === this.label && other.past === this.past;
   }
 
   toDOM(): HTMLElement {
     const span = document.createElement('span');
-    span.className = CM_DATE_TOKEN_PILL_CLASS;
+    span.className = this.past
+      ? `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`
+      : CM_DATE_TOKEN_PILL_CLASS;
     span.setAttribute('data-date-token', '');
-    span.textContent = `🔔 ${this.label}`;
+    span.textContent = `${this.past ? '☑️' : '🔔'} ${this.label}`;
     return span;
   }
 
@@ -72,7 +84,10 @@ function collectDateTokenRangesForLine(
       if (isFocusedLine) {
         ranges.push(dateTokenMark.range(from, to));
       } else {
-        const widget = new DateTokenPillWidget(formatDateTokenPretty(value, now));
+        const widget = new DateTokenPillWidget(
+          formatDateTokenPretty(value, now),
+          isDateTokenInPast(value, now),
+        );
         ranges.push(Decoration.replace({widget}).range(from, to));
       }
     }

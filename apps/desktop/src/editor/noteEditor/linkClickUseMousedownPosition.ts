@@ -12,6 +12,7 @@ export type LinkPointerDownSample = {
   pos: number | null;
   timeStamp: number;
   markerFocusLine: boolean;
+  dateToken: boolean;
 };
 
 const lastPrimaryDownByView = new WeakMap<EditorView, LinkPointerDownSample>();
@@ -19,6 +20,15 @@ const lastPrimaryDownByView = new WeakMap<EditorView, LinkPointerDownSample>();
 function targetInMarkerFocusLine(target: EventTarget | null): boolean {
   return target instanceof Element
     && target.closest('.cm-line')?.classList.contains('cm-eskerra-marker-focus-line') === true;
+}
+
+/**
+ * Whether the gesture started on a rendered date token (chip or pill). Captured
+ * at mousedown because focusing the line swaps a pill for the raw chip before
+ * the click fires, which would otherwise lose the `data-date-token` target.
+ */
+function targetOnDateToken(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-date-token]') !== null;
 }
 
 export function recordPrimaryPointerDownForLinkClick(
@@ -34,6 +44,7 @@ export function recordPrimaryPointerDownForLinkClick(
     pos: view.posAtCoords({x: e.clientX, y: e.clientY}),
     timeStamp: e.timeStamp,
     markerFocusLine: targetInMarkerFocusLine(e.target),
+    dateToken: targetOnDateToken(e.target),
   });
 }
 
@@ -75,12 +86,13 @@ export function pickPrimaryLinkClickContext(
   click: {timeStamp: number; clientX: number; clientY: number},
   down: LinkPointerDownSample | undefined,
   atClickMarkerFocusLine: boolean,
-): {pos: number | null; markerFocusLine: boolean} {
+  atClickDateToken: boolean,
+): {pos: number | null; markerFocusLine: boolean; dateToken: boolean} {
   const pos = pickDocPosForLinkPrimaryClick(atClick, click, down);
   if (pos != null && down != null && pos === down.pos) {
-    return {pos, markerFocusLine: down.markerFocusLine};
+    return {pos, markerFocusLine: down.markerFocusLine, dateToken: down.dateToken};
   }
-  return {pos, markerFocusLine: atClickMarkerFocusLine};
+  return {pos, markerFocusLine: atClickMarkerFocusLine, dateToken: atClickDateToken};
 }
 
 export function resolveDocPositionForLinkPrimaryClick(
@@ -93,7 +105,7 @@ export function resolveDocPositionForLinkPrimaryClick(
 export function resolvePrimaryLinkClickContext(
   view: EditorView,
   e: MouseEvent,
-): {pos: number | null; markerFocusLine: boolean} {
+): {pos: number | null; markerFocusLine: boolean; dateToken: boolean} {
   const down = lastPrimaryDownByView.get(view);
   lastPrimaryDownByView.delete(view);
   const atClick = view.posAtCoords({x: e.clientX, y: e.clientY});
@@ -102,5 +114,6 @@ export function resolvePrimaryLinkClickContext(
     e,
     down,
     targetInMarkerFocusLine(e.target),
+    targetOnDateToken(e.target),
   );
 }

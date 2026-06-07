@@ -62,13 +62,16 @@ export function openDateTokenPickerAtClickPosition(
   pos: number,
   event: MouseEvent,
   openPicker: DateTokenPickerOpenHandler | undefined,
+  options: {forceIncludeBoundaries?: boolean} = {},
 ): boolean {
   if (!openPicker) {
     return false;
   }
 
   const hit = dateTokenAtPosition(view.state, pos, {
-    includeBoundaries: hasDateTokenMarkTarget(event.target),
+    includeBoundaries:
+      options.forceIncludeBoundaries === true ||
+      hasDateTokenMarkTarget(event.target),
   });
   if (!hit) {
     return false;

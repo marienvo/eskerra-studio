@@ -238,3 +238,19 @@ export function formatDateTokenPretty(value: DateTokenValue, now: Date): string 
 
   return `${datePart}${time}`;
 }
+
+/**
+ * Whether a token's moment has already passed. Tokens with a time compare to the
+ * exact clock; date-only tokens are "past" only once the whole day is behind us
+ * (a date-only token for today is not past).
+ */
+export function isDateTokenInPast(value: DateTokenValue, now: Date): boolean {
+  if (value.hour !== undefined && value.minute !== undefined) {
+    return (
+      new Date(value.year, value.month - 1, value.day, value.hour, value.minute)
+        .getTime() < now.getTime()
+    );
+  }
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return localMidnight(value).getTime() < todayMidnight.getTime();
+}

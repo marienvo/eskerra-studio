@@ -133,6 +133,26 @@ describe('dateTokenHighlightCodemirror', () => {
     );
   });
 
+  it('renders past tokens with a check icon and the past modifier class', () => {
+    const doc = '@2026-06-05 done';
+    view = mountView(doc);
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(false);
+
+    const set = buildDateTokenDecorations(view, NOW);
+    let dom: HTMLElement | null = null;
+    set.between(0, view.state.doc.length, (_from, _to, deco) => {
+      const widget = (deco.spec as {widget?: {toDOM: () => HTMLElement}}).widget;
+      if (widget) {
+        dom = widget.toDOM();
+      }
+    });
+
+    expect(dom).not.toBeNull();
+    const pill = dom as unknown as HTMLElement;
+    expect(pill.textContent).toBe('☑️ 5 Jun');
+    expect(pill.classList.contains('cm-date-token-pill--past')).toBe(true);
+  });
+
   it('exposes the pill class for styling', () => {
     expect(CM_DATE_TOKEN_PILL_CLASS).toBe('cm-date-token-pill');
   });

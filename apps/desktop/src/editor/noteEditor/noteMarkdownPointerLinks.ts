@@ -173,6 +173,7 @@ export function createNoteMarkdownPointerLinkHandlers(
           pos,
           event,
           handlers.onOpenDateTokenPicker?.(),
+          {forceIncludeBoundaries: click.dateToken},
         )
       ) {
         // Keep the click non-modal: CodeMirror can still place the caret for direct text editing.
