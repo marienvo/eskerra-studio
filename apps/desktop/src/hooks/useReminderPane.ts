@@ -184,24 +184,7 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
 
   // Build pane rows, merging UI-only remove state from rowStates.
   const rows: readonly ReminderPaneRow[] = useMemo(
-    () =>
-      reminders.map(r =>
-        reminderToPaneRow(r, rowStates.get(r.id) != null
-          ? {
-              id: r.id,
-              source: 'reminder',
-              noteUri: r.noteUri,
-              reminderId: r.id,
-              dueAtMs: r.dueAtMs,
-              normalizedTokenText: r.normalizedTokenText,
-              vaultRelativePath: r.vaultRelativePath,
-              reminderState: r.state,
-              uiCaretHint: r.uiCaretHint?.utf16Offset,
-              displayLine: r.displayLine ?? '',
-              removeState: rowStates.get(r.id) ?? 'idle',
-            }
-          : undefined),
-      ),
+    () => reminders.map(r => reminderToPaneRow(r, rowStates.get(r.id))),
     [reminders, rowStates],
   );
 

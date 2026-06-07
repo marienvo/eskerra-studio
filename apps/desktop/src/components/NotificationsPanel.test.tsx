@@ -1,6 +1,6 @@
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {beforeAll, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import type {ReminderPaneRow} from '../lib/reminderPane';
 import {NotificationsPanel} from './NotificationsPanel';
@@ -92,4 +92,44 @@ describe('NotificationsPanel reminder row', () => {
     renderPanel(row({reminderState: 'stale'}));
     expect(screen.queryByRole('button', {name: 'Snooze reminder'})).toBeNull();
   });
+
+  it('refreshes snooze options when the menu opens after a boundary passes', async () => {
+    const base = 1_700_000_000_000;
+    const dueAtMs = base + 4 * 60_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(base);
+
+    renderPanel(row({dueAtMs}));
+
+    const user = userEvent.setup();
+    // Past the T-3 boundary but still before T-1.
+    nowSpy.mockReturnValue(base + 2 * 60_000 + 30_000);
+    await user.click(screen.getByRole('button', {name: 'Snooze reminder'}));
+
+    expect(screen.queryByText('3 min before')).toBeNull();
+    expect(screen.getByText('1 min before')).toBeTruthy();
+    expect(screen.getByText('At due time')).toBeTruthy();
+
+    nowSpy.mockRestore();
+  });
+
+  it('does not invoke onSnooze when the chosen offset expired before selection', async () => {
+    const base = 1_700_000_000_000;
+    const dueAtMs = base + 4 * 60_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(base);
+    const {onSnooze} = renderPanel(row({dueAtMs}));
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', {name: 'Snooze reminder'}));
+    expect(await screen.findByText('3 min before')).toBeTruthy();
+
+    nowSpy.mockReturnValue(base + 3 * 60_000 + 1);
+    await user.click(screen.getByText('3 min before'));
+
+    expect(onSnooze).not.toHaveBeenCalled();
+    nowSpy.mockRestore();
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
