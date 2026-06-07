@@ -198,7 +198,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       todayHubPerfEnabled() && !showFoldGutter ? performance.now() : 0;
 
     const paste = pasteHandlersRef.current;
-    const {onEditorClick, onEditorMiddleClick} =
+    const {onEditorClick, onEditorMiddleClick, onEditorMouseUp} =
       createNoteMarkdownPointerLinkHandlers({
         onOpenDateTokenPicker: () => onOpenDateTokenPickerRef.current,
         onWikiLinkActivate: p => shell.onWikiLinkActivateRef.current(p),
@@ -245,6 +245,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       armMiddleClickPasteBlock: paste.armMiddleClickPasteBlock,
       onEditorMiddleClick,
       onEditorClick,
+      onEditorMouseUp,
     });
 
     shell.codemirrorBootExtensionsRef.current = extensions;

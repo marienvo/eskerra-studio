@@ -1,5 +1,5 @@
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import type {Transaction} from '@codemirror/state';
+import {EditorSelection, type Transaction} from '@codemirror/state';
 import {createRef} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
@@ -263,6 +263,33 @@ describe('NoteMarkdownEditor', () => {
     const expectedMarkdown = `Due ${formatDateToken({year: 2026, month: 12, day: 15})} please`;
     expect(view.state.doc.toString()).toBe(expectedMarkdown);
     expect(onMarkdownChange).toHaveBeenLastCalledWith(expectedMarkdown);
+    expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
+  });
+
+  it('opens the date token picker on first pill click when the token line is not focused', () => {
+    const initialMarkdown = 'line one\nDue @2026-12-28 please';
+    const {container} = render(
+      <NoteMarkdownEditor {...baseProps({initialMarkdown})} />,
+    );
+    const view = editorView(container);
+    mockDateTokenAnchorCoords(view);
+    const tokenFrom = initialMarkdown.indexOf('@2026-12-28');
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(tokenFrom);
+
+    act(() => {
+      view.dispatch({selection: EditorSelection.cursor(0)});
+      view.focus();
+    });
+
+    const pill = container.querySelector('.cm-date-token-pill');
+    if (!(pill instanceof HTMLElement)) {
+      throw new Error('Missing date token pill');
+    }
+
+    act(() => {
+      fireEvent.click(pill, {clientX: 100, clientY: 100, button: 0});
+    });
+
     expect(screen.getByRole('dialog', {name: 'Pick date and time'})).toBeTruthy();
   });
 

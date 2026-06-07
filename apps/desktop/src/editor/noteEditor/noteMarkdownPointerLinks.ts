@@ -10,7 +10,11 @@ import {
 import {markdownActivatableRelativeMdLinkAtPosition} from './markdownActivatableRelativeMdLinkAtPosition';
 import {markdownBareBrowserUrlAtPosition} from './markdownBareUrl';
 import {
+  consumeDateTokenPickerOpenedForGesture,
   discardStoredPrimaryPointerDownForLinkClick,
+  isSamePrimaryPointerGesture,
+  markDateTokenPickerOpenedForGesture,
+  peekStoredPrimaryPointerDownForLinkClick,
   resolvePrimaryLinkClickContext,
 } from './linkClickUseMousedownPosition';
 import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
@@ -147,11 +151,48 @@ export function activateNoteMarkdownMiddleLinkAtPosition(
   return false;
 }
 
+function tryOpenDateTokenPickerOnPillMouseUp(
+  view: EditorView,
+  event: MouseEvent,
+  openPicker: DateTokenPickerOpenHandler | undefined,
+): boolean {
+  if (event.button !== 0 || !openPicker) {
+    return false;
+  }
+  const down = peekStoredPrimaryPointerDownForLinkClick(view);
+  if (
+    down == null
+    || !down.dateToken
+    || down.pos == null
+    || down.markerFocusLine
+    || !isSamePrimaryPointerGesture(down, event)
+  ) {
+    return false;
+  }
+  queueMicrotask(() => {
+    if (consumeDateTokenPickerOpenedForGesture(view)) {
+      return;
+    }
+    const opened = openDateTokenPickerAtClickPosition(
+      view,
+      down.pos!,
+      event,
+      openPicker,
+      {forceIncludeBoundaries: true},
+    );
+    if (opened) {
+      markDateTokenPickerOpenedForGesture(view);
+    }
+  });
+  return false;
+}
+
 export function createNoteMarkdownPointerLinkHandlers(
   handlers: NoteMarkdownPointerLinkHandlers,
 ): {
   onEditorClick: (event: MouseEvent, view: EditorView) => boolean;
   onEditorMiddleClick: (event: MouseEvent, view: EditorView) => boolean;
+  onEditorMouseUp: (event: MouseEvent, view: EditorView) => boolean;
 } {
   return {
     onEditorClick(event, view) {
@@ -167,6 +208,9 @@ export function createNoteMarkdownPointerLinkHandlers(
       if (pos == null) {
         return false;
       }
+      if (consumeDateTokenPickerOpenedForGesture(view)) {
+        return false;
+      }
       if (
         openDateTokenPickerAtClickPosition(
           view,
@@ -176,6 +220,7 @@ export function createNoteMarkdownPointerLinkHandlers(
           {forceIncludeBoundaries: click.dateToken},
         )
       ) {
+        markDateTokenPickerOpenedForGesture(view);
         // Keep the click non-modal: CodeMirror can still place the caret for direct text editing.
         return false;
       }
@@ -196,6 +241,17 @@ export function createNoteMarkdownPointerLinkHandlers(
         return false;
       }
       return activateNoteMarkdownMiddleLinkAtPosition(view, pos, event, handlers);
+    },
+    onEditorMouseUp(event, view) {
+      if (event.shiftKey || event.altKey) {
+        return false;
+      }
+      tryOpenDateTokenPickerOnPillMouseUp(
+        view,
+        event,
+        handlers.onOpenDateTokenPicker?.(),
+      );
+      return false;
     },
   };
 }
