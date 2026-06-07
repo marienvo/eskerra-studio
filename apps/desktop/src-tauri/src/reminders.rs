@@ -113,17 +113,26 @@ pub async fn reminders_remove(_note_uri: String, _reminder_id: String) -> String
 // ── D-Bus helper (Linux only) ─────────────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
+const DBUS_REMOVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+#[cfg(target_os = "linux")]
 async fn dbus_remove_reminder(note_uri: &str, reminder_id: &str) -> zbus::Result<String> {
     let conn = zbus::Connection::session().await?;
-    let reply = conn
-        .call_method(
+    // Bound the call so a hung (not crashed) daemon doesn't hold the remove
+    // button in its "Removing…" spinner for zbus's ~25s default reply timeout;
+    // on timeout the caller surfaces "remove-unavailable" and offers Retry.
+    let reply = tokio::time::timeout(
+        DBUS_REMOVE_TIMEOUT,
+        conn.call_method(
             Some("dev.eskerra.Reminders1"),
             "/dev/eskerra/Reminders1",
             Some("dev.eskerra.Reminders1"),
             "RemoveReminder",
             &(note_uri, reminder_id),
-        )
-        .await?;
+        ),
+    )
+    .await
+    .map_err(|_| zbus::Error::Failure("RemoveReminder D-Bus call timed out".to_string()))??;
     let result: String = reply.body().deserialize()?;
     Ok(result)
 }

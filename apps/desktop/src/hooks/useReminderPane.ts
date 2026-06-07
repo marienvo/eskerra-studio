@@ -16,7 +16,7 @@
 
 import {listen} from '@tauri-apps/api/event';
 import {invoke, isTauri} from '@tauri-apps/api/core';
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {hasDueRemindersNow, parseReminderIndex, type Reminder} from '../lib/reminderIndex';
 import {
@@ -77,6 +77,10 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
       .then(hash => {
         if (cancelled) return;
         vaultHashRef.current = hash;
+        // Drop any per-row remove state from the previous vault so a stale
+        // 'removing' spinner or 'remove-unavailable' retry cannot bleed across
+        // a vault switch if a reminder ID collides.
+        setRowStates(new Map());
         void writeConfig(vaultRoot, hash);
         readIndex(hash).then(rs => {
           if (!cancelled) setReminders(rs);
@@ -92,13 +96,19 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
   // OS notification actions) surface even when no vault file changed.
   useEffect(() => {
     if (!vaultRoot) return;
+    let cancelled = false;
     const timer = setInterval(() => {
       const hash = vaultHashRef.current;
       if (hash) {
-        readIndex(hash).then(rs => setReminders(rs));
+        readIndex(hash).then(rs => {
+          if (!cancelled) setReminders(rs);
+        });
       }
     }, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [vaultRoot]);
 
   // vault-files-changed: the daemon rescans after any vault edit, so the
@@ -110,7 +120,9 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
     listen('vault-files-changed', () => {
       const hash = vaultHashRef.current;
       if (hash) {
-        readIndex(hash).then(rs => setReminders(rs));
+        readIndex(hash).then(rs => {
+          if (!cancelled) setReminders(rs);
+        });
       }
     })
       .then(fn => {
@@ -136,21 +148,25 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
   }, [reminders]);
 
   // Build pane rows, merging UI-only remove state from rowStates.
-  const rows: readonly ReminderPaneRow[] = reminders.map(r =>
-    reminderToPaneRow(r, rowStates.get(r.id) != null
-      ? {
-          id: r.id,
-          source: 'reminder',
-          noteUri: r.noteUri,
-          reminderId: r.id,
-          dueAtMs: r.dueAtMs,
-          normalizedTokenText: r.normalizedTokenText,
-          vaultRelativePath: r.vaultRelativePath,
-          reminderState: r.state,
-          uiCaretHint: r.uiCaretHint?.utf16Offset,
-          removeState: rowStates.get(r.id) ?? 'idle',
-        }
-      : undefined),
+  const rows: readonly ReminderPaneRow[] = useMemo(
+    () =>
+      reminders.map(r =>
+        reminderToPaneRow(r, rowStates.get(r.id) != null
+          ? {
+              id: r.id,
+              source: 'reminder',
+              noteUri: r.noteUri,
+              reminderId: r.id,
+              dueAtMs: r.dueAtMs,
+              normalizedTokenText: r.normalizedTokenText,
+              vaultRelativePath: r.vaultRelativePath,
+              reminderState: r.state,
+              uiCaretHint: r.uiCaretHint?.utf16Offset,
+              removeState: rowStates.get(r.id) ?? 'idle',
+            }
+          : undefined),
+      ),
+    [reminders, rowStates],
   );
 
   const removeReminder = useCallback(
