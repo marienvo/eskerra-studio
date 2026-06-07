@@ -31,10 +31,11 @@ pub enum TokenResolution {
     /// Callers read its freshly-scanned byte span (write) or `uiCaretHint`
     /// (open) from that token — never a stale stored offset.
     Resolved { token_index: usize },
-    /// Multiple candidates that cannot be disambiguated safely (duplicate
-    /// identical tokens whose anchor does not single one out and whose file
-    /// changed since the scan). Write-back → `stale` (write nothing); open →
-    /// open the note with no caret jump.
+    /// The live token cannot be selected safely: either duplicate candidates
+    /// remain ambiguous, or the only remaining candidate is unsafe because its
+    /// containing-line anchor changed while the file fingerprint also changed.
+    /// Write-back → `stale` (write nothing); open → open the note with no caret
+    /// jump.
     Ambiguous,
 }
 

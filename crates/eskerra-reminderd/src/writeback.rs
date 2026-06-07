@@ -24,10 +24,11 @@
 //! backs Phase 5 click-to-open.
 
 use std::collections::HashMap;
+use std::io::Write as _;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use eskerra_reminder_core::{resolve_live_token, scan, write_atomic, Reminder, TokenResolution};
+use eskerra_reminder_core::{resolve_live_token, scan, Reminder, TokenResolution};
 
 /// Result of a single `RemoveReminder` write-back — the locked IPC result space
 /// (`removed` | `stale`). `remove-unavailable` is an **app-side** transport
@@ -76,6 +77,30 @@ impl NoteLocks {
                 .or_insert_with(|| Arc::new(Mutex::new(()))),
         )
     }
+
+    /// Drop an idle lock entry once the caller's critical section has ended.
+    /// While the caller still holds its local `Arc`, idle means exactly two
+    /// owners: the map and that local `Arc`. Any waiter or concurrent remove has
+    /// already cloned the same `Arc`, so the entry must stay in place.
+    fn cleanup_if_idle(&self, key: &str, note_lock: &Arc<Mutex<()>>) {
+        let mut map = self
+            .locks
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if let Some(current) = map.get(key) {
+            if Arc::ptr_eq(current, note_lock) && Arc::strong_count(current) == 2 {
+                map.remove(key);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.locks
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .len()
+    }
 }
 
 /// Test-only hook invoked right after the per-note lock is acquired and before
@@ -119,17 +144,26 @@ impl Remover {
         record: F,
     ) -> RemoveResult {
         let note_lock = self.locks.for_note(lock_key);
-        let _guard = note_lock
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
-        if let Some(hook) = &self.on_locked {
-            hook(lock_key);
-        }
-        let result = resolve_and_strike(note_abs_path, stored);
-        // Still under `_guard`: a concurrent same-note remove cannot interleave
-        // its re-read between this write and this outcome being recorded.
-        record(result);
+        let result = {
+            let _guard = note_lock
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            if let Some(hook) = &self.on_locked {
+                hook(lock_key);
+            }
+            let result = resolve_and_strike(note_abs_path, stored);
+            // Still under `_guard`: a concurrent same-note remove cannot interleave
+            // its re-read between this write and this outcome being recorded.
+            record(result);
+            result
+        };
+        self.locks.cleanup_if_idle(lock_key, &note_lock);
         result
+    }
+
+    #[cfg(test)]
+    fn lock_entry_count(&self) -> usize {
+        self.locks.len()
     }
 }
 
@@ -177,10 +211,50 @@ fn resolve_and_strike(note_abs_path: &Path, stored: &Reminder) -> RemoveResult {
     let struck = struck_form(token_str);
     let new_bytes = splice(&bytes, from, to, struck.as_bytes());
 
-    match write_atomic(note_abs_path, &new_bytes) {
+    match write_note_atomic_preserving_permissions(note_abs_path, &new_bytes) {
         Ok(()) => RemoveResult::Removed,
         Err(_) => RemoveResult::Stale,
     }
+}
+
+/// Atomic note replacement that preserves metadata needed by user-authored
+/// vault files. The shared core helper is for daemon-owned index/config files;
+/// using it directly on notes would replace a 0644/0664 note with tempfile's
+/// restrictive default mode on Unix.
+fn write_note_atomic_preserving_permissions(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let metadata = std::fs::metadata(path)?;
+    let dir = path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "destination path has no parent directory",
+        )
+    })?;
+    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+    tmp.write_all(contents)?;
+    tmp.flush()?;
+    preserve_note_permissions(tmp.as_file(), &metadata)?;
+    tmp.as_file().sync_data()?;
+    tmp.persist(path).map_err(|e| e.error)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn preserve_note_permissions(
+    file: &std::fs::File,
+    metadata: &std::fs::Metadata,
+) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mode = metadata.permissions().mode() & 0o7777;
+    file.set_permissions(std::fs::Permissions::from_mode(mode))
+}
+
+#[cfg(not(unix))]
+fn preserve_note_permissions(
+    _file: &std::fs::File,
+    _metadata: &std::fs::Metadata,
+) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// `@2026-11-27_2300` → `@~~2026-11-27_2300~~`: insert `~~` after the leading
@@ -337,6 +411,44 @@ mod tests {
         assert_eq!(recorded.get(), Some(RemoveResult::Removed));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn remove_preserves_unix_note_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("n.md");
+        write(&path, "@2026-11-27_0930");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o664)).unwrap();
+        let stored = stored_from("@2026-11-27_0930", 0);
+
+        let result = Remover::new().remove(&path, "Inbox/n.md", &stored, |_| {});
+        assert_eq!(result, RemoveResult::Removed);
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o7777;
+        assert_eq!(mode, 0o664);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "@~~2026-11-27_0930~~"
+        );
+    }
+
+    #[test]
+    fn remover_cleans_idle_note_lock_after_remove() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("n.md");
+        write(&path, "@2026-11-27_0930");
+        let stored = stored_from("@2026-11-27_0930", 0);
+        let remover = Remover::new();
+
+        let result = remover.remove(&path, "Inbox/n.md", &stored, |_| {
+            assert_eq!(remover.lock_entry_count(), 1);
+        });
+
+        assert_eq!(result, RemoveResult::Removed);
+        assert_eq!(remover.lock_entry_count(), 0);
+    }
+
     // --- mandatory concurrency tests (Write-back safety rule 0) --------------
 
     #[test]
@@ -460,6 +572,20 @@ mod tests {
         );
         drop(held_a);
         assert!(locks.for_note("Inbox/a.md").try_lock().is_ok());
+    }
+
+    #[test]
+    fn idle_note_lock_cleanup_keeps_entry_when_another_owner_exists() {
+        let locks = NoteLocks::default();
+        let note_lock = locks.for_note("Inbox/n.md");
+        let other_owner = locks.for_note("Inbox/n.md");
+
+        locks.cleanup_if_idle("Inbox/n.md", &note_lock);
+        assert_eq!(locks.len(), 1);
+
+        drop(other_owner);
+        locks.cleanup_if_idle("Inbox/n.md", &note_lock);
+        assert_eq!(locks.len(), 0);
     }
 
     #[test]
