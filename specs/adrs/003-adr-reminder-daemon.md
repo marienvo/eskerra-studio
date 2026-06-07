@@ -274,12 +274,20 @@ temp + rename); the daemon reloads and re-scans.
 Native **`org.freedesktop.Notifications`** via D-Bus (`zbus`), with action buttons +
 callbacks. `tauri-plugin-notification` is insufficient for persistent action buttons on
 Linux. Actions: `snooze-3`, `snooze-1`, `snooze-0` ("Remind at T-3 / T-1 / at time"),
-`remove`, plus default action (click). Suspend/resume handled via `PrepareForSleep` on
-`org.freedesktop.login1` (same `zbus` stack), with a periodic wall-clock reconciliation
-fallback. The three evaluation contexts (scheduled-fire execution, resume catch-up,
-discovery) and snooze-boundary semantics are pinned in the plan §*Missed / grace
-semantics* and §*Snooze action handling* — this ADR does not restate them. `zbus` API is
-version-sensitive: Phase 3 must verify against current docs, not model memory.
+`remove`, plus default action (click).
+
+Reminder notifications include the standard Freedesktop `sound-name` hint with
+`alarm-clock-elapsed`, so GNOME can play the user's themed alarm sound when the
+notification pops up. This is intentionally best-effort and desktop-owned: GNOME, the
+notification server, Do Not Disturb, muted output, or user sound settings may suppress
+it, and the daemon does **not** start a separate audio playback path.
+
+Suspend/resume handled via `PrepareForSleep` on `org.freedesktop.login1` (same `zbus`
+stack), with a periodic wall-clock reconciliation fallback. The three evaluation
+contexts (scheduled-fire execution, resume catch-up, discovery) and snooze-boundary
+semantics are pinned in the plan §*Missed / grace semantics* and §*Snooze action
+handling* — this ADR does not restate them. `zbus` API is version-sensitive: Phase 3
+must verify against current docs, not model memory.
 
 ### 7. IPC — LOCKED interface
 
@@ -403,7 +411,7 @@ Daemon events:
 | `eskerra.reminderd.scan_completed` | extras: `scan_duration_ms`, `reminder_count`, `changed_paths_count`, `full_scan` (bool) |
 | `eskerra.reminderd.watch_coarse_invalidation` | tag `coarse_reason` (parallels the app's watcher coarse alert) |
 | `eskerra.reminderd.watch_backend_error` | tag `backend=<recommended\|poll>`; raw error in extras only |
-| `eskerra.reminderd.notification_send` | tag `result=<sent\|failed>`; `failure_reason` in extras |
+| `eskerra.reminderd.notification_send` | tag `result=<sent\|failed>`; tag `sound_name=<alarm-clock-elapsed\|none>`; `failure_reason` in extras |
 | `eskerra.reminderd.dbus_unavailable` | tag `surface=<notifications\|login1\|service_register>` |
 | `eskerra.reminderd.remove_result` | tag `result=<removed\|stale>`; on `stale`, tag `stale_reason=<ambiguous\|byte_mismatch\|io>` |
 | `eskerra.reminderd.write_failed` | IO/atomic-write failure on the strikethrough path |

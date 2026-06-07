@@ -30,6 +30,9 @@ pub const ACTION_SNOOZE_0: &str = "snooze-0";
 pub const ACTION_REMOVE: &str = "remove";
 /// The freedesktop "default" action — invoked by a plain click on the body.
 pub const ACTION_DEFAULT: &str = "default";
+/// Themeable Freedesktop sound name GNOME should play when a reminder
+/// notification pops up. Notification servers may ignore this hint.
+pub const REMINDER_SOUND_NAME: &str = "alarm-clock-elapsed";
 
 /// Map an `ActionInvoked` key back to a scheduler [`Action`]. Unknown keys
 /// (forward-compat) yield `None` and are ignored by the caller.
@@ -57,6 +60,10 @@ pub struct NotificationRequest {
     /// atomically replace the triggering notification rather than spawn a
     /// duplicate live notification for the same reminder.
     pub replaces_id: u32,
+    /// Optional Freedesktop `sound-name` hint. This is best-effort: the
+    /// notification server, user sound settings, mute state, or Do Not Disturb
+    /// may suppress it.
+    pub sound_name: Option<String>,
 }
 
 impl NotificationRequest {
@@ -76,6 +83,7 @@ impl NotificationRequest {
                 summary: format!("{title} ({hhmm})"),
                 body: String::new(),
                 replaces_id: 0,
+                sound_name: Some(REMINDER_SOUND_NAME.to_string()),
             }
         } else {
             Self {
@@ -83,6 +91,7 @@ impl NotificationRequest {
                 summary: title,
                 body: format!("{} ({})", reminder.display_line, hhmm),
                 replaces_id: 0,
+                sound_name: Some(REMINDER_SOUND_NAME.to_string()),
             }
         }
     }
@@ -258,6 +267,7 @@ mod zbus_impl {
     use std::sync::Arc;
 
     use zbus::blocking::{Connection, Proxy};
+    use zbus::zvariant::Value;
 
     use super::{ActionCallback, NotificationRegistry, NotificationRequest, Notifier};
 
@@ -301,9 +311,9 @@ mod zbus_impl {
                 actions.push(label.to_string());
             }
 
-            // No hints today; expire_timeout = 0 keeps the notification (and its
-            // action buttons) resident until the user acts, as the feature needs.
-            let hints: HashMap<String, zbus::zvariant::Value> = HashMap::new();
+            // expire_timeout = 0 keeps the notification (and its action buttons)
+            // resident until the user acts, as the feature needs.
+            let hints = build_hints(req);
             let expire_timeout: i32 = 0;
 
             let id: u32 = self
@@ -326,6 +336,17 @@ mod zbus_impl {
             self.registry.register(id, req.reminder_id.clone())?;
             Ok(id)
         }
+    }
+
+    pub(super) fn build_hints(req: &NotificationRequest) -> HashMap<String, Value<'static>> {
+        let mut hints = HashMap::new();
+        if let Some(sound_name) = req.sound_name.as_deref() {
+            hints.insert(
+                "sound-name".to_string(),
+                Value::from(sound_name.to_string()),
+            );
+        }
+        hints
     }
 
     /// One thread, both signals. Routing `ActionInvoked` and `NotificationClosed`
@@ -450,11 +471,18 @@ mod tests {
         let req = NotificationRequest::for_reminder(&r, FireKind::Lead);
         assert_eq!(req.reminder_id, r.id);
         assert_eq!(req.summary, "Daily note");
+        assert_eq!(req.sound_name.as_deref(), Some(REMINDER_SOUND_NAME));
         // Body is "meet soon (HH:MM)" — no raw token, no "Now:" / "Reminder " prefix.
-        assert!(!req.body.contains("@2026-06-06_0900"), "token must not appear in body");
+        assert!(
+            !req.body.contains("@2026-06-06_0900"),
+            "token must not appear in body"
+        );
         assert!(!req.body.contains("Now:"), "old prefix must be gone");
         assert!(!req.body.contains("Reminder "), "old prefix must be gone");
-        assert!(req.body.starts_with("meet soon ("), "body must start with display_line");
+        assert!(
+            req.body.starts_with("meet soon ("),
+            "body must start with display_line"
+        );
         assert!(req.body.ends_with(')'), "body must end with closing paren");
     }
 
@@ -475,7 +503,10 @@ mod tests {
     #[test]
     fn empty_display_line_moves_time_to_title() {
         let r = a_token_only_reminder();
-        assert!(r.display_line.is_empty(), "fixture must have empty display_line");
+        assert!(
+            r.display_line.is_empty(),
+            "fixture must have empty display_line"
+        );
         let expected_hhmm = Local
             .timestamp_millis_opt(r.due_at_ms)
             .single()
@@ -484,7 +515,10 @@ mod tests {
             .to_string();
         let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
         assert_eq!(req.summary, format!("Daily note ({})", expected_hhmm));
-        assert_eq!(req.body, "", "body must be empty when display_line is empty");
+        assert_eq!(
+            req.body, "",
+            "body must be empty when display_line is empty"
+        );
     }
 
     #[test]
@@ -493,7 +527,10 @@ mod tests {
         assert_eq!(acts.len(), 3, "exactly 3 outgoing actions (GNOME cap)");
         let keys: Vec<&str> = acts.iter().map(|(k, _)| *k).collect();
         assert!(keys.contains(&ACTION_REMOVE), "remove must be present");
-        assert!(!keys.contains(&ACTION_SNOOZE_3), "snooze-3 must be absent from outgoing set");
+        assert!(
+            !keys.contains(&ACTION_SNOOZE_3),
+            "snooze-3 must be absent from outgoing set"
+        );
         assert!(keys.contains(&ACTION_SNOOZE_1));
         assert!(keys.contains(&ACTION_SNOOZE_0));
     }
@@ -521,7 +558,21 @@ mod tests {
         let r = a_reminder();
         let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
         assert_eq!(req.replaces_id, 0, "fresh notifications default to 0");
-        assert_eq!(req.replacing(42).replaces_id, 42);
+        let replacing = req.replacing(42);
+        assert_eq!(replacing.replaces_id, 42);
+        assert_eq!(replacing.sound_name.as_deref(), Some(REMINDER_SOUND_NAME));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn zbus_hints_include_reminder_sound_name() {
+        let r = a_reminder();
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        let hints = super::zbus_impl::build_hints(&req);
+        let sound_name = hints
+            .get("sound-name")
+            .and_then(|value| String::try_from(value).ok());
+        assert_eq!(sound_name.as_deref(), Some(REMINDER_SOUND_NAME));
     }
 
     // --- registry routing / action-vs-close race --------------------------

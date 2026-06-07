@@ -32,7 +32,7 @@ path. Reminder ids embed a vault-relative path, so they are **not** emitted.
 |---|---|---|
 | `eskerra.reminderd.scan_completed` | A full or incremental vault scan finished | `vault_hash`, `reminder_count`, `full` (`true`/`false`), `coarse` (`true`/`false`), `duration_ms` |
 | `eskerra.reminderd.watch_coarse_invalidation` | A watch batch arrived **coarse** (precise backend dropped events → forced full rescan) | `vault_hash`, `path_count` |
-| `eskerra.reminderd.notification_send` | One OS notification send attempt resolved | `result` (`ok`/`error`), `error` (on failure) |
+| `eskerra.reminderd.notification_send` | One OS notification send attempt resolved | `result` (`ok`/`error`), `sound_name` (`alarm-clock-elapsed`/`none`), `error` (on failure) |
 | `eskerra.reminderd.dbus_unavailable` | A required D-Bus subsystem is unavailable (degraded fallback active) | `subsystem` (`notifications`/`login1`), `error` |
 | `eskerra.reminderd.remove_result` | A `RemoveReminder` write-back resolved on the daemon side | `vault_hash`, `result` (`removed`/`stale`) |
 
@@ -48,6 +48,9 @@ path. Reminder ids embed a vault-relative path, so they are **not** emitted.
   same triage as the app runbook (backend errors, ulimit/inotify exhaustion).
 - **`notification_send result=error`** — GNOME/D-Bus notification delivery is
   failing. A burst usually accompanies `dbus_unavailable subsystem=notifications`.
+  `sound_name` records the requested Freedesktop notification sound hint, not proof
+  that GNOME actually played audio; user sound settings, mute state, or Do Not
+  Disturb may still suppress it.
 - **`dbus_unavailable subsystem=login1`** — suspend/resume catch-up cannot use
   `PrepareForSleep`; the daemon falls back to the periodic reconciliation tick
   (a missed wake still self-heals, just less promptly).

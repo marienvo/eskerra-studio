@@ -564,12 +564,20 @@ impl Daemon {
         };
         // Phase 2: send (no active borrow held — distinct field `notifier`).
         for req in &requests {
+            let sound_name = req.sound_name.as_deref().unwrap_or("none");
             match self.notifier.send(req) {
-                Ok(_) => obs::emit(obs::event::NOTIFICATION_SEND, &[("result", "ok")]),
+                Ok(_) => obs::emit(
+                    obs::event::NOTIFICATION_SEND,
+                    &[("result", "ok"), ("sound_name", sound_name)],
+                ),
                 Err(err) => {
                     obs::emit(
                         obs::event::NOTIFICATION_SEND,
-                        &[("result", "error"), ("error", &err)],
+                        &[
+                            ("result", "error"),
+                            ("sound_name", sound_name),
+                            ("error", &err),
+                        ],
                     );
                     eprintln!("[reminderd] notification_send failed: {err}");
                 }
