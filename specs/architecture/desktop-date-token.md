@@ -42,9 +42,9 @@ Presentational React overlay: [`dateToken/dateTimePicker/`](../../apps/desktop/s
 
 - **Calendar:** month grid with previous/next month navigation; week rows start on **Monday** (Fedora/GNOME reference).
 - **Today:** prominent button sets the selected date to the current local calendar day.
-- **Time:** hour and minute inputs (24-hour) plus a **No time** toggle. When **No time** is on, time inputs disable and confirm yields a date-only token.
+- **Time:** hour and minute inputs (24-hour) plus a **No time** toggle. When **No time** is on, time inputs disable and confirm yields a date-only token. Minute input uses a **5-minute step** (`step={5}`, max 55); typed or spinner values snap to the nearest 5-minute boundary.
 - **Live apply:** clicking a calendar day, **Today**, or changing time fields (hour, minute, **No time**) updates the document token immediately while the overlay stays open. `Enter` applies the current selection without closing. `Esc` or **Cancel** dismisses the overlay. Arrow keys move the calendar selection without applying until `Enter` or a day click.
-- **Defaults:** today’s date; no time pre-selected on a fresh `@` trigger.
+- **Defaults:** today’s date; no time pre-selected on a fresh `@` trigger. When time is enabled (uncheck **No time**), the picker prefills **now + 15 minutes**, snapped to the nearest 5-minute boundary.
 
 Storybook sandbox: [`dateToken/__sandbox__/DateTimePicker.stories.tsx`](../../apps/desktop/src/editor/noteEditor/dateToken/__sandbox__/DateTimePicker.stories.tsx).
 

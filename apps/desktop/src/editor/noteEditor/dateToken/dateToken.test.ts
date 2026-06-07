@@ -12,7 +12,9 @@ import {
   pad2,
   pad4,
   parseDateToken,
-  roundTimeUpToFiveMinutes,
+  defaultDateTokenTimeFromNow,
+  snapMinuteFieldToFiveMinuteGrid,
+  snapTimeToFiveMinuteGrid,
   todayDateParts,
   type DateTokenValue,
 } from './dateToken';
@@ -83,29 +85,42 @@ describe('todayDateParts and nowTimeParts', () => {
   });
 });
 
-describe('roundTimeUpToFiveMinutes', () => {
-  test('rounds up to the next 5-minute boundary', () => {
-    expect(roundTimeUpToFiveMinutes(new Date(2026, 5, 6, 23, 52))).toEqual({
-      hour: 23,
-      minute: 55,
-    });
-    expect(roundTimeUpToFiveMinutes(new Date(2026, 5, 6, 10, 1))).toEqual({
-      hour: 10,
-      minute: 5,
-    });
+describe('snapTimeToFiveMinuteGrid', () => {
+  test('snaps to the nearest 5-minute boundary', () => {
+    expect(snapTimeToFiveMinuteGrid(23, 52)).toEqual({hour: 23, minute: 50});
+    expect(snapTimeToFiveMinuteGrid(10, 1)).toEqual({hour: 10, minute: 0});
+    expect(snapTimeToFiveMinuteGrid(10, 3)).toEqual({hour: 10, minute: 5});
   });
 
   test('keeps an exact boundary unchanged', () => {
-    expect(roundTimeUpToFiveMinutes(new Date(2026, 5, 6, 10, 0))).toEqual({
-      hour: 10,
-      minute: 0,
-    });
+    expect(snapTimeToFiveMinuteGrid(10, 0)).toEqual({hour: 10, minute: 0});
   });
 
   test('wraps past midnight to 00:00', () => {
-    expect(roundTimeUpToFiveMinutes(new Date(2026, 5, 6, 23, 58))).toEqual({
-      hour: 0,
-      minute: 0,
+    expect(snapTimeToFiveMinuteGrid(23, 58)).toEqual({hour: 0, minute: 0});
+  });
+});
+
+describe('snapMinuteFieldToFiveMinuteGrid', () => {
+  test('snaps minute input to 00–55', () => {
+    expect(snapMinuteFieldToFiveMinuteGrid(52)).toBe(50);
+    expect(snapMinuteFieldToFiveMinuteGrid(58)).toBe(55);
+  });
+});
+
+describe('defaultDateTokenTimeFromNow', () => {
+  test('adds 15 minutes then snaps to the 5-minute grid', () => {
+    expect(defaultDateTokenTimeFromNow(new Date(2026, 5, 6, 14, 30))).toEqual({
+      hour: 14,
+      minute: 45,
+    });
+    expect(defaultDateTokenTimeFromNow(new Date(2026, 5, 6, 14, 31))).toEqual({
+      hour: 14,
+      minute: 45,
+    });
+    expect(defaultDateTokenTimeFromNow(new Date(2026, 5, 6, 14, 33))).toEqual({
+      hour: 14,
+      minute: 50,
     });
   });
 });
