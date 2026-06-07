@@ -9,6 +9,13 @@
 # session, so the "already logged in" case is covered by the app's best-effort
 # `systemctl --user start` (see reminders_write_config). Best-effort: a failure
 # here must never abort the package transaction.
-systemctl --global enable eskerra-reminderd.service >/dev/null 2>&1 || true
+#
+# Only on first install ($1 == 1). On upgrade ($1 > 1) we must NOT re-enable:
+# an admin who disabled (or preset-disabled) the unit has opted out, and
+# recreating the global symlink on every upgrade would silently override that
+# and resume reminders at next login.
+if [ "$1" -eq 1 ]; then
+    systemctl --global enable eskerra-reminderd.service >/dev/null 2>&1 || true
+fi
 
 exit 0
