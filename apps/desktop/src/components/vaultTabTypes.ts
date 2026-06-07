@@ -18,7 +18,7 @@ import type {
 import type {InboxEditorShellScrollDirective} from '../hooks/workspaceEditorScrollMap';
 import type {SubmitNewEntryResult} from '../hooks/workspaceComposeCommands';
 import type {EditorWorkspaceTab} from '../lib/editorWorkspaceTabs';
-import type {SessionNotification} from '../lib/sessionNotifications';
+import type {PaneNotification} from '../lib/reminderPane';
 import type {
   TodayHubSettings,
   TodayHubWorkspaceBridge,
@@ -187,10 +187,14 @@ export type VaultTabTodayHubController = {
 export type VaultTabNotificationsController = {
   notificationsPanelVisible: boolean;
   onToggleNotificationsPanel: () => void;
-  notificationItems: readonly SessionNotification[];
+  notificationItems: readonly PaneNotification[];
   notificationHighlightId: string | null;
   onDismissNotification: (id: string) => void;
   onClearAllNotifications: () => void;
+  /** True when any reminder is due (now ≥ dueAtMs); drives the rail dot. */
+  hasDueReminders: boolean;
+  onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
+  onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
 };
 
 export type VaultTabMergeController = {

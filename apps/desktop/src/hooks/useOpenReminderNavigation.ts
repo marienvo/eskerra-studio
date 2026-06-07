@@ -44,7 +44,7 @@ function openReminderRequestKey(req: OpenReminderRequest): string {
   return `${req.noteUri}\u0000${req.reminderId}\u0000${req.uiCaretHint ?? ''}`;
 }
 
-async function navigateToReminder(
+export async function navigateToReminder(
   req: OpenReminderRequest,
   openMarkdownInEditor: (uri: string, options?: OpenMarkdownInEditorOptions) => Promise<void>,
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>,

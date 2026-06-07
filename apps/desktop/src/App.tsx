@@ -3,7 +3,7 @@
  *
  * Ownership: app-level orchestration and Tauri window integration; vault editing behavior is in `VaultTab` / workspace hook.
  */
-import {useMemo, useRef, useState} from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
 
 import type {NoteMarkdownEditorHandle} from './editor/noteEditor/NoteMarkdownEditor';
 import {useAppPodcastPlayback} from './hooks/useAppPodcastPlayback';
@@ -30,7 +30,8 @@ import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 import {useAppPickFolder} from './shell/useAppPickFolder';
 import {usePaneVisibility} from './shell/usePaneVisibility';
-import {useOpenReminderNavigation} from './hooks/useOpenReminderNavigation';
+import {useOpenReminderNavigation, navigateToReminder} from './hooks/useOpenReminderNavigation';
+import {useReminderPane} from './hooks/useReminderPane';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {AppVaultReadyRoot} from './shell/mainWindow/AppVaultReadyRoot';
@@ -105,6 +106,19 @@ export default function App() {
   } = workspace;
 
   useOpenReminderNavigation({openMarkdownInEditor, inboxEditorRef, initialVaultHydrateAttemptDone});
+
+  const reminderPane = useReminderPane(vaultRoot ?? null);
+
+  const onOpenReminder = useCallback(
+    (noteUri: string, reminderId: string, uiCaretHint?: number) => {
+      void navigateToReminder(
+        {noteUri, reminderId, uiCaretHint},
+        openMarkdownInEditor,
+        inboxEditorRef,
+      );
+    },
+    [openMarkdownInEditor, inboxEditorRef],
+  );
 
   const titleBarActions = useAppTitleBarVaultActions({
     vaultRoot,
@@ -333,6 +347,10 @@ export default function App() {
       dismissDiskConflictSoft={ws.dismissDiskConflictSoft}
       enterDiskConflictMergeView={ws.enterDiskConflictMergeView}
       onMuteLinkSnippetDomain={handleMuteLinkSnippetDomain}
+      reminderItems={reminderPane.rows}
+      hasDueReminders={reminderPane.hasDueReminders}
+      onOpenReminder={onOpenReminder}
+      onRemoveReminder={reminderPane.removeReminder}
     />
   );
 }

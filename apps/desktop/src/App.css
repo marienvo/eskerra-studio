@@ -1058,6 +1058,91 @@ a:focus:not(:focus-visible) {
   margin-top: -0.08rem;
 }
 
+/* Reminder rows */
+.notifications-panel__row--reminder {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.notifications-panel__row--reminder-due {
+  border-color: var(--color-brand, var(--color-border));
+}
+
+.notifications-panel__row--reminder-stale {
+  opacity: 0.8;
+}
+
+.notifications-panel__reminder-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.notifications-panel__reminder-header {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+  text-align: left;
+}
+
+.notifications-panel__reminder-note {
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.notifications-panel__reminder-token {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  font-family: var(--font-mono, monospace);
+}
+
+.notifications-panel__reminder-status {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.notifications-panel__reminder-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+  color: var(--color-link, var(--color-text));
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+.notifications-panel__reminder-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.2rem;
+  margin-top: -0.08rem;
+}
+
+.notifications-panel__reminder-action-btn {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+  cursor: default;
+  line-height: 1.4;
+}
+
+.notifications-panel__reminder-action-btn:hover {
+  background: var(--color-hover-bg, var(--color-surface));
+}
+
 .main-column {
   /* Always-light canvas; shared by editor paper and settings page. */
   --nb-content-bg: #fbfbfb;
