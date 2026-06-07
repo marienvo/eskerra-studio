@@ -294,7 +294,7 @@ impl Daemon {
             // bump `generatedAt` for a no-op.
             ActionOutcome::Unknown
             | ActionOutcome::RemoveRequested
-            | ActionOutcome::OpenRequested => {}
+            | ActionOutcome::OpenRequested { .. } => {}
             // snooze-0 at exactly due fires immediately. Replace the triggering
             // notification (`replaces_id = notification_id`) so the desktop never
             // shows two live notifications for the same reminder.
@@ -1436,9 +1436,9 @@ mod tests {
         assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), before);
         assert_eq!(d.active_index().unwrap().generated_at_ms, generated_before);
 
-        // Open (default click) is a Phase 5 stub: likewise no index write.
+        // Open (default click): carries note_uri and does not write the index.
         let outcome = d.on_action(&id, 7, Action::Open, NOW + 2);
-        assert_eq!(outcome, ActionOutcome::OpenRequested);
+        assert!(matches!(outcome, ActionOutcome::OpenRequested { .. }));
         assert_eq!(std::fs::read(h.index_path("vh1")).unwrap(), before);
         assert_eq!(d.active_index().unwrap().generated_at_ms, generated_before);
 

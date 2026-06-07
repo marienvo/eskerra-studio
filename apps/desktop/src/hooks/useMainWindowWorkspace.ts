@@ -1268,6 +1268,7 @@ export function useMainWindowWorkspace(options: {
       applyFrontmatterInnerChange,
       syncFrontmatterStateFromDisk,
     },
+    openMarkdownInEditor,
     workspaceShadowModelForTests:
       import.meta.env.MODE === 'test' ? workspaceShadowModel : undefined,
     ...(import.meta.env.MODE === 'test'

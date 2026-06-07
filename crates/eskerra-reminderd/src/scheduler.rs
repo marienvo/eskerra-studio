@@ -87,8 +87,9 @@ pub enum ActionOutcome {
     ExpiredNoOp,
     /// `Remove` — caller routes to the Phase 4 writer.
     RemoveRequested,
-    /// Default click — caller routes to the Phase 5 open path.
-    OpenRequested,
+    /// Default click — caller routes to the Phase 5 open path. Carries the
+    /// `note_uri` and advisory `ui_caret_hint` from the reminder at action time.
+    OpenRequested { note_uri: String, ui_caret_hint: Option<u32> },
     /// No reminder with that id in the active index (e.g. a stale action after a
     /// vault switch / removal) — ignored.
     Unknown,
@@ -202,7 +203,10 @@ pub fn apply_action(
     };
     match action {
         Action::Remove => ActionOutcome::RemoveRequested,
-        Action::Open => ActionOutcome::OpenRequested,
+        Action::Open => ActionOutcome::OpenRequested {
+            note_uri: r.note_uri.clone(),
+            ui_caret_hint: r.ui_caret_hint.map(|h| h.utf16_offset),
+        },
         Action::Snooze { minutes } => apply_snooze(r, minutes, now),
     }
 }
@@ -544,10 +548,10 @@ mod tests {
             apply_action(&mut rs, &id, Action::Remove, DUE),
             ActionOutcome::RemoveRequested
         );
-        assert_eq!(
+        assert!(matches!(
             apply_action(&mut rs, &id, Action::Open, DUE),
-            ActionOutcome::OpenRequested
-        );
+            ActionOutcome::OpenRequested { note_uri, .. } if note_uri == "file:///n.md"
+        ));
     }
 
     #[test]

@@ -30,6 +30,7 @@ import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 import {useAppPickFolder} from './shell/useAppPickFolder';
 import {usePaneVisibility} from './shell/usePaneVisibility';
+import {useOpenReminderNavigation} from './hooks/useOpenReminderNavigation';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
 import {AppVaultReadyRoot} from './shell/mainWindow/AppVaultReadyRoot';
@@ -99,7 +100,11 @@ export default function App() {
     },
     tabsController,
     todayHubController,
+    openMarkdownInEditor,
+    initialVaultHydrateAttemptDone,
   } = workspace;
+
+  useOpenReminderNavigation({openMarkdownInEditor, inboxEditorRef, initialVaultHydrateAttemptDone});
 
   const titleBarActions = useAppTitleBarVaultActions({
     vaultRoot,
