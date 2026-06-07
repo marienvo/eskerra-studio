@@ -44,10 +44,7 @@ pub fn validate_no_unsafe_state(vault_path: &Path) -> Result<(), SyncError> {
             kind: UnsafeKind::Merge,
         });
     }
-    if gd.join("REBASE_HEAD").exists()
-        || gd.join("rebase-merge").is_dir()
-        || gd.join("rebase-apply").is_dir()
-    {
+    if gd.join("rebase-merge").is_dir() || gd.join("rebase-apply").is_dir() {
         return Err(SyncError::UnsafeGitState {
             kind: UnsafeKind::Rebase,
         });
@@ -323,6 +320,16 @@ mod tests {
             "got: {:?}",
             result
         );
+    }
+
+    #[test]
+    fn stale_rebase_head_without_rebase_dirs_is_allowed() {
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+        let git_dir = repo.path().join(".git");
+        std::fs::write(git_dir.join("REBASE_HEAD"), "deadbeef\n").unwrap();
+
+        assert!(validate_no_unsafe_state(repo.path()).is_ok());
     }
 
     #[test]

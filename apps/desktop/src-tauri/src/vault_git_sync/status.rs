@@ -184,10 +184,9 @@ fn detect_unsafe_state(vault_path: &Path) -> Result<Option<GitStatusUnsafeState>
     if gd.join("MERGE_HEAD").exists() {
         return Ok(Some(GitStatusUnsafeState::Merge));
     }
-    if gd.join("REBASE_HEAD").exists()
-        || gd.join("rebase-merge").is_dir()
-        || gd.join("rebase-apply").is_dir()
-    {
+    // REBASE_HEAD alone can be left behind after an interrupted cleanup; Git only
+    // considers a rebase in progress while rebase-merge/ or rebase-apply/ exists.
+    if gd.join("rebase-merge").is_dir() || gd.join("rebase-apply").is_dir() {
         return Ok(Some(GitStatusUnsafeState::Rebase));
     }
     if gd.join("CHERRY_PICK_HEAD").exists() {
@@ -622,6 +621,17 @@ mod tests {
 
         let result = git_status(repo.path(), "side", "origin").unwrap();
         assert_eq!(result.unsafe_state, Some(GitStatusUnsafeState::Rebase));
+    }
+
+    #[test]
+    fn stale_rebase_head_without_rebase_dirs_is_not_unsafe() {
+        let repo = Repo::new();
+        repo.commit("f.txt", "a", "init");
+        let git_dir = repo.path().join(".git");
+        std::fs::write(git_dir.join("REBASE_HEAD"), "deadbeef\n").unwrap();
+
+        let result = git_status(repo.path(), "main", "origin").unwrap();
+        assert!(result.unsafe_state.is_none());
     }
 
     // -----------------------------------------------------------------------
