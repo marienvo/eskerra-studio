@@ -287,16 +287,14 @@ function SnoozeMenu({
   options: readonly SnoozeMinutes[];
   onSnooze: (minutes: SnoozeMinutes) => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
+    <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
           className="notifications-panel__reminder-action-btn small app-tooltip-trigger"
           aria-label="Snooze reminder"
           aria-haspopup="menu"
-          aria-expanded={open}
           data-tooltip="Snooze"
           data-tooltip-placement="inline-start"
         >
@@ -314,10 +312,7 @@ function SnoozeMenu({
             <DropdownMenu.Item
               key={minutes}
               className="note-list-context-menu__item"
-              onSelect={() => {
-                onSnooze(minutes);
-                setOpen(false);
-              }}
+              onSelect={() => onSnooze(minutes)}
             >
               {snoozeOptionLabel(minutes)}
             </DropdownMenu.Item>

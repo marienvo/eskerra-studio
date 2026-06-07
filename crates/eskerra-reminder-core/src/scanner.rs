@@ -115,11 +115,7 @@ pub fn scan(bytes: &[u8]) -> Option<ScanOutput> {
         let (line_from, line_to) = lines[line_idx];
         let context_anchor = context_anchor_hash(text, line_from, line_to, from, to);
         let ui_caret_hint_utf16 = utf16_len(&text[..to]) as u32;
-        let display_line = clean_reminder_line(
-            &text[line_from..line_to],
-            from - line_from,
-            to - line_from,
-        );
+        let display_line = clean_reminder_line(&text[line_from..line_to]);
 
         tokens.push(ScannedToken {
             normalized_token_text,
@@ -242,31 +238,56 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// Returns the reminder's containing line cleaned for human display.
 ///
 /// `line` is the line content without trailing `\r\n` (as produced by
-/// `line_spans`). `token_from` and `token_to` are **line-relative** UTF-8
-/// byte offsets (inclusive-start, exclusive-end) of the token; both must
-/// lie on valid UTF-8 character boundaries within `line`.
+/// `line_spans`).
 ///
 /// Steps:
-/// 1. Remove `line[token_from..token_to]` (excises the `@…` timestamp,
-///    leaving any other text on the same line intact).
+/// 1. Remove **every** live `@…` date token on the line (re-running the same
+///    boundary-aware matching the document scan uses), so a sibling reminder
+///    sharing the line never leaks its raw `@date` text into the display copy.
 /// 2. Strip any leading blockquote `"> "` / heading `"# "` run.
 /// 3. Strip a single leading list marker: `"- "`, `"* "`, `"+ "`, `"N. "`,
 ///    or `"N) "`.
 /// 4. Trim leading/trailing whitespace and collapse interior whitespace
-///    runs (including the gap the removed token left) to single spaces.
+///    runs (including the gaps the removed tokens left) to single spaces.
 ///
 /// Returns an empty string when nothing remains after cleaning (e.g. the
-/// line contained only the token and an optional list bullet).
-pub fn clean_reminder_line(line: &str, token_from: usize, token_to: usize) -> String {
-    debug_assert!(token_from <= token_to, "token range inverted");
-    debug_assert!(token_to <= line.len(), "token_to out of line bounds");
-    debug_assert!(line.is_char_boundary(token_from), "token_from not on a char boundary");
-    debug_assert!(line.is_char_boundary(token_to), "token_to not on a char boundary");
-
-    let without_token = format!("{}{}", &line[..token_from], &line[token_to..]);
-    let trimmed = without_token.trim_start();
+/// line contained only token(s) and an optional list bullet).
+pub fn clean_reminder_line(line: &str) -> String {
+    let without_tokens = strip_date_tokens(line);
+    let trimmed = without_tokens.trim_start();
     let after_marker = strip_leading_marker(trimmed);
     collapse_whitespace(after_marker)
+}
+
+/// Removes every live date token from `line`, returning the remaining text.
+///
+/// Re-runs the same `@`-boundary detection and greedy `match_token_at`
+/// matching that the document scan performs, so the set of tokens excised
+/// here is exactly the set the scanner reports as live on this line — both
+/// the token being displayed and any siblings. Struck-through / non-matching
+/// `@…` text is left untouched.
+fn strip_date_tokens(line: &str) -> String {
+    let bytes = line.as_bytes();
+    let mut out = String::with_capacity(line.len());
+    let mut prev_char_is_boundary = true; // start of line counts as a boundary
+    let mut skip_to = 0usize;
+    for (byte_pos, ch) in line.char_indices() {
+        if byte_pos < skip_to {
+            continue; // inside a matched token's byte span — drop it
+        }
+        if ch == '@' && prev_char_is_boundary {
+            if let Some((end, _value)) = match_token_at(bytes, byte_pos) {
+                skip_to = end;
+                // The token always ends in a digit, so the char after it sees
+                // a non-boundary predecessor — mirror the document scan exactly.
+                prev_char_is_boundary = false;
+                continue;
+            }
+        }
+        out.push(ch);
+        prev_char_is_boundary = is_word_boundary_char(ch);
+    }
+    out
 }
 
 /// Strips any leading run of `"> "` / `"# "` prefixes (blockquote/heading),
@@ -448,13 +469,7 @@ mod tests {
         // display_line must equal the helper output for the same line: the
         // token excised by byte span, surrounding multi-byte chars preserved.
         let second_line = "café☕ @2026-11-27_0930 end";
-        // Line starts after "🎉 héllo wörld\n"; compute the line-relative offsets.
-        let line_start = text.find('\n').unwrap() + 1;
-        let expected_display = clean_reminder_line(
-            second_line,
-            tok.token_byte_from - line_start,
-            tok.token_byte_to - line_start,
-        );
+        let expected_display = clean_reminder_line(second_line);
         assert_eq!(tok.display_line, expected_display);
         assert_eq!(tok.display_line, "café☕ end");
     }
@@ -487,85 +502,80 @@ mod tests {
 
     // ── clean_reminder_line ───────────────────────────────────────────────────
 
-    fn cl(line: &str, token: &str) -> String {
-        let from = line.find(token).expect("token not found in line");
-        let to = from + token.len();
-        clean_reminder_line(line, from, to)
+    fn cl(line: &str) -> String {
+        clean_reminder_line(line)
     }
 
     const TOK: &str = "@2026-11-27_2300";
 
     #[test]
     fn clean_strips_dash_bullet_marker() {
-        assert_eq!(cl(&format!("- Call dentist {TOK}"), TOK), "Call dentist");
-        assert_eq!(cl(&format!("- {TOK} Call dentist"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("- Call dentist {TOK}")), "Call dentist");
+        assert_eq!(cl(&format!("- {TOK} Call dentist")), "Call dentist");
     }
 
     #[test]
     fn clean_strips_star_bullet_marker() {
-        assert_eq!(cl(&format!("* Call dentist {TOK}"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("* Call dentist {TOK}")), "Call dentist");
     }
 
     #[test]
     fn clean_strips_plus_bullet_marker() {
-        assert_eq!(cl(&format!("+ Call dentist {TOK}"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("+ Call dentist {TOK}")), "Call dentist");
     }
 
     #[test]
     fn clean_strips_ordered_dot_marker() {
-        assert_eq!(cl(&format!("1. Call dentist {TOK}"), TOK), "Call dentist");
-        assert_eq!(cl(&format!("42. Call dentist {TOK}"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("1. Call dentist {TOK}")), "Call dentist");
+        assert_eq!(cl(&format!("42. Call dentist {TOK}")), "Call dentist");
     }
 
     #[test]
     fn clean_strips_ordered_paren_marker() {
-        assert_eq!(cl(&format!("1) Call dentist {TOK}"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("1) Call dentist {TOK}")), "Call dentist");
     }
 
     #[test]
     fn clean_strips_blockquote_prefix() {
-        assert_eq!(cl(&format!("> Call dentist {TOK}"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("> Call dentist {TOK}")), "Call dentist");
         // nested blockquote
-        assert_eq!(cl(&format!("> > Call dentist {TOK}"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("> > Call dentist {TOK}")), "Call dentist");
     }
 
     #[test]
     fn clean_strips_blockquote_then_bullet() {
-        assert_eq!(cl(&format!("> - Call dentist {TOK}"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("> - Call dentist {TOK}")), "Call dentist");
     }
 
     #[test]
     fn clean_strips_heading_prefix() {
-        assert_eq!(cl(&format!("# Meeting {TOK}"), TOK), "Meeting");
-        assert_eq!(cl(&format!("## Meeting {TOK}"), TOK), "Meeting");
+        assert_eq!(cl(&format!("# Meeting {TOK}")), "Meeting");
+        assert_eq!(cl(&format!("## Meeting {TOK}")), "Meeting");
     }
 
     #[test]
     fn clean_token_at_start_of_line() {
-        assert_eq!(cl(&format!("{TOK} Call dentist"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("{TOK} Call dentist")), "Call dentist");
     }
 
     #[test]
     fn clean_token_at_end_of_line() {
-        assert_eq!(cl(&format!("Call dentist {TOK}"), TOK), "Call dentist");
+        assert_eq!(cl(&format!("Call dentist {TOK}")), "Call dentist");
     }
 
     #[test]
     fn clean_token_mid_line_collapses_whitespace() {
-        assert_eq!(
-            cl(&format!("Call {TOK} dentist"), TOK),
-            "Call dentist"
-        );
+        assert_eq!(cl(&format!("Call {TOK} dentist")), "Call dentist");
     }
 
     #[test]
-    fn clean_two_tokens_on_one_line_only_own_token_removed() {
+    fn clean_strips_all_tokens_when_multiple_share_one_line() {
+        // Both reminders on the line are excised, so neither token's
+        // display_line leaks the other's raw `@date` text.
         let other = "@2026-01-01_0900";
-        let line = format!("{TOK} and {other} text");
-        // Removing TOK leaves the other token intact.
-        assert_eq!(cl(&line, TOK), format!("and {other} text"));
-        // Removing the other token leaves TOK intact.
-        assert_eq!(cl(&line, other), format!("{TOK} and text"));
+        assert_eq!(cl(&format!("{TOK} and {other} text")), "and text");
+        assert_eq!(cl(&format!("- Call dentist {TOK} {other}")), "Call dentist");
+        assert_eq!(cl(&format!("Pay {TOK} rent {other} today")), "Pay rent today");
     }
 
     #[test]
@@ -573,23 +583,31 @@ mod tests {
         // All interior whitespace runs — including original double-spaces —
         // are collapsed to a single space (spec: "collapse interior runs of
         // whitespace … to single spaces").
-        assert_eq!(
-            clean_reminder_line("Call  dentist", 0, 0),
-            "Call dentist"
-        );
+        assert_eq!(clean_reminder_line("Call  dentist"), "Call dentist");
         // The gap left by token removal is likewise collapsed.
-        let line = format!("Call {TOK} dentist");
-        assert_eq!(cl(&line, TOK), "Call dentist");
+        assert_eq!(cl(&format!("Call {TOK} dentist")), "Call dentist");
     }
 
     #[test]
     fn clean_returns_empty_when_line_was_only_token_and_bullet() {
         // `- @token` → remove token → `- ` → strip `- ` → ``
-        assert_eq!(cl(&format!("- {TOK}"), TOK), "");
+        assert_eq!(cl(&format!("- {TOK}")), "");
         // `@token` alone
-        assert_eq!(cl(TOK, TOK), "");
+        assert_eq!(cl(TOK), "");
         // `> @token`
-        assert_eq!(cl(&format!("> {TOK}"), TOK), "");
+        assert_eq!(cl(&format!("> {TOK}")), "");
+        // Only tokens, no other text.
+        assert_eq!(cl(&format!("- {TOK} @2026-01-01_0900")), "");
+    }
+
+    #[test]
+    fn clean_leaves_struck_through_token_text_intact() {
+        // A struck-through token never matches the grammar, so it is not a live
+        // reminder and its text stays as ordinary content.
+        assert_eq!(
+            cl(&format!("done @~~2026-01-01~~ {TOK}")),
+            "done @~~2026-01-01~~",
+        );
     }
 
     #[test]
@@ -597,6 +615,6 @@ mod tests {
         // "café☕ @2026-11-27_2300 réunion"
         // Verifies the byte-span excision on a line with multi-byte chars.
         let line = format!("café☕ {TOK} réunion");
-        assert_eq!(cl(&line, TOK), "café☕ réunion");
+        assert_eq!(cl(&line), "café☕ réunion");
     }
 }
