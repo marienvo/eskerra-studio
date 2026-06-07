@@ -9,12 +9,14 @@
 //! so the edge cases are unit-testable without spawning watchers.
 
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use eskerra_reminder_core::{merge_reminders, DefaultTime, Reminder, ReminderIndex, ReminderState};
 
 use crate::config::ReminderdConfig;
 use crate::index_store::{load_index, write_index, IndexLoadError};
 use crate::notify::{NotificationRequest, Notifier};
+use crate::obs;
 use crate::paths::index_path_in;
 use crate::rederive::rederive_for_settings;
 use crate::scan::{rescan_changed_files, scan_vault};
@@ -217,6 +219,17 @@ impl Daemon {
         let touches_directory = abs_paths.iter().any(|p| p.is_dir());
         let full = coarse || touches_directory;
 
+        // A coarse batch means the precise watcher backend dropped events and we
+        // fell back to a full rescan — the daemon mirror of the app's
+        // `vault_watch_coarse_invalidation` degradation signal.
+        if coarse {
+            obs::emit(
+                obs::event::WATCH_COARSE_INVALIDATION,
+                &[("vault_hash", &active.hash), ("path_count", &paths.len().to_string())],
+            );
+        }
+
+        let scan_start = Instant::now();
         let fresh = if full {
             scan_vault(&root, default_time, lead_minutes)
         } else {
@@ -224,6 +237,16 @@ impl Daemon {
         };
         let merged = merge_reminders(&prior, fresh);
         let count = merged.len();
+        obs::emit(
+            obs::event::SCAN_COMPLETED,
+            &[
+                ("vault_hash", &active.hash),
+                ("reminder_count", &count.to_string()),
+                ("full", if full { "true" } else { "false" }),
+                ("coarse", if coarse { "true" } else { "false" }),
+                ("duration_ms", &scan_start.elapsed().as_millis().to_string()),
+            ],
+        );
         if let Some(active) = self.active.as_mut() {
             active.index.reminders = merged;
         }
@@ -341,6 +364,10 @@ impl Daemon {
         let Some(active) = self.active.as_mut() else {
             return;
         };
+        obs::emit(
+            obs::event::REMOVE_RESULT,
+            &[("vault_hash", &active.hash), ("result", result.as_ipc_str())],
+        );
         match result {
             RemoveResult::Removed => {
                 let before = active.index.reminders.len();
@@ -423,9 +450,20 @@ impl Daemon {
                 ReminderIndex::new(hash.clone(), now_ms, vec![])
             }
         };
+        let scan_start = Instant::now();
         let fresh = scan_vault(&root, cfg.date_only_default_time, cfg.lead_minutes);
         let merged = merge_reminders(&prior_index.reminders, fresh);
         let count = merged.len();
+        obs::emit(
+            obs::event::SCAN_COMPLETED,
+            &[
+                ("vault_hash", &hash),
+                ("reminder_count", &count.to_string()),
+                ("full", "true"),
+                ("coarse", "false"),
+                ("duration_ms", &scan_start.elapsed().as_millis().to_string()),
+            ],
+        );
         let index = ReminderIndex::new(hash.clone(), now_ms, merged);
         self.unavailable = false;
         self.active = Some(ActiveVault {
@@ -526,8 +564,15 @@ impl Daemon {
         };
         // Phase 2: send (no active borrow held — distinct field `notifier`).
         for req in &requests {
-            if let Err(err) = self.notifier.send(req) {
-                eprintln!("[reminderd] notification_send failed: {err}");
+            match self.notifier.send(req) {
+                Ok(_) => obs::emit(obs::event::NOTIFICATION_SEND, &[("result", "ok")]),
+                Err(err) => {
+                    obs::emit(
+                        obs::event::NOTIFICATION_SEND,
+                        &[("result", "error"), ("error", &err)],
+                    );
+                    eprintln!("[reminderd] notification_send failed: {err}");
+                }
             }
         }
     }

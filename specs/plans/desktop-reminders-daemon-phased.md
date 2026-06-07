@@ -1,6 +1,7 @@
 # Desktop reminders — phased plan (daemon-owned, Rust-level vault monitoring)
 
-Status: **Phases 0–4 complete** (2026-06-06). Phase 0 locked architecture, cargo
+Status: **Phases 0–7 complete** (Phases 0–4 2026-06-06; Phases 5–7 2026-06-07) —
+the feature is fully shipped. Phase 0 locked architecture, cargo
 layout, index/IPC schema, systemd/packaging sketch, observability fields, and the
 `RemoveReminder` failure contract in [ADR 003](../adrs/003-adr-reminder-daemon.md).
 Phase 1 shipped the pure `eskerra-reminder-core` (grammar, scanner, index, identity,
@@ -19,10 +20,16 @@ sole-writer strikethrough write-back: the pure duplicate-safe resolver
 module (per-note write lock, byte-preserving minimal edit, atomic temp+rename, fail-closed
 `removed`/`stale`), the `dev.eskerra.Reminders1` `RemoveReminder` D-Bus service, and the
 off-loop worker wiring so the `remove` action and the IPC share one per-note lock and
-removes to different notes run in parallel. Phases 5–7 not yet implemented. Supersedes the
+removes to different notes run in parallel. Phase 5 shipped click-to-open
+(single-instance `--open-reminder`, lookup-then-resolve caret-after-token with safe
+fallbacks). Phase 6 shipped the app pane: index read/watch, reminder rows
+interleaved in the Notifications pane, the due/overdue dot, and the
+`remove`/`remove-unavailable`/`stale` lifecycle. Phase 7 shipped the end-to-end
+integration suite, daemon + app observability, app-side reminder tests, and the
+doc/ADR updates. **All phases complete.** Supersedes the
 "Future reminders (deferred)"
 section of [`specs/architecture/desktop-date-token.md`](../architecture/desktop-date-token.md)
-once shipped.
+(now rewritten to point here).
 
 ## Goal
 
@@ -1123,7 +1130,36 @@ saw the request.
 `review-state-consistency-closure-safety` skill, since timers + watched-file state +
 refs are exactly its failure mode.
 
-### Phase 7 — End-to-end, reconcile/data-loss tests, observability, docs
+### Phase 7 — End-to-end, reconcile/data-loss tests, observability, docs  ✅ DONE (2026-06-07)
+
+**Outcome:** Shipped the cross-process **end-to-end integration suite**
+([`crates/eskerra-reminderd/tests/integration.rs`](../../crates/eskerra-reminderd/tests/integration.rs))
+driving the public `Daemon` + `Notifier` + `writeback::Remover` against a real
+temp vault: full lifecycle (scan → arm → fire → snooze → remove → strikethrough →
+index drop → wakeup clears), daemon-strike minimal-byte-diff reconcile,
+within-lead-window vs. overdue discovery, suspend/resume catch-up (within-grace
+fires once / beyond-grace in-app only / no double-fire), live-rescan
+**merge/state-migration** (snooze migrates by unique `contextAnchor` after an
+identical token is inserted above, no wrong-line carry), vault-switch index
+isolation, and settings-only re-derive (same `id`, new `dueAt`, notified reset).
+The per-invariant unit tests for the write-back fail-closed cases, concurrent
+per-note serialization, scheduler/snooze boundary table, and the full
+merge/state-migration matrix already shipped with Phases 1/3/4 and stay green.
+Shipped **observability**: a dependency-free
+[`obs`](../../crates/eskerra-reminderd/src/obs.rs) module (stable event names +
+non-PII tags, one structured journald line per event) wired into scan completion
+(duration/count/full/coarse), notification send success/fail, D-Bus
+unavailability (`notifications`/`login1`), `RemoveReminder` result
+(`removed`/`stale`), and watch coarse-invalidation; plus the app-side
+`eskerra.desktop.reminder_remove_unavailable` Sentry signal in `useReminderPane`.
+The new runbook is
+[`specs/observability/desktop-reminderd.md`](../observability/desktop-reminderd.md).
+Shipped **app-side tests** for the previously-untested reminder libs
+(`reminderIndex` parse + dot logic, `reminderPane` row/removeState mapping,
+`useReminderPane` daemon-unavailable/retry/stale transitions). **Docs:** rewrote
+the date-token spec's "Future reminders" section to point at the shipped feature,
+added the reminder-daemon **single-writer + reconcile** invariants to AGENTS.md,
+and resolved ADR §9 to the as-shipped systemd unit + preset + RPM packaging.
 
 **Scope:**
 - Integration tests: token on disk → index → notification fire → snooze → remove →

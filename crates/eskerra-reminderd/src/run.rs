@@ -319,6 +319,10 @@ fn build_notifier(tx: Sender<DaemonEvent>) -> Box<dyn Notifier> {
     match crate::notify::ZbusNotifier::new(on_action) {
         Ok(n) => Box::new(n),
         Err(err) => {
+            crate::obs::emit(
+                crate::obs::event::DBUS_UNAVAILABLE,
+                &[("subsystem", "notifications"), ("error", &err.to_string())],
+            );
             eprintln!("[reminderd] notifications unavailable ({err}); falling back to click-only");
             Box::new(NullNotifier)
         }
@@ -341,6 +345,10 @@ fn spawn_suspend_listener(tx: Sender<DaemonEvent>) {
         let conn = match Connection::system() {
             Ok(c) => c,
             Err(err) => {
+                crate::obs::emit(
+                    crate::obs::event::DBUS_UNAVAILABLE,
+                    &[("subsystem", "login1"), ("error", &err.to_string())],
+                );
                 eprintln!(
                     "[reminderd] login1 unavailable ({err}); relying on periodic reconciliation"
                 );

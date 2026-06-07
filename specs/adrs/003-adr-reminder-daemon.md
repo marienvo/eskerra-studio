@@ -320,12 +320,14 @@ single-writer invariant. `stale` ("received but unsafe") and `remove-unavailable
 ("never reached") must stay distinct in code, copy, and tests. Full rules:
 plan §Phase 4 *Write-back safety rules* + *IPC-unavailable contract*.
 
-### 9. systemd unit + autostart / packaging sketch
+### 9. systemd unit + autostart / packaging (as shipped)
 
 systemd `--user` service so the daemon outlives the GUI window and starts at login.
+**As shipped** (Phase 7 resolved the Phase 0 sketch below); source of truth is
+[`apps/desktop/src-tauri/linux/eskerra-reminderd.service`](../../apps/desktop/src-tauri/linux/eskerra-reminderd.service):
 
 ```ini
-# eskerra-reminderd.service  → installed at /usr/lib/systemd/user/eskerra-reminderd.service
+# eskerra-reminderd.service  → /usr/lib/systemd/user/eskerra-reminderd.service
 [Unit]
 Description=Eskerra reminder daemon
 After=graphical-session.target
@@ -338,23 +340,33 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 ```
 
-Packaging (RPM target is already configured in `tauri.linux.conf.json`):
+`WantedBy=graphical-session.target` (not `default.target`) was chosen so the
+daemon's lifecycle is bound to a live graphical session — it needs the session
+D-Bus for notifications and `login1` for suspend/resume, so there is no value in
+running it headless outside a session.
 
-- Install the `eskerra-reminderd` binary to `/usr/bin/eskerra-reminderd` and the unit to
-  `/usr/lib/systemd/user/eskerra-reminderd.service` via the Tauri/RPM bundle file list
-  (extend the existing Linux packaging the way `linux/com.eskerra.desktop.desktop` is
-  shipped).
-- **Enablement:** ship a systemd user **preset** (e.g.
-  `/usr/lib/systemd/user-preset/80-eskerra-reminderd.preset` → `enable
-  eskerra-reminderd.service`) so it is enabled per-user on first login, **or** have the
-  app enable+start it on first run (`systemctl --user enable --now eskerra-reminderd`).
-  The app's best-effort `systemctl --user start` recovery path (failure contract row 3)
-  also covers the "installed but not yet running" case.
-- Exact RPM scriptlet wiring (`%systemd_user_post` vs. preset vs. app-driven enable) is
-  an **open item** to finalize in Phase 2 packaging (see plan *Open items*).
+Packaging — **wired and shipped** via the Tauri/RPM `bundle.linux.rpm.files` map
+in [`apps/desktop/src-tauri/tauri.conf.json`](../../apps/desktop/src-tauri/tauri.conf.json):
+
+- `/usr/bin/eskerra-reminderd` ← `../../../target/release/eskerra-reminderd`. The
+  daemon is built (`cargo build --release -p eskerra-reminderd`) **before**
+  `tauri build` by [`scripts/tauri-desktop-build.mjs`](../../scripts/tauri-desktop-build.mjs)
+  so the binary exists when the bundler collects the file list.
+- `/usr/lib/systemd/user/eskerra-reminderd.service` ← `linux/eskerra-reminderd.service`.
+- `/usr/lib/systemd/user-preset/80-eskerra-reminderd.preset` ←
+  `linux/80-eskerra-reminderd.preset` (`enable eskerra-reminderd.service`).
+- **Enablement (resolved):** the shipped systemd user **preset** enables the
+  service per-user on first login — no `%systemd_user_post` scriptlet is required
+  (user presets are applied by `systemd --user` at session start). The app's
+  best-effort `systemctl --user start eskerra-reminderd` recovery path (failure
+  contract row 3) covers the "installed but not yet running / not yet re-logged-in"
+  case off the UI thread.
+- **Version alignment:** the daemon ships in the same RPM as the app and is
+  stamped to the workspace version by the bump/assert scripts (see §*Version
+  alignment* above).
 
 ### 10. Observability fields (Phase 0 list; Phase 7 turns these into Sentry runbooks)
 
