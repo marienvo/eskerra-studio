@@ -7,7 +7,7 @@ import {
   reminderNoteName,
   reminderDueLabel,
   reminderTimeLabel,
-  liveSnoozeOptions,
+  snoozeMenuOptions,
   REMINDER_SNOOZE_UNAVAILABLE_TEXT,
 } from '../lib/reminderPane';
 
@@ -210,10 +210,12 @@ function ReminderRow({
   const hasLine = row.displayLine.trim().length > 0;
   const headerText = hasLine ? noteName : `${noteName} (${timeLabel})`;
 
-  // Snooze is offered only for non-expired offsets, and never on a stale or
-  // in-flight-remove row (the daemon would no-op it anyway).
+  // Snooze is offered only inside the T-3 window with live offsets, and never
+  // on a stale or in-flight-remove row (the daemon would no-op it anyway).
   const snoozeOptions =
-    isStale || isRemoving || isUnavailable ? [] : liveSnoozeOptions(row.dueAtMs, nowMs);
+    isStale || isRemoving || isUnavailable
+      ? []
+      : snoozeMenuOptions(row.dueAtMs, nowMs);
 
   return (
     <li
@@ -296,7 +298,7 @@ function ReminderRow({
               if (open) onRefreshNowMs();
             }}
             onSnooze={minutes => {
-              if (!liveSnoozeOptions(row.dueAtMs, Date.now()).includes(minutes)) {
+              if (!snoozeMenuOptions(row.dueAtMs, Date.now()).includes(minutes)) {
                 return;
               }
               void onSnooze(row.noteUri, row.reminderId, minutes);

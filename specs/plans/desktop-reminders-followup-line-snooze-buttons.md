@@ -204,10 +204,11 @@ Verify nothing else asserts the old body string (grep tests). No D-Bus API surfa
     the **note-name header** (`Daily note (23:00)`) and render **no** second line, rather
     than a bare `(HH:MM)`. Keep the existing relative status line (`reminderDueLabel`,
     "in 5 min" / "overdue") and the stale/unavailable status messages as-is.
-  - **Snooze menu:** add a compact `[Snooze ▾]` control before the Remove button, opening
-    a small menu with the live options ("3 min before", "1 min before", "At due time").
-    Hidden entirely when `liveSnoozeOptions` is empty (fully overdue) or the reminder is
-    `stale`/`removing`. Each item calls `onSnoozeReminder(noteUri, id, minutes)`.
+  - **Snooze menu:** add a compact `[Snooze ▾]` control on its own bottom row (right-aligned),
+    opening a small menu with the live options ("3 min before", "1 min before", "At due time").
+    Hidden entirely when `snoozeMenuOptions` is empty (still before the T-3 window, fully
+    overdue, or every offset expired) or the reminder is `stale`/`removing`. Each item calls
+    `onSnoozeReminder(noteUri, id, minutes)`.
   - Thread `onSnoozeReminder` through `NotificationsPanelProps` and wire it from the
     `useReminderPane` consumer alongside `onRemoveReminder`.
 
