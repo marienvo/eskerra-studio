@@ -1,9 +1,9 @@
 # Desktop reminders — follow-up: reminder-line copy, app snooze, GNOME remove
 
-Status: **Planned** (follow-up to the shipped
-[`desktop-reminders-daemon-phased.md`](./desktop-reminders-daemon-phased.md), Phases 0–7
-complete). This plan does **not** re-open the daemon architecture, identity, write-back,
-or merge invariants — those stay locked in [ADR 003](../adrs/003-adr-reminder-daemon.md).
+Status: **Planned** (follow-up to the now-completed reminder-daemon feature — its phased
+plan was retired once Phases 0–7 shipped, and its architecture is canonically captured in
+[ADR 003](../adrs/003-adr-reminder-daemon.md)). This plan does **not** re-open the daemon
+architecture, identity, write-back, or merge invariants — those stay locked in ADR 003.
 It adds three user-facing refinements on top of the finished feature.
 
 ## Why
@@ -253,7 +253,7 @@ patterns). Run `review-state-consistency-closure-safety` over the menu + minute-
 - **One render path for the line.** The cleaning lives only in Rust (`clean_reminder_line`);
   both surfaces consume the stored `displayLine` and append `(HH:MM)` derived from
   `dueAtMs`. Do not reimplement the cleaning in TS — that would reintroduce the
-  two-implementations-must-match hazard the daemon plan worked to avoid.
+  two-implementations-must-match hazard the daemon design (ADR 003) deliberately avoids.
 - **Compatibility.** No `schemaVersion` bump, no IPC removal: an old app reading a new
   index ignores `displayLine`; a new app reading an old index falls back to an empty line
   until the daemon rescans; an old popup's `snooze-3` button still routes. Ship daemon and
