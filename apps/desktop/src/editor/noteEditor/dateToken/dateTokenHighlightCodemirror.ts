@@ -27,8 +27,11 @@ const dateTokenMark = Decoration.mark({
 
 /** Pretty `🔔 <label>` pill rendered in place of the raw token text. */
 class DateTokenPillWidget extends WidgetType {
-  constructor(readonly label: string) {
+  readonly label: string;
+
+  constructor(label: string) {
     super();
+    this.label = label;
   }
 
   eq(other: DateTokenPillWidget): boolean {
