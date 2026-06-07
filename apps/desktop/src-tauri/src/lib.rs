@@ -4,6 +4,7 @@ mod link_rich_metadata;
 mod linux_app_identity;
 mod open_reminder;
 mod r2_http;
+mod reminders;
 mod startup_theme;
 mod tiling;
 #[cfg(target_os = "linux")]
@@ -148,6 +149,10 @@ pub fn run() {
             crash_log::eskerra_append_crash_log,
             open_reminder::reminders_take_pending_open,
             open_reminder::reminders_resolve_position,
+            reminders::reminders_vault_hash,
+            reminders::reminders_read_index,
+            reminders::reminders_write_config,
+            reminders::reminders_remove,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

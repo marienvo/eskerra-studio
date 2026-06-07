@@ -160,7 +160,11 @@ export function VaultTab({
     inboxEditorShellScrollDirectiveRef,
   });
 
-  const notificationsHasItems = notificationItems.length > 0;
+  // Session notifications always light the dot; due reminders only light it
+  // when now ≥ dueAtMs (future reminders must not trigger the dot — spec §6).
+  const notificationsHasItems =
+    notificationItems.some(i => i.source !== 'reminder') ||
+    notificationsController.hasDueReminders;
   const shellEndColumnVisible =
     notificationsController.notificationsPanelVisible || inboxPaneVisible;
   const shellEndColumnContent = shellEndColumnVisible ? (

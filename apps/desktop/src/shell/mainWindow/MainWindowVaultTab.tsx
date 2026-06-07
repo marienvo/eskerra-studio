@@ -4,7 +4,7 @@ import type {ComponentProps, RefObject} from 'react';
 import {EpisodesPane} from '../../components/EpisodesPane';
 import {VaultTab} from '../../components/VaultTab';
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
-import type {SessionNotification} from '../../lib/sessionNotifications';
+import type {PaneNotification} from '../../lib/reminderPane';
 import type {UseMainWindowWorkspaceResult} from '../../hooks/useMainWindowWorkspace';
 import type {StoredLayouts} from '../../lib/layout/layoutStore';
 import type {PaneVisibilityController} from '../usePaneVisibility';
@@ -29,10 +29,13 @@ type MainWindowVaultTabProps = {
   titleBarTabActionsDisabled?: boolean;
   onAddEntry: () => void;
   busy: boolean;
-  notificationItems: readonly SessionNotification[];
+  notificationItems: readonly PaneNotification[];
   notificationHighlightId: string | null;
   dismissNotification: (id: string) => void;
   clearAllNotifications: () => void;
+  hasDueReminders: boolean;
+  onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
+  onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
   playbackTransport: ComponentProps<typeof VaultTab>['playbackController']['playbackTransport'];
   toolbarNowPlaying: ComponentProps<typeof VaultTab>['playbackController']['toolbarNowPlaying'];
   podcastCatalog: {
@@ -76,6 +79,9 @@ export function MainWindowVaultTab({
   notificationHighlightId,
   dismissNotification,
   clearAllNotifications,
+  hasDueReminders,
+  onOpenReminder,
+  onRemoveReminder,
   playbackTransport,
   toolbarNowPlaying,
   podcastCatalog,
@@ -234,6 +240,9 @@ export function MainWindowVaultTab({
         notificationHighlightId,
         onDismissNotification: dismissNotification,
         onClearAllNotifications: clearAllNotifications,
+        hasDueReminders,
+        onOpenReminder,
+        onRemoveReminder,
       }}
       todayHubController={{
         showTodayHubCanvas: todayHubController.showTodayHubCanvas,

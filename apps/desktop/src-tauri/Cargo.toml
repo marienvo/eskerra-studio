@@ -53,3 +53,5 @@ tempfile = "3"
 gdk = "0.18"
 gtk = { version = "0.18", default-features = false, features = ["v3_24"] }
 webkit2gtk = "2.0.2"
+# D-Bus for RemoveReminder IPC to the reminderd daemon (Phase 6).
+zbus = { version = "5", default-features = false, features = ["tokio"] }

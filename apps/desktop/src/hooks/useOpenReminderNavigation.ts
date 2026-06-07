@@ -15,7 +15,7 @@ type ResolvedReminderPosition = {
   caretUtf16: number;
 };
 
-async function navigateToReminder(
+export async function navigateToReminder(
   req: OpenReminderRequest,
   openMarkdownInEditor: (uri: string, options?: OpenMarkdownInEditorOptions) => Promise<void>,
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>,

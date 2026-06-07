@@ -21,6 +21,7 @@ import {AppStatusBarSection} from './AppStatusBarSection';
 import {MainWindowVaultTab} from './MainWindowVaultTab';
 import type {useAppPaletteLayerState} from './useAppPaletteLayerState';
 import type {useAppMainWindowChromeSession} from './useAppMainWindowChromeSession';
+import type {PaneNotification} from '../../lib/reminderPane';
 import type {useAppPodcastPlayback} from '../../hooks/useAppPodcastPlayback';
 
 type AppPage = 'vault' | 'settings';
@@ -79,6 +80,10 @@ export type AppVaultReadyRootProps = {
   dismissDiskConflictSoft: UseMainWindowWorkspaceResult['conflictController']['dismissDiskConflictSoft'];
   enterDiskConflictMergeView: UseMainWindowWorkspaceResult['conflictController']['enterDiskConflictMergeView'];
   onMuteLinkSnippetDomain: (domain: string) => Promise<void>;
+  reminderItems: readonly PaneNotification[];
+  hasDueReminders: boolean;
+  onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
+  onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
 };
 
 export function AppVaultReadyRoot({
@@ -126,6 +131,10 @@ export function AppVaultReadyRoot({
   dismissDiskConflictSoft,
   enterDiskConflictMergeView,
   onMuteLinkSnippetDomain,
+  reminderItems,
+  hasDueReminders,
+  onOpenReminder,
+  onRemoveReminder,
 }: AppVaultReadyRootProps) {
   const {
     notifications: {
@@ -213,10 +222,13 @@ export function AppVaultReadyRoot({
               titleBarTabActionsDisabled={titleBarTabActionsDisabled}
               onAddEntry={openAddToInbox}
               busy={busy}
-              notificationItems={notificationItems}
+              notificationItems={[...notificationItems, ...reminderItems]}
               notificationHighlightId={notificationHighlightId}
               dismissNotification={dismissNotification}
               clearAllNotifications={clearAllNotifications}
+              hasDueReminders={hasDueReminders}
+              onOpenReminder={onOpenReminder}
+              onRemoveReminder={onRemoveReminder}
               playbackTransport={playbackTransport}
               toolbarNowPlaying={toolbarNowPlaying}
               podcastCatalog={podcastCatalog}
