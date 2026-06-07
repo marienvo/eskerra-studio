@@ -2,7 +2,10 @@ import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
-import type {ReminderPaneRow} from '../lib/reminderPane';
+import {
+  REMINDER_SNOOZE_UNAVAILABLE_TEXT,
+  type ReminderPaneRow,
+} from '../lib/reminderPane';
 import {NotificationsPanel} from './NotificationsPanel';
 
 // Radix DropdownMenu drives its trigger/menu through pointer-capture + Popper,
@@ -91,6 +94,11 @@ describe('NotificationsPanel reminder row', () => {
   it('hides the Snooze menu for a stale reminder', () => {
     renderPanel(row({reminderState: 'stale'}));
     expect(screen.queryByRole('button', {name: 'Snooze reminder'})).toBeNull();
+  });
+
+  it('shows the transient snooze-unavailable hint on the row status line', () => {
+    renderPanel(row({snoozeUnavailableHint: true}));
+    expect(screen.getByText(REMINDER_SNOOZE_UNAVAILABLE_TEXT)).toBeTruthy();
   });
 
   it('refreshes snooze options when the menu opens after a boundary passes', async () => {

@@ -8,6 +8,7 @@ import {
   reminderDueLabel,
   reminderTimeLabel,
   liveSnoozeOptions,
+  REMINDER_SNOOZE_UNAVAILABLE_TEXT,
 } from '../lib/reminderPane';
 
 import {MaterialIcon} from './MaterialIcon';
@@ -379,6 +380,13 @@ function ReminderStatusLine({
     return (
       <p className="notifications-panel__reminder-status notifications-panel__reminder-status--unavailable small muted">
         {"Couldn't reach the reminder service"}
+      </p>
+    );
+  }
+  if (row.snoozeUnavailableHint) {
+    return (
+      <p className="notifications-panel__reminder-status notifications-panel__reminder-status--unavailable small muted">
+        {REMINDER_SNOOZE_UNAVAILABLE_TEXT}
       </p>
     );
   }

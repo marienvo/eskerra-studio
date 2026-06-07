@@ -5,6 +5,7 @@ import {
   reminderDueLabel,
   reminderNoteName,
   reminderTimeLabel,
+  isLockedSnoozeMinutes,
   liveSnoozeOptions,
   reminderToPaneRow,
 } from './reminderPane';
@@ -133,6 +134,16 @@ describe('reminderTimeLabel', () => {
     expect(reminderTimeLabel(late)).toBe('23:00');
     const midnight = new Date(2026, 0, 1, 0, 0).getTime();
     expect(reminderTimeLabel(midnight)).toBe('00:00');
+  });
+});
+
+describe('isLockedSnoozeMinutes', () => {
+  it('accepts only the locked action set', () => {
+    expect(isLockedSnoozeMinutes(3)).toBe(true);
+    expect(isLockedSnoozeMinutes(1)).toBe(true);
+    expect(isLockedSnoozeMinutes(0)).toBe(true);
+    expect(isLockedSnoozeMinutes(2)).toBe(false);
+    expect(isLockedSnoozeMinutes(999)).toBe(false);
   });
 });
 

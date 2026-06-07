@@ -40,7 +40,16 @@ export type ReminderPaneRow = {
    */
   displayLine: string;
   removeState: ReminderRemoveState;
+  /**
+   * Brief inline flash when snooze IPC failed (ADR §8). Auto-clears; not
+   * persisted across index re-reads.
+   */
+  snoozeUnavailableHint?: boolean;
 };
+
+/** Status-line copy when snooze transport fails (ADR §8 transient hint). */
+export const REMINDER_SNOOZE_UNAVAILABLE_TEXT =
+  "Couldn't reach the reminder service — try snooze again";
 
 /** Union of all row types the notifications pane can display. */
 export type PaneNotification = SessionNotification | ReminderPaneRow;
@@ -106,6 +115,11 @@ export function reminderTimeLabel(dueAtMs: number): string {
 /** The locked snooze offsets in minutes before `dueAt` (T-3 / T-1 / at-due). */
 export const SNOOZE_MINUTES = [3, 1, 0] as const;
 export type SnoozeMinutes = (typeof SNOOZE_MINUTES)[number];
+
+/** Whether `minutes` is in the locked snooze action set (daemon + D-Bus contract). */
+export function isLockedSnoozeMinutes(minutes: number): minutes is SnoozeMinutes {
+  return (SNOOZE_MINUTES as readonly number[]).includes(minutes);
+}
 
 /**
  * Which of the three snoozes are still live at `nowMs`: relative snoozes (3 / 1)

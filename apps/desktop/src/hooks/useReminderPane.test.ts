@@ -214,9 +214,31 @@ describe('useReminderPane.snoozeReminder', () => {
     });
 
     // The row stays put (no local write) and carries no failure state — snooze
-    // surfaces only a transient hint and lets the user retry from the menu.
+    // surfaces a brief inline hint (ADR §8) and lets the user retry from the menu.
     expect(result.current.rows).toHaveLength(1);
     expect(result.current.rows[0]?.reminderState).toBe('notified');
     expect(result.current.rows[0]?.removeState).toBe('idle');
+    expect(result.current.rows[0]?.snoozeUnavailableHint).toBe(true);
+
+    await waitFor(
+      () => expect(result.current.rows[0]?.snoozeUnavailableHint).toBe(false),
+      {timeout: 4_000},
+    );
+  });
+
+  it('does not invoke reminders_snooze for unsupported minute offsets', async () => {
+    mockInvoke({index: [reminder()]});
+    const {result} = renderHook(() => useReminderPane('/vault'));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    tauriTest.state.invoke.mockClear();
+
+    await act(async () => {
+      await result.current.snoozeReminder('file:///vault/a.md', 'rem-1', 2);
+    });
+
+    const snoozeCalls = tauriTest.state.invoke.mock.calls.filter(
+      ([cmd]) => cmd === 'reminders_snooze',
+    );
+    expect(snoozeCalls).toHaveLength(0);
   });
 });

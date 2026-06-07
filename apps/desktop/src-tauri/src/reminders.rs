@@ -118,9 +118,16 @@ pub async fn reminders_remove(_note_uri: String, _reminder_id: String) -> String
 ///
 /// Linux only. On other targets always returns `"snooze-unavailable"` so the TS
 /// side degrades gracefully without conditional imports.
+fn is_locked_snooze_minutes(minutes: u32) -> bool {
+    matches!(minutes, 3 | 1 | 0)
+}
+
 #[cfg(target_os = "linux")]
 #[tauri::command]
 pub async fn reminders_snooze(note_uri: String, reminder_id: String, minutes: u32) -> String {
+    if !is_locked_snooze_minutes(minutes) {
+        return "unknown".to_string();
+    }
     match dbus_snooze_reminder(&note_uri, &reminder_id, minutes).await {
         Ok(result) => result,
         Err(_) => "snooze-unavailable".to_string(),
@@ -132,8 +139,11 @@ pub async fn reminders_snooze(note_uri: String, reminder_id: String, minutes: u3
 pub async fn reminders_snooze(
     _note_uri: String,
     _reminder_id: String,
-    _minutes: u32,
+    minutes: u32,
 ) -> String {
+    if !is_locked_snooze_minutes(minutes) {
+        return "unknown".to_string();
+    }
     "snooze-unavailable".to_string()
 }
 

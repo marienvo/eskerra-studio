@@ -52,6 +52,9 @@ mod imp {
         /// the mapped outcome string (`rescheduled` | `fired` | `expired` |
         /// `unknown`).
         fn snooze_reminder(&self, _note_uri: &str, id: &str, minutes: u32) -> String {
+            if !crate::scheduler::is_locked_snooze_minutes(minutes) {
+                return "unknown".to_string();
+            }
             perform_snooze(id, minutes, &self.sender())
         }
     }
