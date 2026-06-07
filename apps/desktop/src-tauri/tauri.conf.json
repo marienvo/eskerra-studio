@@ -71,6 +71,8 @@
     "linux": {
       "rpm": {
         "desktopTemplate": "linux/eskerra.desktop.hbs",
+        "postInstallScript": "linux/rpm-postinstall.sh",
+        "preRemoveScript": "linux/rpm-preremove.sh",
         "files": {
           "/usr/bin/eskerra-reminderd": "../../../target/release/eskerra-reminderd",
           "/usr/lib/systemd/user/eskerra-reminderd.service": "linux/eskerra-reminderd.service",
