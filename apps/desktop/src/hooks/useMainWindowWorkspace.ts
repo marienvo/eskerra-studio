@@ -145,7 +145,10 @@ export type UseMainWindowWorkspaceResult = {
   tabsController: WorkspaceTabsController;
   todayHubController: WorkspaceTodayHubController;
   frontmatterController: WorkspaceFrontmatterController;
-  openMarkdownInEditor: (uri: string, options?: OpenMarkdownInEditorOptions) => Promise<void>;
+  openMarkdownInEditor: (
+    uri: string,
+    options?: OpenMarkdownInEditorOptions,
+  ) => Promise<void>;
   /** Test-only shadow model for the workspaceModel migration bridge. */
   workspaceShadowModelForTests?: WorkspaceModel;
   /**

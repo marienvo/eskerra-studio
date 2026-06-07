@@ -227,19 +227,30 @@ fn handle_action_followup(
                 eprintln!("[reminderd] remove (notification) {reminder_id}: {result:?}");
             });
         }
-        ActionOutcome::OpenRequested { note_uri, ui_caret_hint } => {
+        ActionOutcome::OpenRequested {
+            note_uri,
+            ui_caret_hint,
+        } => {
             let mut cmd = std::process::Command::new("eskerra");
             cmd.arg("--open-reminder").arg(note_uri).arg(&reminder_id);
             if let Some(hint) = ui_caret_hint {
                 cmd.arg("--ui-caret-hint").arg(hint.to_string());
             }
-            match cmd.spawn() {
+            match spawn_and_reap_open_reminder(cmd) {
                 Ok(_) => eprintln!("[reminderd] spawned eskerra --open-reminder for {reminder_id}"),
                 Err(e) => eprintln!("[reminderd] failed to spawn eskerra for {reminder_id}: {e}"),
             }
         }
         _ => {}
     }
+}
+
+fn spawn_and_reap_open_reminder(mut cmd: std::process::Command) -> std::io::Result<()> {
+    let mut child = cmd.spawn()?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 /// Run one `RemoveReminder` write-back off the run loop, shared by the
