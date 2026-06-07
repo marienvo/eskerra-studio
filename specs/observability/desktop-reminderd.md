@@ -62,6 +62,7 @@ path. Reminder ids embed a vault-relative path, so they are **not** emitted.
 | `message` (Sentry) | When | Tags |
 |---|---|---|
 | `eskerra.desktop.reminder_remove_unavailable` | The app's `RemoveReminder` IPC failed at the transport level (daemon unreachable) → app-side `remove-unavailable` | `obs_surface=reminders`, `vault_root_hash` |
+| `eskerra.desktop.reminder_snooze_unavailable` | The app's `SnoozeReminder` IPC failed at the transport level (daemon unreachable) → app-side `snooze-unavailable` | `obs_surface=reminders`, `vault_root_hash` |
 
 Emission path:
 [`apps/desktop/src/hooks/useReminderPane.ts`](../../apps/desktop/src/hooks/useReminderPane.ts)
@@ -81,6 +82,6 @@ path) — the `vault_root_hash` tag is the only vault identifier.
   `dbus_unavailable subsystem=notifications` → notifications are broken.
 - `watch_coarse_invalidation` rate climbing → watcher degradation (same as the
   app coarse-invalidation alert).
-- `reminder_remove_unavailable` rate climbing → the daemon is down / not
-  registered for a population of users (also watch for it correlating with the
-  daemon process not running).
+- `reminder_remove_unavailable` / `reminder_snooze_unavailable` rate climbing →
+  the daemon is down / not registered for a population of users (also watch for
+  it correlating with the daemon process not running).

@@ -195,6 +195,7 @@ export type VaultTabNotificationsController = {
   hasDueReminders: boolean;
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
   onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
 export type VaultTabMergeController = {

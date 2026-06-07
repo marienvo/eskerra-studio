@@ -295,6 +295,21 @@ D-Bus service owned by the daemon:
     re-scanning at write time. Any position the app holds is advisory UI state and is
     never sent over IPC, so a stale offset can never drive a write.
   - Backs both the app pane's "delete" and the OS notification `remove` action.
+- **Method:** `SnoozeReminder(IN s noteUri, IN s id, IN u minutes, OUT s result)`
+  - `result` ∈ `{ "rescheduled", "fired", "expired", "unknown" }`, the IPC string
+    mapping of the shared `ActionOutcome`: `Rescheduled → "rescheduled"`,
+    `FiredNow → "fired"`, `ExpiredNoOp → "expired"`, `Unknown → "unknown"`.
+  - Resolution is **by `id`** against the daemon-owned index (`noteUri` is routing
+    context only), exactly as `RemoveReminder`. `minutes` ∈ `{3, 1, 0}` (T-3 / T-1 /
+    at-due) per the locked action set.
+  - Runs the **same `scheduler::apply_action(Snooze)` path** as the GNOME notification
+    snooze (no second snooze model). The app passes notification id `0` (no popup to
+    replace); a snooze-0 at exactly due still fires the at-time notification once,
+    guarded against a double-fire. Unlike `RemoveReminder`, snooze mutates only the
+    in-memory index + re-arms the scheduler (no filesystem write-back, no per-note
+    lock), so it runs **on** the daemon run loop rather than an off-loop worker.
+  - Backs the app pane's per-row **Snooze** menu, so snooze is reachable after the
+    GNOME popup is gone (including right after clicking it to open the app).
 
 **Click-to-open is process spawn, not D-Bus** (Phase 5): the daemon spawns
 `eskerra --open-reminder <noteUri> <reminderId>` with an **optional**
@@ -314,6 +329,7 @@ local-write fallback:
 | **`removed`** | Token resolved to exactly one live span (or zero-match: already struck/edited/deleted, or no index entry for `id`). | Daemon | Daemon strikes the token (or no-op for zero-match) and drops the reminder from the index. Zero-match is a *success-equivalent*, not an error. |
 | **`stale`** | Daemon **received** the request but **refused to write safely**: ambiguous duplicate resolution, byte mismatch at the resolved span, IO error, or any case where it cannot identify *exactly one* correct span. | Daemon | **No write.** Daemon records `stale` in the index. App shows "could not remove — open the note" (links to note). `stale` reminders stop firing OS notifications but stay visible until resolved. |
 | **`remove-unavailable`** | Daemon **could not be reached at all**: not running, `dev.eskerra.Reminders1` not registered, call timeout, or any transport-level bus error — i.e. the D-Bus method call failed *before* the daemon evaluated anything. | **App only** | **Never** a local strikethrough. **Never** recorded as daemon `stale` (an unreachable daemon by definition produced no `stale` entry). App keeps the row visible & active (note unchanged on disk, still firing per schedule), renders a **Retry** affordance + **Open note** fallback, and **may** best-effort `systemctl --user start eskerra-reminderd` off the UI thread, then retry. App-local UI state only; never written to the daemon-owned index; clears automatically on a successful retry. |
+| **`snooze-unavailable`** | The `SnoozeReminder` transport-failure parallel: daemon unreachable / unregistered / call timeout / bus error — the call failed *before* the daemon evaluated anything. | **App only** | **Never** a local write. App surfaces a brief, transient hint and leaves the row interactive so the user can retry the snooze from the menu (no persistent per-row failure state — snooze, unlike remove, carries no `stale`/`removing` lifecycle). App-local UI only; never written to the daemon-owned index. |
 
 This is the single highest-risk omission the plan calls out: an unhandled transport error
 is exactly the gap that tempts a local-write fallback and silently breaks the

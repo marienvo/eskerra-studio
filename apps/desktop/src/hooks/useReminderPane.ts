@@ -37,11 +37,27 @@ const MINUTE_TICK_MS = 60_000;
  */
 const REMOVE_UNAVAILABLE_EVENT = 'eskerra.desktop.reminder_remove_unavailable';
 
+/**
+ * Sentry signal for a `SnoozeReminder` transport failure (daemon unreachable →
+ * app-side `snooze-unavailable`). Parallels `REMOVE_UNAVAILABLE_EVENT`; same
+ * PII-free tagging.
+ */
+const SNOOZE_UNAVAILABLE_EVENT = 'eskerra.desktop.reminder_snooze_unavailable';
+
 function reportRemoveUnavailable(vaultHash: string | null): void {
   captureObservabilityMessage({
     message: REMOVE_UNAVAILABLE_EVENT,
     level: 'warning',
     fingerprint: [REMOVE_UNAVAILABLE_EVENT],
+    tags: {obs_surface: 'reminders', vault_root_hash: vaultHash ?? 'unknown'},
+  });
+}
+
+function reportSnoozeUnavailable(vaultHash: string | null): void {
+  captureObservabilityMessage({
+    message: SNOOZE_UNAVAILABLE_EVENT,
+    level: 'warning',
+    fingerprint: [SNOOZE_UNAVAILABLE_EVENT],
     tags: {obs_surface: 'reminders', vault_root_hash: vaultHash ?? 'unknown'},
   });
 }
@@ -74,6 +90,7 @@ export type UseReminderPaneResult = {
   rows: readonly ReminderPaneRow[];
   hasDueReminders: boolean;
   removeReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  snoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
 export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult {
@@ -180,6 +197,7 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
               vaultRelativePath: r.vaultRelativePath,
               reminderState: r.state,
               uiCaretHint: r.uiCaretHint?.utf16Offset,
+              displayLine: r.displayLine ?? '',
               removeState: rowStates.get(r.id) ?? 'idle',
             }
           : undefined),
@@ -244,7 +262,39 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
     [],
   );
 
-  return {rows, hasDueReminders, removeReminder};
+  const snoozeReminder = useCallback(
+    async (noteUri: string, reminderId: string, minutes: number): Promise<void> => {
+      let result: string;
+      try {
+        result = isTauri()
+          ? await invoke<string>('reminders_snooze', {noteUri, reminderId, minutes})
+          : 'snooze-unavailable';
+      } catch {
+        result = 'snooze-unavailable';
+      }
+
+      if (result === 'snooze-unavailable') {
+        // Daemon unreachable: never a local write. Surface the rate signal and
+        // leave the row interactive so the user can retry from the menu (no
+        // persistent per-row failure state, unlike remove).
+        reportSnoozeUnavailable(vaultHashRef.current);
+        return;
+      }
+
+      // Snooze changed fireAtMs / state on the daemon side; re-read the index so
+      // the row reflects the new schedule immediately (the 15s poll +
+      // vault-files-changed already cover this, but this keeps it responsive).
+      const hash = vaultHashRef.current;
+      if (hash) {
+        const rs = await readIndex(hash);
+        // Bail if the vault switched while the read was in flight.
+        if (vaultHashRef.current === hash) setReminders(rs);
+      }
+    },
+    [],
+  );
+
+  return {rows, hasDueReminders, removeReminder, snoozeReminder};
 }
 
 export function __resetReminderPaneForTests(): void {

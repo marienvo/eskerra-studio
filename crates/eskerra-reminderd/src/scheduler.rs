@@ -95,6 +95,24 @@ pub enum ActionOutcome {
     Unknown,
 }
 
+impl ActionOutcome {
+    /// Wire string for the `dev.eskerra.Reminders1.SnoozeReminder` OUT arg
+    /// (ADR §7). Only the snooze outcomes are reachable from `SnoozeReminder`
+    /// (the action is always a `Snooze`); the routing-only `RemoveRequested` /
+    /// `OpenRequested` outcomes cannot arise there and map to `"unknown"`
+    /// defensively so this stays total.
+    pub fn as_snooze_ipc_str(&self) -> &'static str {
+        match self {
+            ActionOutcome::Rescheduled { .. } => "rescheduled",
+            ActionOutcome::FiredNow => "fired",
+            ActionOutcome::ExpiredNoOp => "expired",
+            ActionOutcome::Unknown
+            | ActionOutcome::RemoveRequested
+            | ActionOutcome::OpenRequested { .. } => "unknown",
+        }
+    }
+}
+
 /// True when `r` has already fired for its current `fireAt` (the double-fire
 /// guard). A snooze moves `fireAt` to a new value, so a prior guard for the old
 /// fire does not suppress the re-armed fire.

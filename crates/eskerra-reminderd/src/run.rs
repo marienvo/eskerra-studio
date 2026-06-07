@@ -61,6 +61,15 @@ pub(crate) enum DaemonEvent {
         result: RemoveResult,
         reply: Sender<()>,
     },
+    /// An app-driven `SnoozeReminder` IPC call. Snooze only mutates the
+    /// in-memory index + re-arms the scheduler (no off-loop write-back), so it
+    /// runs **on** the loop and replies with the mapped IPC result string.
+    /// `notification_id` is `0` — there is no triggering popup to replace.
+    Snooze {
+        id: String,
+        minutes: u32,
+        reply: Sender<String>,
+    },
 }
 
 fn now_ms() -> i64 {
@@ -142,6 +151,16 @@ pub fn run() -> Result<(), String> {
             Ok(DaemonEvent::RemoveApply { id, result, reply }) => {
                 daemon.apply_remove_result(&id, result, now_ms());
                 let _ = reply.send(());
+            }
+            Ok(DaemonEvent::Snooze { id, minutes, reply }) => {
+                // App-driven snooze: same `apply_action` path as the GNOME
+                // action, on the loop (index-only, no write-back). notification
+                // id 0 = no popup to replace; for a snooze-0 at exactly due,
+                // `on_action` still sends the at-time fire once (guarded).
+                let outcome =
+                    daemon.on_action(&id, 0, Action::Snooze { minutes }, now_ms());
+                eprintln!("[reminderd] app snooze {minutes}m on {id}: {outcome:?}");
+                let _ = reply.send(outcome.as_snooze_ipc_str().to_string());
             }
             Err(RecvTimeoutError::Timeout) => {
                 let now = now_ms();
@@ -303,6 +322,32 @@ pub(crate) fn perform_remove(
             }
         },
     )
+}
+
+/// Run one `SnoozeReminder` on the run loop, shared by the D-Bus service. Sends
+/// a [`DaemonEvent::Snooze`] and blocks on the loop's reply with the mapped IPC
+/// result string (`rescheduled` | `fired` | `expired` | `unknown`). A lost run
+/// loop yields `"unknown"` (the reminder cannot be resolved). Unlike
+/// [`perform_remove`], snooze never touches the filesystem, so it has no per-note
+/// lock and runs entirely on the loop.
+///
+/// Only the Linux `SnoozeReminder` D-Bus service calls this (unlike
+/// [`perform_remove`], which the all-platform notification path also drives), so
+/// it is dead code on non-Linux targets.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn perform_snooze(id: &str, minutes: u32, tx: &Sender<DaemonEvent>) -> String {
+    let (reply_tx, reply_rx) = mpsc::channel();
+    if tx
+        .send(DaemonEvent::Snooze {
+            id: id.to_string(),
+            minutes,
+            reply: reply_tx,
+        })
+        .is_err()
+    {
+        return "unknown".to_string(); // run loop gone
+    }
+    reply_rx.recv().unwrap_or_else(|_| "unknown".to_string())
 }
 
 /// Build the D-Bus notifier, falling back to a no-op (click-only) notifier when

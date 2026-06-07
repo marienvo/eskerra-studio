@@ -1,8 +1,14 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {useEffect, useState} from 'react';
 
 import type {SessionNotification} from '../lib/sessionNotifications';
-import type {PaneNotification, ReminderPaneRow} from '../lib/reminderPane';
-import {reminderNoteName, reminderDueLabel} from '../lib/reminderPane';
+import type {PaneNotification, ReminderPaneRow, SnoozeMinutes} from '../lib/reminderPane';
+import {
+  reminderNoteName,
+  reminderDueLabel,
+  reminderTimeLabel,
+  liveSnoozeOptions,
+} from '../lib/reminderPane';
 
 import {MaterialIcon} from './MaterialIcon';
 
@@ -15,7 +21,13 @@ type NotificationsPanelProps = {
   onClearAll: () => void;
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
   onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
+
+/** Menu label for each snooze offset. */
+function snoozeOptionLabel(minutes: SnoozeMinutes): string {
+  return minutes === 0 ? 'At due time' : `${minutes} min before`;
+}
 
 export function NotificationsPanel({
   appSurface,
@@ -25,6 +37,7 @@ export function NotificationsPanel({
   onClearAll,
   onOpenReminder,
   onRemoveReminder,
+  onSnoozeReminder,
 }: NotificationsPanelProps) {
   // Minute tick so due-time labels stay current. useState(Date.now) is the
   // accepted initializer-function pattern; the setInterval callback is in an
@@ -83,6 +96,7 @@ export function NotificationsPanel({
                   nowMs={nowMs}
                   onOpen={onOpenReminder}
                   onRemove={onRemoveReminder}
+                  onSnooze={onSnoozeReminder}
                 />
               ) : (
                 <SessionRow
@@ -156,16 +170,30 @@ function ReminderRow({
   nowMs,
   onOpen,
   onRemove,
+  onSnooze,
 }: {
   row: ReminderPaneRow;
   nowMs: number;
   onOpen: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
   onRemove: (noteUri: string, reminderId: string) => Promise<void>;
+  onSnooze: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 }) {
   const noteName = reminderNoteName(row.vaultRelativePath);
   const isStale = row.reminderState === 'stale';
   const isRemoving = row.removeState === 'removing';
   const isUnavailable = row.removeState === 'remove-unavailable';
+
+  // The reminder line + its compact (HH:MM) echo. When the cleaned line is
+  // empty (the source line held only the token) the time folds onto the
+  // note-name header and no second line is rendered — mirrors the GNOME body.
+  const timeLabel = reminderTimeLabel(row.dueAtMs);
+  const hasLine = row.displayLine.trim().length > 0;
+  const headerText = hasLine ? noteName : `${noteName} (${timeLabel})`;
+
+  // Snooze is offered only for non-expired offsets, and never on a stale or
+  // in-flight-remove row (the daemon would no-op it anyway).
+  const snoozeOptions =
+    isStale || isRemoving || isUnavailable ? [] : liveSnoozeOptions(row.dueAtMs, nowMs);
 
   return (
     <li
@@ -173,16 +201,18 @@ function ReminderRow({
       className={reminderRowClass(row, nowMs)}
     >
       <div className="notifications-panel__reminder-body">
-        {/* Clickable header: note name + token */}
+        {/* Clickable header: note name (+ folded time) and the reminder line */}
         <button
           type="button"
           className="notifications-panel__reminder-header"
           onClick={() => onOpen(row.noteUri, row.reminderId, row.uiCaretHint)}
         >
-          <span className="notifications-panel__reminder-note">{noteName}</span>
-          <span className="notifications-panel__reminder-token muted">
-            {row.normalizedTokenText}
-          </span>
+          <span className="notifications-panel__reminder-note">{headerText}</span>
+          {hasLine ? (
+            <span className="notifications-panel__reminder-line muted">
+              {`${row.displayLine} (${timeLabel})`}
+            </span>
+          ) : null}
         </button>
 
         {/* Status line */}
@@ -195,6 +225,12 @@ function ReminderRow({
 
       {/* Action buttons */}
       <div className="notifications-panel__reminder-actions">
+        {snoozeOptions.length > 0 ? (
+          <SnoozeMenu
+            options={snoozeOptions}
+            onSnooze={minutes => void onSnooze(row.noteUri, row.reminderId, minutes)}
+          />
+        ) : null}
         {isUnavailable ? (
           <>
             <button
@@ -236,6 +272,59 @@ function ReminderRow({
         )}
       </div>
     </li>
+  );
+}
+
+/**
+ * Compact `[Snooze ▾]` dropdown offering the live snooze offsets. Built on the
+ * shared Radix `DropdownMenu` so it is keyboard-navigable and dismissible
+ * (Escape / outside click) for free.
+ */
+function SnoozeMenu({
+  options,
+  onSnooze,
+}: {
+  options: readonly SnoozeMinutes[];
+  onSnooze: (minutes: SnoozeMinutes) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="notifications-panel__reminder-action-btn small app-tooltip-trigger"
+          aria-label="Snooze reminder"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          data-tooltip="Snooze"
+          data-tooltip-placement="inline-start"
+        >
+          Snooze ▾
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="notifications-panel__snooze-menu note-list-context-menu"
+          sideOffset={4}
+          align="end"
+          collisionPadding={8}
+        >
+          {options.map(minutes => (
+            <DropdownMenu.Item
+              key={minutes}
+              className="note-list-context-menu__item"
+              onSelect={() => {
+                onSnooze(minutes);
+                setOpen(false);
+              }}
+            >
+              {snoozeOptionLabel(minutes)}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 

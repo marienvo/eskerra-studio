@@ -110,6 +110,33 @@ pub async fn reminders_remove(_note_uri: String, _reminder_id: String) -> String
     "remove-unavailable".to_string()
 }
 
+/// Calls `dev.eskerra.Reminders1.SnoozeReminder(noteUri, id, minutes)` on the
+/// session D-Bus. Returns the daemon's result string (`"rescheduled"` |
+/// `"fired"` | `"expired"` | `"unknown"`) on success, or `"snooze-unavailable"`
+/// on any transport/registry error (daemon not running, call timed out, etc.).
+/// Like `reminders_remove`, never writes to disk itself.
+///
+/// Linux only. On other targets always returns `"snooze-unavailable"` so the TS
+/// side degrades gracefully without conditional imports.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub async fn reminders_snooze(note_uri: String, reminder_id: String, minutes: u32) -> String {
+    match dbus_snooze_reminder(&note_uri, &reminder_id, minutes).await {
+        Ok(result) => result,
+        Err(_) => "snooze-unavailable".to_string(),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub async fn reminders_snooze(
+    _note_uri: String,
+    _reminder_id: String,
+    _minutes: u32,
+) -> String {
+    "snooze-unavailable".to_string()
+}
+
 // ── D-Bus helper (Linux only) ─────────────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
@@ -133,6 +160,29 @@ async fn dbus_remove_reminder(note_uri: &str, reminder_id: &str) -> zbus::Result
     )
     .await
     .map_err(|_| zbus::Error::Failure("RemoveReminder D-Bus call timed out".to_string()))??;
+    let result: String = reply.body().deserialize()?;
+    Ok(result)
+}
+
+#[cfg(target_os = "linux")]
+async fn dbus_snooze_reminder(
+    note_uri: &str,
+    reminder_id: &str,
+    minutes: u32,
+) -> zbus::Result<String> {
+    let conn = zbus::Connection::session().await?;
+    let reply = tokio::time::timeout(
+        DBUS_REMOVE_TIMEOUT,
+        conn.call_method(
+            Some("dev.eskerra.Reminders1"),
+            "/dev/eskerra/Reminders1",
+            Some("dev.eskerra.Reminders1"),
+            "SnoozeReminder",
+            &(note_uri, reminder_id, minutes),
+        ),
+    )
+    .await
+    .map_err(|_| zbus::Error::Failure("SnoozeReminder D-Bus call timed out".to_string()))??;
     let result: String = reply.body().deserialize()?;
     Ok(result)
 }

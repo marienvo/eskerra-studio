@@ -4,6 +4,8 @@ import type {Reminder, ReminderState} from './reminderIndex';
 import {
   reminderDueLabel,
   reminderNoteName,
+  reminderTimeLabel,
+  liveSnoozeOptions,
   reminderToPaneRow,
   type ReminderPaneRow,
   type ReminderRemoveState,
@@ -41,6 +43,7 @@ function prevRow(removeState: ReminderRemoveState): ReminderPaneRow {
     vaultRelativePath: 'Inbox/a.md',
     reminderState: 'scheduled',
     uiCaretHint: 16,
+    displayLine: '',
     removeState,
   };
 }
@@ -63,6 +66,18 @@ describe('reminderToPaneRow', () => {
 
   it('defaults removeState to idle when there is no prior row', () => {
     expect(reminderToPaneRow(reminder(), undefined).removeState).toBe('idle');
+  });
+
+  it('carries the displayLine from the daemon reminder', () => {
+    const row = reminderToPaneRow(reminder({displayLine: 'Call the dentist back'}), undefined);
+    expect(row.displayLine).toBe('Call the dentist back');
+  });
+
+  it('treats an absent displayLine (older index) as an empty string', () => {
+    // The base factory omits displayLine, mirroring an index written before the
+    // field existed.
+    expect(reminder().displayLine).toBeUndefined();
+    expect(reminderToPaneRow(reminder(), undefined).displayLine).toBe('');
   });
 
   it('keeps a `removing` spinner across index re-reads while not stale', () => {
@@ -124,5 +139,41 @@ describe('reminderDueLabel', () => {
     const label = reminderDueLabel(now + 3 * 24 * 60 * 60_000, now);
     expect(label).not.toMatch(/^in /);
     expect(label).not.toBe('overdue');
+  });
+});
+
+describe('reminderTimeLabel', () => {
+  it('formats the local time as zero-padded 24-hour HH:MM', () => {
+    // Build an instant from local Y/M/D h:m so the assertion is timezone-stable.
+    const due = new Date(2026, 5, 6, 9, 5).getTime();
+    expect(reminderTimeLabel(due)).toBe('09:05');
+    const late = new Date(2026, 10, 27, 23, 0).getTime();
+    expect(reminderTimeLabel(late)).toBe('23:00');
+    const midnight = new Date(2026, 0, 1, 0, 0).getTime();
+    expect(reminderTimeLabel(midnight)).toBe('00:00');
+  });
+});
+
+describe('liveSnoozeOptions', () => {
+  const due = 1_000_000_000_000;
+  const min = 60_000;
+
+  it('offers all three before the T-3 boundary', () => {
+    expect(liveSnoozeOptions(due, due - 4 * min)).toEqual([3, 1, 0]);
+  });
+
+  it('drops T-3 once now is at/after dueAt-3min', () => {
+    expect(liveSnoozeOptions(due, due - 3 * min)).toEqual([1, 0]);
+    expect(liveSnoozeOptions(due, due - 2 * min)).toEqual([1, 0]);
+  });
+
+  it('leaves only at-due between T-1 and due', () => {
+    expect(liveSnoozeOptions(due, due - min)).toEqual([0]);
+    expect(liveSnoozeOptions(due, due - 30_000)).toEqual([0]);
+  });
+
+  it('offers nothing exactly at due or past due', () => {
+    expect(liveSnoozeOptions(due, due)).toEqual([]);
+    expect(liveSnoozeOptions(due, due + min)).toEqual([]);
   });
 });

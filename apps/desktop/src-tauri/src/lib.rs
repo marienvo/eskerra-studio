@@ -158,6 +158,7 @@ pub fn run() {
             reminders::reminders_read_index,
             reminders::reminders_write_config,
             reminders::reminders_remove,
+            reminders::reminders_snooze,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

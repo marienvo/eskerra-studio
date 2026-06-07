@@ -33,6 +33,12 @@ export type ReminderPaneRow = {
   reminderState: Reminder['state'];
   /** Optional advisory caret position forwarded to click-to-open. */
   uiCaretHint: number | undefined;
+  /**
+   * The cleaned reminder line (token + leading marker removed, whitespace
+   * collapsed) computed once by the Rust scanner. Empty when the line held
+   * only the token; the row then folds the time onto the note-name header.
+   */
+  displayLine: string;
   removeState: ReminderRemoveState;
 };
 
@@ -67,6 +73,8 @@ export function reminderToPaneRow(
     vaultRelativePath: reminder.vaultRelativePath,
     reminderState: reminder.state,
     uiCaretHint: reminder.uiCaretHint?.utf16Offset,
+    // Older index without `displayLine` → empty (folds onto the header).
+    displayLine: reminder.displayLine ?? '',
     // Preserve in-flight UI state across index re-reads; reset only to idle
     // when the daemon confirms `removed` (row disappears) or the index no
     // longer contains this id (also gone). A `stale` daemon state clears
@@ -80,6 +88,34 @@ export function reminderNoteName(vaultRelativePath: string): string {
   const parts = vaultRelativePath.split('/');
   const filename = parts[parts.length - 1] ?? vaultRelativePath;
   return filename.endsWith('.md') ? filename.slice(0, -3) : filename;
+}
+
+/**
+ * Local `HH:MM` (24-hour) render of the due time — the compact `(HH:MM)` echo
+ * appended to the reminder line, derived from `dueAtMs` so it stays correct
+ * after a settings-only re-derive (which moves `dueAtMs` without rescanning).
+ * Mirrors the daemon's `hhmm_local`.
+ */
+export function reminderTimeLabel(dueAtMs: number): string {
+  const date = new Date(dueAtMs);
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/** The locked snooze offsets in minutes before `dueAt` (T-3 / T-1 / at-due). */
+export const SNOOZE_MINUTES = [3, 1, 0] as const;
+export type SnoozeMinutes = (typeof SNOOZE_MINUTES)[number];
+
+/**
+ * Which of the three snoozes are still live at `nowMs`: a snooze-N targets
+ * `dueAt − N·min` and is offered only while that target is in the future
+ * (`> now`); snooze-0 targets `dueAt` itself. Mirrors the daemon's expired
+ * no-op rule so the menu only ever shows snoozes that would actually reschedule
+ * a fire. Empty for a fully overdue reminder.
+ */
+export function liveSnoozeOptions(dueAtMs: number, nowMs: number): SnoozeMinutes[] {
+  return SNOOZE_MINUTES.filter(minutes => dueAtMs - minutes * 60_000 > nowMs);
 }
 
 /** Human-readable due-time label for a reminder row. */
