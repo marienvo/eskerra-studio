@@ -155,9 +155,9 @@ function tryOpenDateTokenPickerOnPillMouseUp(
   view: EditorView,
   event: MouseEvent,
   openPicker: DateTokenPickerOpenHandler | undefined,
-): boolean {
+): void {
   if (event.button !== 0 || !openPicker) {
-    return false;
+    return;
   }
   const down = peekStoredPrimaryPointerDownForLinkClick(view);
   if (
@@ -167,7 +167,7 @@ function tryOpenDateTokenPickerOnPillMouseUp(
     || down.markerFocusLine
     || !isSamePrimaryPointerGesture(down, event)
   ) {
-    return false;
+    return;
   }
   queueMicrotask(() => {
     if (consumeDateTokenPickerOpenedForGesture(view)) {
@@ -184,7 +184,6 @@ function tryOpenDateTokenPickerOnPillMouseUp(
       markDateTokenPickerOpenedForGesture(view);
     }
   });
-  return false;
 }
 
 export function createNoteMarkdownPointerLinkHandlers(
@@ -192,7 +191,7 @@ export function createNoteMarkdownPointerLinkHandlers(
 ): {
   onEditorClick: (event: MouseEvent, view: EditorView) => boolean;
   onEditorMiddleClick: (event: MouseEvent, view: EditorView) => boolean;
-  onEditorMouseUp: (event: MouseEvent, view: EditorView) => boolean;
+  onEditorMouseUp: (event: MouseEvent, view: EditorView) => void;
 } {
   return {
     onEditorClick(event, view) {
@@ -244,14 +243,13 @@ export function createNoteMarkdownPointerLinkHandlers(
     },
     onEditorMouseUp(event, view) {
       if (event.shiftKey || event.altKey) {
-        return false;
+        return;
       }
       tryOpenDateTokenPickerOnPillMouseUp(
         view,
         event,
         handlers.onOpenDateTokenPicker?.(),
       );
-      return false;
     },
   };
 }

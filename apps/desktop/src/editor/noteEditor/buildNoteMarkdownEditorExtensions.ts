@@ -129,7 +129,7 @@ export type NoteMarkdownEditorExtensionsInput = {
   armMiddleClickPasteBlock: () => void;
   onEditorMiddleClick: (e: MouseEvent, view: EditorView) => boolean;
   onEditorClick: (e: MouseEvent, view: EditorView) => boolean;
-  onEditorMouseUp: (e: MouseEvent, view: EditorView) => boolean;
+  onEditorMouseUp: (e: MouseEvent, view: EditorView) => void;
 };
 
 export function createNoteMarkdownUpdateListener(
@@ -367,7 +367,8 @@ export function buildNoteMarkdownEditorExtensions(
         return onEditorPaste(event, view);
       },
       mouseup(event, view) {
-        return onEditorMouseUp(event, view);
+        onEditorMouseUp(event, view);
+        return false;
       },
       click(event, view) {
         return onEditorClick(event, view);
