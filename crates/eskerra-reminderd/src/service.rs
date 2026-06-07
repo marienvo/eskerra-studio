@@ -53,9 +53,9 @@ mod imp {
     /// Register the service on the session bus on a dedicated thread that keeps
     /// the connection alive for the daemon's lifetime; the `zbus` reactor
     /// processes incoming `RemoveReminder` calls on its own tasks. Best-effort:
-    /// returns `None` if the bus / name is unavailable (mirrors the notifier
-    /// fallback — the app then sees a transport failure and surfaces
-    /// `remove-unavailable`).
+    /// always returns `Some(handle)`; if the bus / name is unavailable the
+    /// thread logs and exits immediately. The app then sees a transport failure
+    /// and surfaces `remove-unavailable`.
     pub(crate) fn spawn(remover: Arc<Remover>, tx: Sender<DaemonEvent>) -> Option<JoinHandle<()>> {
         let handle = std::thread::spawn(move || {
             let service = RemoveService {

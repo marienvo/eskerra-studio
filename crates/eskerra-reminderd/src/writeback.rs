@@ -171,10 +171,8 @@ fn resolve_and_strike(note_abs_path: &Path, stored: &Reminder) -> RemoveResult {
     if slice != stored.normalized_token_text.as_bytes() {
         return RemoveResult::Stale;
     }
-    // The grammar is ASCII, so the verified slice is valid UTF-8.
-    let Ok(token_str) = std::str::from_utf8(slice) else {
-        return RemoveResult::Stale;
-    };
+    // The verified slice equals bytes from this String, so no decode can fail.
+    let token_str = stored.normalized_token_text.as_str();
 
     let struck = struck_form(token_str);
     let new_bytes = splice(&bytes, from, to, struck.as_bytes());
