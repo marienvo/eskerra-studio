@@ -40,6 +40,7 @@ import {
   mergeTodayRowColumns,
   splitTodayRowIntoColumns,
   todayHubColumnCount,
+  todayHubColumnOffsetToRowOffset,
   todayHubRowUri,
   todayHubWeekEndInclusive,
   todayHubWeekProgress,
@@ -59,7 +60,15 @@ import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,
 } from '../editor/noteEditor/vaultLinkActivatePayload';
-import {TodayHubCellStaticRichText} from './TodayHubCellStaticRichText';
+import type {ReminderRemoveResult} from '../hooks/useReminderPane';
+import type {Reminder} from '../lib/reminderIndex';
+import {requestReminderStrikeViaDaemon} from '../lib/reminderTokenLookup';
+import {DateTokenPickerOverlay} from '../editor/noteEditor/dateToken/DateTokenPickerOverlay';
+import {formatDateToken, type DateTokenValue} from '../editor/noteEditor/dateToken/dateToken';
+import {
+  TodayHubCellStaticRichText,
+  type TodayHubDateTokenPillActivatePayload,
+} from './TodayHubCellStaticRichText';
 import {TodayWeekProgressBar} from './TodayWeekProgressBar';
 
 /**
@@ -96,6 +105,11 @@ type TodayHubCanvasProps = {
   todayHubCleanRowBlocked?: (rowUri: string) => boolean;
   linkSnippetBlockedDomains?: ReadonlyArray<string>;
   onMuteLinkSnippetDomain?: (domain: string) => void;
+  reminders: readonly Reminder[];
+  onRemoveReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
 };
 
 function normUri(u: string): string {
@@ -299,6 +313,8 @@ export function TodayHubCanvas({
   todayHubCleanRowBlocked,
   linkSnippetBlockedDomains,
   onMuteLinkSnippetDomain,
+  reminders,
+  onRemoveReminder,
 }: TodayHubCanvasProps) {
   const hubDirectoryUri = useMemo(
     () => normUri(todayNoteUri).replace(/\/[^/]+$/, ''),
@@ -378,6 +394,16 @@ export function TodayHubCanvas({
   const [localRowSections, setLocalRowSections] = useState<Record<string, string[]>>(
     {},
   );
+  const [hubDateTokenPicker, setHubDateTokenPicker] =
+    useState<TodayHubDateTokenPillActivatePayload | null>(null);
+  const hubDateTokenPickerRef = useRef(hubDateTokenPicker);
+  const remindersRef = useRef(reminders);
+  const onRemoveReminderRef = useRef(onRemoveReminder);
+  useLayoutEffect(() => {
+    hubDateTokenPickerRef.current = hubDateTokenPicker;
+    remindersRef.current = reminders;
+    onRemoveReminderRef.current = onRemoveReminder;
+  }, [hubDateTokenPicker, reminders, onRemoveReminder]);
 
   const debounceTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{uri: string; columnCount: number} | null>(null);
@@ -781,6 +807,81 @@ export function TodayHubCanvas({
     [active, getSections, schedulePersist],
   );
 
+  const applyTodayHubCellDateTokenReplace = useCallback(
+    (
+      uri: string,
+      col: number,
+      from: number,
+      to: number,
+      replacement: string,
+    ) => {
+      const key = normUri(uri);
+      const base =
+        localRowSectionsRef.current[key] ??
+        splitTodayRowIntoColumns(
+          inboxContentByUriRef.current[key] ?? '',
+          columnCount,
+        );
+      const cur = [...base];
+      const chunk = cur[col] ?? '';
+      cur[col] = chunk.slice(0, from) + replacement + chunk.slice(to);
+      const next = {...localRowSectionsRef.current, [key]: cur};
+      localRowSectionsRef.current = next;
+      setLocalRowSections(next);
+      schedulePersist(key);
+    },
+    [columnCount, schedulePersist],
+  );
+
+  const hubDateTokenStrikeRequest = useCallback(async () => {
+    const picker = hubDateTokenPickerRef.current;
+    if (!picker) {
+      return 'not-found' as const;
+    }
+    const key = normUri(picker.uri);
+    const sections =
+      localRowSectionsRef.current[key]
+      ?? splitTodayRowIntoColumns(
+        inboxContentByUriRef.current[key] ?? '',
+        columnCount,
+      );
+    const rowText = mergeTodayRowColumns(sections);
+    const rowOffset = todayHubColumnOffsetToRowOffset(
+      sections,
+      picker.col,
+      picker.from,
+    );
+    return requestReminderStrikeViaDaemon(
+      remindersRef.current,
+      picker.uri,
+      rowText,
+      rowOffset,
+      picker.initialValue,
+      onRemoveReminderRef.current,
+    );
+  }, [columnCount]);
+
+  const hubDateTokenConfirm = useCallback(
+    (value: DateTokenValue) => {
+      const picker = hubDateTokenPickerRef.current;
+      if (!picker) {
+        return;
+      }
+      if (value.struck && !picker.initialValue.struck) {
+        return;
+      }
+      applyTodayHubCellDateTokenReplace(
+        picker.uri,
+        picker.col,
+        picker.from,
+        picker.to,
+        formatDateToken(value),
+      );
+      setHubDateTokenPicker(null);
+    },
+    [applyTodayHubCellDateTokenReplace, setHubDateTokenPicker],
+  );
+
   const noopMarkdownChange = useCallback(() => {}, []);
 
   const closeEmptyActiveCellIfStillEmpty = useCallback(
@@ -854,6 +955,7 @@ export function TodayHubCanvas({
   }, []);
 
   return (
+    <>
     <div
       className="today-hub-canvas"
       role="region"
@@ -973,6 +1075,7 @@ export function TodayHubCanvas({
                         <TodayHubCellStaticRichText
                           cellText={chunk}
                           rowUri={uri}
+                          col={ci}
                           vaultRoot={vaultRoot}
                           wikiNavParentRef={wikiNavParentRef}
                           noteRefs={noteRefs}
@@ -981,6 +1084,7 @@ export function TodayHubCanvas({
                             onMarkdownRelativeLinkActivate
                           }
                           onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
+                          onDateTokenPillActivate={setHubDateTokenPicker}
                           linkSnippetBlockedDomains={linkSnippetBlockedDomains}
                           onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
                         />
@@ -1023,6 +1127,8 @@ export function TodayHubCanvas({
                       busy={false}
                       linkSnippetBlockedDomains={linkSnippetBlockedDomains}
                       onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+                      reminders={reminders}
+                      onRemoveReminder={onRemoveReminder}
                     />
                   );
 
@@ -1080,5 +1186,15 @@ export function TodayHubCanvas({
         })}
       </div>
     </div>
+    {hubDateTokenPicker ? (
+      <DateTokenPickerOverlay
+        anchorRect={hubDateTokenPicker.anchorRect}
+        initialValue={hubDateTokenPicker.initialValue}
+        onConfirm={hubDateTokenConfirm}
+        onStrikeRequest={hubDateTokenStrikeRequest}
+        onCancel={() => setHubDateTokenPicker(null)}
+      />
+    ) : null}
+    </>
   );
 }

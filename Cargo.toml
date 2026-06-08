@@ -14,7 +14,7 @@ members = [
 # anchored to the canonical mobile semver, and the bump/assert scripts stamp
 # both this workspace version and the app version to the same value.
 [workspace.package]
-version = "0.69.1"
+version = "0.71.0"
 
 # Vendored patches for the Tauri/desktop app build (see
 # apps/desktop/src-tauri/Cargo.toml for the rationale comments). Lives at the

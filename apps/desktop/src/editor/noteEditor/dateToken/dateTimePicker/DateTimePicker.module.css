@@ -147,3 +147,23 @@
 .timeSeparator {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
+
+.completedSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border);
+}
+
+.completedLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+  user-select: none;
+}
+
+.completedLabel p {
+  margin: 0;
+}

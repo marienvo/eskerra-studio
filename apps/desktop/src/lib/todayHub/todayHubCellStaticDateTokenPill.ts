@@ -1,8 +1,8 @@
 import {
-  DATE_TOKEN_PATTERN,
+  collectDateTokenSpansInLine,
   formatDateTokenPretty,
   isDateTokenInPast,
-  parseDateToken,
+  parseDateTokenSpan,
 } from '../../editor/noteEditor/dateToken/dateToken';
 import type {CellStaticSegment} from '../../editor/noteEditor/eskerraTableV1/eskerraTableCellStaticSegments';
 
@@ -16,6 +16,7 @@ export type TodayHubStaticPillPart = {
   /** Pretty label (e.g. `Tomorrow 12:00`), matching the CodeMirror widget. */
   label: string;
   past: boolean;
+  completed: boolean;
 };
 
 /** Run of styled segments rendered as plain `<span>`s. */
@@ -39,36 +40,34 @@ function collectDateTokenPillsForLine(
   now: Date,
 ): TodayHubStaticPillPart[] {
   const out: TodayHubStaticPillPart[] = [];
-  DATE_TOKEN_PATTERN.lastIndex = 0;
-  let match = DATE_TOKEN_PATTERN.exec(lineText);
-  while (match) {
-    const token = match[1]!;
-    const value = parseDateToken(token);
-    if (value !== null) {
-      const tokenStartInLine = match.index + match[0].length - token.length;
-      const from = lineFrom + tokenStartInLine;
-      out.push({
-        kind: 'date-pill',
-        from,
-        to: from + token.length,
-        label: formatDateTokenPretty(value, now),
-        past: isDateTokenInPast(value, now),
-      });
+  for (const {token, tokenStartInLine} of collectDateTokenSpansInLine(
+    lineText,
+  )) {
+    const value = parseDateTokenSpan(token);
+    if (value === null) {
+      continue;
     }
-    match = DATE_TOKEN_PATTERN.exec(lineText);
+    const completed = value.struck === true;
+    const from = lineFrom + tokenStartInLine;
+    out.push({
+      kind: 'date-pill',
+      from,
+      to: from + token.length,
+      label: formatDateTokenPretty(value, now),
+      past: completed ? false : isDateTokenInPast(value, now),
+      completed,
+    });
   }
   return out;
 }
 
 /** True when the cell contains at least one valid date token (used to gate the minute clock). */
 export function cellTextHasDateTokenPill(cellText: string): boolean {
-  DATE_TOKEN_PATTERN.lastIndex = 0;
-  let match = DATE_TOKEN_PATTERN.exec(cellText);
-  while (match) {
-    if (parseDateToken(match[1]!) !== null) {
+  const lines = cellText.split('\n');
+  for (const line of lines) {
+    if (collectDateTokenSpansInLine(line).length > 0) {
       return true;
     }
-    match = DATE_TOKEN_PATTERN.exec(cellText);
   }
   return false;
 }

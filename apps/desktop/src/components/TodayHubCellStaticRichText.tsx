@@ -25,7 +25,13 @@ import {
   todayHubStaticLineParts,
 } from '../lib/todayHub/todayHubCellStaticDateTokenPill';
 import {
+  parseDateTokenSpan,
+  type DateTokenValue,
+} from '../editor/noteEditor/dateToken/dateToken';
+import type {DateTokenPickerOverlayAnchor} from '../editor/noteEditor/dateToken/dateTokenPickerOverlayPosition';
+import {
   CM_DATE_TOKEN_PILL_CLASS,
+  CM_DATE_TOKEN_PILL_COMPLETED_CLASS,
   CM_DATE_TOKEN_PILL_PAST_CLASS,
 } from '../editor/noteEditor/dateToken/dateTokenHighlightCodemirror';
 import {parseLoneLinkLine} from '../lib/parseLoneLinkLine';
@@ -79,6 +85,19 @@ function useDateTokenPillMinuteClock(active: boolean): Date {
     };
   }, [active]);
   return now;
+}
+
+function todayHubDateTokenPillClassName(
+  past: boolean,
+  completed: boolean,
+): string {
+  if (completed) {
+    return `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_COMPLETED_CLASS}`;
+  }
+  if (past) {
+    return `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`;
+  }
+  return CM_DATE_TOKEN_PILL_CLASS;
 }
 
 function hostnameOf(url: string): string {
@@ -265,9 +284,19 @@ function tryHandleTodayHubExternalOrBareAtPos(
   return true;
 }
 
+export type TodayHubDateTokenPillActivatePayload = {
+  readonly uri: string;
+  readonly col: number;
+  readonly from: number;
+  readonly to: number;
+  readonly initialValue: DateTokenValue;
+  readonly anchorRect: DateTokenPickerOverlayAnchor;
+};
+
 export type TodayHubCellStaticRichTextProps = {
   cellText: string;
   rowUri: string;
+  col: number;
   vaultRoot: string;
   wikiNavParentRef: MutableRefObject<string | null>;
   noteRefs: readonly {name: string; uri: string}[];
@@ -276,6 +305,7 @@ export type TodayHubCellStaticRichTextProps = {
     payload: VaultRelativeMarkdownLinkActivatePayload,
   ) => void;
   onMarkdownExternalLinkOpen: (payload: {href: string; at: number}) => void;
+  onDateTokenPillActivate?: (payload: TodayHubDateTokenPillActivatePayload) => void;
   linkSnippetBlockedDomains?: ReadonlyArray<string>;
   onMuteLinkSnippetDomain?: (domain: string) => void;
 };
@@ -293,6 +323,8 @@ export function TodayHubCellStaticRichText({
   onWikiLinkActivate,
   onMarkdownRelativeLinkActivate,
   onMarkdownExternalLinkOpen,
+  onDateTokenPillActivate,
+  col,
   linkSnippetBlockedDomains,
   onMuteLinkSnippetDomain,
 }: TodayHubCellStaticRichTextProps): ReactElement | null {
@@ -379,16 +411,50 @@ export function TodayHubCellStaticRichText({
                 part.kind === 'date-pill' ? (
                   <span
                     key={`pill-${part.from}-${part.to}`}
-                    className={
-                      part.past
-                        ? `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`
-                        : CM_DATE_TOKEN_PILL_CLASS
-                    }
+                    className={todayHubDateTokenPillClassName(
+                      part.past,
+                      part.completed,
+                    )}
                     data-date-token=""
                     data-doc-from={part.from}
                     data-doc-to={part.to}
+                    onPointerDown={e => {
+                      if (!onDateTokenPillActivate || e.button !== 0) {
+                        return;
+                      }
+                      const tokenText = cellText.slice(part.from, part.to);
+                      const initialValue = parseDateTokenSpan(tokenText);
+                      if (!initialValue) {
+                        return;
+                      }
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      onDateTokenPillActivate({
+                        uri: rowUri,
+                        col,
+                        from: part.from,
+                        to: part.to,
+                        initialValue,
+                        anchorRect: {
+                          left: rect.left,
+                          top: rect.top,
+                          bottom: rect.bottom,
+                        },
+                      });
+                    }}
                   >
-                    {`${part.past ? '☑️' : '🔔'} ${part.label}`}
+                    {part.completed && (
+                      <>
+                        <span className="cm-date-token-pill__emoji">✔️</span>
+                        <span className="cm-date-token-pill__label">
+                          {part.label}
+                        </span>
+                      </>
+                    )}
+                    {!part.completed && (
+                      <>{`${part.past ? '☑️' : '🔔'} ${part.label}`}</>
+                    )}
                   </span>
                 ) : (
                   <Fragment key={`seg-${pi}`}>

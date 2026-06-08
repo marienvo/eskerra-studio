@@ -48,10 +48,13 @@ A separate headless binary **`eskerra-reminderd`** (systemd `--user` service) is
 reminder-driven disk writes (the strikethrough rewrite). The Tauri app **reads** the
 index and renders; it **never** writes the `~~…~~` mutation locally.
 
-**Single-writer invariant (load-bearing):** deleting a reminder from the app pane calls
-the daemon's `RemoveReminder` IPC — the app never strikes the token itself, including
-when the daemon is unreachable (see **`RemoveReminder` failure contract**). This keeps
-exactly one writer for that mutation and prevents two processes racing on the same bytes.
+**Single-writer invariant (load-bearing):** deleting a reminder from the app pane **or**
+checking **Completed** in the date-token picker (inbox editor or Today Hub) calls the
+daemon's `RemoveReminder` IPC — the app never writes `@~~…~~` locally on strike, including
+when the daemon is unreachable (see **`RemoveReminder` failure contract**). Unchecking
+Completed is a local unstrike only; the daemon rescans and may re-index the live token.
+This keeps exactly one writer for the strike mutation and prevents two processes racing on
+the same bytes.
 
 Single-writer is *exclusivity across processes*, not *serialization within the daemon*:
 two concurrent `RemoveReminder` calls for different tokens in the **same** note could

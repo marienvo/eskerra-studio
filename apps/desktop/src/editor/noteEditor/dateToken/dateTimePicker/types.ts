@@ -1,3 +1,4 @@
+import type {ReminderStrikeResult} from '../../../../lib/reminderTokenLookup';
 import type {DateTokenValue} from '../dateToken';
 
 export const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
@@ -38,4 +39,9 @@ export type DateTimePickerProps = {
   readonly onReturnFocus?: () => void;
   /** Injectable clock for Today and defaults (tests use 2026-06-06). */
   readonly now?: Date;
+  /**
+   * When the user checks Completed, strike via the reminder daemon instead of
+   * emitting `struck: true` through `onConfirm`.
+   */
+  readonly onStrikeRequest?: () => Promise<ReminderStrikeResult>;
 };

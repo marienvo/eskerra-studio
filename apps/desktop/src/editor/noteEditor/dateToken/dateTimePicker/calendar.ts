@@ -87,6 +87,7 @@ export function resolveInitialState(
   noTime: boolean;
   hour: number;
   minute: number;
+  struck: boolean;
 } {
   const selected = initialValue ?? todayDateParts(now);
   const hasTime =
@@ -105,6 +106,7 @@ export function resolveInitialState(
     noTime: !hasTime,
     hour: time.hour,
     minute: time.minute,
+    struck: initialValue?.struck === true,
   };
 }
 
@@ -118,20 +120,23 @@ export function clampMinute(value: number): number {
 
 export function buildDateTokenValue(
   date: DatePickerDate,
-  options: {noTime: boolean; hour: number; minute: number},
+  options: {noTime: boolean; hour: number; minute: number; struck?: boolean},
 ): DateTokenValue {
-  if (options.noTime) {
-    return {
-      year: date.year,
-      month: date.month,
-      day: date.day,
-    };
+  const base = options.noTime
+    ? {
+        year: date.year,
+        month: date.month,
+        day: date.day,
+      }
+    : {
+        year: date.year,
+        month: date.month,
+        day: date.day,
+        hour: clampHour(options.hour),
+        minute: clampMinute(options.minute),
+      };
+  if (options.struck) {
+    return {...base, struck: true};
   }
-  return {
-    year: date.year,
-    month: date.month,
-    day: date.day,
-    hour: clampHour(options.hour),
-    minute: clampMinute(options.minute),
-  };
+  return base;
 }

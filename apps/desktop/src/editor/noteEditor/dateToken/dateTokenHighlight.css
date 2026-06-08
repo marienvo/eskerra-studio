@@ -56,3 +56,25 @@
 .note-markdown-editor-host .cm-date-token-pill--past:hover {
   background-color: color-mix(in srgb, #64748b 24%, transparent);
 }
+
+/* Completed reminders: muted gray with strikethrough label only. */
+[data-app-surface='capture'] .note-markdown-editor-host .cm-date-token--completed {
+  color: color-mix(in srgb, #6b7280 85%, var(--color-text));
+  background-color: color-mix(in srgb, #6b7280 12%, transparent);
+  border-color: color-mix(in srgb, #6b7280 28%, transparent);
+  text-decoration: line-through;
+}
+
+.note-markdown-editor-host .cm-date-token-pill--completed {
+  color: color-mix(in srgb, #6b7280 85%, var(--color-text));
+  background-color: color-mix(in srgb, #6b7280 12%, transparent);
+  border-color: color-mix(in srgb, #6b7280 28%, transparent);
+}
+
+.note-markdown-editor-host .cm-date-token-pill--completed:hover {
+  background-color: color-mix(in srgb, #6b7280 22%, transparent);
+}
+
+.note-markdown-editor-host .cm-date-token-pill--completed .cm-date-token-pill__label {
+  text-decoration: line-through;
+}

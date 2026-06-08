@@ -10,8 +10,6 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import {createPortal} from 'react-dom';
-
 import {
   todayHubPerfEnabled,
   todayHubPerfLog,
@@ -36,17 +34,19 @@ import {useNoteMarkdownEditorCompartmentEffects} from './useNoteMarkdownEditorCo
 import {useNoteMarkdownEditorImageDrop} from './useNoteMarkdownEditorImageDrop';
 import {useNoteMarkdownEditorLoad} from './useNoteMarkdownEditorLoad';
 import {useNoteMarkdownEditorShellRefs} from './useNoteMarkdownEditorShellRefs';
-import {DateTimePicker} from './dateToken/DateTimePicker';
+import type {ReminderRemoveResult} from '../../hooks/useReminderPane';
+import type {Reminder} from '../../lib/reminderIndex';
+import {
+  requestReminderStrikeViaDaemon,
+  type ReminderStrikeResult,
+} from '../../lib/reminderTokenLookup';
+import {DateTokenPickerOverlay} from './dateToken/DateTokenPickerOverlay';
 import {
   formatDateToken,
+  parseDateTokenSpan,
   type DateTokenValue,
 } from './dateToken/dateToken';
-import {
-  clampDateTokenPickerOverlayPosition,
-  DATE_TOKEN_PICKER_OVERLAY_GAP_PX,
-  type DateTokenPickerOverlayAnchor,
-  type DateTokenPickerOverlayPosition,
-} from './dateToken/dateTokenPickerOverlayPosition';
+import type {DateTokenPickerOverlayAnchor} from './dateToken/dateTokenPickerOverlayPosition';
 import type {
   DateTokenPickerOpenHandler,
   DateTokenPickerOpenRequest,
@@ -62,6 +62,16 @@ type DateTokenPickerOverlayState = {
   readonly initialValue: DateTokenValue | null;
   readonly commit: (value: DateTokenValue) => void;
   readonly returnFocus: () => void;
+  readonly onStrikeRequest: () => Promise<ReminderStrikeResult>;
+};
+
+type DateTokenStrikeContext = {
+  readonly getNoteUri: () => string | null;
+  readonly getReminders: () => readonly Reminder[];
+  readonly removeReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
 };
 
 function fallbackDateTokenAnchorRect(view: EditorView): DateTokenPickerOverlayAnchor {
@@ -89,12 +99,36 @@ function dateTokenOverlayAnchorFromRequest(
 
 function buildDateTokenPickerOverlayState(
   request: DateTokenPickerOpenRequest,
+  strikeContext: DateTokenStrikeContext,
 ): DateTokenPickerOverlayState {
   const insertTrailingSpace = request.initialValue == null;
   let tokenEnd = request.tokenTo;
   return {
     anchorRect: dateTokenOverlayAnchorFromRequest(request),
     initialValue: request.initialValue ?? null,
+    onStrikeRequest: async () => {
+      const noteUri = strikeContext.getNoteUri();
+      if (!noteUri) {
+        return 'not-found';
+      }
+      const docText = request.view.state.doc.toString();
+      const currentDocLength = docText.length;
+      const from = Math.max(0, Math.min(request.tokenFrom, currentDocLength));
+      const to = Math.max(from, Math.min(request.tokenTo, currentDocLength));
+      const spanText = docText.slice(from, to);
+      const parsed = parseDateTokenSpan(spanText);
+      if (!parsed || parsed.struck === true) {
+        return 'not-found';
+      }
+      return requestReminderStrikeViaDaemon(
+        strikeContext.getReminders(),
+        noteUri,
+        docText,
+        from,
+        parsed,
+        strikeContext.removeReminder,
+      );
+    },
     commit: value => {
       const view = request.view;
       if (!view.state.facet(EditorView.editable)) {
@@ -145,11 +179,12 @@ const NoteMarkdownEditorImpl = forwardRef<
   const onOpenDateTokenPickerRef = useRef<DateTokenPickerOpenHandler | undefined>(
     undefined,
   );
-  const dateTokenPickerOverlayRef = useRef<HTMLDivElement | null>(null);
+  const remindersRef = useRef<readonly Reminder[]>(props.reminders ?? []);
+  remindersRef.current = props.reminders ?? [];
+  const removeReminderRef = useRef(props.onRemoveReminder);
+  removeReminderRef.current = props.onRemoveReminder;
   const [dateTokenPicker, setDateTokenPicker] =
     useState<DateTokenPickerOverlayState | null>(null);
-  const [dateTokenPickerOverlayPosition, setDateTokenPickerOverlayPosition] =
-    useState<DateTokenPickerOverlayPosition | null>(null);
   const [tableCellMenuOpen, setTableCellMenuOpen] = useState(false);
   const [tableCellMenuAnchor, setTableCellMenuAnchor] = useState<{
     x: number;
@@ -292,49 +327,24 @@ const NoteMarkdownEditorImpl = forwardRef<
       if (shell.readOnlyRef.current) {
         return;
       }
-      setDateTokenPicker(buildDateTokenPickerOverlayState(request));
+      setDateTokenPicker(
+        buildDateTokenPickerOverlayState(request, {
+          getNoteUri: () => shell.activeNotePathRef.current,
+          getReminders: () => remindersRef.current,
+          removeReminder: async (noteUri, reminderId) => {
+            const remove = removeReminderRef.current;
+            if (!remove) {
+              return 'remove-unavailable';
+            }
+            return remove(noteUri, reminderId);
+          },
+        }),
+      );
     };
     return () => {
       onOpenDateTokenPickerRef.current = undefined;
     };
-  }, [shell.readOnlyRef]);
-
-  useLayoutEffect(() => {
-    if (!dateTokenPicker) {
-      setDateTokenPickerOverlayPosition(null);
-      return;
-    }
-
-    const measureAndClamp = () => {
-      const overlay = dateTokenPickerOverlayRef.current;
-      if (!overlay) {
-        return;
-      }
-      const {width, height} = overlay.getBoundingClientRect();
-      setDateTokenPickerOverlayPosition(
-        clampDateTokenPickerOverlayPosition(
-          dateTokenPicker.anchorRect,
-          {width, height},
-          {width: window.innerWidth, height: window.innerHeight},
-        ),
-      );
-    };
-
-    measureAndClamp();
-
-    const overlay = dateTokenPickerOverlayRef.current;
-    let resizeObserver: ResizeObserver | null = null;
-    if (overlay && typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(measureAndClamp);
-      resizeObserver.observe(overlay);
-    }
-    window.addEventListener('resize', measureAndClamp);
-
-    return () => {
-      resizeObserver?.disconnect();
-      window.removeEventListener('resize', measureAndClamp);
-    };
-  }, [dateTokenPicker]);
+  }, [shell.readOnlyRef, shell.activeNotePathRef]);
 
   useEffect(() => {
     if (!dateTokenPicker) {
@@ -352,47 +362,6 @@ const NoteMarkdownEditorImpl = forwardRef<
       view.scrollDOM.removeEventListener('scroll', onEditorScroll);
     };
   }, [dateTokenPicker, shell.viewRef]);
-
-  useEffect(() => {
-    if (!dateTokenPicker) {
-      return;
-    }
-    const onDocumentPointerDown = (event: PointerEvent) => {
-      const overlay = dateTokenPickerOverlayRef.current;
-      if (!overlay) {
-        return;
-      }
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (overlay.contains(target)) {
-        return;
-      }
-      setDateTokenPicker(null);
-    };
-    document.addEventListener('pointerdown', onDocumentPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onDocumentPointerDown, true);
-    };
-  }, [dateTokenPicker]);
-
-  useEffect(() => {
-    if (!dateTokenPicker) {
-      return;
-    }
-    const onDocumentKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        setDateTokenPicker(null);
-      }
-    };
-    document.addEventListener('keydown', onDocumentKeyDown, true);
-    return () => {
-      document.removeEventListener('keydown', onDocumentKeyDown, true);
-    };
-  }, [dateTokenPicker]);
 
   useImperativeHandle(
     ref,
@@ -463,33 +432,16 @@ const NoteMarkdownEditorImpl = forwardRef<
           setTableCellMenuOpen(o);
         }}
       />
-      {dateTokenPicker
-        ? createPortal(
-            <div
-              ref={dateTokenPickerOverlayRef}
-              data-date-token-picker-overlay
-              style={{
-                position: 'fixed',
-                left:
-                  dateTokenPickerOverlayPosition?.left
-                  ?? dateTokenPicker.anchorRect.left,
-                top:
-                  dateTokenPickerOverlayPosition?.top
-                  ?? dateTokenPicker.anchorRect.bottom
-                    + DATE_TOKEN_PICKER_OVERLAY_GAP_PX,
-                zIndex: 320,
-              }}
-            >
-              <DateTimePicker
-                initialValue={dateTokenPicker.initialValue}
-                onConfirm={dateTokenPicker.commit}
-                onReturnFocus={dateTokenPicker.returnFocus}
-                onCancel={() => setDateTokenPicker(null)}
-              />
-            </div>,
-            document.body,
-          )
-        : null}
+      {dateTokenPicker ? (
+        <DateTokenPickerOverlay
+          anchorRect={dateTokenPicker.anchorRect}
+          initialValue={dateTokenPicker.initialValue}
+          onConfirm={dateTokenPicker.commit}
+          onReturnFocus={dateTokenPicker.returnFocus}
+          onStrikeRequest={dateTokenPicker.onStrikeRequest}
+          onCancel={() => setDateTokenPicker(null)}
+        />
+      ) : null}
     </>
   );
 });

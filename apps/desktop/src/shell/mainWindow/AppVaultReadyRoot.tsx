@@ -5,7 +5,9 @@ import type {RefObject, SetStateAction} from 'react';
 
 import type {EskerraSettings, VaultFilesystem} from '@eskerra/core';
 
+import type {ReminderRemoveResult} from '../../hooks/useReminderPane';
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
+import type {Reminder} from '../../lib/reminderIndex';
 import {WindowTitleBar} from '../../components/WindowTitleBar';
 import type {StoredLayouts} from '../../lib/layout/layoutStore';
 import type {UseMainWindowWorkspaceResult} from '../../hooks/useMainWindowWorkspace';
@@ -81,9 +83,13 @@ export type AppVaultReadyRootProps = {
   enterDiskConflictMergeView: UseMainWindowWorkspaceResult['conflictController']['enterDiskConflictMergeView'];
   onMuteLinkSnippetDomain: (domain: string) => Promise<void>;
   reminderItems: readonly PaneNotification[];
+  reminders: readonly Reminder[];
   hasDueReminders: boolean;
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
-  onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onRemoveReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
   onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
@@ -133,6 +139,7 @@ export function AppVaultReadyRoot({
   enterDiskConflictMergeView,
   onMuteLinkSnippetDomain,
   reminderItems,
+  reminders,
   hasDueReminders,
   onOpenReminder,
   onRemoveReminder,
@@ -229,6 +236,7 @@ export function AppVaultReadyRoot({
               dismissNotification={dismissNotification}
               clearAllNotifications={clearAllNotifications}
               hasDueReminders={hasDueReminders}
+              reminders={reminders}
               onOpenReminder={onOpenReminder}
               onRemoveReminder={onRemoveReminder}
               onSnoozeReminder={onSnoozeReminder}

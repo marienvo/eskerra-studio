@@ -21,6 +21,7 @@ function pills(parts: ReturnType<typeof todayHubStaticLineParts>): TodayHubStati
 describe('cellTextHasDateTokenPill', () => {
   it('detects a valid date token', () => {
     expect(cellTextHasDateTokenPill('call mom @2026-12-30_1200')).toBe(true);
+    expect(cellTextHasDateTokenPill('done @~~2026-12-30_1200~~')).toBe(true);
   });
 
   it('returns false for an invalid calendar date', () => {
@@ -44,6 +45,7 @@ describe('todayHubStaticLineParts', () => {
       from: tokenStart,
       to: text.length,
       past: false,
+      completed: false,
     });
     // "call mom " segment precedes the pill (token start is preceded by a space).
     expect(parts[0]).toEqual({
@@ -65,6 +67,26 @@ describe('todayHubStaticLineParts', () => {
     const text = 'overdue @2026-12-01_0800';
     const [pill] = pills(todayHubStaticLineParts(0, text, segments(text), NOW));
     expect(pill!.past).toBe(true);
+    expect(pill!.completed).toBe(false);
+  });
+
+  it('renders struck spans as completed pills with full token offsets', () => {
+    const text = 'done @~~2026-12-30_1200~~';
+    const [pill] = pills(todayHubStaticLineParts(0, text, segments(text), NOW));
+    const tokenStart = text.indexOf('@~~');
+    expect(pill).toMatchObject({
+      from: tokenStart,
+      to: text.length,
+      completed: true,
+      past: false,
+    });
+  });
+
+  it('accepts daemon \\_ escape in struck spans', () => {
+    const text = 'done @~~2026-12-30\\_1200~~';
+    const [pill] = pills(todayHubStaticLineParts(0, text, segments(text), NOW));
+    expect(pill!.completed).toBe(true);
+    expect(pill!.to - pill!.from).toBe('@~~2026-12-30\\_1200~~'.length);
   });
 
   it('honours the line offset for multi-line cells', () => {

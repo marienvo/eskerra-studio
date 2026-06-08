@@ -1,6 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {useCallback, useEffect, useState} from 'react';
 
+import type {ReminderRemoveResult} from '../hooks/useReminderPane';
 import type {SessionNotification} from '../lib/sessionNotifications';
 import type {PaneNotification, ReminderPaneRow, SnoozeMinutes} from '../lib/reminderPane';
 import {
@@ -21,7 +22,10 @@ type NotificationsPanelProps = {
   onDismiss: (id: string) => void;
   onClearAll: () => void;
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
-  onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onRemoveReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
   onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
@@ -195,7 +199,10 @@ function ReminderRow({
   nowMs: number;
   onRefreshNowMs: () => void;
   onOpen: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
-  onRemove: (noteUri: string, reminderId: string) => Promise<void>;
+  onRemove: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
   onSnooze: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 }) {
   const noteName = reminderNoteName(row.vaultRelativePath);

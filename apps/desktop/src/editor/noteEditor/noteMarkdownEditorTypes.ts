@@ -1,5 +1,7 @@
 import type {InboxWikiLinkCompletionCandidate} from '@eskerra/core';
 
+import type {ReminderRemoveResult} from '../../hooks/useReminderPane';
+import type {Reminder} from '../../lib/reminderIndex';
 import type {NoteInboxAttachmentHost} from '../../lib/noteInboxAttachmentHost';
 import type {NoteMarkdownLoadOptions} from './noteMarkdownLoadMarkdown';
 import type {VaultImagePreviewUrlResolver} from './vaultImagePreviewTypes';
@@ -74,6 +76,13 @@ export type NoteMarkdownEditorProps = {
    * Hub uses this for empty cells to collapse back to the dashed placeholder.
    */
   onEditableBlur?: () => void;
+  /** Daemon index entries for Completed-checkbox strike lookup. */
+  reminders?: readonly Reminder[];
+  /** Routes reminder strike through `RemoveReminder` IPC (ADR 003). */
+  onRemoveReminder?: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
 };
 
 export type NoteMarkdownEditorHandle = {

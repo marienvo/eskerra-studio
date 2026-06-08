@@ -76,8 +76,9 @@ React component. The two entry points are:
 
 ## Reminder pill parity
 
-Date tokens (`@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM`) render as a pretty pill (`🔔 Tomorrow 12:00`,
-or `☑️ …` once past) on any **non-focused** line. Both modes must show the pill:
+Date tokens (`@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM`, or struck `@~~…~~`) render as a pretty pill
+(`🔔 Tomorrow 12:00`, `☑️ …` once past, or `✔️ …` with strikethrough label when completed) on any
+**non-focused** line. Both modes must show the pill:
 
 - **Edit mode:** `dateTokenHighlightExtensions()` in
   [`dateTokenHighlightCodemirror.ts`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenHighlightCodemirror.ts)
@@ -86,11 +87,24 @@ or `☑️ …` once past) on any **non-focused** line. Both modes must show the
   [`todayHubStaticLineParts()`](../../apps/desktop/src/lib/todayHub/todayHubCellStaticDateTokenPill.ts)
   per line and renders a `cm-date-token-pill` span in place of the raw token segments.
 
-Both share the pill classes (`cm-date-token-pill`, `cm-date-token-pill--past`) and CSS in
+Both share the pill classes (`cm-date-token-pill`, `cm-date-token-pill--past`,
+`cm-date-token-pill--completed`) and CSS in
 [`dateTokenHighlight.css`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenHighlight.css),
 and the same label/past helpers (`formatDateTokenPretty`, `isDateTokenInPast`). Read mode runs an
 aligned **minute clock** (only when the cell contains a pill) so labels relabel and flip past on the
 same cadence as the editor.
+
+**Read-mode picker:** clicking a pill in an inactive cell opens the shared
+[`DateTokenPickerOverlay`](../../apps/desktop/src/editor/noteEditor/dateToken/DateTokenPickerOverlay.tsx)
+(portaled picker). `pointerdown` on the pill calls `stopPropagation()` so the cell does not also
+activate. Date/time confirm splices the token via `applyTodayHubCellDateTokenReplace`
+(updates `localRowSections` without opening the cell) and `schedulePersist`. Checking
+**Completed** routes through `RemoveReminder` IPC (same single-writer path as the inbox
+editor and Notifications pane); the hub never writes `@~~…~~` locally on strike. Reminder
+lookup must use **`mergeTodayRowColumns(sections)`** and map the pill's column-local
+`from` through **`todayHubColumnOffsetToRowOffset`** — the daemon indexes
+`occurrenceOrdinal` over the full row file, not a single column. Pill
+`data-doc-from` / `data-doc-to` cover the **full** struck span (`@~~…~~`), not the inner date.
 
 **Rule:** the read-mode pill placement (`collectDateTokenPillsForLine`) must mirror CodeMirror's
 `collectDateTokenRangesForLine` token detection; any change to the pill label, glyphs, classes, or

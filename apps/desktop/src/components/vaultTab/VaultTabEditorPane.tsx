@@ -3,6 +3,9 @@ import {useCallback, useLayoutEffect, useMemo, useRef, useState} from 'react';
 
 import type {EskerraSettings, VaultFilesystem, VaultMarkdownRef} from '@eskerra/core';
 
+import type {ReminderRemoveResult} from '../../hooks/useReminderPane';
+import type {Reminder} from '../../lib/reminderIndex';
+
 import {createNoteInboxAttachmentHost} from '../../lib/noteInboxAttachmentHost';
 import {resolveVaultImagePreviewUrl} from '../../lib/resolveVaultImagePreviewUrl';
 import {todayHubColumnCount, type TodayHubSettings, type TodayHubWorkspaceBridge} from '../../lib/todayHub';
@@ -67,6 +70,11 @@ type VaultTabEditorPaneProps = {
   todayHubCleanRowBlocked?: (rowUri: string) => boolean;
   linkSnippetBlockedDomains?: VaultTabLinkController['linkSnippetBlockedDomains'];
   onMuteLinkSnippetDomain?: VaultTabLinkController['onMuteLinkSnippetDomain'];
+  reminders: readonly Reminder[];
+  onRemoveReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
 };
 
 function useEditorPaneBodyDerived(
@@ -199,6 +207,8 @@ function EditorPaneTodayHubBlock({
   todayHubCleanRowBlocked,
   linkSnippetBlockedDomains,
   onMuteLinkSnippetDomain,
+  reminders,
+  onRemoveReminder,
 }: {
   mergeView: VaultTabEditorPaneProps['mergeView'];
   showTodayHubCanvas: boolean;
@@ -222,6 +232,8 @@ function EditorPaneTodayHubBlock({
   todayHubCleanRowBlocked: VaultTabEditorPaneProps['todayHubCleanRowBlocked'];
   linkSnippetBlockedDomains: VaultTabEditorPaneProps['linkSnippetBlockedDomains'];
   onMuteLinkSnippetDomain: VaultTabEditorPaneProps['onMuteLinkSnippetDomain'];
+  reminders: VaultTabEditorPaneProps['reminders'];
+  onRemoveReminder: VaultTabEditorPaneProps['onRemoveReminder'];
 }) {
   if (
     !showTodayHubCanvas
@@ -260,6 +272,8 @@ function EditorPaneTodayHubBlock({
             todayHubCleanRowBlocked={todayHubCleanRowBlocked}
             linkSnippetBlockedDomains={linkSnippetBlockedDomains}
             onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+            reminders={reminders}
+            onRemoveReminder={onRemoveReminder}
           />
         </div>
       </div>
@@ -360,6 +374,8 @@ export function VaultTabEditorPane({
   diskConflict,
   linkSnippetBlockedDomains,
   onMuteLinkSnippetDomain,
+  reminders,
+  onRemoveReminder,
 }: VaultTabEditorPaneProps) {
   const [editorHasFoldedRanges, setEditorHasFoldedRanges] = useState(false);
   const [editorHasFoldableRanges, setEditorHasFoldableRanges] = useState(false);
@@ -494,6 +510,8 @@ export function VaultTabEditorPane({
                 onFoldableRangesPresentChange={onFoldableRangesPresentChange}
                 linkSnippetBlockedDomains={linkSnippetBlockedDomains}
                 onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+                reminders={reminders}
+                onRemoveReminder={onRemoveReminder}
               />
               {!composingNewEntry && selectedUri && !showTodayHubCanvas ? (
                 <div ref={backlinksSidecarRef} className="note-sidecar-group">
@@ -531,6 +549,8 @@ export function VaultTabEditorPane({
           todayHubCleanRowBlocked={todayHubCleanRowBlocked}
           linkSnippetBlockedDomains={linkSnippetBlockedDomains}
           onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+          reminders={reminders}
+          onRemoveReminder={onRemoveReminder}
         />
       </div>
     </div>
