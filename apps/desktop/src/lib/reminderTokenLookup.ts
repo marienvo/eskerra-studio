@@ -6,6 +6,7 @@ import {
 } from '../editor/noteEditor/dateToken/dateToken';
 import type {ReminderRemoveResult} from '../hooks/useReminderPane';
 import type {Reminder} from './reminderIndex';
+import {absolutePathToReminderFileUri} from './todayHub/reminderHubCellTarget';
 
 export type ReminderStrikeResult =
   | 'removed'
@@ -124,9 +125,10 @@ export async function requestReminderStrikeViaDaemon(
     reminderId: string,
   ) => Promise<ReminderRemoveResult>,
 ): Promise<ReminderStrikeResult> {
+  const daemonNoteUri = absolutePathToReminderFileUri(noteUri);
   const match = findReminderForTokenAtOffset(
     reminders,
-    noteUri,
+    daemonNoteUri,
     documentText,
     tokenOffset,
     value,
@@ -134,5 +136,5 @@ export async function requestReminderStrikeViaDaemon(
   if (!match) {
     return 'not-found';
   }
-  return removeReminder(noteUri, match.id);
+  return removeReminder(daemonNoteUri, match.id);
 }

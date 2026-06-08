@@ -16,6 +16,40 @@ import {
 
 import {normalizeEditorDocUri} from '../editorDocumentHistory';
 
+function reminderFileUriEncodesByte(byte: number): boolean {
+  return (
+    (byte >= 0x30 && byte <= 0x39)
+    || (byte >= 0x41 && byte <= 0x5a)
+    || (byte >= 0x61 && byte <= 0x7a)
+    || byte === 0x2d
+    || byte === 0x5f
+    || byte === 0x2e
+    || byte === 0x2f
+    || byte === 0x7e
+  );
+}
+
+/**
+ * Encode an editor document path as the daemon's `noteUri` (`file://` + path).
+ * Mirrors `note_uri_for` in `eskerra-reminderd/src/scan.rs`.
+ */
+export function absolutePathToReminderFileUri(path: string): string {
+  const trimmed = path.trim().replace(/\\/g, '/');
+  if (trimmed.toLowerCase().startsWith('file://')) {
+    return trimmed;
+  }
+  const bytes = new TextEncoder().encode(trimmed);
+  let encoded = '';
+  for (const byte of bytes) {
+    if (reminderFileUriEncodesByte(byte)) {
+      encoded += String.fromCharCode(byte);
+    } else {
+      encoded += `%${byte.toString(16).toUpperCase().padStart(2, '0')}`;
+    }
+  }
+  return `file://${encoded}`;
+}
+
 /** Decode a `file://` reminder note URI into an absolute filesystem path, or `null` if not one. */
 export function reminderFileUriToAbsolutePath(noteUri: string): string | null {
   let url: URL;

@@ -3,10 +3,36 @@ import {describe, expect, it} from 'vitest';
 import {mergeTodayRowColumns} from '@eskerra/core';
 
 import {
+  absolutePathToReminderFileUri,
   findTodayHubRowMatch,
   mapFullFileCaretToHubCellLineStart,
+  reminderFileUriToAbsolutePath,
   todayHubRowTitleForNoteUri,
 } from './reminderHubCellTarget';
+
+describe('absolutePathToReminderFileUri', () => {
+  it('prefixes a POSIX editor path with file://', () => {
+    expect(absolutePathToReminderFileUri('/vault/Inbox/a.md')).toBe(
+      'file:///vault/Inbox/a.md',
+    );
+  });
+
+  it('percent-encodes spaces and reserved path bytes like the daemon scanner', () => {
+    expect(absolutePathToReminderFileUri('/home/user/My Vault/Inbox/a#b?.md')).toBe(
+      'file:///home/user/My%20Vault/Inbox/a%23b%3F.md',
+    );
+  });
+
+  it('leaves an existing file:// URI unchanged', () => {
+    const uri = 'file:///home/user/My%20Vault/Inbox/a%23b%3F.md';
+    expect(absolutePathToReminderFileUri(uri)).toBe(uri);
+  });
+
+  it('round-trips with reminderFileUriToAbsolutePath', () => {
+    const path = '/home/user/My Vault/Inbox/a#b?.md';
+    expect(reminderFileUriToAbsolutePath(absolutePathToReminderFileUri(path))).toBe(path);
+  });
+});
 
 describe('findTodayHubRowMatch', () => {
   const hubs = ['/vault/Hub/Today.md', '/vault/Other/Today.md'];
