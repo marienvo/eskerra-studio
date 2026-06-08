@@ -397,11 +397,13 @@ export function TodayHubCanvas({
   const [hubDateTokenPicker, setHubDateTokenPicker] =
     useState<TodayHubDateTokenPillActivatePayload | null>(null);
   const hubDateTokenPickerRef = useRef(hubDateTokenPicker);
-  hubDateTokenPickerRef.current = hubDateTokenPicker;
   const remindersRef = useRef(reminders);
-  remindersRef.current = reminders;
   const onRemoveReminderRef = useRef(onRemoveReminder);
-  onRemoveReminderRef.current = onRemoveReminder;
+  useLayoutEffect(() => {
+    hubDateTokenPickerRef.current = hubDateTokenPicker;
+    remindersRef.current = reminders;
+    onRemoveReminderRef.current = onRemoveReminder;
+  }, [hubDateTokenPicker, reminders, onRemoveReminder]);
 
   const debounceTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{uri: string; columnCount: number} | null>(null);
@@ -877,7 +879,7 @@ export function TodayHubCanvas({
       );
       setHubDateTokenPicker(null);
     },
-    [applyTodayHubCellDateTokenReplace],
+    [applyTodayHubCellDateTokenReplace, setHubDateTokenPicker],
   );
 
   const noopMarkdownChange = useCallback(() => {}, []);
