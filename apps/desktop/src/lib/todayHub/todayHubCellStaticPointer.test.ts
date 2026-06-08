@@ -2,6 +2,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {
   isVisibleTodayHubStaticLinkTokenElement,
+  mapTodayHubStaticRenderedLineOffsetToDocOffset,
   todayHubStaticRichTextPointerHitsVisibleLinkToken,
 } from './todayHubCellStaticPointer';
 
@@ -67,5 +68,48 @@ describe('todayHubStaticRichTextPointerHitsVisibleLinkToken', () => {
     root.appendChild(link);
     vi.spyOn(root.ownerDocument, 'elementFromPoint').mockReturnValue(link);
     expect(todayHubStaticRichTextPointerHitsVisibleLinkToken(root, 0, 0)).toBe(true);
+  });
+});
+
+describe('mapTodayHubStaticRenderedLineOffsetToDocOffset', () => {
+  it('passes through 1:1 text when there are no pills', () => {
+    const line = document.createElement('div');
+    line.dataset.docLineFrom = '10';
+    line.textContent = 'hello world';
+    expect(mapTodayHubStaticRenderedLineOffsetToDocOffset(line, 0)).toBe(10);
+    expect(mapTodayHubStaticRenderedLineOffsetToDocOffset(line, 5)).toBe(15);
+    expect(mapTodayHubStaticRenderedLineOffsetToDocOffset(line, 11)).toBe(21);
+  });
+
+  it('maps rendered offsets through a date pill back to the raw token span', () => {
+    const line = document.createElement('div');
+    line.dataset.docLineFrom = '0';
+    const before = document.createTextNode('Meet ');
+    const pill = document.createElement('span');
+    pill.dataset.docFrom = '5';
+    pill.dataset.docTo = '15';
+    pill.textContent = '🔔 Today';
+    const after = document.createTextNode(' done');
+    line.append(before, pill, after);
+
+    const pillRenderedLen = pill.textContent!.length;
+    expect(mapTodayHubStaticRenderedLineOffsetToDocOffset(line, 5)).toBe(5);
+    expect(mapTodayHubStaticRenderedLineOffsetToDocOffset(line, 5 + pillRenderedLen)).toBe(15);
+    expect(mapTodayHubStaticRenderedLineOffsetToDocOffset(line, 5 + pillRenderedLen + 1)).toBe(16);
+  });
+
+  it('maps a click inside the pill proportionally within the source token', () => {
+    const line = document.createElement('div');
+    line.dataset.docLineFrom = '0';
+    const pill = document.createElement('span');
+    pill.dataset.docFrom = '0';
+    pill.dataset.docTo = '10';
+    pill.textContent = '🔔 Today';
+    line.appendChild(pill);
+
+    const midRendered = Math.floor(pill.textContent!.length / 2);
+    const mapped = mapTodayHubStaticRenderedLineOffsetToDocOffset(line, midRendered);
+    expect(mapped).toBeGreaterThanOrEqual(0);
+    expect(mapped).toBeLessThanOrEqual(10);
   });
 });

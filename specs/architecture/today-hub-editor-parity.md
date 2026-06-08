@@ -100,6 +100,12 @@ token pattern must be applied to **both** entry points.
 so date tokens showed as raw `@…` text until the cell was activated. Static rendering must replicate
 every CodeMirror **widget** decoration (pills, link preview cards), not just inline mark classes.
 
+**Click-to-edit offsets:** pill spans carry `data-doc-from` / `data-doc-to` (source token range in
+`cellText`). `mapTodayHubStaticRenderedLineOffsetToDocOffset` in
+[`todayHubCellStaticPointer.ts`](../../apps/desktop/src/lib/todayHub/todayHubCellStaticPointer.ts)
+rewrites pointer-derived offsets from rendered DOM length back to document offsets so activating a
+readonly cell places the caret on the raw `@date` token, not on the shorter pretty label.
+
 ## Debug checklist
 
 1. Compare `getComputedStyle(.cm-scroller)` vs `getComputedStyle(.today-hub-canvas__cell-static-rich)` for `font-size` and `line-height`.

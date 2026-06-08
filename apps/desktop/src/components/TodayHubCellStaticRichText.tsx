@@ -58,6 +58,7 @@ function useDateTokenPillMinuteClock(active: boolean): Date {
     if (!active) {
       return;
     }
+    setNow(new Date());
     let intervalId: ReturnType<typeof setInterval> | undefined;
     const msUntilNextMinute = MINUTE_TICK_MS - (Date.now() % MINUTE_TICK_MS);
     const timeoutId = setTimeout(() => {
@@ -378,6 +379,8 @@ export function TodayHubCellStaticRichText({
                         : CM_DATE_TOKEN_PILL_CLASS
                     }
                     data-date-token=""
+                    data-doc-from={part.from}
+                    data-doc-to={part.to}
                   >
                     {`${part.past ? '☑️' : '🔔'} ${part.label}`}
                   </span>
