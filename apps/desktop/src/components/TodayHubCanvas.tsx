@@ -590,6 +590,26 @@ export function TodayHubCanvas({
     }
   }, [cellEditorRef, columnCount, runRowPersist, todayHubCleanRowBlocked]);
 
+  const reloadLiveRowFromDisk = useCallback(
+    (diskBody: string) => {
+      const a = activeRef.current;
+      if (!a) {
+        return;
+      }
+      const key = normUri(a.uri);
+      const cols = splitTodayRowIntoColumns(diskBody, columnCount);
+      setLocalRowSections(prev => {
+        const next = {...prev, [key]: cols};
+        localRowSectionsRef.current = next;
+        return next;
+      });
+      cellEditorRef.current?.loadMarkdown(cols[a.col] ?? '', {
+        selection: 'preserve',
+      });
+    },
+    [cellEditorRef, columnCount],
+  );
+
   const openCell = useCallback(
     (uri: string, col: number, clickCaret: number | null = null) => {
       const key = normUri(uri);
@@ -771,6 +791,7 @@ export function TodayHubCanvas({
     const bridge = bridgeRef.current;
     const flushFn = flushScheduledPersist;
     const cleanFn = cleanHubPageDayColumns;
+    const reloadFn = reloadLiveRowFromDisk;
     bridge.flushPendingEdits = flushFn;
     bridge.hasPendingHubFlush = () =>
       debounceTimerRef.current != null || pendingPersistRef.current != null;
@@ -786,6 +807,7 @@ export function TodayHubCanvas({
         inboxContentByUriRef.current,
       );
     };
+    bridge.reloadLiveRowFromDisk = reloadFn;
     bridge.cleanHubPageDayColumns = cleanFn;
     const openReminderFn = openReminderCellFromBridge;
     bridge.openReminderCell = openReminderFn;
@@ -795,6 +817,7 @@ export function TodayHubCanvas({
         bridge.hasPendingHubFlush = () => false;
         bridge.getLiveRowUri = () => null;
         bridge.getLiveRowMergedMarkdown = () => null;
+        bridge.reloadLiveRowFromDisk = () => {};
       }
       if (bridge.cleanHubPageDayColumns === cleanFn) {
         bridge.cleanHubPageDayColumns = async () => {};
@@ -809,6 +832,7 @@ export function TodayHubCanvas({
     columnCount,
     flushScheduledPersist,
     cleanHubPageDayColumns,
+    reloadLiveRowFromDisk,
     openReminderCellFromBridge,
   ]);
 

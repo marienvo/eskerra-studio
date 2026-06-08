@@ -211,6 +211,53 @@ describe('TodayHubCanvas — disk truth for non-active week rows', () => {
     });
   });
 
+  it('reloads the active cell editor from disk through the workspace bridge', async () => {
+    const rowUri = currentWeekRowUri();
+    const {bridgeRef} = renderCanvas({[rowUri]: 'first body'});
+
+    await waitFor(() => {
+      expect(staticCellWithText('first body')).not.toBeNull();
+    });
+    await openRow('first body');
+    await waitFor(() => {
+      expect(activeCellEditorDoc()).toBe('first body');
+    });
+
+    await act(async () => {
+      bridgeRef.current.reloadLiveRowFromDisk('disk body');
+    });
+
+    await waitFor(() => {
+      expect(activeCellEditorDoc()).toBe('disk body');
+    });
+  });
+
+  it('keeps active local edits when an external cache update arrives without a live reload', async () => {
+    const rowUri = currentWeekRowUri();
+    const {rerenderWith} = renderCanvas({[rowUri]: 'disk content'});
+
+    await waitFor(() => {
+      expect(staticCellWithText('disk content')).not.toBeNull();
+    });
+    await openRow('disk content');
+    await waitFor(() => {
+      expect(activeCellEditorDoc()).toBe('disk content');
+    });
+
+    await act(async () => {
+      setActiveCellEditorText('local edits');
+    });
+    await waitFor(() => {
+      expect(activeCellEditorDoc()).toBe('local edits');
+    });
+
+    await act(async () => {
+      rerenderWith({[rowUri]: 'external disk content'});
+    });
+
+    expect(activeCellEditorDoc()).toBe('local edits');
+  });
+
   it('keeps unsaved row preview after a failed persist when the cell is closed', async () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     try {
