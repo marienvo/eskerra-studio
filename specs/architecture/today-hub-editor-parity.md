@@ -74,6 +74,32 @@ React component. The two entry points are:
 1. `LinkRichPreviewWidget.toDOM()` — imperative DOM build in `linkRichPreviewCodemirror.ts`
 2. `LinkRichPreviewCard` — declarative React in `LinkRichPreviewCard.tsx`
 
+## Reminder pill parity
+
+Date tokens (`@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM`) render as a pretty pill (`🔔 Tomorrow 12:00`,
+or `☑️ …` once past) on any **non-focused** line. Both modes must show the pill:
+
+- **Edit mode:** `dateTokenHighlightExtensions()` in
+  [`dateTokenHighlightCodemirror.ts`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenHighlightCodemirror.ts)
+  replaces the token with a `DateTokenPillWidget` on lines without the caret.
+- **Read mode:** `TodayHubCellStaticRichText` calls
+  [`todayHubStaticLineParts()`](../../apps/desktop/src/lib/todayHub/todayHubCellStaticDateTokenPill.ts)
+  per line and renders a `cm-date-token-pill` span in place of the raw token segments.
+
+Both share the pill classes (`cm-date-token-pill`, `cm-date-token-pill--past`) and CSS in
+[`dateTokenHighlight.css`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenHighlight.css),
+and the same label/past helpers (`formatDateTokenPretty`, `isDateTokenInPast`). Read mode runs an
+aligned **minute clock** (only when the cell contains a pill) so labels relabel and flip past on the
+same cadence as the editor.
+
+**Rule:** the read-mode pill placement (`collectDateTokenPillsForLine`) must mirror CodeMirror's
+`collectDateTokenRangesForLine` token detection; any change to the pill label, glyphs, classes, or
+token pattern must be applied to **both** entry points.
+
+**Pitfall (the bug this fixed):** read mode previously rendered only the Lezer/wiki/link segments,
+so date tokens showed as raw `@…` text until the cell was activated. Static rendering must replicate
+every CodeMirror **widget** decoration (pills, link preview cards), not just inline mark classes.
+
 ## Debug checklist
 
 1. Compare `getComputedStyle(.cm-scroller)` vs `getComputedStyle(.today-hub-canvas__cell-static-rich)` for `font-size` and `line-height`.
