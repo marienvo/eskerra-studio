@@ -39,3 +39,7 @@ export {
   hubCellWarmKey,
   touchWarmLru,
 } from './todayHubWarmLru';
+export {
+  retainTodayHubLocalRowSections,
+  type TodayHubLocalRowSections,
+} from './todayHubLocalRowSections';

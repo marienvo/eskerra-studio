@@ -153,7 +153,7 @@ export type UseTodayHubsStateResult = {
     rowUri: string,
     merged: string,
     columnCount: number,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   todayHubCleanRowBlocked: (rowUri: string) => boolean;
   syncShadowWorkspaceFromShellRestore: (
     projection: ShellRestoreProjectionSyncArgs,

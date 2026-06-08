@@ -179,7 +179,7 @@ export type VaultTabTodayHubController = {
     rowUri: string,
     mergedMarkdown: string,
     columnCount: number,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   /** Skip hub row clean when this returns true (e.g. disk conflict on that week file). */
   todayHubCleanRowBlocked?: (rowUri: string) => boolean;
 };

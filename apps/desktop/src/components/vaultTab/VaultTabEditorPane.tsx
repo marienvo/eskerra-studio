@@ -63,7 +63,7 @@ type VaultTabEditorPaneProps = {
   todayHubWikiNavParentRef: MutableRefObject<string | null>;
   todayHubCellEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   prehydrateTodayHubRows: (rowUris: readonly string[]) => Promise<void>;
-  persistTodayHubRow: (rowUri: string, mergedMarkdown: string, columnCount: number) => Promise<void>;
+  persistTodayHubRow: (rowUri: string, mergedMarkdown: string, columnCount: number) => Promise<boolean>;
   todayHubCleanRowBlocked?: (rowUri: string) => boolean;
   linkSnippetBlockedDomains?: VaultTabLinkController['linkSnippetBlockedDomains'];
   onMuteLinkSnippetDomain?: VaultTabLinkController['onMuteLinkSnippetDomain'];

@@ -137,7 +137,7 @@ describe('todayHubRowPersist', () => {
     const todayHubRowLastPersistedRef = ref(new Map<string, string>());
     const saveActiveRef = ref(false);
     const saveChainRef = ref(Promise.resolve());
-    await enqueuePersistTodayHubRowOnSaveChain(rowUri, '| hello |', 1, {
+    const ok = await enqueuePersistTodayHubRowOnSaveChain(rowUri, '| hello |', 1, {
       ...makeDeps({
         vaultRootRef: ref('/vault'),
         todayHubRowLastPersistedRef,
@@ -146,6 +146,7 @@ describe('todayHubRowPersist', () => {
       saveChainRef,
     });
 
+    expect(ok).toBe(true);
     expect(vaultBootstrap.saveNoteMarkdown).toHaveBeenCalled();
     expect(todayHubRowLastPersistedRef.current.get(norm)).toBeDefined();
   });
@@ -155,12 +156,13 @@ describe('todayHubRowPersist', () => {
     const setErr = vi.fn();
     const saveActiveRef = ref(false);
     const saveChainRef = ref(Promise.resolve());
-    await enqueuePersistTodayHubRowOnSaveChain('/vault/Hub/Row.md', '| hello |', 1, {
+    const ok = await enqueuePersistTodayHubRowOnSaveChain('/vault/Hub/Row.md', '| hello |', 1, {
       ...makeDeps({vaultRootRef: ref('/vault'), setErr}),
       saveActiveRef,
       saveChainRef,
     });
 
+    expect(ok).toBe(false);
     expect(setErr).toHaveBeenCalledWith('disk');
   });
 
@@ -179,7 +181,7 @@ describe('todayHubRowPersist', () => {
     const setInboxContentByUri = vi.fn();
     const saveActiveRef = ref(false);
     const saveChainRef = ref(Promise.resolve());
-    await enqueuePersistTodayHubRowOnSaveChain(rowUri, '  \n', 1, {
+    const ok = await enqueuePersistTodayHubRowOnSaveChain(rowUri, '  \n', 1, {
       ...makeDeps({
         fs,
         vaultRootRef: ref('/vault'),
@@ -190,6 +192,7 @@ describe('todayHubRowPersist', () => {
       saveChainRef,
     });
 
+    expect(ok).toBe(true);
     expect(vaultBootstrap.deleteVaultMarkdownNote).toHaveBeenCalled();
     expect(vaultBootstrap.saveNoteMarkdown).not.toHaveBeenCalled();
     expect(setInboxContentByUri).toHaveBeenCalled();
