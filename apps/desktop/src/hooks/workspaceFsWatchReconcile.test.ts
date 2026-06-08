@@ -271,6 +271,46 @@ describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — home-navigated page'
     );
   });
 
+  it('reconciles the open Today hub note (home mode) from disk', async () => {
+    // The active Today hub note opens in "home" mode (no editor tab) and is not in the tab
+    // strip. It must still reload from disk on an external change — the week-row reconcile
+    // only covers YYYY-MM-DD.md row files, never Today.md itself.
+    const rewrittenDiskBody = '# Today\n- updated externally';
+    const fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn().mockResolvedValue(rewrittenDiskBody + '\n'),
+    } as unknown as ReconcileFsOpenMarkdownEnv['fs'];
+
+    const loadFullMarkdownIntoInboxEditor = vi.fn();
+
+    const env = minimalEnv({
+      editorWorkspaceTabsRef: {
+        current: [{id: 't1', history: {entries: [RENAMED_TAB], index: 0}}],
+      },
+      activeEditorTabIdRef: {current: null},
+      selectedUriRef: {current: HUB},
+      syncWorkspaceModelRemoveOpenTabUri: vi.fn(),
+      fs,
+      vaultRootRef: {current: '/vault'},
+      loadFullMarkdownIntoInboxEditor,
+      lastPersistedRef: {current: null},
+      inboxContentByUriRef: {current: {}},
+    });
+
+    await reconcileOpenNotesAfterFsChangeFromVaultWatch(
+      env,
+      minimalTodayEnv(),
+      [HUB],
+      vi.fn(),
+    );
+
+    expect(loadFullMarkdownIntoInboxEditor).toHaveBeenCalledWith(
+      rewrittenDiskBody,
+      HUB,
+      'preserve',
+    );
+  });
+
   it('does not reconcile the home-navigated URI when an editor tab is active', async () => {
     // Active surface is a tab — home page URI must not be double-reconciled.
     const loadFullMarkdownIntoInboxEditor = vi.fn();

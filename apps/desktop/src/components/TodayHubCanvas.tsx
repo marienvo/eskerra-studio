@@ -43,6 +43,7 @@ import {
   todayHubRowUri,
   todayHubWeekEndInclusive,
   todayHubWeekProgress,
+  retainTodayHubLocalRowSections,
   touchWarmLru,
   type TodayHubWorkspaceBridge,
   type TodayHubSettings,
@@ -380,6 +381,8 @@ export function TodayHubCanvas({
 
   const debounceTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{uri: string; columnCount: number} | null>(null);
+  /** Row URI whose persist is awaiting completion; kept out of the prune so we never drop in-flight edits. */
+  const inFlightPersistUriRef = useRef<string | null>(null);
   const inboxContentByUriRef = useRef(inboxContentByUri);
   const localRowSectionsRef = useRef<Record<string, string[]>>({});
   /** Latest hub cell focus request: monotonic gen + optional caret (consumed by focus effect). */
@@ -401,6 +404,35 @@ export function TodayHubCanvas({
     void prehydrateTodayHubRows(rowUris);
   }, [prehydrateTodayHubRows, rowUris]);
 
+  // `localRowSections` is authoritative only for the active row (or one mid-persist); other
+  // rows must fall back to `inboxContentByUri` (disk truth). Without pruning, a row opened once
+  // stays pinned to its last in-memory sections forever — shadowing reconciled disk changes in
+  // the preview and letting Ctrl+E clean re-persist stale content over an external edit. `merged`
+  // is captured synchronously before each persist `await`, so retained rows never lose edits.
+  const pruneInactiveLocalRowSections = useCallback(() => {
+    setLocalRowSections(prev => {
+      const retain = new Set(
+        [
+          activeRef.current?.uri,
+          pendingPersistRef.current?.uri,
+          inFlightPersistUriRef.current,
+        ].filter((u): u is string => u != null),
+      );
+      const next = retainTodayHubLocalRowSections(prev, retain);
+      if (next === prev) {
+        return prev;
+      }
+      localRowSectionsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  // External-disk-change trigger: reconcile writing a row body into `inboxContentByUri` (or an
+  // active-cell change) drops stale non-active sections so the preview re-renders from disk.
+  useEffect(() => {
+    pruneInactiveLocalRowSections();
+  }, [inboxContentByUri, active, pruneInactiveLocalRowSections]);
+
   const getSections = useCallback(
     (uri: string): string[] => {
       const key = normUri(uri);
@@ -411,6 +443,22 @@ export function TodayHubCanvas({
       return splitTodayRowIntoColumns(raw, columnCount);
     },
     [localRowSections, inboxContentByUri, columnCount],
+  );
+
+  /** Persist a row, tracking it as in-flight so the prune never drops a mid-write buffer. */
+  const runRowPersist = useCallback(
+    async (uri: string, merged: string, cc: number) => {
+      inFlightPersistUriRef.current = uri;
+      try {
+        await persistTodayHubRow(uri, merged, cc);
+      } finally {
+        if (inFlightPersistUriRef.current === uri) {
+          inFlightPersistUriRef.current = null;
+        }
+        pruneInactiveLocalRowSections();
+      }
+    },
+    [persistTodayHubRow, pruneInactiveLocalRowSections],
   );
 
   const flushScheduledPersist = useCallback(async () => {
@@ -427,9 +475,9 @@ export function TodayHubCanvas({
         localRowSectionsRef.current,
         inboxContentByUriRef.current,
       );
-      await persistTodayHubRow(pending.uri, merged, pending.columnCount);
+      await runRowPersist(pending.uri, merged, pending.columnCount);
     }
-  }, [persistTodayHubRow]);
+  }, [runRowPersist]);
 
   const schedulePersist = useCallback(
     (uri: string) => {
@@ -451,11 +499,11 @@ export function TodayHubCanvas({
             localRowSectionsRef.current,
             inboxContentByUriRef.current,
           );
-          await persistTodayHubRow(p.uri, merged, p.columnCount);
+          await runRowPersist(p.uri, merged, p.columnCount);
         })();
       }, INBOX_AUTOSAVE_DEBOUNCE_MS);
     },
-    [columnCount, persistTodayHubRow],
+    [columnCount, runRowPersist],
   );
 
   const cleanHubPageDayColumns = useCallback(async () => {

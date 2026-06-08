@@ -30,7 +30,6 @@ import {
   type EditorWorkspaceTab,
 } from '../lib/editorWorkspaceTabs';
 import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
-import {vaultUriIsTodayMarkdownFile} from '../lib/vaultTreeLoadChildren';
 import {
   clearInboxYamlFrontmatterEditorRefs,
 } from '../lib/inboxYamlFrontmatterEditor';
@@ -312,11 +311,14 @@ export async function reconcileOpenNotesAfterFsChangeFromVaultWatch(
   // Include the home-navigated page URI when no editor tab is active: a note open via workspace
   // home navigation is not in the tab strip but is still displayed in the editor and must be
   // reconciled like any open tab (e.g. wiki-link rename rewrites its file on disk).
+  // This includes the open Today hub note (`Today.md`): it is the main editor's document but
+  // opens in "home" mode (no editor tab), and the week-row reconcile below only handles the
+  // `YYYY-MM-DD.md` row files — never the hub note itself — so without this it would never
+  // reload from disk and the in-memory body could be autosaved back over an external edit.
   const homePageUri =
     !open.composingNewEntryRef.current &&
     open.activeEditorTabIdRef.current === null &&
     open.selectedUriRef.current &&
-    !vaultUriIsTodayMarkdownFile(open.selectedUriRef.current) &&
     !tabNorms.has(normalizeEditorDocUri(open.selectedUriRef.current))
       ? open.selectedUriRef.current
       : null;

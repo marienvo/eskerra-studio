@@ -7,7 +7,7 @@
     "apps/desktop/src/lib/markdown/cleanNote/tokenProtection.ts"
   ],
   "allowedSonarjsEslintDisableFingerprints": [
-    "apps/desktop/src/components/TodayHubCanvas.tsx:830:sonarjs/cognitive-complexity",
+    "apps/desktop/src/components/TodayHubCanvas.tsx:878:sonarjs/cognitive-complexity",
     "apps/desktop/src/editor/noteEditor/eskerraTableV1/EskerraTableShell.tsx:485:sonarjs/no-invariant-returns",
     "apps/desktop/src/editor/noteEditor/eskerraTableV1/EskerraTableShell.tsx:526:sonarjs/no-invariant-returns",
     "apps/desktop/src/editor/noteEditor/noteMarkdownLinkInsert.ts:12:sonarjs/no-invariant-returns",
