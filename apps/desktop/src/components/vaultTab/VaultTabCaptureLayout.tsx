@@ -184,7 +184,12 @@ export function VaultTabCaptureLayout({
     onEditorHistoryGoForward,
   } = tabsController;
 
-  const {notificationsPanelVisible, onToggleNotificationsPanel} = notificationsController;
+  const {
+    notificationsPanelVisible,
+    onToggleNotificationsPanel,
+    reminders,
+    onRemoveReminder,
+  } = notificationsController;
   const {playbackTransport, toolbarNowPlaying, episodesPane} = playbackController;
   const {vaultTreeSelectionClearNonce} = treeController;
   const {
@@ -383,6 +388,8 @@ export function VaultTabCaptureLayout({
                       todayHubCleanRowBlocked={todayHubCleanRowBlocked}
                       linkSnippetBlockedDomains={linkSnippetBlockedDomains}
                       onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+                      reminders={reminders}
+                      onRemoveReminder={onRemoveReminder}
                     />
                   ) : (
                     <p className="muted empty-hint">

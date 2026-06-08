@@ -106,9 +106,14 @@ describe('useReminderPane.removeReminder', () => {
 
   it('drops the row on a successful `removed` result', async () => {
     const {result} = await renderWithReminder('removed');
+    let removeResult: string | undefined;
     await act(async () => {
-      await result.current.removeReminder('file:///vault/a.md', 'rem-1');
+      removeResult = await result.current.removeReminder(
+        'file:///vault/a.md',
+        'rem-1',
+      );
     });
+    expect(removeResult).toBe('removed');
     expect(result.current.rows).toHaveLength(0);
   });
 

@@ -97,9 +97,11 @@ same cadence as the editor.
 **Read-mode picker:** clicking a pill in an inactive cell opens the shared
 [`DateTokenPickerOverlay`](../../apps/desktop/src/editor/noteEditor/dateToken/DateTokenPickerOverlay.tsx)
 (portaled picker). `pointerdown` on the pill calls `stopPropagation()` so the cell does not also
-activate. Confirm splices the token via `applyTodayHubCellDateTokenReplace` (updates
-`localRowSections` without opening the cell) and `schedulePersist`. Pill `data-doc-from` /
-`data-doc-to` cover the **full** struck span (`@~~…~~`), not the inner date.
+activate. Date/time confirm splices the token via `applyTodayHubCellDateTokenReplace`
+(updates `localRowSections` without opening the cell) and `schedulePersist`. Checking
+**Completed** routes through `RemoveReminder` IPC (same single-writer path as the inbox
+editor and Notifications pane); the hub never writes `@~~…~~` locally on strike. Pill
+`data-doc-from` / `data-doc-to` cover the **full** struck span (`@~~…~~`), not the inner date.
 
 **Rule:** the read-mode pill placement (`collectDateTokenPillsForLine`) must mirror CodeMirror's
 `collectDateTokenRangesForLine` token detection; any change to the pill label, glyphs, classes, or

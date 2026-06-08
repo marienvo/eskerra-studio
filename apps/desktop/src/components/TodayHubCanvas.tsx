@@ -59,8 +59,11 @@ import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,
 } from '../editor/noteEditor/vaultLinkActivatePayload';
+import type {ReminderRemoveResult} from '../hooks/useReminderPane';
+import type {Reminder} from '../lib/reminderIndex';
+import {requestReminderStrikeViaDaemon} from '../lib/reminderTokenLookup';
 import {DateTokenPickerOverlay} from '../editor/noteEditor/dateToken/DateTokenPickerOverlay';
-import {formatDateToken} from '../editor/noteEditor/dateToken/dateToken';
+import {formatDateToken, type DateTokenValue} from '../editor/noteEditor/dateToken/dateToken';
 import {
   TodayHubCellStaticRichText,
   type TodayHubDateTokenPillActivatePayload,
@@ -101,6 +104,11 @@ type TodayHubCanvasProps = {
   todayHubCleanRowBlocked?: (rowUri: string) => boolean;
   linkSnippetBlockedDomains?: ReadonlyArray<string>;
   onMuteLinkSnippetDomain?: (domain: string) => void;
+  reminders: readonly Reminder[];
+  onRemoveReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
 };
 
 function normUri(u: string): string {
@@ -304,6 +312,8 @@ export function TodayHubCanvas({
   todayHubCleanRowBlocked,
   linkSnippetBlockedDomains,
   onMuteLinkSnippetDomain,
+  reminders,
+  onRemoveReminder,
 }: TodayHubCanvasProps) {
   const hubDirectoryUri = useMemo(
     () => normUri(todayNoteUri).replace(/\/[^/]+$/, ''),
@@ -385,6 +395,12 @@ export function TodayHubCanvas({
   );
   const [hubDateTokenPicker, setHubDateTokenPicker] =
     useState<TodayHubDateTokenPillActivatePayload | null>(null);
+  const hubDateTokenPickerRef = useRef(hubDateTokenPicker);
+  hubDateTokenPickerRef.current = hubDateTokenPicker;
+  const remindersRef = useRef(reminders);
+  remindersRef.current = reminders;
+  const onRemoveReminderRef = useRef(onRemoveReminder);
+  onRemoveReminderRef.current = onRemoveReminder;
 
   const debounceTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{uri: string; columnCount: number} | null>(null);
@@ -814,6 +830,50 @@ export function TodayHubCanvas({
     [columnCount, schedulePersist],
   );
 
+  const hubDateTokenStrikeRequest = useCallback(async () => {
+    const picker = hubDateTokenPickerRef.current;
+    if (!picker) {
+      return 'not-found' as const;
+    }
+    const key = normUri(picker.uri);
+    const sections =
+      localRowSectionsRef.current[key]
+      ?? splitTodayRowIntoColumns(
+        inboxContentByUriRef.current[key] ?? '',
+        columnCount,
+      );
+    const cellText = sections[picker.col] ?? '';
+    return requestReminderStrikeViaDaemon(
+      remindersRef.current,
+      picker.uri,
+      cellText,
+      picker.from,
+      picker.initialValue,
+      onRemoveReminderRef.current,
+    );
+  }, [columnCount]);
+
+  const hubDateTokenConfirm = useCallback(
+    (value: DateTokenValue) => {
+      const picker = hubDateTokenPickerRef.current;
+      if (!picker) {
+        return;
+      }
+      if (value.struck && !picker.initialValue.struck) {
+        return;
+      }
+      applyTodayHubCellDateTokenReplace(
+        picker.uri,
+        picker.col,
+        picker.from,
+        picker.to,
+        formatDateToken(value),
+      );
+      setHubDateTokenPicker(null);
+    },
+    [applyTodayHubCellDateTokenReplace],
+  );
+
   const noopMarkdownChange = useCallback(() => {}, []);
 
   const closeEmptyActiveCellIfStillEmpty = useCallback(
@@ -1059,6 +1119,8 @@ export function TodayHubCanvas({
                       busy={false}
                       linkSnippetBlockedDomains={linkSnippetBlockedDomains}
                       onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
+                      reminders={reminders}
+                      onRemoveReminder={onRemoveReminder}
                     />
                   );
 
@@ -1120,16 +1182,8 @@ export function TodayHubCanvas({
       <DateTokenPickerOverlay
         anchorRect={hubDateTokenPicker.anchorRect}
         initialValue={hubDateTokenPicker.initialValue}
-        onConfirm={value => {
-          applyTodayHubCellDateTokenReplace(
-            hubDateTokenPicker.uri,
-            hubDateTokenPicker.col,
-            hubDateTokenPicker.from,
-            hubDateTokenPicker.to,
-            formatDateToken(value),
-          );
-          setHubDateTokenPicker(null);
-        }}
+        onConfirm={hubDateTokenConfirm}
+        onStrikeRequest={hubDateTokenStrikeRequest}
         onCancel={() => setHubDateTokenPicker(null)}
       />
     ) : null}

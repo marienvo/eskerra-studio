@@ -16,6 +16,7 @@ export function useDateTimePicker({
   initialValue,
   onConfirm,
   onReturnFocus,
+  onStrikeRequest,
   now,
 }: DateTimePickerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -120,11 +121,26 @@ export function useDateTimePicker({
 
   const setStruckWithCommit = useCallback(
     (value: boolean) => {
-      setStruck(value);
-      commitValue(selected, {struck: value});
+      if (value) {
+        void (async () => {
+          if (!onStrikeRequest) {
+            return;
+          }
+          const result = await onStrikeRequest();
+          if (result === 'removed') {
+            setStruck(true);
+            onReturnFocus?.();
+            return;
+          }
+          setStruck(false);
+        })();
+        return;
+      }
+      setStruck(false);
+      commitValue(selected, {struck: false});
       onReturnFocus?.();
     },
-    [commitValue, onReturnFocus, selected],
+    [commitValue, onReturnFocus, onStrikeRequest, selected],
   );
 
   return {

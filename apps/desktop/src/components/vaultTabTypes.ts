@@ -10,7 +10,9 @@ import type {
   VaultMarkdownRef,
 } from '@eskerra/core';
 
+import type {ReminderRemoveResult} from '../hooks/useReminderPane';
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import type {Reminder} from '../lib/reminderIndex';
 import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,
@@ -193,8 +195,13 @@ export type VaultTabNotificationsController = {
   onClearAllNotifications: () => void;
   /** True when any reminder is due (now ≥ dueAtMs); drives the rail dot. */
   hasDueReminders: boolean;
+  /** Raw daemon index for date-picker strike lookup. */
+  reminders: readonly Reminder[];
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
-  onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onRemoveReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
   onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 

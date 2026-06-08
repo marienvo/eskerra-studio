@@ -54,6 +54,8 @@ function renderCanvas(
     onSaveShortcut: vi.fn(),
     prehydrateTodayHubRows,
     persistTodayHubRow,
+    reminders: [],
+    onRemoveReminder: vi.fn(async () => 'removed' as const),
   };
 
   const utils = render(

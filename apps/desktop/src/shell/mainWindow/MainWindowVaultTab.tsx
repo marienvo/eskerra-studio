@@ -4,6 +4,8 @@ import type {ComponentProps, RefObject} from 'react';
 import {EpisodesPane} from '../../components/EpisodesPane';
 import {VaultTab} from '../../components/VaultTab';
 import type {NoteMarkdownEditorHandle} from '../../editor/noteEditor/NoteMarkdownEditor';
+import type {ReminderRemoveResult} from '../../hooks/useReminderPane';
+import type {Reminder} from '../../lib/reminderIndex';
 import type {PaneNotification} from '../../lib/reminderPane';
 import type {UseMainWindowWorkspaceResult} from '../../hooks/useMainWindowWorkspace';
 import type {StoredLayouts} from '../../lib/layout/layoutStore';
@@ -34,8 +36,12 @@ type MainWindowVaultTabProps = {
   dismissNotification: (id: string) => void;
   clearAllNotifications: () => void;
   hasDueReminders: boolean;
+  reminders: readonly Reminder[];
   onOpenReminder: (noteUri: string, reminderId: string, uiCaretHint?: number) => void;
-  onRemoveReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  onRemoveReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
   onSnoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
   playbackTransport: ComponentProps<typeof VaultTab>['playbackController']['playbackTransport'];
   toolbarNowPlaying: ComponentProps<typeof VaultTab>['playbackController']['toolbarNowPlaying'];
@@ -81,6 +87,7 @@ export function MainWindowVaultTab({
   dismissNotification,
   clearAllNotifications,
   hasDueReminders,
+  reminders,
   onOpenReminder,
   onRemoveReminder,
   onSnoozeReminder,
@@ -243,6 +250,7 @@ export function MainWindowVaultTab({
         onDismissNotification: dismissNotification,
         onClearAllNotifications: clearAllNotifications,
         hasDueReminders,
+        reminders,
         onOpenReminder,
         onRemoveReminder,
         onSnoozeReminder,
