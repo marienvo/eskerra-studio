@@ -1,6 +1,14 @@
 import {ensureSyntaxTree} from '@codemirror/language';
 import type {EditorState} from '@codemirror/state';
-import {useMemo, type MutableRefObject, type PointerEvent, type ReactElement} from 'react';
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useState,
+  type MutableRefObject,
+  type PointerEvent,
+  type ReactElement,
+} from 'react';
 
 import {isBrowserOpenableMarkdownHref, wikiLinkInnerBrowserOpenableHref} from '@eskerra/core';
 
@@ -12,6 +20,14 @@ import {
   buildTodayHubCellStaticViewModel,
   clipSegmentsToRange,
 } from '../lib/todayHub/todayHubCellStaticView';
+import {
+  cellTextHasDateTokenPill,
+  todayHubStaticLineParts,
+} from '../lib/todayHub/todayHubCellStaticDateTokenPill';
+import {
+  CM_DATE_TOKEN_PILL_CLASS,
+  CM_DATE_TOKEN_PILL_PAST_CLASS,
+} from '../editor/noteEditor/dateToken/dateTokenHighlightCodemirror';
 import {parseLoneLinkLine} from '../lib/parseLoneLinkLine';
 import {LinkRichPreviewCard} from './LinkRichPreviewCard';
 import {
@@ -28,6 +44,42 @@ import type {
 } from '../editor/noteEditor/vaultLinkActivatePayload';
 
 const HIT_TREE_MS = 200;
+
+const MINUTE_TICK_MS = 60_000;
+
+/**
+ * Returns a `now` that advances on aligned minute boundaries while `active`, so read-mode reminder
+ * pills relabel (`Today` → `Tomorrow`) and flip past (🔔 → ☑️) on the same cadence as the CodeMirror
+ * editor's clock. Stays static when the cell has no pills, so pill-free cells never schedule timers.
+ */
+function useDateTokenPillMinuteClock(active: boolean): Date {
+  const [now, setNow] = useState(() => new Date());
+  const [prevActive, setPrevActive] = useState(active);
+  if (active !== prevActive) {
+    setPrevActive(active);
+    if (active) {
+      setNow(new Date());
+    }
+  }
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    const msUntilNextMinute = MINUTE_TICK_MS - (Date.now() % MINUTE_TICK_MS);
+    const timeoutId = setTimeout(() => {
+      setNow(new Date());
+      intervalId = setInterval(() => setNow(new Date()), MINUTE_TICK_MS);
+    }, msUntilNextMinute);
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId !== undefined) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [active]);
+  return now;
+}
 
 function hostnameOf(url: string): string {
   try {
@@ -258,6 +310,12 @@ export function TodayHubCellStaticRichText({
     [cellText, noteRefs, rowUri, vaultRoot],
   );
 
+  const hasDateTokenPills = useMemo(
+    () => cellTextHasDateTokenPill(cellText),
+    [cellText],
+  );
+  const now = useDateTokenPillMinuteClock(hasDateTokenPills);
+
   if (cellText.length === 0) {
     return null;
   }
@@ -305,20 +363,46 @@ export function TodayHubCellStaticRichText({
 
           const rangeEnd = line.from + line.text.length;
           const lineSegments = clipSegmentsToRange(segments, line.from, rangeEnd);
+          const parts = todayHubStaticLineParts(
+            line.from,
+            line.text,
+            lineSegments,
+            now,
+          );
           return (
             <div
               key={line.from}
               className={line.lineClassName}
               data-doc-line-from={line.from}
             >
-              {lineSegments.map((seg, i) => (
-                <span
-                  key={`${line.from}-${seg.from}-${seg.to}-${i}-${seg.className}`}
-                  className={seg.className || undefined}
-                >
-                  {cellText.slice(seg.from, seg.to)}
-                </span>
-              ))}
+              {parts.map((part, pi) =>
+                part.kind === 'date-pill' ? (
+                  <span
+                    key={`pill-${part.from}-${part.to}`}
+                    className={
+                      part.past
+                        ? `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`
+                        : CM_DATE_TOKEN_PILL_CLASS
+                    }
+                    data-date-token=""
+                    data-doc-from={part.from}
+                    data-doc-to={part.to}
+                  >
+                    {`${part.past ? '☑️' : '🔔'} ${part.label}`}
+                  </span>
+                ) : (
+                  <Fragment key={`seg-${pi}`}>
+                    {part.segments.map((seg, i) => (
+                      <span
+                        key={`${line.from}-${seg.from}-${seg.to}-${i}-${seg.className}`}
+                        className={seg.className || undefined}
+                      >
+                        {cellText.slice(seg.from, seg.to)}
+                      </span>
+                    ))}
+                  </Fragment>
+                ),
+              )}
             </div>
           );
         })}

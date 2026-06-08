@@ -215,6 +215,73 @@ function utf16OffsetFromPointerLegacy(
   return null;
 }
 
+/**
+ * Map a UTF-16 offset within a line's **rendered** text (DOM `textContent` walk order) to the
+ * document offset in `cellText`. Reminder pills use shorter pretty labels than the raw `@date`
+ * token; `data-doc-from` / `data-doc-to` on those spans preserve click-to-edit caret placement.
+ */
+export function mapTodayHubStaticRenderedLineOffsetToDocOffset(
+  lineEl: HTMLElement,
+  renderedOffset: number,
+): number {
+  const lineFrom = Number(lineEl.dataset.docLineFrom);
+  let rendered = 0;
+  let source = lineFrom;
+
+  const hitInText = (len: number): number | null => {
+    if (renderedOffset < rendered + len) {
+      return source + (renderedOffset - rendered);
+    }
+    rendered += len;
+    source += len;
+    return null;
+  };
+
+  const walk = (node: Node): number | null => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return hitInText((node as Text).length);
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return null;
+    }
+    const el = node as HTMLElement;
+    const docFromRaw = el.dataset.docFrom;
+    const docToRaw = el.dataset.docTo;
+    if (docFromRaw != null && docToRaw != null) {
+      const docFrom = Number(docFromRaw);
+      const docTo = Number(docToRaw);
+      const renderedLen = el.textContent?.length ?? 0;
+      if (renderedOffset < rendered + renderedLen) {
+        const rel = renderedOffset - rendered;
+        const docLen = docTo - docFrom;
+        if (renderedLen === 0 || docLen === 0) {
+          return docFrom;
+        }
+        const mapped = Math.round((rel / renderedLen) * docLen);
+        return docFrom + Math.min(mapped, docLen);
+      }
+      rendered += renderedLen;
+      source = docTo;
+      return null;
+    }
+    for (const child of el.childNodes) {
+      const hit = walk(child);
+      if (hit != null) {
+        return hit;
+      }
+    }
+    return null;
+  };
+
+  for (const child of lineEl.childNodes) {
+    const hit = walk(child);
+    if (hit != null) {
+      return hit;
+    }
+  }
+  return source;
+}
+
 /** UTF-16 document offset for a primary click inside the static hub cell (for opening edit at the same place). */
 export function todayHubStaticCellDocOffsetFromPointer(
   root: HTMLElement,
@@ -225,18 +292,15 @@ export function todayHubStaticCellDocOffsetFromPointer(
   for (const el of lineEls) {
     const fromRange = localOffsetInLineFromCaretRange(el, clientX, clientY);
     if (fromRange != null) {
-      const from = Number(el.dataset.docLineFrom);
-      return from + fromRange;
+      return mapTodayHubStaticRenderedLineOffsetToDocOffset(el, fromRange);
     }
     const fromLegacy = utf16OffsetFromPointerLegacy(el, clientX, clientY);
     if (fromLegacy != null) {
-      const from = Number(el.dataset.docLineFrom);
-      return from + fromLegacy;
+      return mapTodayHubStaticRenderedLineOffsetToDocOffset(el, fromLegacy);
     }
     const fromGeom = localOffsetInLineFromCaretGeometry(el, clientX, clientY);
     if (fromGeom != null) {
-      const from = Number(el.dataset.docLineFrom);
-      return from + fromGeom;
+      return mapTodayHubStaticRenderedLineOffsetToDocOffset(el, fromGeom);
     }
   }
   return null;
