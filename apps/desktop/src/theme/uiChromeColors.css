@@ -27,6 +27,26 @@ html[data-ui-chrome='light']
   --color-shell-hover-bg: rgba(15, 23, 42, 0.07);
 }
 
+/* Pressed pane toggles: light palette[0] + white mixes read nearly white-on-white. */
+html[data-ui-chrome='light']
+  [data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--vault-on:not(:disabled),
+html[data-ui-chrome='light']
+  [data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--episodes-on:not(:disabled),
+html[data-ui-chrome='light']
+  [data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--inbox-on:not(:disabled),
+html[data-ui-chrome='light']
+  [data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--notifications-on:not(:disabled) {
+  color: color-mix(in srgb, var(--color-app-chrome-backdrop) 72%, black);
+}
+
 html[data-ui-chrome='light'] .today-hub-workspace-select:hover {
   border-color: color-mix(in srgb, var(--color-shell-icon-muted) 65%, rgba(0, 0, 0, 0.14));
 }
