@@ -78,10 +78,10 @@ export async function persistTodayHubRowToVault(
   merged: string,
   columnCount: number,
   deps: TodayHubRowPersistDeps,
-): Promise<void> {
+): Promise<boolean> {
   const root = deps.vaultRootRef.current;
   if (!root) {
-    return;
+    return false;
   }
   const norm = normalizeEditorDocUri(rowUri);
   deps.setErr(null);
@@ -89,12 +89,12 @@ export async function persistTodayHubRowToVault(
     const toPersist = normalizeTodayHubRowForDisk(merged, columnCount);
     const sections = splitTodayRowIntoColumns(toPersist, columnCount);
     if (todayHubRowSectionsAllBlank(sections)) {
-      await deleteBlankTodayHubRow(root, norm, deps);
-      return;
+      return await deleteBlankTodayHubRow(root, norm, deps);
     }
-    await savePopulatedTodayHubRow(root, norm, toPersist, deps);
+    return await savePopulatedTodayHubRow(root, norm, toPersist, deps);
   } catch (e) {
     deps.setErr(e instanceof Error ? e.message : String(e));
+    return false;
   }
 }
 
@@ -102,7 +102,7 @@ async function deleteBlankTodayHubRow(
   root: string,
   norm: string,
   deps: TodayHubRowPersistDeps,
-): Promise<void> {
+): Promise<boolean> {
   try {
     if (await deps.fs.exists(norm)) {
       await deleteVaultMarkdownNote(root, norm, deps.fs);
@@ -111,7 +111,7 @@ async function deleteBlankTodayHubRow(
     }
   } catch (e) {
     deps.setErr(e instanceof Error ? e.message : String(e));
-    return;
+    return false;
   }
 
   deps.todayHubRowLastPersistedRef.current.delete(norm);
@@ -122,6 +122,7 @@ async function deleteBlankTodayHubRow(
   }
   await deps.refreshNotes(root);
   deps.setFsRefreshNonce(n => n + 1);
+  return true;
 }
 
 async function savePopulatedTodayHubRow(
@@ -129,13 +130,13 @@ async function savePopulatedTodayHubRow(
   norm: string,
   toPersist: string,
   deps: TodayHubRowPersistDeps,
-): Promise<void> {
+): Promise<boolean> {
   const md = await persistTransientMarkdownImages(toPersist, root);
   if (markdownContainsTransientImageUrls(md)) {
     deps.setErr(
       INBOX_TRANSIENT_IMAGE_SAVE_ERROR,
     );
-    return;
+    return false;
   }
 
   await saveNoteMarkdown(norm, deps.fs, md);
@@ -150,6 +151,7 @@ async function savePopulatedTodayHubRow(
   }
   await deps.refreshNotes(root);
   deps.setFsRefreshNonce(n => n + 1);
+  return true;
 }
 
 export function enqueuePersistTodayHubRowOnSaveChain(
@@ -160,7 +162,7 @@ export function enqueuePersistTodayHubRowOnSaveChain(
     saveActiveRef: MutableRefObject<boolean>;
     saveChainRef: MutableRefObject<Promise<void>>;
   },
-): Promise<void> {
+): Promise<boolean> {
   const run = () => persistTodayHubRowToVault(rowUri, merged, columnCount, deps);
   deps.saveActiveRef.current = true;
   const next = deps.saveChainRef.current.then(() => run()).finally(() => {

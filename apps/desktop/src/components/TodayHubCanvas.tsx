@@ -91,7 +91,7 @@ type TodayHubCanvasProps = {
     rowUri: string,
     mergedMarkdown: string,
     columnCount: number,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   /** When true for a week row URI, skip cleaning that row (disk conflict). */
   todayHubCleanRowBlocked?: (rowUri: string) => boolean;
   linkSnippetBlockedDomains?: ReadonlyArray<string>;
@@ -381,8 +381,10 @@ export function TodayHubCanvas({
 
   const debounceTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{uri: string; columnCount: number} | null>(null);
-  /** Row URI whose persist is awaiting completion; kept out of the prune so we never drop in-flight edits. */
-  const inFlightPersistUriRef = useRef<string | null>(null);
+  /** Row URIs whose persist is awaiting completion; kept out of the prune so we never drop in-flight edits. */
+  const inFlightPersistUrisRef = useRef<Set<string>>(new Set());
+  /** Inactive rows with a failed persist still hold unsaved edits in `localRowSections`. */
+  const retainUnsavedPersistUrisRef = useRef<Set<string>>(new Set());
   const inboxContentByUriRef = useRef(inboxContentByUri);
   const localRowSectionsRef = useRef<Record<string, string[]>>({});
   /**
@@ -415,13 +417,21 @@ export function TodayHubCanvas({
   // is captured synchronously before each persist `await`, so retained rows never lose edits.
   const pruneInactiveLocalRowSections = useCallback(() => {
     setLocalRowSections(prev => {
-      const retain = new Set(
-        [
-          activeRef.current?.uri,
-          pendingPersistRef.current?.uri,
-          inFlightPersistUriRef.current,
-        ].filter((u): u is string => u != null),
-      );
+      const retain = new Set<string>();
+      const activeUri = activeRef.current?.uri;
+      if (activeUri != null) {
+        retain.add(activeUri);
+      }
+      const pendingUri = pendingPersistRef.current?.uri;
+      if (pendingUri != null) {
+        retain.add(pendingUri);
+      }
+      for (const uri of inFlightPersistUrisRef.current) {
+        retain.add(uri);
+      }
+      for (const uri of retainUnsavedPersistUrisRef.current) {
+        retain.add(uri);
+      }
       const next = retainTodayHubLocalRowSections(prev, retain);
       if (next === prev) {
         return prev;
@@ -451,15 +461,19 @@ export function TodayHubCanvas({
 
   /** Persist a row, tracking it as in-flight so the prune never drops a mid-write buffer. */
   const runRowPersist = useCallback(
-    async (uri: string, merged: string, cc: number) => {
-      inFlightPersistUriRef.current = uri;
+    async (uri: string, merged: string, cc: number): Promise<boolean> => {
+      inFlightPersistUrisRef.current.add(uri);
       try {
-        await persistTodayHubRow(uri, merged, cc);
-      } finally {
-        if (inFlightPersistUriRef.current === uri) {
-          inFlightPersistUriRef.current = null;
+        const ok = await persistTodayHubRow(uri, merged, cc);
+        if (ok) {
+          retainUnsavedPersistUrisRef.current.delete(uri);
+          pruneInactiveLocalRowSections();
+        } else {
+          retainUnsavedPersistUrisRef.current.add(uri);
         }
-        pruneInactiveLocalRowSections();
+        return ok;
+      } finally {
+        inFlightPersistUrisRef.current.delete(uri);
       }
     },
     [persistTodayHubRow, pruneInactiveLocalRowSections],
@@ -535,7 +549,10 @@ export function TodayHubCanvas({
       if (!changed) {
         continue;
       }
-      await persistTodayHubRow(rowUri, merged, columnCount);
+      const ok = await runRowPersist(rowUri, merged, columnCount);
+      if (!ok) {
+        continue;
+      }
       setLocalRowSections(prev => {
         const next = {...prev};
         const a = activeRef.current;
@@ -561,7 +578,7 @@ export function TodayHubCanvas({
         });
       }
     }
-  }, [cellEditorRef, columnCount, persistTodayHubRow, todayHubCleanRowBlocked]);
+  }, [cellEditorRef, columnCount, runRowPersist, todayHubCleanRowBlocked]);
 
   const openCell = useCallback(
     (uri: string, col: number, clickCaret: number | null = null) => {

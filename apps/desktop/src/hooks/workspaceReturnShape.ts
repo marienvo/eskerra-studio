@@ -166,7 +166,7 @@ export type WorkspaceTodayHubController = {
     rowUri: string,
     mergedMarkdown: string,
     columnCount: number,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   todayHubCleanRowBlocked: (rowUri: string) => boolean;
   todayHubSelectorItems: readonly {todayNoteUri: string; label: string}[];
   activeTodayHubUri: string | null;

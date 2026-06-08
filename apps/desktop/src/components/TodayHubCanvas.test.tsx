@@ -3,6 +3,8 @@ import {EditorView} from '@codemirror/view';
 import {createRef} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
+import {INBOX_AUTOSAVE_DEBOUNCE_MS} from '../lib/inboxAutosaveScheduler';
+
 import {
   createIdleTodayHubWorkspaceBridge,
   enumerateTodayHubWeekStarts,
@@ -26,11 +28,15 @@ function currentWeekRowUri(): string {
   return todayHubRowUri(HUB_DIR, starts[1]!);
 }
 
-function renderCanvas(inboxContentByUri: Record<string, string>) {
+function renderCanvas(
+  inboxContentByUri: Record<string, string>,
+  options?: {persistTodayHubRow?: ReturnType<typeof vi.fn>},
+) {
   const bridgeRef = {current: createIdleTodayHubWorkspaceBridge()};
   const wikiNavParentRef = {current: null as string | null};
   const cellEditorRef = createRef<NoteMarkdownEditorHandle>();
-  const persistTodayHubRow = vi.fn(async () => {});
+  const persistTodayHubRow =
+    options?.persistTodayHubRow ?? vi.fn(async () => true);
   const prehydrateTodayHubRows = vi.fn(async () => {});
 
   const baseProps = {
@@ -104,8 +110,21 @@ function activeCellEditorDoc(): string | null {
   return EditorView.findFromDOM(content)?.state.doc.toString() ?? null;
 }
 
+function setActiveCellEditorText(text: string): void {
+  const content = document.querySelector<HTMLElement>(
+    '.today-hub-canvas__cm-host--editing .cm-content',
+  );
+  expect(content).not.toBeNull();
+  const view = EditorView.findFromDOM(content!);
+  expect(view).not.toBeNull();
+  view!.dispatch({
+    changes: {from: 0, to: view!.state.doc.length, insert: text},
+  });
+}
+
 describe('TodayHubCanvas — disk truth for non-active week rows', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -190,5 +209,43 @@ describe('TodayHubCanvas — disk truth for non-active week rows', () => {
     await waitFor(() => {
       expect(activeCellEditorDoc()).toBe('second body');
     });
+  });
+
+  it('keeps unsaved row preview after a failed persist when the cell is closed', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const rowUri = currentWeekRowUri();
+      const persistTodayHubRow = vi.fn(async () => false);
+      renderCanvas({[rowUri]: 'disk content'}, {persistTodayHubRow});
+
+      await waitFor(() => {
+        expect(staticCellWithText('disk content')).not.toBeNull();
+      });
+
+      await openRow('disk content');
+      await waitFor(() => {
+        expect(activeCellEditorDoc()).toBe('disk content');
+      });
+
+      await act(async () => {
+        setActiveCellEditorText('edited content');
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(INBOX_AUTOSAVE_DEBOUNCE_MS + 50);
+      });
+      await waitFor(() => {
+        expect(persistTodayHubRow).toHaveBeenCalled();
+      });
+
+      await closeActiveCell();
+
+      await waitFor(() => {
+        expect(staticCellWithText('edited content')).not.toBeNull();
+      });
+      expect(staticCellWithText('disk content')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
