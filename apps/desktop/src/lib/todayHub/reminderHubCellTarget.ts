@@ -95,9 +95,10 @@ export function findTodayHubRowMatch(
  * is not rendered by the hub (caller falls back to opening the plain note).
  */
 /**
- * Hub display title (its folder name) for a reminder whose `file://` note URI is a `YYYY-MM-DD.md`
- * row beside a hub `Today.md`, or `null` otherwise. Used to label notifications with the hub name
- * instead of the bare date stem. Mirrors the daemon's `today_hub_row_title`.
+ * Hub display title (its folder name) for a reminder whose `file://` note URI is either the hub's
+ * own `Today.md` or a `YYYY-MM-DD.md` row beside it, or `null` otherwise. Used to label
+ * notifications with the hub name instead of the bare note stem. Mirrors the daemon's
+ * `today_hub_title`.
  */
 export function todayHubRowTitleForNoteUri(
   noteUri: string,
@@ -106,6 +107,12 @@ export function todayHubRowTitleForNoteUri(
   const path = reminderFileUriToAbsolutePath(noteUri);
   if (path == null) {
     return null;
+  }
+  const normPath = normalizeEditorDocUri(path);
+  for (const hub of hubTodayNoteUris) {
+    if (normalizeEditorDocUri(hub) === normPath) {
+      return todayHubFolderLabelFromTodayNoteUri(hub);
+    }
   }
   const match = findTodayHubRowMatch(path, hubTodayNoteUris);
   return match ? todayHubFolderLabelFromTodayNoteUri(match.hubTodayNoteUri) : null;

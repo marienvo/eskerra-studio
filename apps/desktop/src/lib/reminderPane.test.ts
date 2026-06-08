@@ -81,6 +81,18 @@ describe('reminderToPaneRow', () => {
     expect(row.displayTitle).toBe('Hub');
   });
 
+  it('sets displayTitle to the hub folder name for a reminder on the hub Today note', () => {
+    const row = reminderToPaneRow(
+      reminder({
+        noteUri: 'file:///vault/Hub/Today.md',
+        vaultRelativePath: 'Hub/Today.md',
+      }),
+      undefined,
+      ['/vault/Hub/Today.md'],
+    );
+    expect(row.displayTitle).toBe('Hub');
+  });
+
   it('keeps a `removing` spinner across index re-reads while not stale', () => {
     const row = reminderToPaneRow(reminder({state: 'notified'}), 'removing');
     expect(row.removeState).toBe('removing');

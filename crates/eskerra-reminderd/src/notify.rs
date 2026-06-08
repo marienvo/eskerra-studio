@@ -138,10 +138,10 @@ fn note_title(vault_relative_path: &str) -> String {
 }
 
 /// Notification title: the hub's folder name when the reminder lives in a Today
-/// Hub cell (a `YYYY-MM-DD.md` row beside a `Today.md`), otherwise the note stem.
-/// Mirrors the desktop `todayHubRowTitleForNoteUri`.
+/// Hub note (`Today.md`) or cell (a `YYYY-MM-DD.md` row beside it), otherwise
+/// the note stem. Mirrors the desktop `todayHubRowTitleForNoteUri`.
 fn note_title_for(vault_relative_path: &str, vault_root: &Path) -> String {
-    today_hub_row_title(vault_relative_path, vault_root)
+    today_hub_title(vault_relative_path, vault_root)
         .unwrap_or_else(|| note_title(vault_relative_path))
 }
 
@@ -156,25 +156,36 @@ fn is_today_hub_row_stem(stem: &str) -> bool {
         && b[8..].iter().all(u8::is_ascii_digit)
 }
 
-/// Hub folder name for a `YYYY-MM-DD.md` row that sits beside a `Today.md`, else `None`.
-fn today_hub_row_title(vault_relative_path: &str, vault_root: &Path) -> Option<String> {
+/// Hub folder name for a `Today.md` or sibling `YYYY-MM-DD.md` row, else `None`.
+fn today_hub_title(vault_relative_path: &str, vault_root: &Path) -> Option<String> {
     let file = vault_relative_path
         .rsplit('/')
         .next()
         .unwrap_or(vault_relative_path);
-    let stem = file.strip_suffix(".md")?;
-    if !is_today_hub_row_stem(stem) {
+    let dir = vault_relative_path
+        .strip_suffix(file)?
+        .trim_end_matches('/');
+    if dir.is_empty() {
         return None;
     }
-    let dir = vault_relative_path.strip_suffix(file)?.trim_end_matches('/');
-    if dir.is_empty() {
+    if file == "Today.md" {
+        return vault_root
+            .join(vault_relative_path)
+            .is_file()
+            .then(|| hub_folder_title(dir));
+    }
+    let stem = file.strip_suffix(".md")?;
+    if !is_today_hub_row_stem(stem) {
         return None;
     }
     if !vault_root.join(dir).join("Today.md").is_file() {
         return None;
     }
-    let folder = dir.rsplit('/').next().unwrap_or(dir);
-    Some(folder.to_string())
+    Some(hub_folder_title(dir))
+}
+
+fn hub_folder_title(dir: &str) -> String {
+    dir.rsplit('/').next().unwrap_or(dir).to_string()
 }
 
 /// Abstraction over the OS notification service so the daemon's firing logic is
@@ -517,11 +528,10 @@ mod tests {
         std::fs::create_dir_all(root.path().join("Work")).unwrap();
         std::fs::write(root.path().join("Work/Today.md"), b"---\n---\n").unwrap();
 
+        // The hub note itself → hub folder name.
+        assert_eq!(note_title_for("Work/Today.md", root.path()), "Work");
         // Row beside a Today.md → hub folder name.
-        assert_eq!(
-            note_title_for("Work/2026-06-08.md", root.path()),
-            "Work"
-        );
+        assert_eq!(note_title_for("Work/2026-06-08.md", root.path()), "Work");
         // Date-named note with no sibling Today.md → bare stem.
         assert_eq!(
             note_title_for("Notes/2026-06-08.md", root.path()),
@@ -529,7 +539,8 @@ mod tests {
         );
         // Date-named note at the vault root (no hub folder) → bare stem.
         assert_eq!(note_title_for("2026-06-08.md", root.path()), "2026-06-08");
-        // Non-date note in a hub folder → its own stem, not the folder name.
+        // A missing/root Today.md or non-date note in a hub folder → its own stem, not the folder name.
+        assert_eq!(note_title_for("Today.md", root.path()), "Today");
         assert_eq!(note_title_for("Work/Plan.md", root.path()), "Plan");
     }
 
@@ -625,7 +636,11 @@ mod tests {
         let n = NullNotifier;
         let r = a_reminder();
         assert!(n
-            .send(&NotificationRequest::for_reminder(&r, FireKind::AtTime, no_hub_root()))
+            .send(&NotificationRequest::for_reminder(
+                &r,
+                FireKind::AtTime,
+                no_hub_root()
+            ))
             .is_ok());
     }
 

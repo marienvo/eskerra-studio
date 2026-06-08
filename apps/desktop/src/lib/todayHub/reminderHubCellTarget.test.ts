@@ -5,6 +5,7 @@ import {mergeTodayRowColumns} from '@eskerra/core';
 import {
   findTodayHubRowMatch,
   mapFullFileCaretToHubCellLineStart,
+  todayHubRowTitleForNoteUri,
 } from './reminderHubCellTarget';
 
 describe('findTodayHubRowMatch', () => {
@@ -34,6 +35,22 @@ describe('findTodayHubRowMatch', () => {
 
   it('does not match the hub Today.md itself', () => {
     expect(findTodayHubRowMatch('/vault/Hub/Today.md', hubs)).toBeNull();
+  });
+});
+
+describe('todayHubRowTitleForNoteUri', () => {
+  const hubs = ['/vault/Hub/Today.md', '/vault/Other/Today.md'];
+
+  it('uses the hub folder label for a reminder on the hub Today.md itself', () => {
+    expect(todayHubRowTitleForNoteUri('file:///vault/Hub/Today.md', hubs)).toBe('Hub');
+  });
+
+  it('uses the hub folder label for a hub-row reminder', () => {
+    expect(todayHubRowTitleForNoteUri('file:///vault/Other/2026-06-08.md', hubs)).toBe('Other');
+  });
+
+  it('returns null for an ordinary note', () => {
+    expect(todayHubRowTitleForNoteUri('file:///vault/Hub/Plan.md', hubs)).toBeNull();
   });
 });
 
