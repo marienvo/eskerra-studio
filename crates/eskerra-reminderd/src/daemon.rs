@@ -550,7 +550,8 @@ impl Daemon {
                         .iter()
                         .find(|r| r.id == f.reminder_id)
                         .map(|r| {
-                            NotificationRequest::for_reminder(r, f.kind).replacing(replaces_id)
+                            NotificationRequest::for_reminder(r, f.kind, &active.root)
+                                .replacing(replaces_id)
                         })
                 })
                 .collect();

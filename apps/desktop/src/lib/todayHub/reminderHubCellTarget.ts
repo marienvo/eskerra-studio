@@ -11,9 +11,36 @@ import {
   parseTodayHubRowStemToLocalCalendarDate,
   splitTodayRowIntoColumnSpans,
   todayHubDirectoryUriFromTodayNoteUri,
+  todayHubFolderLabelFromTodayNoteUri,
 } from '@eskerra/core';
 
 import {normalizeEditorDocUri} from '../editorDocumentHistory';
+
+/** Decode a `file://` reminder note URI into an absolute filesystem path, or `null` if not one. */
+export function reminderFileUriToAbsolutePath(noteUri: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(noteUri);
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== 'file:' || (url.host !== '' && url.host !== 'localhost')) {
+    return null;
+  }
+  if (url.search !== '' || url.hash !== '') {
+    return null;
+  }
+
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(url.pathname);
+  } catch {
+    return null;
+  }
+
+  return decodedPath.startsWith('/') ? decodedPath : null;
+}
 
 export type TodayHubRowMatch = {
   /** The hub's `Today.md` URI (used to switch the active hub workspace). */
@@ -67,6 +94,23 @@ export function findTodayHubRowMatch(
  * Result of asking the live hub canvas to open a reminder cell. `out-of-window` means the row's week
  * is not rendered by the hub (caller falls back to opening the plain note).
  */
+/**
+ * Hub display title (its folder name) for a reminder whose `file://` note URI is a `YYYY-MM-DD.md`
+ * row beside a hub `Today.md`, or `null` otherwise. Used to label notifications with the hub name
+ * instead of the bare date stem. Mirrors the daemon's `today_hub_row_title`.
+ */
+export function todayHubRowTitleForNoteUri(
+  noteUri: string,
+  hubTodayNoteUris: readonly string[],
+): string | null {
+  const path = reminderFileUriToAbsolutePath(noteUri);
+  if (path == null) {
+    return null;
+  }
+  const match = findTodayHubRowMatch(path, hubTodayNoteUris);
+  return match ? todayHubFolderLabelFromTodayNoteUri(match.hubTodayNoteUri) : null;
+}
+
 export type TodayHubReminderCellOpenResult = 'handled' | 'out-of-window';
 
 export type TodayHubCellCaretTarget = {

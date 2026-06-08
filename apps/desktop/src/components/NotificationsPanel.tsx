@@ -198,7 +198,7 @@ function ReminderRow({
   onRemove: (noteUri: string, reminderId: string) => Promise<void>;
   onSnooze: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 }) {
-  const noteName = reminderNoteName(row.vaultRelativePath);
+  const noteName = row.displayTitle ?? reminderNoteName(row.vaultRelativePath);
   const isStale = row.reminderState === 'stale';
   const isRemoving = row.removeState === 'removing';
   const isUnavailable = row.removeState === 'remove-unavailable';

@@ -13,6 +13,7 @@
 //! `Body::deserialize::<T>()`).
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Mutex;
 
 use chrono::{Local, TimeZone};
@@ -74,8 +75,8 @@ impl NotificationRequest {
     /// onto the title instead so there is no bare `(HH:MM)` second line.
     /// Defaults to a fresh notification (`replaces_id = 0`); use
     /// [`Self::replacing`] to supersede an existing one.
-    pub fn for_reminder(reminder: &Reminder, _kind: FireKind) -> Self {
-        let title = note_title(&reminder.vault_relative_path);
+    pub fn for_reminder(reminder: &Reminder, _kind: FireKind, vault_root: &Path) -> Self {
+        let title = note_title_for(&reminder.vault_relative_path, vault_root);
         let hhmm = hhmm_local(reminder.due_at_ms);
         if reminder.display_line.is_empty() {
             Self {
@@ -134,6 +135,46 @@ fn note_title(vault_relative_path: &str) -> String {
         .next()
         .unwrap_or(vault_relative_path);
     last.strip_suffix(".md").unwrap_or(last).to_string()
+}
+
+/// Notification title: the hub's folder name when the reminder lives in a Today
+/// Hub cell (a `YYYY-MM-DD.md` row beside a `Today.md`), otherwise the note stem.
+/// Mirrors the desktop `todayHubRowTitleForNoteUri`.
+fn note_title_for(vault_relative_path: &str, vault_root: &Path) -> String {
+    today_hub_row_title(vault_relative_path, vault_root)
+        .unwrap_or_else(|| note_title(vault_relative_path))
+}
+
+/// `true` for a `YYYY-MM-DD` stem (shape only; the sibling `Today.md` is the real gate).
+fn is_today_hub_row_stem(stem: &str) -> bool {
+    let b = stem.as_bytes();
+    b.len() == 10
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && b[..4].iter().all(u8::is_ascii_digit)
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && b[8..].iter().all(u8::is_ascii_digit)
+}
+
+/// Hub folder name for a `YYYY-MM-DD.md` row that sits beside a `Today.md`, else `None`.
+fn today_hub_row_title(vault_relative_path: &str, vault_root: &Path) -> Option<String> {
+    let file = vault_relative_path
+        .rsplit('/')
+        .next()
+        .unwrap_or(vault_relative_path);
+    let stem = file.strip_suffix(".md")?;
+    if !is_today_hub_row_stem(stem) {
+        return None;
+    }
+    let dir = vault_relative_path.strip_suffix(file)?.trim_end_matches('/');
+    if dir.is_empty() {
+        return None;
+    }
+    if !vault_root.join(dir).join("Today.md").is_file() {
+        return None;
+    }
+    let folder = dir.rsplit('/').next().unwrap_or(dir);
+    Some(folder.to_string())
 }
 
 /// Abstraction over the OS notification service so the daemon's firing logic is
@@ -411,6 +452,11 @@ mod tests {
     use chrono::{Local, TimeZone};
     use eskerra_reminder_core::{fresh_reminder_from_scan, scan, DefaultTime};
 
+    /// A vault root with no Today Hub folders — title resolution falls back to the note stem.
+    fn no_hub_root() -> &'static Path {
+        Path::new("/eskerra-nonexistent-vault")
+    }
+
     fn a_reminder() -> Reminder {
         let out = scan(b"meet @2026-06-06_0900 soon").unwrap();
         let token = out.tokens.into_iter().next().unwrap();
@@ -466,9 +512,39 @@ mod tests {
     }
 
     #[test]
+    fn note_title_for_uses_hub_folder_name_on_hub_rows() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("Work")).unwrap();
+        std::fs::write(root.path().join("Work/Today.md"), b"---\n---\n").unwrap();
+
+        // Row beside a Today.md → hub folder name.
+        assert_eq!(
+            note_title_for("Work/2026-06-08.md", root.path()),
+            "Work"
+        );
+        // Date-named note with no sibling Today.md → bare stem.
+        assert_eq!(
+            note_title_for("Notes/2026-06-08.md", root.path()),
+            "2026-06-08"
+        );
+        // Date-named note at the vault root (no hub folder) → bare stem.
+        assert_eq!(note_title_for("2026-06-08.md", root.path()), "2026-06-08");
+        // Non-date note in a hub folder → its own stem, not the folder name.
+        assert_eq!(note_title_for("Work/Plan.md", root.path()), "Plan");
+    }
+
+    #[test]
+    fn is_today_hub_row_stem_matches_date_shape_only() {
+        assert!(is_today_hub_row_stem("2026-06-08"));
+        assert!(!is_today_hub_row_stem("2026-6-8"));
+        assert!(!is_today_hub_row_stem("2026-06-08x"));
+        assert!(!is_today_hub_row_stem("Daily note"));
+    }
+
+    #[test]
     fn request_for_reminder_carries_id_and_title() {
         let r = a_reminder();
-        let req = NotificationRequest::for_reminder(&r, FireKind::Lead);
+        let req = NotificationRequest::for_reminder(&r, FireKind::Lead, no_hub_root());
         assert_eq!(req.reminder_id, r.id);
         assert_eq!(req.summary, "Daily note");
         assert_eq!(req.sound_name.as_deref(), Some(REMINDER_SOUND_NAME));
@@ -495,7 +571,7 @@ mod tests {
             .unwrap()
             .format("%H:%M")
             .to_string();
-        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime, no_hub_root());
         assert_eq!(req.summary, "Daily note");
         assert_eq!(req.body, format!("meet soon ({})", expected_hhmm));
     }
@@ -513,7 +589,7 @@ mod tests {
             .unwrap()
             .format("%H:%M")
             .to_string();
-        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime, no_hub_root());
         assert_eq!(req.summary, format!("Daily note ({})", expected_hhmm));
         assert_eq!(
             req.body, "",
@@ -549,14 +625,14 @@ mod tests {
         let n = NullNotifier;
         let r = a_reminder();
         assert!(n
-            .send(&NotificationRequest::for_reminder(&r, FireKind::AtTime))
+            .send(&NotificationRequest::for_reminder(&r, FireKind::AtTime, no_hub_root()))
             .is_ok());
     }
 
     #[test]
     fn replacing_sets_replaces_id() {
         let r = a_reminder();
-        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime, no_hub_root());
         assert_eq!(req.replaces_id, 0, "fresh notifications default to 0");
         let replacing = req.replacing(42);
         assert_eq!(replacing.replaces_id, 42);
@@ -567,7 +643,7 @@ mod tests {
     #[test]
     fn zbus_hints_include_reminder_sound_name() {
         let r = a_reminder();
-        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime);
+        let req = NotificationRequest::for_reminder(&r, FireKind::AtTime, no_hub_root());
         let hints = super::zbus_impl::build_hints(&req);
         let sound_name = hints
             .get("sound-name")

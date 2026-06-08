@@ -4,8 +4,13 @@ import {type RefObject, useCallback, useEffect, useRef} from 'react';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
 import type {TodayHubWorkspaceBridge} from '../lib/todayHub';
-import {findTodayHubRowMatch} from '../lib/todayHub/reminderHubCellTarget';
+import {
+  findTodayHubRowMatch,
+  reminderFileUriToAbsolutePath,
+} from '../lib/todayHub/reminderHubCellTarget';
 import type {OpenMarkdownInEditorOptions} from './workspaceOpenMarkdownCommand';
+
+export {reminderFileUriToAbsolutePath};
 
 type OpenReminderRequest = {
   noteUri: string;
@@ -62,31 +67,6 @@ async function tryOpenReminderInHubCell(
   }
   const result = await openCell(match.rowUri, caretUtf16).catch(() => null);
   return result === 'handled';
-}
-
-export function reminderFileUriToAbsolutePath(noteUri: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(noteUri);
-  } catch {
-    return null;
-  }
-
-  if (url.protocol !== 'file:' || (url.host !== '' && url.host !== 'localhost')) {
-    return null;
-  }
-  if (url.search !== '' || url.hash !== '') {
-    return null;
-  }
-
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(url.pathname);
-  } catch {
-    return null;
-  }
-
-  return decodedPath.startsWith('/') ? decodedPath : null;
 }
 
 function openReminderRequestKey(req: OpenReminderRequest): string {

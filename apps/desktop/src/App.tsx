@@ -109,15 +109,19 @@ export default function App() {
     initialVaultHydrateAttemptDone,
   } = workspace;
 
+  const hubTodayNoteUris = useMemo(
+    () => todayHubController.todayHubSelectorItems.map(i => i.todayNoteUri),
+    [todayHubController.todayHubSelectorItems],
+  );
+
   const todayHubReminderBridge = useMemo<TodayHubReminderBridge>(
     () => ({
-      hubTodayNoteUris: () =>
-        todayHubController.todayHubSelectorItems.map(i => i.todayNoteUri),
+      hubTodayNoteUris: () => hubTodayNoteUris,
       switchTodayHubWorkspace: todayHubController.switchTodayHubWorkspace,
       bridgeRef: todayHubController.todayHubBridgeRef,
     }),
     [
-      todayHubController.todayHubSelectorItems,
+      hubTodayNoteUris,
       todayHubController.switchTodayHubWorkspace,
       todayHubController.todayHubBridgeRef,
     ],
@@ -130,7 +134,7 @@ export default function App() {
     hubBridge: todayHubReminderBridge,
   });
 
-  const reminderPane = useReminderPane(vaultRoot ?? null);
+  const reminderPane = useReminderPane(vaultRoot ?? null, hubTodayNoteUris);
 
   const onOpenReminder = useCallback(
     (noteUri: string, reminderId: string, uiCaretHint?: number) => {
