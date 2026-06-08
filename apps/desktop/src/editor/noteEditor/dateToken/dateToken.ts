@@ -9,6 +9,8 @@ export type DateTokenValue = {
   readonly day: number;
   readonly hour?: number;
   readonly minute?: number;
+  /** Daemon-struck or user-completed reminder (`@~~…~~` on disk). */
+  readonly struck?: boolean;
 };
 
 /**
@@ -17,6 +19,18 @@ export type DateTokenValue = {
  */
 export const DATE_TOKEN_PATTERN =
   /(?:^|\s)(@\d{4}-\d{2}-\d{2}(?:_\d{4})?)/g;
+
+/**
+ * Struck reminder on disk: `@~~YYYY-MM-DD` or `@~~YYYY-MM-DD_HHMM~~`.
+ * An optional backslash before `_` is accepted as escape noise from the daemon.
+ */
+export const STRUCK_DATE_TOKEN_PATTERN =
+  /(?:^|\s)(@~~\d{4}-\d{2}-\d{2}(?:\\?_\d{4})?~~)/g;
+
+export type DateTokenSpanInLine = {
+  readonly token: string;
+  readonly tokenStartInLine: number;
+};
 
 /**
  * Match when the cursor is immediately after `@` at a word boundary (start of
@@ -135,15 +149,100 @@ export function defaultDateTokenTimeFromNow(
 }
 
 export function formatDateToken(value: DateTokenValue): string {
-  const date = `@${pad4(value.year)}-${pad2(value.month)}-${pad2(value.day)}`;
-  if (value.hour === undefined || value.minute === undefined) {
+  const datePart = `${pad4(value.year)}-${pad2(value.month)}-${pad2(value.day)}`;
+  const timePart =
+    value.hour !== undefined && value.minute !== undefined
+      ? `_${pad2(value.hour)}${pad2(value.minute)}`
+      : '';
+  if (value.struck) {
+    return `@~~${datePart}${timePart}~~`;
+  }
+  const date = `@${datePart}`;
+  if (!timePart) {
     return date;
   }
-  return `${date}_${pad2(value.hour)}${pad2(value.minute)}`;
+  return `${date}${timePart}`;
+}
+
+/** Maps daemon `\_` escape noise to `_` inside a struck span before parsing. */
+export function normalizeStruckDateTokenTimeSeparator(text: string): string {
+  return text.replace(/\\_/g, '_');
 }
 
 export function formatTodayDateToken(now: Date): string {
   return formatDateToken(todayDateParts(now));
+}
+
+/** Parses a live or struck full token span from the document. */
+export function parseDateTokenSpan(span: string): DateTokenValue | null {
+  if (span.startsWith('@~~') && span.endsWith('~~')) {
+    const inner = span.slice(3, -2);
+    const normalized = normalizeStruckDateTokenTimeSeparator(inner);
+    const value = parseDateToken(`@${normalized}`);
+    if (!value) {
+      return null;
+    }
+    return {...value, struck: true};
+  }
+  const value = parseDateToken(span);
+  if (!value) {
+    return null;
+  }
+  return {...value, struck: false};
+}
+
+function spansOverlap(
+  left: {start: number; end: number},
+  right: {start: number; end: number},
+): boolean {
+  return left.start < right.end && right.start < left.end;
+}
+
+/**
+ * Returns non-overlapping live and struck token spans on one line. Struck spans
+ * are collected first so inner `@` digits never match as live tokens.
+ */
+export function collectDateTokenSpansInLine(
+  lineText: string,
+): DateTokenSpanInLine[] {
+  const spans: DateTokenSpanInLine[] = [];
+  const occupied: Array<{start: number; end: number}> = [];
+
+  STRUCK_DATE_TOKEN_PATTERN.lastIndex = 0;
+  let match = STRUCK_DATE_TOKEN_PATTERN.exec(lineText);
+  while (match) {
+    const token = match[1]!;
+    if (parseDateTokenSpan(token) !== null) {
+      const tokenStartInLine = match.index + match[0].length - token.length;
+      spans.push({token, tokenStartInLine});
+      occupied.push({
+        start: tokenStartInLine,
+        end: tokenStartInLine + token.length,
+      });
+    }
+    match = STRUCK_DATE_TOKEN_PATTERN.exec(lineText);
+  }
+
+  DATE_TOKEN_PATTERN.lastIndex = 0;
+  match = DATE_TOKEN_PATTERN.exec(lineText);
+  while (match) {
+    const token = match[1]!;
+    const tokenStartInLine = match.index + match[0].length - token.length;
+    const range = {
+      start: tokenStartInLine,
+      end: tokenStartInLine + token.length,
+    };
+    if (
+      !occupied.some(o => spansOverlap(o, range))
+      && parseDateTokenSpan(token) !== null
+    ) {
+      spans.push({token, tokenStartInLine});
+    }
+    match = DATE_TOKEN_PATTERN.exec(lineText);
+  }
+
+  spans.sort((a, b) => a.tokenStartInLine - b.tokenStartInLine);
+  return spans;
 }
 
 export function parseDateToken(text: string): DateTokenValue | null {

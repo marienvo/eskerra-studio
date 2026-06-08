@@ -101,7 +101,7 @@ describe('DateTimePicker', () => {
     expect(hourInput.disabled).toBe(false);
     expect(minuteInput.disabled).toBe(false);
 
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', {name: /no time/i}));
     expect(hourInput.disabled).toBe(true);
     expect(minuteInput.disabled).toBe(true);
 
@@ -124,7 +124,7 @@ describe('DateTimePicker', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', {name: /no time/i}));
     fireEvent.change(screen.getByRole('spinbutton', {name: 'Hour'}), {
       target: {value: '23'},
     });
@@ -182,7 +182,7 @@ describe('DateTimePicker', () => {
 
     fireEvent.click(screen.getByRole('button', {name: 'Today'}));
     fireEvent.click(screen.getByRole('gridcell', {name: '15 June 2026'}));
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', {name: /no time/i}));
     expect(onReturnFocus).toHaveBeenCalledTimes(3);
   });
 
@@ -219,7 +219,7 @@ describe('DateTimePicker', () => {
     );
 
     // Token has no time → "No time" starts checked. Unchecking enables time.
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', {name: /no time/i}));
 
     expect(onConfirm).toHaveBeenLastCalledWith({
       year: 2026,
@@ -237,5 +237,44 @@ describe('DateTimePicker', () => {
     }) as HTMLInputElement;
     expect(hourInput.value).toBe('14');
     expect(minuteInput.value).toBe('45');
+  });
+
+  it('toggles completed to emit struck and bare tokens live', () => {
+    const onConfirm = vi.fn();
+    render(
+      <DateTimePicker
+        initialValue={{
+          year: 2026,
+          month: 6,
+          day: 8,
+          hour: 9,
+          minute: 30,
+        }}
+        now={FIXED_NOW}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', {name: /completed/i}));
+    expect(onConfirm).toHaveBeenLastCalledWith({
+      year: 2026,
+      month: 6,
+      day: 8,
+      hour: 9,
+      minute: 30,
+      struck: true,
+    });
+
+    onConfirm.mockClear();
+    fireEvent.click(screen.getByRole('checkbox', {name: /completed/i}));
+    expect(onConfirm).toHaveBeenLastCalledWith({
+      year: 2026,
+      month: 6,
+      day: 8,
+      hour: 9,
+      minute: 30,
+    });
+    expect(onConfirm.mock.calls[0]![0]).not.toHaveProperty('struck');
   });
 });

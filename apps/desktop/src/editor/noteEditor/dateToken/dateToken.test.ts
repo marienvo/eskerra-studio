@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
 
 import {
+  collectDateTokenSpansInLine,
   DATE_TOKEN_PATTERN,
   DATE_TOKEN_PREFIX_PATTERN,
   formatDateToken,
@@ -8,10 +9,12 @@ import {
   formatTodayDateToken,
   isDateTokenInPast,
   isValidCalendarDate,
+  normalizeStruckDateTokenTimeSeparator,
   nowTimeParts,
   pad2,
   pad4,
   parseDateToken,
+  parseDateTokenSpan,
   defaultDateTokenTimeFromNow,
   snapMinuteFieldToFiveMinuteGrid,
   snapTimeToFiveMinuteGrid,
@@ -310,5 +313,67 @@ describe('DATE_TOKEN_PREFIX_PATTERN', () => {
     expect(matchPrefixBeforeCursor('foo@')).toBeNull();
     expect(matchPrefixBeforeCursor('foo@bar')).toBeNull();
     expect(matchPrefixBeforeCursor('user@domain')).toBeNull();
+  });
+});
+
+describe('struck date tokens', () => {
+  test('normalizeStruckDateTokenTimeSeparator maps \\_ to _', () => {
+    expect(normalizeStruckDateTokenTimeSeparator('2026-06-08\\_0930')).toBe(
+      '2026-06-08_0930',
+    );
+    expect(normalizeStruckDateTokenTimeSeparator('2026-06-08_0930')).toBe(
+      '2026-06-08_0930',
+    );
+  });
+
+  test('parseDateTokenSpan parses struck spans with optional escaped underscore', () => {
+    expect(parseDateTokenSpan('@~~2026-06-08_0930~~')).toEqual({
+      year: 2026,
+      month: 6,
+      day: 8,
+      hour: 9,
+      minute: 30,
+      struck: true,
+    });
+    expect(parseDateTokenSpan('@~~2026-06-08\\_0930~~')).toEqual({
+      year: 2026,
+      month: 6,
+      day: 8,
+      hour: 9,
+      minute: 30,
+      struck: true,
+    });
+    expect(parseDateTokenSpan('@2026-06-08_0930')).toEqual({
+      year: 2026,
+      month: 6,
+      day: 8,
+      hour: 9,
+      minute: 30,
+      struck: false,
+    });
+  });
+
+  test('formatDateToken emits canonical struck form without backslash', () => {
+    expect(
+      formatDateToken({
+        year: 2026,
+        month: 6,
+        day: 8,
+        hour: 9,
+        minute: 30,
+        struck: true,
+      }),
+    ).toBe('@~~2026-06-08_0930~~');
+    expect(
+      formatDateToken({year: 2026, month: 6, day: 8, struck: true}),
+    ).toBe('@~~2026-06-08~~');
+  });
+
+  test('collectDateTokenSpansInLine prefers struck spans and avoids overlap', () => {
+    const line = 'done @~~2026-06-08_0930~~ live @2026-12-28';
+    expect(collectDateTokenSpansInLine(line).map(s => s.token)).toEqual([
+      '@~~2026-06-08_0930~~',
+      '@2026-12-28',
+    ]);
   });
 });
