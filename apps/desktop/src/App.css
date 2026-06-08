@@ -6433,55 +6433,7 @@ button:disabled {
 .pane-header-add-btn--vault-on:not(:disabled),
 .pane-header-add-btn--episodes-on:not(:disabled),
 .pane-header-add-btn--inbox-on:not(:disabled) {
-  background: var(--color-accent);
-  color: var(--color-app-chrome-surface);
-}
-
-/* Pressed pane toggles: keep filled accent tile on hover/focus (no gray ghost wash). */
-.pane-header--editor-toolbar
-  .pane-header-add-btn--vault-on.icon-btn-ghost:hover:not(:disabled),
-.pane-header--editor-toolbar
-  .pane-header-add-btn--episodes-on.icon-btn-ghost:hover:not(:disabled),
-.pane-header--editor-toolbar
-  .pane-header-add-btn--inbox-on.icon-btn-ghost:hover:not(:disabled),
-.pane-header--editor-toolbar
-  .pane-header-add-btn--notifications-on.icon-btn-ghost:hover:not(:disabled),
-.pane-header--editor-toolbar
-  .pane-header-add-btn--vault-on.icon-btn-ghost:focus-visible:not(:disabled),
-.pane-header--editor-toolbar
-  .pane-header-add-btn--episodes-on.icon-btn-ghost:focus-visible:not(:disabled),
-.pane-header--editor-toolbar
-  .pane-header-add-btn--inbox-on.icon-btn-ghost:focus-visible:not(:disabled),
-.pane-header--editor-toolbar
-  .pane-header-add-btn--notifications-on.icon-btn-ghost:focus-visible:not(:disabled) {
-  background: var(--color-accent);
-  color: var(--color-app-chrome-surface);
-}
-
-[data-app-surface='capture']
-  .pane-header--editor-toolbar
-  .pane-header-add-btn--vault-on:hover:not(:disabled),
-[data-app-surface='capture']
-  .pane-header--editor-toolbar
-  .pane-header-add-btn--episodes-on:hover:not(:disabled),
-[data-app-surface='capture']
-  .pane-header--editor-toolbar
-  .pane-header-add-btn--inbox-on:hover:not(:disabled),
-[data-app-surface='capture']
-  .pane-header--editor-toolbar
-  .pane-header-add-btn--notifications-on:hover:not(:disabled),
-[data-app-surface='capture']
-  .pane-header--editor-toolbar
-  .pane-header-add-btn--vault-on:focus-visible:not(:disabled),
-[data-app-surface='capture']
-  .pane-header--editor-toolbar
-  .pane-header-add-btn--episodes-on:focus-visible:not(:disabled),
-[data-app-surface='capture']
-  .pane-header--editor-toolbar
-  .pane-header-add-btn--inbox-on:focus-visible:not(:disabled),
-[data-app-surface='capture']
-  .pane-header--editor-toolbar
-  .pane-header-add-btn--notifications-on:focus-visible:not(:disabled) {
+  background: var(--color-app-chrome-active-fill);
   color: var(--color-app-chrome-surface);
 }
 
@@ -6491,16 +6443,7 @@ button:disabled {
 .pane-header--editor-toolbar
   .pane-header-add-btn--notifications-on:not(:disabled)
   .pane-header-add-btn__badge-dot {
-  border-color: var(--color-accent);
-}
-
-.pane-header--editor-toolbar
-  .pane-header-add-btn--inbox-on.icon-btn-ghost:hover:not(:disabled)
-  .pane-header-add-btn__badge-dot,
-.pane-header--editor-toolbar
-  .pane-header-add-btn--notifications-on.icon-btn-ghost:hover:not(:disabled)
-  .pane-header-add-btn__badge-dot {
-  border-color: var(--color-accent);
+  border-color: var(--color-app-chrome-active-fill);
 }
 
 [data-app-surface='capture'] .pane-footer {
