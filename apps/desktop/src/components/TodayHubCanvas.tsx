@@ -385,11 +385,15 @@ export function TodayHubCanvas({
   const inFlightPersistUriRef = useRef<string | null>(null);
   const inboxContentByUriRef = useRef(inboxContentByUri);
   const localRowSectionsRef = useRef<Record<string, string[]>>({});
-  /** Latest hub cell focus request: monotonic gen + optional caret (consumed by focus effect). */
+  /**
+   * Latest hub cell focus request: monotonic gen + optional caret, plus the disk-truth `target`
+   * markdown for the opened column so the focus effect can heal a warm editor's stale doc.
+   */
   const hubCellFocusGenerationRef = useRef(0);
   const pendingHubCellFocusRef = useRef<{
     gen: number;
     caret: number | null;
+    target: string;
   } | null>(null);
 
   useLayoutEffect(() => {
@@ -579,6 +583,7 @@ export function TodayHubCanvas({
         pendingHubCellFocusRef.current = {
           gen: nextGen,
           caret: clickCaret,
+          target: initial[col] ?? '',
         };
         setLocalRowSections(prev => {
           const next = {...prev, [key]: initial};
@@ -637,7 +642,7 @@ export function TodayHubCanvas({
     if (!pack) {
       return;
     }
-    const {gen, caret} = pack;
+    const {gen, caret, target} = pack;
 
     const applyHubCellFocus = (): void => {
       if (hubCellFocusGenerationRef.current !== gen) {
@@ -651,6 +656,11 @@ export function TodayHubCanvas({
         return;
       }
       pendingHubCellFocusRef.current = null;
+      // Heal a warm cell editor whose doc drifted from disk truth (clean / external edit while
+      // it was warm but not active). No-op for cold opens and already-synced warm cells.
+      if (ed.getMarkdown() !== target) {
+        ed.loadMarkdown(target, {selection: 'preserve'});
+      }
       if (caret != null) {
         ed.focus({anchor: caret});
       } else {

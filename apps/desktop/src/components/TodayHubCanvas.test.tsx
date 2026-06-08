@@ -1,4 +1,5 @@
 import {act, fireEvent, render, waitFor} from '@testing-library/react';
+import {EditorView} from '@codemirror/view';
 import {createRef} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
@@ -70,8 +71,8 @@ function staticCellWithText(needle: string): HTMLElement | null {
   return null;
 }
 
-async function openThenCloseRow(rowText: string): Promise<void> {
-  // Open the cell (mounts the editor + seeds localRowSections), then Escape to close it.
+async function openRow(rowText: string): Promise<void> {
+  // Open the cell (mounts/surfaces the editor + seeds localRowSections).
   const staticRich = staticCellWithText(rowText);
   expect(staticRich).not.toBeNull();
   const readonly = staticRich!.closest('.today-hub-canvas__cell-readonly');
@@ -79,9 +80,28 @@ async function openThenCloseRow(rowText: string): Promise<void> {
   await act(async () => {
     fireEvent.click(readonly!);
   });
+}
+
+async function closeActiveCell(): Promise<void> {
   await act(async () => {
     fireEvent.keyDown(window, {key: 'Escape'});
   });
+}
+
+async function openThenCloseRow(rowText: string): Promise<void> {
+  await openRow(rowText);
+  await closeActiveCell();
+}
+
+/** Doc text of the currently-editing hub cell's CodeMirror view. */
+function activeCellEditorDoc(): string | null {
+  const content = document.querySelector<HTMLElement>(
+    '.today-hub-canvas__cm-host--editing .cm-content',
+  );
+  if (!content) {
+    return null;
+  }
+  return EditorView.findFromDOM(content)?.state.doc.toString() ?? null;
 }
 
 describe('TodayHubCanvas — disk truth for non-active week rows', () => {
@@ -140,5 +160,35 @@ describe('TodayHubCanvas — disk truth for non-active week rows', () => {
       expect(merged).toContain('new content');
       expect(merged).not.toContain('old content');
     }
+  });
+
+  it('reopening a warm cell shows disk content in the editor, not its stale doc', async () => {
+    const rowUri = currentWeekRowUri();
+    const {rerenderWith} = renderCanvas({[rowUri]: 'first body'});
+
+    await waitFor(() => {
+      expect(staticCellWithText('first body')).not.toBeNull();
+    });
+
+    // Open (mounts the editor with the initial body) then close — the editor stays warm.
+    await openRow('first body');
+    await waitFor(() => {
+      expect(activeCellEditorDoc()).toBe('first body');
+    });
+    await closeActiveCell();
+
+    // External change (e.g. Ctrl+E cleanup / disk edit) reconciled into the cache while warm.
+    await act(async () => {
+      rerenderWith({[rowUri]: 'second body'});
+    });
+    await waitFor(() => {
+      expect(staticCellWithText('second body')).not.toBeNull();
+    });
+
+    // Reopen the still-warm cell: its CodeMirror doc must reflect disk truth, not the stale doc.
+    await openRow('second body');
+    await waitFor(() => {
+      expect(activeCellEditorDoc()).toBe('second body');
+    });
   });
 });
