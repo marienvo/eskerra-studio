@@ -168,6 +168,6 @@ export function enqueuePersistTodayHubRowOnSaveChain(
   const next = deps.saveChainRef.current.then(() => run()).finally(() => {
     deps.saveActiveRef.current = false;
   });
-  deps.saveChainRef.current = next.catch(() => undefined);
+  deps.saveChainRef.current = next.then(() => undefined, () => undefined);
   return next;
 }
