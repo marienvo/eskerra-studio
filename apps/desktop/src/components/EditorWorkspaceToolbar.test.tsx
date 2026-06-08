@@ -43,6 +43,42 @@ const baseProps = {
   vaultPaneVisible: true,
 };
 
+describe('EditorWorkspaceToolbar pane toggles', () => {
+  it('applies pressed modifier classes when panes are visible', () => {
+    const {container} = render(
+      <EditorWorkspaceToolbar
+        {...baseProps}
+        vaultPaneVisible
+        episodesPaneVisible
+        inboxPaneVisible
+        notificationsPanelVisible
+      />,
+    );
+
+    expect(container.querySelector('.pane-header-add-btn--vault-on')).not.toBeNull();
+    expect(container.querySelector('.pane-header-add-btn--episodes-on')).not.toBeNull();
+    expect(container.querySelector('.pane-header-add-btn--inbox-on')).not.toBeNull();
+    expect(container.querySelector('.pane-header-add-btn--notifications-on')).not.toBeNull();
+  });
+
+  it('omits pressed modifier classes when panes are hidden', () => {
+    const {container} = render(
+      <EditorWorkspaceToolbar
+        {...baseProps}
+        vaultPaneVisible={false}
+        episodesPaneVisible={false}
+        inboxPaneVisible={false}
+        notificationsPanelVisible={false}
+      />,
+    );
+
+    expect(container.querySelector('.pane-header-add-btn--vault-on')).toBeNull();
+    expect(container.querySelector('.pane-header-add-btn--episodes-on')).toBeNull();
+    expect(container.querySelector('.pane-header-add-btn--inbox-on')).toBeNull();
+    expect(container.querySelector('.pane-header-add-btn--notifications-on')).toBeNull();
+  });
+});
+
 describe('EditorWorkspaceToolbar close now playing', () => {
   it('renders close control before the title when now playing', () => {
     const onClose = vi.fn();

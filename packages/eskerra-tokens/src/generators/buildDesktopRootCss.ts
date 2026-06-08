@@ -81,6 +81,12 @@ export function buildDesktopRootCss(): string {
   --color-shell-hover-bg: rgba(255, 255, 255, 0.12);
   /* Opaque: chroma 2 tinted toward white (not translucent gray-on-gradient) */
   --color-shell-tagline: color-mix(in srgb, var(--color-app-chrome-chroma-2) 15%, white);
+  /*
+   * Opaque approximation of visible AppChromeBackground behind transparent shell rows
+   * (editor toolbar, title bar gutter, etc.). Same white-mix pattern as --color-shell-tagline
+   * but anchored on backdrop (gradient base rect) instead of chroma-2.
+   */
+  --color-app-chrome-surface: color-mix(in srgb, var(--color-app-chrome-backdrop) 85%, white);
 
   /* Capture */
   --color-capture-panel: ${b.brandSurfaceBright};
