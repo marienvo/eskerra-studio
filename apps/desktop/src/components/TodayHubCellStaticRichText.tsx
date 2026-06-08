@@ -54,11 +54,17 @@ const MINUTE_TICK_MS = 60_000;
  */
 function useDateTokenPillMinuteClock(active: boolean): Date {
   const [now, setNow] = useState(() => new Date());
+  const [prevActive, setPrevActive] = useState(active);
+  if (active !== prevActive) {
+    setPrevActive(active);
+    if (active) {
+      setNow(new Date());
+    }
+  }
   useEffect(() => {
     if (!active) {
       return;
     }
-    setNow(new Date());
     let intervalId: ReturnType<typeof setInterval> | undefined;
     const msUntilNextMinute = MINUTE_TICK_MS - (Date.now() % MINUTE_TICK_MS);
     const timeoutId = setTimeout(() => {
