@@ -32,7 +32,9 @@ export function DateTokenPickerOverlay({
 }: DateTokenPickerOverlayProps) {
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
+  useLayoutEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
   const [position, setPosition] = useState<DateTokenPickerOverlayPosition | null>(
     null,
   );

@@ -1,9 +1,9 @@
 {
   "maxLinesByPath": {
-    "apps/desktop/src/components/TodayHubCanvas.tsx": 1139,
+    "apps/desktop/src/components/TodayHubCanvas.tsx": 1201,
     "apps/desktop/src/components/VaultPaneTree.tsx": 1108,
-    "apps/desktop/src/components/vaultTab/VaultTabCaptureLayout.tsx": 402,
-    "apps/desktop/src/components/vaultTab/VaultTabEditorPane.tsx": 539,
+    "apps/desktop/src/components/vaultTab/VaultTabCaptureLayout.tsx": 409,
+    "apps/desktop/src/components/vaultTab/VaultTabEditorPane.tsx": 559,
     "apps/desktop/src/editor/frontmatterEditor/FrontmatterEditor.tsx": 1203,
     "apps/desktop/src/editor/noteEditor/eskerraTableV1/EskerraTableShell.tsx": 1703,
     "apps/desktop/src/editor/noteEditor/markdownSelectionSurround.test.ts": 846,

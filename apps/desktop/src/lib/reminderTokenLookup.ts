@@ -15,8 +15,33 @@ export type ReminderStrikeResult =
 
 /** Canonical on-disk token text for a live reminder (matches Rust scanner). */
 export function normalizedTokenTextFromValue(value: DateTokenValue): string {
-  const {struck: _struck, ...live} = value;
-  return formatDateToken(live);
+  const {year, month, day, hour, minute} = value;
+  return formatDateToken({year, month, day, hour, minute});
+}
+
+function countPriorMatchingTokensOnLine(
+  line: string,
+  lineStart: number,
+  offset: number,
+  normalizedTokenText: string,
+): number {
+  let count = 0;
+  for (const span of collectDateTokenSpansInLine(line)) {
+    if (span.token.startsWith('@~~')) {
+      continue;
+    }
+    const value = parseDateTokenSpan(span.token);
+    if (!value) {
+      continue;
+    }
+    if (normalizedTokenTextFromValue(value) !== normalizedTokenText) {
+      continue;
+    }
+    if (lineStart + span.tokenStartInLine < offset) {
+      count++;
+    }
+  }
+  return count;
 }
 
 /**
@@ -33,23 +58,12 @@ export function occurrenceOrdinalAtOffset(
   const lines = text.split('\n');
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex]!;
-    for (const span of collectDateTokenSpansInLine(line)) {
-      if (span.token.startsWith('@~~')) {
-        continue;
-      }
-      const value = parseDateTokenSpan(span.token);
-      if (!value) {
-        continue;
-      }
-      const normalized = normalizedTokenTextFromValue(value);
-      if (normalized !== normalizedTokenText) {
-        continue;
-      }
-      const tokenFrom = lineStart + span.tokenStartInLine;
-      if (tokenFrom < offset) {
-        ordinal++;
-      }
-    }
+    ordinal += countPriorMatchingTokensOnLine(
+      line,
+      lineStart,
+      offset,
+      normalizedTokenText,
+    );
     lineStart += line.length + (lineIndex < lines.length - 1 ? 1 : 0);
   }
   return ordinal;
