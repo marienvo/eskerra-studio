@@ -30,7 +30,11 @@ import {useAppTitleBarTodayHubSelect} from './shell/useAppTitleBarTodayHubSelect
 import {useAppDebouncedPersistMainWindowUi} from './shell/useAppDebouncedPersistMainWindowUi';
 import {useAppPickFolder} from './shell/useAppPickFolder';
 import {usePaneVisibility} from './shell/usePaneVisibility';
-import {useOpenReminderNavigation, navigateToReminder} from './hooks/useOpenReminderNavigation';
+import {
+  useOpenReminderNavigation,
+  navigateToReminder,
+  type TodayHubReminderBridge,
+} from './hooks/useOpenReminderNavigation';
 import {useReminderPane} from './hooks/useReminderPane';
 import {AppLayoutsLoadingScreen} from './shell/mainWindow/AppLayoutsLoadingScreen';
 import {AppNoVaultSetupScreen} from './shell/mainWindow/AppNoVaultSetupScreen';
@@ -105,7 +109,26 @@ export default function App() {
     initialVaultHydrateAttemptDone,
   } = workspace;
 
-  useOpenReminderNavigation({openMarkdownInEditor, inboxEditorRef, initialVaultHydrateAttemptDone});
+  const todayHubReminderBridge = useMemo<TodayHubReminderBridge>(
+    () => ({
+      hubTodayNoteUris: () =>
+        todayHubController.todayHubSelectorItems.map(i => i.todayNoteUri),
+      switchTodayHubWorkspace: todayHubController.switchTodayHubWorkspace,
+      bridgeRef: todayHubController.todayHubBridgeRef,
+    }),
+    [
+      todayHubController.todayHubSelectorItems,
+      todayHubController.switchTodayHubWorkspace,
+      todayHubController.todayHubBridgeRef,
+    ],
+  );
+
+  useOpenReminderNavigation({
+    openMarkdownInEditor,
+    inboxEditorRef,
+    initialVaultHydrateAttemptDone,
+    hubBridge: todayHubReminderBridge,
+  });
 
   const reminderPane = useReminderPane(vaultRoot ?? null);
 
@@ -115,9 +138,10 @@ export default function App() {
         {noteUri, reminderId, uiCaretHint},
         openMarkdownInEditor,
         inboxEditorRef,
+        todayHubReminderBridge,
       );
     },
-    [openMarkdownInEditor, inboxEditorRef],
+    [openMarkdownInEditor, inboxEditorRef, todayHubReminderBridge],
   );
 
   const titleBarActions = useAppTitleBarVaultActions({

@@ -51,6 +51,8 @@ import {
 import {INBOX_AUTOSAVE_DEBOUNCE_MS} from '../lib/inboxAutosaveScheduler';
 import {todayHubPerfEnabled, todayHubPerfLog} from '../lib/todayHub/todayHubPerf';
 import {todayHubStaticCellDocOffsetFromPointer} from '../lib/todayHub/todayHubCellStaticPointer';
+import {mapFullFileCaretToHubCellLineStart} from '../lib/todayHub/reminderHubCellTarget';
+import type {TodayHubReminderCellOpenResult} from '../lib/todayHub/reminderHubCellTarget';
 import {
   todayHubCanvasCellSurface,
   todayHubCanvasCellWarmOrActive,
@@ -343,6 +345,7 @@ export function TodayHubCanvas({
   /** Invalidates pending double-rAF warm scheduling when the pointer leaves the cell. */
   const hubWarmDeferGenRef = useRef<Record<string, number>>({});
   const hubOpenPerfT0Ref = useRef(0);
+  const canvasRootRef = useRef<HTMLDivElement | null>(null);
 
   const wikiLinkCompletionCandidates = useMemo(
     () => buildInboxWikiLinkCompletionCandidates(noteRefs),
@@ -648,6 +651,40 @@ export function TodayHubCanvas({
   );
 
   /**
+   * Bridge entry for reminder click-to-open (Gnome notification or in-pane panel). The row's week
+   * must be one this hub renders; otherwise the caller opens the plain note. Hydrates the row if it
+   * is not warm, opens the column holding the token at its line start, and scrolls the row into view.
+   */
+  const openReminderCellFromBridge = useCallback(
+    async (rowUri: string, caretUtf16: number): Promise<TodayHubReminderCellOpenResult> => {
+      const key = normUri(rowUri);
+      if (!rowUrisRef.current.some(r => normUri(r) === key)) {
+        return 'out-of-window';
+      }
+      if (inboxContentByUriRef.current[key] === undefined) {
+        await prehydrateTodayHubRows([rowUri]);
+      }
+      const raw = inboxContentByUriRef.current[key] ?? '';
+      const {col, sectionCaret} = mapFullFileCaretToHubCellLineStart(
+        raw,
+        columnCount,
+        caretUtf16,
+      );
+      openCell(key, col, sectionCaret);
+      requestAnimationFrame(() => {
+        const rowEl = canvasRootRef.current?.querySelector(
+          `[data-hub-row-uri="${CSS.escape(key)}"]`,
+        );
+        if (rowEl instanceof HTMLElement) {
+          rowEl.scrollIntoView({block: 'center'});
+        }
+      });
+      return 'handled';
+    },
+    [columnCount, openCell, prehydrateTodayHubRows],
+  );
+
+  /**
    * Focus the cell editor after mount: sync when no click offset; one `rAF` when placing the caret
    * from a pointer offset (see `specs/performance/todayhub-cell-edit-mode-latency.md`).
    */
@@ -743,6 +780,8 @@ export function TodayHubCanvas({
       );
     };
     bridge.cleanHubPageDayColumns = cleanFn;
+    const openReminderFn = openReminderCellFromBridge;
+    bridge.openReminderCell = openReminderFn;
     return () => {
       if (bridge.flushPendingEdits === flushFn) {
         bridge.flushPendingEdits = async () => {};
@@ -753,8 +792,18 @@ export function TodayHubCanvas({
       if (bridge.cleanHubPageDayColumns === cleanFn) {
         bridge.cleanHubPageDayColumns = async () => {};
       }
+      if (bridge.openReminderCell === openReminderFn) {
+        bridge.openReminderCell = null;
+      }
     };
-  }, [bridgeRef, active, columnCount, flushScheduledPersist, cleanHubPageDayColumns]);
+  }, [
+    bridgeRef,
+    active,
+    columnCount,
+    flushScheduledPersist,
+    cleanHubPageDayColumns,
+    openReminderCellFromBridge,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -855,6 +904,7 @@ export function TodayHubCanvas({
 
   return (
     <div
+      ref={canvasRootRef}
       className="today-hub-canvas"
       role="region"
       aria-label="Today hub weekly canvas"
@@ -874,6 +924,7 @@ export function TodayHubCanvas({
           return (
             <div
               key={uri}
+              data-hub-row-uri={uri}
               className={
                 ri === 0
                   ? 'today-hub-canvas__row today-hub-canvas__row--previous-week'

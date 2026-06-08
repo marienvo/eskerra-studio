@@ -55,6 +55,52 @@ export function splitTodayRowIntoColumns(fullText: string, columnCount: number):
   return sanitizeColumnChunks([...head, tail]);
 }
 
+export type TodayRowColumnSpan = {
+  /** Sanitized section string the cell editor loads (identical to `splitTodayRowIntoColumns[i]`). */
+  section: string;
+  /** UTF-16 start offset of this column's content in the `\r\n`→`\n` normalized full row text. */
+  sourceStart: number;
+};
+
+/**
+ * Like {@link splitTodayRowIntoColumns}, but also reports each column's start offset in the
+ * CRLF-normalized full row text. Lets callers map a full-file caret (e.g. a resolved reminder
+ * token position) back to the column section the hub cell editor displays.
+ *
+ * Offsets mirror `String.split(SPLIT_RX)`: the matched delimiter text is consumed, so a column's
+ * `sourceStart` is the position just after the preceding delimiter. For a well-formed row (exactly
+ * `columnCount - 1` delimiters) each section is a contiguous slice of the normalized text, so
+ * `sourceStart + offsetInSection` round-trips. Trailing empty columns (no delimiter present) and the
+ * over-split tail (more delimiters than columns) report `sourceStart` at the start of their first
+ * chunk; intra-section offsets past an internal delimiter in those malformed cases may drift.
+ */
+export function splitTodayRowIntoColumnSpans(
+  fullText: string,
+  columnCount: number,
+): TodayRowColumnSpan[] {
+  if (columnCount < 1) {
+    throw new Error('columnCount must be at least 1');
+  }
+  const normalized = fullText.replace(/\r\n/g, '\n');
+  const sections = splitTodayRowIntoColumns(normalized, columnCount);
+  if (columnCount === 1) {
+    return [{section: sections[0], sourceStart: 0}];
+  }
+  const starts: number[] = [0];
+  const rx = new RegExp(SPLIT_RX.source, SPLIT_RX.flags);
+  let m: RegExpExecArray | null;
+  while ((m = rx.exec(normalized)) !== null) {
+    starts.push(m.index + m[0].length);
+    if (m[0].length === 0) {
+      rx.lastIndex += 1;
+    }
+  }
+  return sections.map((section, i) => ({
+    section,
+    sourceStart: i < starts.length ? starts[i] : normalized.length,
+  }));
+}
+
 export function mergeTodayRowColumns(sections: string[]): string {
   if (sections.length === 0) {
     return '';

@@ -9,6 +9,7 @@ import {
   normalizeTodayHubRowForDisk,
   parseTodayHubFrontmatter,
   splitTodayRowIntoColumns,
+  splitTodayRowIntoColumnSpans,
   startOfLocalWeek,
   startOfLocalWeekMonday,
   todayHubColumnCount,
@@ -339,6 +340,41 @@ describe('splitTodayRowIntoColumns / mergeTodayRowColumns', () => {
   it('todayHubRowSectionsAllBlank', () => {
     expect(todayHubRowSectionsAllBlank(['', '  \n'])).toBe(true);
     expect(todayHubRowSectionsAllBlank(['x'])).toBe(false);
+  });
+});
+
+describe('splitTodayRowIntoColumnSpans', () => {
+  it('single column starts at 0', () => {
+    const raw = '# Hi\n\nfoo';
+    expect(splitTodayRowIntoColumnSpans(raw, 1)).toEqual([{section: raw, sourceStart: 0}]);
+  });
+
+  it('reports a source offset that round-trips for each well-formed column', () => {
+    const merged = mergeTodayRowColumns(['# 2026-04-06\n\ndefault col', 'actions\n\nmore']);
+    const spans = splitTodayRowIntoColumnSpans(merged, 2);
+    expect(spans).toHaveLength(2);
+    // Each section is a contiguous slice of the normalized text at its reported start.
+    for (const {section, sourceStart} of spans) {
+      expect(merged.slice(sourceStart, sourceStart + section.length)).toBe(section);
+    }
+    expect(spans[0].sourceStart).toBe(0);
+    // Column 1 begins right after the `\n\n::today-section::\n\n` delimiter.
+    expect(spans[1].sourceStart).toBe('# 2026-04-06\n\ndefault col'.length + '\n\n::today-section::\n\n'.length);
+  });
+
+  it('trailing empty columns (no delimiter) start at end of text', () => {
+    const spans = splitTodayRowIntoColumnSpans('only default', 3);
+    expect(spans.map(s => s.section)).toEqual(['only default', '', '']);
+    expect(spans[0].sourceStart).toBe(0);
+    expect(spans[1].sourceStart).toBe('only default'.length);
+    expect(spans[2].sourceStart).toBe('only default'.length);
+  });
+
+  it('last column start sits at the first tail chunk when over-split', () => {
+    const text = 'a\n\n::today-section::\n\nb\n\n::today-section::\n\nc';
+    const spans = splitTodayRowIntoColumnSpans(text, 2);
+    expect(spans[0].sourceStart).toBe(0);
+    expect(text.slice(spans[1].sourceStart)).toBe('b\n\n::today-section::\n\nc');
   });
 });
 

@@ -3,7 +3,11 @@ import {beforeEach, describe, expect, it, vi} from 'vitest';
 import type {RefObject} from 'react';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
-import {useOpenReminderNavigation} from './useOpenReminderNavigation';
+import type {TodayHubWorkspaceBridge} from '../lib/todayHub';
+import {
+  useOpenReminderNavigation,
+  type TodayHubReminderBridge,
+} from './useOpenReminderNavigation';
 
 type OpenReminderRequest = {
   noteUri: string;
@@ -74,11 +78,13 @@ describe('useOpenReminderNavigation', () => {
     openMarkdownInEditor = vi.fn(() => Promise.resolve()),
     focus = vi.fn(),
     getMarkdown = vi.fn(() => 'editor markdown'),
+    hubBridge,
   }: {
     initialVaultHydrateAttemptDone: boolean;
     openMarkdownInEditor?: (uri: string) => Promise<void>;
     focus?: NoteMarkdownEditorHandle['focus'];
     getMarkdown?: NoteMarkdownEditorHandle['getMarkdown'];
+    hubBridge?: TodayHubReminderBridge;
   }) {
     const inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null> = {
       current: {focus, getMarkdown},
@@ -90,11 +96,35 @@ describe('useOpenReminderNavigation', () => {
           openMarkdownInEditor,
           inboxEditorRef,
           initialVaultHydrateAttemptDone: hydrated,
+          hubBridge,
         }),
       {initialProps: {hydrated: initialVaultHydrateAttemptDone}},
     );
 
     return {hook, openMarkdownInEditor, focus};
+  }
+
+  function makeHubBridge(
+    openReminderCell: TodayHubWorkspaceBridge['openReminderCell'],
+  ): {
+    bridge: TodayHubReminderBridge;
+    switchTodayHubWorkspace: ReturnType<typeof vi.fn>;
+    openReminderCell: NonNullable<TodayHubWorkspaceBridge['openReminderCell']>;
+  } {
+    const switchTodayHubWorkspace = vi.fn(() => Promise.resolve());
+    const fn = vi.fn(openReminderCell ?? (() => Promise.resolve('handled' as const)));
+    const bridgeRef = {
+      current: {openReminderCell: fn} as unknown as TodayHubWorkspaceBridge,
+    } as RefObject<TodayHubWorkspaceBridge>;
+    return {
+      bridge: {
+        hubTodayNoteUris: () => ['/vault/Hub/Today.md'],
+        switchTodayHubWorkspace,
+        bridgeRef,
+      },
+      switchTodayHubWorkspace,
+      openReminderCell: fn,
+    };
   }
 
   it('opens the decoded file path and resolves caret from editor markdown with the original reminder URI', async () => {
@@ -395,5 +425,61 @@ describe('useOpenReminderNavigation', () => {
     });
 
     expect(openMarkdownInEditor).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes a reminder in a Today Hub row to the hub canvas instead of the plain note', async () => {
+    const openMarkdownInEditor = vi.fn(() => Promise.resolve());
+    tauriTest.state.invoke.mockImplementation((command: string) => {
+      if (command === 'reminders_resolve_position') {
+        return Promise.resolve({caretUtf16: 99});
+      }
+      return Promise.resolve(null);
+    });
+    const {bridge, switchTodayHubWorkspace, openReminderCell} = makeHubBridge(() =>
+      Promise.resolve('handled'),
+    );
+
+    renderReminderHook({initialVaultHydrateAttemptDone: true, openMarkdownInEditor, hubBridge: bridge});
+    await flushMicrotasks();
+
+    act(() => {
+      tauriTest.emitOpenReminder({
+        noteUri: 'file:///vault/Hub/2026-06-08.md',
+        reminderId: 'r-hub',
+      });
+    });
+
+    await waitFor(() => {
+      expect(switchTodayHubWorkspace).toHaveBeenCalledWith('/vault/Hub/Today.md');
+    });
+    await waitFor(() => {
+      expect(openReminderCell).toHaveBeenCalledWith('/vault/Hub/2026-06-08.md', 99);
+    });
+    expect(openMarkdownInEditor).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the plain note when the hub row is out of the canvas window', async () => {
+    const openMarkdownInEditor = vi.fn(() => Promise.resolve());
+    tauriTest.state.invoke.mockImplementation((command: string) => {
+      if (command === 'reminders_resolve_position') {
+        return Promise.resolve({caretUtf16: 5});
+      }
+      return Promise.resolve(null);
+    });
+    const {bridge} = makeHubBridge(() => Promise.resolve('out-of-window'));
+
+    renderReminderHook({initialVaultHydrateAttemptDone: true, openMarkdownInEditor, hubBridge: bridge});
+    await flushMicrotasks();
+
+    act(() => {
+      tauriTest.emitOpenReminder({
+        noteUri: 'file:///vault/Hub/2020-01-06.md',
+        reminderId: 'r-old',
+      });
+    });
+
+    await waitFor(() => {
+      expect(openMarkdownInEditor).toHaveBeenCalledWith('/vault/Hub/2020-01-06.md');
+    });
   });
 });

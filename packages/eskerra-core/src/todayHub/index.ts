@@ -50,6 +50,8 @@ export {
   mergeTodayRowColumns,
   normalizeTodayHubRowForDisk,
   splitTodayRowIntoColumns,
+  splitTodayRowIntoColumnSpans,
   stripTodayHubDelimiterOnlyLinesFromColumn,
   todayHubRowSectionsAllBlank,
 } from './splitMergeTodayRowColumns';
+export type {TodayRowColumnSpan} from './splitMergeTodayRowColumns';
