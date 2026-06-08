@@ -11,10 +11,10 @@ import {
 import {computeMarkerFocusLineStarts} from '../markdownMarkerFocusLine';
 
 import {
-  DATE_TOKEN_PATTERN,
+  collectDateTokenSpansInLine,
   formatDateTokenPretty,
   isDateTokenInPast,
-  parseDateToken,
+  parseDateTokenSpan,
 } from './dateToken';
 
 import './dateTokenHighlight.css';
@@ -28,30 +28,55 @@ export const CM_DATE_TOKEN_PILL_CLASS = 'cm-date-token-pill';
 /** Modifier class for pills whose moment has already passed. */
 export const CM_DATE_TOKEN_PILL_PAST_CLASS = 'cm-date-token-pill--past';
 
+/** Modifier class for daemon-struck or user-completed reminder pills. */
+export const CM_DATE_TOKEN_PILL_COMPLETED_CLASS = 'cm-date-token-pill--completed';
+
+/** Focused-line mark for struck tokens. */
+export const CM_DATE_TOKEN_COMPLETED_CLASS = 'cm-date-token--completed';
+
 const MINUTE_TICK_MS = 60_000;
 
-const dateTokenMark = Decoration.mark({
-  class: CM_DATE_TOKEN_CLASS,
-  attributes: {'data-date-token': ''},
-});
+function dateTokenMarkClass(completed: boolean): string {
+  return completed
+    ? `${CM_DATE_TOKEN_CLASS} ${CM_DATE_TOKEN_COMPLETED_CLASS}`
+    : CM_DATE_TOKEN_CLASS;
+}
 
 /** Pretty pill rendered in place of the raw token text on non-focused lines. */
 class DateTokenPillWidget extends WidgetType {
   readonly label: string;
   readonly past: boolean;
+  readonly completed: boolean;
 
-  constructor(label: string, past: boolean) {
+  constructor(label: string, past: boolean, completed: boolean) {
     super();
     this.label = label;
     this.past = past;
+    this.completed = completed;
   }
 
   eq(other: DateTokenPillWidget): boolean {
-    return other.label === this.label && other.past === this.past;
+    return (
+      other.label === this.label
+      && other.past === this.past
+      && other.completed === this.completed
+    );
   }
 
   toDOM(): HTMLElement {
     const span = document.createElement('span');
+    if (this.completed) {
+      span.className = `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_COMPLETED_CLASS}`;
+      span.setAttribute('data-date-token', '');
+      const emoji = document.createElement('span');
+      emoji.className = 'cm-date-token-pill__emoji';
+      emoji.textContent = '✔️';
+      const label = document.createElement('span');
+      label.className = 'cm-date-token-pill__label';
+      label.textContent = this.label;
+      span.append(emoji, label);
+      return span;
+    }
     span.className = this.past
       ? `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`
       : CM_DATE_TOKEN_PILL_CLASS;
@@ -74,26 +99,29 @@ function collectDateTokenRangesForLine(
   const ranges: Range<Decoration>[] = [];
   const line = doc.line(lineNumber);
   const text = line.text;
-  DATE_TOKEN_PATTERN.lastIndex = 0;
-  let match = DATE_TOKEN_PATTERN.exec(text);
-  while (match) {
-    const token = match[1]!;
-    const value = parseDateToken(token);
-    if (value !== null) {
-      const tokenStartInLine = match.index + match[0].length - token.length;
-      const from = line.from + tokenStartInLine;
-      const to = from + token.length;
-      if (isFocusedLine) {
-        ranges.push(dateTokenMark.range(from, to));
-      } else {
-        const widget = new DateTokenPillWidget(
-          formatDateTokenPretty(value, now),
-          isDateTokenInPast(value, now),
-        );
-        ranges.push(Decoration.replace({widget}).range(from, to));
-      }
+  for (const {token, tokenStartInLine} of collectDateTokenSpansInLine(text)) {
+    const value = parseDateTokenSpan(token);
+    if (value === null) {
+      continue;
     }
-    match = DATE_TOKEN_PATTERN.exec(text);
+    const from = line.from + tokenStartInLine;
+    const to = from + token.length;
+    const completed = value.struck === true;
+    if (isFocusedLine) {
+      ranges.push(
+        Decoration.mark({
+          class: dateTokenMarkClass(completed),
+          attributes: {'data-date-token': ''},
+        }).range(from, to),
+      );
+    } else {
+      const widget = new DateTokenPillWidget(
+        formatDateTokenPretty(value, now),
+        completed ? false : isDateTokenInPast(value, now),
+        completed,
+      );
+      ranges.push(Decoration.replace({widget}).range(from, to));
+    }
   }
   return ranges;
 }
@@ -259,14 +287,8 @@ export function documentHasVisibleDateTokenPills(view: EditorView): boolean {
     if (focusLineStarts.has(line.from)) {
       continue;
     }
-    const text = line.text;
-    DATE_TOKEN_PATTERN.lastIndex = 0;
-    let match = DATE_TOKEN_PATTERN.exec(text);
-    while (match) {
-      if (parseDateToken(match[1]!) !== null) {
-        return true;
-      }
-      match = DATE_TOKEN_PATTERN.exec(text);
+    if (collectDateTokenSpansInLine(line.text).length > 0) {
+      return true;
     }
   }
   return false;

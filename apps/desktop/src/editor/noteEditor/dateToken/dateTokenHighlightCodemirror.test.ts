@@ -7,6 +7,7 @@ import {
   buildDateTokenDecorations,
   CM_DATE_TOKEN_CLASS,
   CM_DATE_TOKEN_PILL_CLASS,
+  CM_DATE_TOKEN_PILL_COMPLETED_CLASS,
   CM_DATE_TOKEN_PILL_PAST_CLASS,
   dateTokenHighlightExtensions,
   documentHasVisibleDateTokenPills,
@@ -147,6 +148,30 @@ describe('dateTokenHighlightCodemirror', () => {
     expect(collectIntervals(view, buildDateTokenDecorations(view, NOW))).toEqual(
       [],
     );
+  });
+
+  it('renders struck tokens as completed pills with structured label DOM', () => {
+    const doc = 'done @~~2026-06-07_0930~~';
+    view = mountView(doc);
+    vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(false);
+
+    const set = buildDateTokenDecorations(view, NOW);
+    let dom: HTMLElement | null = null;
+    set.between(0, view.state.doc.length, (_from, _to, deco) => {
+      const widget = (deco.spec as {widget?: {toDOM: () => HTMLElement}}).widget;
+      if (widget) {
+        dom = widget.toDOM();
+      }
+    });
+
+    expect(dom).not.toBeNull();
+    const pill = dom as unknown as HTMLElement;
+    expect(pill.classList.contains(CM_DATE_TOKEN_PILL_COMPLETED_CLASS)).toBe(true);
+    expect(pill.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('✔️');
+    expect(pill.querySelector('.cm-date-token-pill__label')?.textContent).toBe(
+      'Tomorrow at 09:30',
+    );
+    expect(pill.classList.contains('cm-date-token-pill--past')).toBe(false);
   });
 
   it('renders past tokens with a check icon and the past modifier class', () => {

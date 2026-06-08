@@ -8,19 +8,24 @@ Module map: [`apps/desktop/src/editor/noteEditor/dateToken/`](../../apps/desktop
 
 ```
 DATE_TOKEN = "@" YYYY "-" MM "-" DD ( "_" HHMM )?
+STRUCK_DATE_TOKEN = "@~~" YYYY "-" MM "-" DD ( "_" HHMM )? "~~"
 ```
 
 - **With time:** `@2026-12-28_2352` (hour and minute as two-digit 24-hour fields, no colon).
 - **Without time:** `@2026-12-28` (the `_HHMM` suffix is omitted).
+- **Struck (completed reminder):** `@~~2026-06-08_0930~~` — written by `eskerra-reminderd` on removal or by the user via the picker **Completed** toggle. An optional backslash before `_` (`\_`) is accepted when parsing daemon output but user writes always emit canonical `_`.
 
 Single source of truth for parsing, formatting, and scan regexes: [`dateToken.ts`](../../apps/desktop/src/editor/noteEditor/dateToken/dateToken.ts).
 
 | Export | Role |
 |--------|------|
-| `DATE_TOKEN_PATTERN` | Document scan for chip decoration and click hit-testing (`(?:^|\s)(@…)`; group 1 is the token span). |
+| `DATE_TOKEN_PATTERN` | Live-token scan (`(?:^|\s)(@…)`; group 1 is the token span). |
+| `STRUCK_DATE_TOKEN_PATTERN` | Struck-token scan (`@~~…~~`; group 1 is the full span). |
 | `DATE_TOKEN_PREFIX_PATTERN` | Word-boundary check when the user has just typed `@`. |
-| `parseDateToken(text)` | Returns `{year, month, day, hour?, minute?}` or `null` when syntax or calendar/time validation fails. |
-| `formatDateToken(value)` | Builds the on-disk string (date-only when `hour` / `minute` are absent); year is zero-padded to four digits via `pad4`. |
+| `collectDateTokenSpansInLine(line)` | Non-overlapping live + struck spans on one line (struck first). |
+| `parseDateToken(text)` | Parses a live `@…` span; returns `{year, month, day, hour?, minute?}` or `null`. |
+| `parseDateTokenSpan(span)` | Parses live or struck full span; sets `struck: true` for `@~~…~~`. |
+| `formatDateToken(value)` | Builds on-disk string; when `value.struck`, emits `@~~…~~` (canonical `_`, never `\_`). |
 | `isValidCalendarDate` | Leap-year aware month/day validation. |
 
 **Validation:** A span is styled and treated as a date token only when `parseDateToken` succeeds. Invalid dates (for example `@2026-02-29`) and invalid times (for example `@2026-01-01_2560`) stay **plain unstyled text** so partial typing does not flash false chips.
@@ -43,6 +48,7 @@ Presentational React overlay: [`dateToken/dateTimePicker/`](../../apps/desktop/s
 - **Calendar:** month grid with previous/next month navigation; week rows start on **Monday** (Fedora/GNOME reference).
 - **Today:** prominent button sets the selected date to the current local calendar day.
 - **Time:** hour and minute inputs (24-hour) plus a **No time** toggle. When **No time** is on, time inputs disable and confirm yields a date-only token. Minute input uses a **5-minute step** (`step={5}`, max 55); typed or spinner values snap to the nearest 5-minute boundary.
+- **Completed:** checkbox below time toggles `struck` on the token (`@~~…~~` vs bare `@…`). This is a normal editor persist path — distinct from the reminder pane `RemoveReminder` IPC (daemon write-back).
 - **Live apply:** clicking a calendar day, **Today**, or changing time fields (hour, minute, **No time**) updates the document token immediately while the overlay stays open. `Enter` applies the current selection without closing. `Esc` or **Cancel** dismisses the overlay. Arrow keys move the calendar selection without applying until `Enter` or a day click.
 - **Defaults:** today’s date; no time pre-selected on a fresh `@` trigger. When time is enabled (uncheck **No time**), the picker prefills **now + 15 minutes**, snapped to the nearest 5-minute boundary.
 
@@ -63,9 +69,19 @@ Orchestration lives in [`NoteMarkdownEditor.tsx`](../../apps/desktop/src/editor/
 
 Overlay is portaled to `document.body`, positioned with `view.coordsAtPos` (fallback: editor host top-left inset). After mount, measured overlay size is clamped into the viewport (`clampDateTokenPickerOverlayPosition` in [`dateTokenPickerOverlayPosition.ts`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenPickerOverlayPosition.ts)): horizontal inset 8px; prefer below the anchor with a 6px gap, flip above when the bottom would overflow, then clamp top. Editor scroll dismisses the overlay (anchor is not re-followed on scroll).
 
+## Pill variants (non-focused lines)
+
+| Variant | Glyph | Modifier class | When |
+|---------|-------|----------------|------|
+| Upcoming | 🔔 | (default) | Live token, moment not yet past |
+| Past | ☑️ | `cm-date-token-pill--past` | Live token, moment passed |
+| Completed | ✔️ | `cm-date-token-pill--completed` | Struck `@~~…~~` (styling wins over `--past`) |
+
+Completed pills use structured DOM (`cm-date-token-pill__emoji` + `cm-date-token-pill__label` with strikethrough on the label only). The minute clock relabels all pill variants.
+
 ## Inline chip rendering
 
-Valid tokens receive a **mark decoration** (editable plain text, not a replace widget):
+Valid tokens receive a **mark decoration** on the **focused** line (editable plain text, not a replace widget). Struck tokens add `cm-date-token--completed`:
 
 - ViewPlugin: [`dateTokenHighlightCodemirror.ts`](../../apps/desktop/src/editor/noteEditor/dateToken/dateTokenHighlightCodemirror.ts)
 - Class: `cm-date-token`; attribute `data-date-token` for click detection

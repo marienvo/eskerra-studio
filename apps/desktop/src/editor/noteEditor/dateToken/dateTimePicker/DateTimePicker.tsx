@@ -1,5 +1,6 @@
 import {DsSurface} from '@eskerra/ds-desktop';
 
+import {DateTimePickerCompletedSection} from './DateTimePickerCompletedSection';
 import {DateTimePickerDayGrid} from './DateTimePickerDayGrid';
 import {DateTimePickerHeader} from './DateTimePickerHeader';
 import {DateTimePickerTimeSection} from './DateTimePickerTimeSection';
@@ -19,8 +20,10 @@ export function DateTimePicker(props: DateTimePickerProps) {
     noTime,
     hour,
     minute,
+    struck,
     calendarCells,
     setNoTime,
+    setStruck,
     setHour,
     setMinute,
     selectDate,
@@ -51,6 +54,10 @@ export function DateTimePicker(props: DateTimePickerProps) {
           onNoTimeChange={setNoTime}
           onHourChange={setHour}
           onMinuteChange={setMinute}
+        />
+        <DateTimePickerCompletedSection
+          struck={struck}
+          onStruckChange={setStruck}
         />
       </DsSurface>
     </div>

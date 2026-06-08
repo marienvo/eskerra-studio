@@ -109,13 +109,25 @@ function protectHighlightsInLine(
 /** Matches desktop date tokens; keep aligned with `DATE_TOKEN_PATTERN` in dateToken.ts. */
 const DATE_TOKEN_IN_PLAIN_TEXT = /(^|\s)(@\d{4}-\d{2}-\d{2}(?:_\d{4})?)/g;
 
+/** Struck reminders; keep aligned with `STRUCK_DATE_TOKEN_PATTERN` in dateToken.ts. */
+const STRUCK_DATE_TOKEN_IN_PLAIN_TEXT =
+  /(^|\s)(@~~\d{4}-\d{2}-\d{2}(?:\\?_\d{4})?~~)/g;
+
 function protectDateTokensInPlainText(
   text: string,
   tokens: Map<string, string>,
   startIndex: number,
 ): {line: string; nextIndex: number} {
   let index = startIndex;
-  const line = text.replace(
+  let line = text.replace(
+    STRUCK_DATE_TOKEN_IN_PLAIN_TEXT,
+    (_m, leading: string, token: string) => {
+      const placeholder = `DATETOKENTOKEN${String(index++).padStart(8, '0')}END`;
+      tokens.set(placeholder, token);
+      return `${leading}${placeholder}`;
+    },
+  );
+  line = line.replace(
     DATE_TOKEN_IN_PLAIN_TEXT,
     (_m, leading: string, token: string) => {
       const placeholder = `DATETOKENTOKEN${String(index++).padStart(8, '0')}END`;

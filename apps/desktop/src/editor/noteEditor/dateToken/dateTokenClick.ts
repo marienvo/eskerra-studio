@@ -2,8 +2,8 @@ import {type EditorState} from '@codemirror/state';
 import {EditorView, type Rect} from '@codemirror/view';
 
 import {
-  DATE_TOKEN_PATTERN,
-  parseDateToken,
+  collectDateTokenSpansInLine,
+  parseDateTokenSpan,
   type DateTokenValue,
 } from './dateToken';
 import type {DateTokenPickerOpenHandler} from './dateTokenTrigger';
@@ -28,23 +28,21 @@ export function dateTokenAtPosition(
   options: {includeBoundaries?: boolean} = {},
 ): DateTokenAtPosition | null {
   const line = state.doc.lineAt(Math.max(0, Math.min(pos, state.doc.length)));
-  DATE_TOKEN_PATTERN.lastIndex = 0;
-  let match = DATE_TOKEN_PATTERN.exec(line.text);
-  while (match) {
-    const text = match[1]!;
-    const value = parseDateToken(text);
-    if (value) {
-      const tokenStartInLine = match.index + match[0].length - text.length;
-      const from = line.from + tokenStartInLine;
-      const to = from + text.length;
-      const inside = options.includeBoundaries
-        ? pos >= from && pos <= to
-        : pos > from && pos < to;
-      if (inside) {
-        return {from, to, text, value};
-      }
+  for (const {token, tokenStartInLine} of collectDateTokenSpansInLine(
+    line.text,
+  )) {
+    const value = parseDateTokenSpan(token);
+    if (!value) {
+      continue;
     }
-    match = DATE_TOKEN_PATTERN.exec(line.text);
+    const from = line.from + tokenStartInLine;
+    const to = from + token.length;
+    const inside = options.includeBoundaries
+      ? pos >= from && pos <= to
+      : pos > from && pos < to;
+    if (inside) {
+      return {from, to, text: token, value};
+    }
   }
   return null;
 }

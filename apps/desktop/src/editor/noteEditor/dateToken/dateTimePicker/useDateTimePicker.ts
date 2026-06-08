@@ -30,6 +30,7 @@ export function useDateTimePicker({
   const [noTime, setNoTime] = useState(initial.noTime);
   const [hour, setHour] = useState(initial.hour);
   const [minute, setMinute] = useState(initial.minute);
+  const [struck, setStruck] = useState(initial.struck);
 
   const calendarCells = useMemo(
     () => buildCalendarGrid(viewYear, viewMonth),
@@ -39,17 +40,18 @@ export function useDateTimePicker({
   const commitValue = useCallback(
     (
       date: DatePickerDate,
-      time?: {noTime?: boolean; hour?: number; minute?: number},
+      time?: {noTime?: boolean; hour?: number; minute?: number; struck?: boolean},
     ) => {
       onConfirm(
         buildDateTokenValue(date, {
           noTime: time?.noTime ?? noTime,
           hour: time?.hour ?? hour,
           minute: time?.minute ?? minute,
+          struck: time?.struck ?? struck,
         }),
       );
     },
-    [hour, minute, noTime, onConfirm],
+    [hour, minute, noTime, onConfirm, struck],
   );
 
   const selectDate = useCallback(
@@ -116,6 +118,15 @@ export function useDateTimePicker({
     [commitValue, selected],
   );
 
+  const setStruckWithCommit = useCallback(
+    (value: boolean) => {
+      setStruck(value);
+      commitValue(selected, {struck: value});
+      onReturnFocus?.();
+    },
+    [commitValue, onReturnFocus, selected],
+  );
+
   return {
     rootRef,
     viewYear,
@@ -124,8 +135,10 @@ export function useDateTimePicker({
     noTime,
     hour,
     minute,
+    struck,
     calendarCells,
     setNoTime: setNoTimeWithCommit,
+    setStruck: setStruckWithCommit,
     setHour: setHourClamped,
     setMinute: setMinuteClamped,
     selectDate,

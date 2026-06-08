@@ -105,4 +105,18 @@ describe('cleanNoteMarkdownBody tokens', () => {
     expect(once).not.toContain('\\_');
     expect(twice).toBe(once);
   });
+
+  it('preserves struck reminder tokens including optional escaped underscore', () => {
+    const input = [
+      '# T',
+      '',
+      'done @~~2026-06-08_0930~~',
+      'also @~~2026-12-28\\_1200~~',
+    ].join('\n');
+    const once = clean(input, '/tmp/StruckDateTokens.md');
+    const twice = clean(once, '/tmp/StruckDateTokens.md');
+    expect(once).toContain('done @~~2026-06-08_0930~~');
+    expect(once).toContain('also @~~2026-12-28\\_1200~~');
+    expect(twice).toBe(once);
+  });
 });

@@ -61,7 +61,12 @@ import type {
   VaultRelativeMarkdownLinkActivatePayload,
   VaultWikiLinkActivatePayload,
 } from '../editor/noteEditor/vaultLinkActivatePayload';
-import {TodayHubCellStaticRichText} from './TodayHubCellStaticRichText';
+import {DateTokenPickerOverlay} from '../editor/noteEditor/dateToken/DateTokenPickerOverlay';
+import {formatDateToken} from '../editor/noteEditor/dateToken/dateToken';
+import {
+  TodayHubCellStaticRichText,
+  type TodayHubDateTokenPillActivatePayload,
+} from './TodayHubCellStaticRichText';
 import {TodayWeekProgressBar} from './TodayWeekProgressBar';
 
 /**
@@ -381,6 +386,8 @@ export function TodayHubCanvas({
   const [localRowSections, setLocalRowSections] = useState<Record<string, string[]>>(
     {},
   );
+  const [hubDateTokenPicker, setHubDateTokenPicker] =
+    useState<TodayHubDateTokenPillActivatePayload | null>(null);
 
   const debounceTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{uri: string; columnCount: number} | null>(null);
@@ -830,6 +837,32 @@ export function TodayHubCanvas({
     [active, getSections, schedulePersist],
   );
 
+  const applyTodayHubCellDateTokenReplace = useCallback(
+    (
+      uri: string,
+      col: number,
+      from: number,
+      to: number,
+      replacement: string,
+    ) => {
+      const key = normUri(uri);
+      const base =
+        localRowSectionsRef.current[key] ??
+        splitTodayRowIntoColumns(
+          inboxContentByUriRef.current[key] ?? '',
+          columnCount,
+        );
+      const cur = [...base];
+      const chunk = cur[col] ?? '';
+      cur[col] = chunk.slice(0, from) + replacement + chunk.slice(to);
+      const next = {...localRowSectionsRef.current, [key]: cur};
+      localRowSectionsRef.current = next;
+      setLocalRowSections(next);
+      schedulePersist(key);
+    },
+    [columnCount, schedulePersist],
+  );
+
   const noopMarkdownChange = useCallback(() => {}, []);
 
   const closeEmptyActiveCellIfStillEmpty = useCallback(
@@ -903,6 +936,7 @@ export function TodayHubCanvas({
   }, []);
 
   return (
+    <>
     <div
       ref={canvasRootRef}
       className="today-hub-canvas"
@@ -1024,6 +1058,7 @@ export function TodayHubCanvas({
                         <TodayHubCellStaticRichText
                           cellText={chunk}
                           rowUri={uri}
+                          col={ci}
                           vaultRoot={vaultRoot}
                           wikiNavParentRef={wikiNavParentRef}
                           noteRefs={noteRefs}
@@ -1032,6 +1067,7 @@ export function TodayHubCanvas({
                             onMarkdownRelativeLinkActivate
                           }
                           onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
+                          onDateTokenPillActivate={setHubDateTokenPicker}
                           linkSnippetBlockedDomains={linkSnippetBlockedDomains}
                           onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
                         />
@@ -1131,5 +1167,23 @@ export function TodayHubCanvas({
         })}
       </div>
     </div>
+    {hubDateTokenPicker ? (
+      <DateTokenPickerOverlay
+        anchorRect={hubDateTokenPicker.anchorRect}
+        initialValue={hubDateTokenPicker.initialValue}
+        onConfirm={value => {
+          applyTodayHubCellDateTokenReplace(
+            hubDateTokenPicker.uri,
+            hubDateTokenPicker.col,
+            hubDateTokenPicker.from,
+            hubDateTokenPicker.to,
+            formatDateToken(value),
+          );
+          setHubDateTokenPicker(null);
+        }}
+        onCancel={() => setHubDateTokenPicker(null)}
+      />
+    ) : null}
+    </>
   );
 }

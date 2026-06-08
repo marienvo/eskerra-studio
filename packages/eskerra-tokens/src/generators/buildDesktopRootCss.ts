@@ -81,6 +81,12 @@ export function buildDesktopRootCss(): string {
   --color-shell-hover-bg: rgba(255, 255, 255, 0.12);
   /* Opaque: chroma 2 tinted toward white (not translucent gray-on-gradient) */
   --color-shell-tagline: color-mix(in srgb, var(--color-app-chrome-chroma-2) 15%, white);
+  /*
+   * Bar read: almost pure palette[0] (AppChromeBackground base rect); minimal white for opaque SVG/icons.
+   */
+  --color-app-chrome-surface: color-mix(in srgb, var(--color-app-chrome-backdrop) 97%, white);
+  /* Pressed shell icon buttons: mostly white with a hint of palette[0] (inverse of chrome-surface). */
+  --color-app-chrome-active-fill: color-mix(in srgb, var(--color-app-chrome-backdrop) 15%, white);
 
   /* Capture */
   --color-capture-panel: ${b.brandSurfaceBright};

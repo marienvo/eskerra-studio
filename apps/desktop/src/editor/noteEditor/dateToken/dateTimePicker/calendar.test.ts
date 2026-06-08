@@ -62,6 +62,7 @@ describe('dateTimePicker calendar', () => {
       noTime: true,
       hour: 0,
       minute: 0,
+      struck: false,
     });
 
     expect(resolveInitialState({year: 2026, month: 12, day: 28}, FIXED_NOW)).toEqual({
@@ -71,6 +72,7 @@ describe('dateTimePicker calendar', () => {
       noTime: true,
       hour: 0,
       minute: 0,
+      struck: false,
     });
 
     expect(
@@ -85,6 +87,22 @@ describe('dateTimePicker calendar', () => {
       noTime: false,
       hour: 23,
       minute: 50,
+      struck: false,
+    });
+
+    expect(
+      resolveInitialState(
+        {year: 2026, month: 6, day: 8, hour: 9, minute: 30, struck: true},
+        FIXED_NOW,
+      ),
+    ).toEqual({
+      selected: {year: 2026, month: 6, day: 8},
+      viewYear: 2026,
+      viewMonth: 6,
+      noTime: false,
+      hour: 9,
+      minute: 30,
+      struck: true,
     });
   });
 });

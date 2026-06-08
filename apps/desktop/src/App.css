@@ -6429,11 +6429,31 @@ button:disabled {
   cursor: default;
 }
 
-.pane-header-add-btn--notifications-on:not(:disabled),
-.pane-header-add-btn--vault-on:not(:disabled),
-.pane-header-add-btn--episodes-on:not(:disabled),
-.pane-header-add-btn--inbox-on:not(:disabled) {
-  color: var(--color-accent);
+[data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--notifications-on:not(:disabled),
+[data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--vault-on:not(:disabled),
+[data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--episodes-on:not(:disabled),
+[data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--inbox-on:not(:disabled) {
+  background: var(--color-app-chrome-active-fill);
+  color: var(--color-app-chrome-surface);
+}
+
+[data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--inbox-on:not(:disabled)
+  .pane-header-add-btn__badge-dot,
+[data-app-surface='capture']
+  .pane-header--editor-toolbar
+  .pane-header-add-btn--notifications-on:not(:disabled)
+  .pane-header-add-btn__badge-dot {
+  border-color: var(--color-app-chrome-active-fill);
 }
 
 [data-app-surface='capture'] .pane-footer {

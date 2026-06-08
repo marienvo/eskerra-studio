@@ -36,7 +36,14 @@ describe('dateTokenClick', () => {
       from,
       to: from + '@2026-12-28_2352'.length,
       text: '@2026-12-28_2352',
-      value: {year: 2026, month: 12, day: 28, hour: 23, minute: 52},
+      value: {
+        year: 2026,
+        month: 12,
+        day: 28,
+        hour: 23,
+        minute: 52,
+        struck: false,
+      },
     });
   });
 
@@ -61,7 +68,7 @@ describe('dateTokenClick', () => {
       view,
       tokenFrom: from,
       tokenTo: from + '@2026-12-28'.length,
-      initialValue: {year: 2026, month: 12, day: 28},
+      initialValue: {year: 2026, month: 12, day: 28, struck: false},
       anchorRect: rect,
     });
   });
@@ -91,6 +98,27 @@ describe('dateTokenClick', () => {
       openDateTokenPickerAtClickPosition(view, from, new MouseEvent('click'), onOpen),
     ).toBe(false);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('resolves the full struck token span for picker open', () => {
+    const doc = 'done @~~2026-06-08_0930~~ please';
+    const from = doc.indexOf('@~~');
+    const token = '@~~2026-06-08_0930~~';
+    view = createView(doc);
+
+    expect(dateTokenAtPosition(view.state, from + 2, {includeBoundaries: true})).toEqual({
+      from,
+      to: from + token.length,
+      text: token,
+      value: {
+        year: 2026,
+        month: 6,
+        day: 8,
+        hour: 9,
+        minute: 30,
+        struck: true,
+      },
+    });
   });
 
   it('does nothing outside a valid date token', () => {
