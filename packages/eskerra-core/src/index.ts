@@ -366,6 +366,7 @@ export {
   startOfLocalWeekMonday,
   stripTodayHubDelimiterOnlyLinesFromColumn,
   todayHubColumnCount,
+  todayHubColumnOffsetToRowOffset,
   todayHubDirectoryUriFromTodayNoteUri,
   todayHubFolderLabelFromTodayNoteUri,
   todayHubFolderLabelFromUri,

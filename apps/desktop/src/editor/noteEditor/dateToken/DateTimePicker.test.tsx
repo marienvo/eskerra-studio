@@ -239,8 +239,9 @@ describe('DateTimePicker', () => {
     expect(minuteInput.value).toBe('45');
   });
 
-  it('toggles completed to emit struck and bare tokens live', () => {
+  it('routes completed check through onStrikeRequest without local struck confirm', async () => {
     const onConfirm = vi.fn();
+    const onStrikeRequest = vi.fn().mockResolvedValue('removed');
     render(
       <DateTimePicker
         initialValue={{
@@ -253,17 +254,18 @@ describe('DateTimePicker', () => {
         now={FIXED_NOW}
         onConfirm={onConfirm}
         onCancel={vi.fn()}
+        onStrikeRequest={onStrikeRequest}
       />,
     );
 
     fireEvent.click(screen.getByRole('checkbox', {name: /completed/i}));
-    expect(onConfirm).toHaveBeenLastCalledWith({
-      year: 2026,
-      month: 6,
-      day: 8,
-      hour: 9,
-      minute: 30,
-      struck: true,
+    await vi.waitFor(() => expect(onStrikeRequest).toHaveBeenCalledTimes(1));
+    expect(onConfirm).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      const checkbox = screen.getByRole('checkbox', {
+        name: /completed/i,
+      }) as HTMLInputElement;
+      expect(checkbox.checked).toBe(true);
     });
 
     onConfirm.mockClear();

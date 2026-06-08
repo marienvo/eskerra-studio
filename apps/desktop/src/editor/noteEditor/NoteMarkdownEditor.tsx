@@ -34,9 +34,16 @@ import {useNoteMarkdownEditorCompartmentEffects} from './useNoteMarkdownEditorCo
 import {useNoteMarkdownEditorImageDrop} from './useNoteMarkdownEditorImageDrop';
 import {useNoteMarkdownEditorLoad} from './useNoteMarkdownEditorLoad';
 import {useNoteMarkdownEditorShellRefs} from './useNoteMarkdownEditorShellRefs';
+import type {ReminderRemoveResult} from '../../hooks/useReminderPane';
+import type {Reminder} from '../../lib/reminderIndex';
+import {
+  requestReminderStrikeViaDaemon,
+  type ReminderStrikeResult,
+} from '../../lib/reminderTokenLookup';
 import {DateTokenPickerOverlay} from './dateToken/DateTokenPickerOverlay';
 import {
   formatDateToken,
+  parseDateTokenSpan,
   type DateTokenValue,
 } from './dateToken/dateToken';
 import type {DateTokenPickerOverlayAnchor} from './dateToken/dateTokenPickerOverlayPosition';
@@ -55,6 +62,16 @@ type DateTokenPickerOverlayState = {
   readonly initialValue: DateTokenValue | null;
   readonly commit: (value: DateTokenValue) => void;
   readonly returnFocus: () => void;
+  readonly onStrikeRequest: () => Promise<ReminderStrikeResult>;
+};
+
+type DateTokenStrikeContext = {
+  readonly getNoteUri: () => string | null;
+  readonly getReminders: () => readonly Reminder[];
+  readonly removeReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
 };
 
 function fallbackDateTokenAnchorRect(view: EditorView): DateTokenPickerOverlayAnchor {
@@ -82,12 +99,36 @@ function dateTokenOverlayAnchorFromRequest(
 
 function buildDateTokenPickerOverlayState(
   request: DateTokenPickerOpenRequest,
+  strikeContext: DateTokenStrikeContext,
 ): DateTokenPickerOverlayState {
   const insertTrailingSpace = request.initialValue == null;
   let tokenEnd = request.tokenTo;
   return {
     anchorRect: dateTokenOverlayAnchorFromRequest(request),
     initialValue: request.initialValue ?? null,
+    onStrikeRequest: async () => {
+      const noteUri = strikeContext.getNoteUri();
+      if (!noteUri) {
+        return 'not-found';
+      }
+      const docText = request.view.state.doc.toString();
+      const currentDocLength = docText.length;
+      const from = Math.max(0, Math.min(request.tokenFrom, currentDocLength));
+      const to = Math.max(from, Math.min(request.tokenTo, currentDocLength));
+      const spanText = docText.slice(from, to);
+      const parsed = parseDateTokenSpan(spanText);
+      if (!parsed || parsed.struck === true) {
+        return 'not-found';
+      }
+      return requestReminderStrikeViaDaemon(
+        strikeContext.getReminders(),
+        noteUri,
+        docText,
+        from,
+        parsed,
+        strikeContext.removeReminder,
+      );
+    },
     commit: value => {
       const view = request.view;
       if (!view.state.facet(EditorView.editable)) {
@@ -138,6 +179,10 @@ const NoteMarkdownEditorImpl = forwardRef<
   const onOpenDateTokenPickerRef = useRef<DateTokenPickerOpenHandler | undefined>(
     undefined,
   );
+  const remindersRef = useRef<readonly Reminder[]>(props.reminders ?? []);
+  remindersRef.current = props.reminders ?? [];
+  const removeReminderRef = useRef(props.onRemoveReminder);
+  removeReminderRef.current = props.onRemoveReminder;
   const [dateTokenPicker, setDateTokenPicker] =
     useState<DateTokenPickerOverlayState | null>(null);
   const [tableCellMenuOpen, setTableCellMenuOpen] = useState(false);
@@ -282,12 +327,24 @@ const NoteMarkdownEditorImpl = forwardRef<
       if (shell.readOnlyRef.current) {
         return;
       }
-      setDateTokenPicker(buildDateTokenPickerOverlayState(request));
+      setDateTokenPicker(
+        buildDateTokenPickerOverlayState(request, {
+          getNoteUri: () => shell.activeNotePathRef.current,
+          getReminders: () => remindersRef.current,
+          removeReminder: async (noteUri, reminderId) => {
+            const remove = removeReminderRef.current;
+            if (!remove) {
+              return 'remove-unavailable';
+            }
+            return remove(noteUri, reminderId);
+          },
+        }),
+      );
     };
     return () => {
       onOpenDateTokenPickerRef.current = undefined;
     };
-  }, [shell.readOnlyRef]);
+  }, [shell.readOnlyRef, shell.activeNotePathRef]);
 
   useEffect(() => {
     if (!dateTokenPicker) {
@@ -381,6 +438,7 @@ const NoteMarkdownEditorImpl = forwardRef<
           initialValue={dateTokenPicker.initialValue}
           onConfirm={dateTokenPicker.commit}
           onReturnFocus={dateTokenPicker.returnFocus}
+          onStrikeRequest={dateTokenPicker.onStrikeRequest}
           onCancel={() => setDateTokenPicker(null)}
         />
       ) : null}

@@ -88,10 +88,17 @@ async function writeConfig(vaultRoot: string, vaultHash: string): Promise<void> 
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
+export type ReminderRemoveResult = 'removed' | 'stale' | 'remove-unavailable';
+
 export type UseReminderPaneResult = {
   rows: readonly ReminderPaneRow[];
+  /** Raw daemon index entries for reminder-id lookup outside the pane. */
+  reminders: readonly Reminder[];
   hasDueReminders: boolean;
-  removeReminder: (noteUri: string, reminderId: string) => Promise<void>;
+  removeReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult>;
   snoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
@@ -229,7 +236,10 @@ export function useReminderPane(
   );
 
   const removeReminder = useCallback(
-    async (noteUri: string, reminderId: string): Promise<void> => {
+    async (
+      noteUri: string,
+      reminderId: string,
+    ): Promise<ReminderRemoveResult> => {
       setRowStates(prev => {
         const next = new Map(prev);
         next.set(reminderId, 'removing');
@@ -237,8 +247,8 @@ export function useReminderPane(
       });
 
       try {
-        const result = isTauri()
-          ? await invoke<string>('reminders_remove', {noteUri, reminderId})
+        const result: ReminderRemoveResult = isTauri()
+          ? ((await invoke<string>('reminders_remove', {noteUri, reminderId})) as ReminderRemoveResult)
           : 'remove-unavailable';
 
         if (result === 'removed') {
@@ -273,6 +283,7 @@ export function useReminderPane(
             return next;
           });
         }
+        return result;
       } catch {
         reportRemoveUnavailable(vaultHashRef.current);
         setRowStates(prev => {
@@ -280,6 +291,7 @@ export function useReminderPane(
           next.set(reminderId, 'remove-unavailable');
           return next;
         });
+        return 'remove-unavailable';
       }
     },
     [],
@@ -321,7 +333,7 @@ export function useReminderPane(
     [flashSnoozeUnavailable],
   );
 
-  return {rows, hasDueReminders, removeReminder, snoozeReminder};
+  return {rows, reminders, hasDueReminders, removeReminder, snoozeReminder};
 }
 
 export function __resetReminderPaneForTests(): void {

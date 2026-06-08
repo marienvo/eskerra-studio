@@ -48,7 +48,7 @@ Presentational React overlay: [`dateToken/dateTimePicker/`](../../apps/desktop/s
 - **Calendar:** month grid with previous/next month navigation; week rows start on **Monday** (Fedora/GNOME reference).
 - **Today:** prominent button sets the selected date to the current local calendar day.
 - **Time:** hour and minute inputs (24-hour) plus a **No time** toggle. When **No time** is on, time inputs disable and confirm yields a date-only token. Minute input uses a **5-minute step** (`step={5}`, max 55); typed or spinner values snap to the nearest 5-minute boundary.
-- **Completed:** checkbox below time toggles `struck` on the token (`@~~…~~` vs bare `@…`). This is a normal editor persist path — distinct from the reminder pane `RemoveReminder` IPC (daemon write-back).
+- **Completed:** checkbox below time strikes a live reminder via the same `RemoveReminder` IPC as the Notifications pane (lookup by `noteUri` + normalized token text + occurrence ordinal in [`reminderTokenLookup.ts`](../../apps/desktop/src/lib/reminderTokenLookup.ts)). The app never writes `@~~…~~` locally on check. Unchecking Completed unstrikes via a normal editor persist (`formatDateToken` without `struck`).
 - **Live apply:** clicking a calendar day, **Today**, or changing time fields (hour, minute, **No time**) updates the document token immediately while the overlay stays open. `Enter` applies the current selection without closing. `Esc` or **Cancel** dismisses the overlay. Arrow keys move the calendar selection without applying until `Enter` or a day click.
 - **Defaults:** today’s date; no time pre-selected on a fresh `@` trigger. When time is enabled (uncheck **No time**), the picker prefills **now + 15 minutes**, snapped to the nearest 5-minute boundary.
 
@@ -144,9 +144,9 @@ rule (due/overdue only; future reminders excluded), strikethrough removal
 is unchanged** — striking a token is the documented "no longer a reminder"
 mutation, and the grammar already excludes `@~~…~~`.
 
-Still out of scope here: Today Hub rows / hub canvas integration, mobile
-rendering (Android has no vault editor), and read-only / preview surfaces outside
-the capture editor (read-only capture mounts skip picker open and commit).
+Still out of scope here: mobile rendering (Android has no vault editor). Today Hub
+read-mode pill picker and hub cell editors share the same overlay and Completed
+semantics — see [`today-hub-editor-parity.md`](today-hub-editor-parity.md).
 
 Any change to the on-disk token format must update this document **and**
 `dateToken.ts` **and** the Rust `eskerra-reminder-core` grammar together — never

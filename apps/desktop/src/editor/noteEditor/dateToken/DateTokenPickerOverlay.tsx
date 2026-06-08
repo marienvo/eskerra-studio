@@ -2,6 +2,7 @@ import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 
 import {DateTimePicker} from './DateTimePicker';
+import type {DateTimePickerProps} from './dateTimePicker/types';
 import type {DateTokenValue} from './dateToken';
 import {
   clampDateTokenPickerOverlayPosition,
@@ -16,6 +17,7 @@ export type DateTokenPickerOverlayProps = {
   readonly onConfirm: (value: DateTokenValue) => void;
   readonly onReturnFocus?: () => void;
   readonly onCancel: () => void;
+  readonly onStrikeRequest?: DateTimePickerProps['onStrikeRequest'];
   readonly now?: Date;
 };
 
@@ -25,9 +27,14 @@ export function DateTokenPickerOverlay({
   onConfirm,
   onReturnFocus,
   onCancel,
+  onStrikeRequest,
   now,
 }: DateTokenPickerOverlayProps) {
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const onCancelRef = useRef(onCancel);
+  useLayoutEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
   const [position, setPosition] = useState<DateTokenPickerOverlayPosition | null>(
     null,
   );
@@ -77,27 +84,27 @@ export function DateTokenPickerOverlay({
       if (overlay.contains(target)) {
         return;
       }
-      onCancel();
+      onCancelRef.current();
     };
     document.addEventListener('pointerdown', onDocumentPointerDown, true);
     return () => {
       document.removeEventListener('pointerdown', onDocumentPointerDown, true);
     };
-  }, [onCancel]);
+  }, []);
 
   useEffect(() => {
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        onCancel();
+        onCancelRef.current();
       }
     };
     document.addEventListener('keydown', onDocumentKeyDown, true);
     return () => {
       document.removeEventListener('keydown', onDocumentKeyDown, true);
     };
-  }, [onCancel]);
+  }, []);
 
   return createPortal(
     <div
@@ -117,6 +124,7 @@ export function DateTokenPickerOverlay({
         onConfirm={onConfirm}
         onReturnFocus={onReturnFocus}
         onCancel={onCancel}
+        onStrikeRequest={onStrikeRequest}
         now={now}
       />
     </div>,

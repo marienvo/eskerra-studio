@@ -376,6 +376,7 @@ export default function App() {
       enterDiskConflictMergeView={ws.enterDiskConflictMergeView}
       onMuteLinkSnippetDomain={handleMuteLinkSnippetDomain}
       reminderItems={reminderPane.rows}
+      reminders={reminderPane.reminders}
       hasDueReminders={reminderPane.hasDueReminders}
       onOpenReminder={onOpenReminder}
       onRemoveReminder={reminderPane.removeReminder}

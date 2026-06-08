@@ -52,6 +52,7 @@ export {
   splitTodayRowIntoColumns,
   splitTodayRowIntoColumnSpans,
   stripTodayHubDelimiterOnlyLinesFromColumn,
+  todayHubColumnOffsetToRowOffset,
   todayHubRowSectionsAllBlank,
 } from './splitMergeTodayRowColumns';
 export type {TodayRowColumnSpan} from './splitMergeTodayRowColumns';
