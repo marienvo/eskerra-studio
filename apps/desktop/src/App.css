@@ -6445,10 +6445,12 @@ button:disabled {
   color: var(--color-app-chrome-surface);
 }
 
-.pane-header--editor-toolbar
+[data-app-surface='capture']
+  .pane-header--editor-toolbar
   .pane-header-add-btn--inbox-on:not(:disabled)
   .pane-header-add-btn__badge-dot,
-.pane-header--editor-toolbar
+[data-app-surface='capture']
+  .pane-header--editor-toolbar
   .pane-header-add-btn--notifications-on:not(:disabled)
   .pane-header-add-btn__badge-dot {
   border-color: var(--color-app-chrome-active-fill);
