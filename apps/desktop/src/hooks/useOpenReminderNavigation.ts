@@ -3,6 +3,7 @@ import {invoke, isTauri} from '@tauri-apps/api/core';
 import {type RefObject, useCallback, useEffect, useRef} from 'react';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
 import type {TodayHubWorkspaceBridge} from '../lib/todayHub';
 import {
   findTodayHubRowMatch,
@@ -35,14 +36,22 @@ export type TodayHubReminderBridge = {
   bridgeRef: RefObject<TodayHubWorkspaceBridge>;
 };
 
-/** Poll the canvas bridge for `openReminderCell` until it is assigned (just after the hub mounts). */
+/** Poll the canvas bridge for the target hub's `openReminderCell` after a hub switch. */
 async function waitForCanvasReminderOpen(
   bridgeRef: RefObject<TodayHubWorkspaceBridge>,
+  expectedHubTodayNoteUri: string,
   maxFrames = 120,
 ): Promise<TodayHubWorkspaceBridge['openReminderCell']> {
+  const expectedHub = normalizeEditorDocUri(expectedHubTodayNoteUri);
   for (let i = 0; i < maxFrames; i++) {
-    const fn = bridgeRef.current?.openReminderCell ?? null;
-    if (fn != null) {
+    const bridge = bridgeRef.current;
+    const fn = bridge?.openReminderCell ?? null;
+    const mountedHub = bridge?.getTodayNoteUri?.() ?? null;
+    if (
+      fn != null &&
+      mountedHub != null &&
+      normalizeEditorDocUri(mountedHub) === expectedHub
+    ) {
       return fn;
     }
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -61,7 +70,10 @@ async function tryOpenReminderInHubCell(
   hubBridge: TodayHubReminderBridge,
 ): Promise<boolean> {
   await hubBridge.switchTodayHubWorkspace(match.hubTodayNoteUri);
-  const openCell = await waitForCanvasReminderOpen(hubBridge.bridgeRef);
+  const openCell = await waitForCanvasReminderOpen(
+    hubBridge.bridgeRef,
+    match.hubTodayNoteUri,
+  );
   if (openCell == null) {
     return false;
   }

@@ -125,10 +125,6 @@ export function findTodayHubRowMatch(
 }
 
 /**
- * Result of asking the live hub canvas to open a reminder cell. `out-of-window` means the row's week
- * is not rendered by the hub (caller falls back to opening the plain note).
- */
-/**
  * Hub display title (its folder name) for a reminder whose `file://` note URI is either the hub's
  * own `Today.md` or a `YYYY-MM-DD.md` row beside it, or `null` otherwise. Used to label
  * notifications with the hub name instead of the bare note stem. Mirrors the daemon's
@@ -152,6 +148,10 @@ export function todayHubRowTitleForNoteUri(
   return match ? todayHubFolderLabelFromTodayNoteUri(match.hubTodayNoteUri) : null;
 }
 
+/**
+ * Result of asking the live hub canvas to open a reminder cell. `out-of-window` means the row's week
+ * is not rendered by the hub (caller falls back to opening the plain note).
+ */
 export type TodayHubReminderCellOpenResult = 'handled' | 'out-of-window';
 
 export type TodayHubCellCaretTarget = {

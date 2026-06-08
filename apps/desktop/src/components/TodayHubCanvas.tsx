@@ -811,9 +811,11 @@ export function TodayHubCanvas({
     const flushFn = flushScheduledPersist;
     const cleanFn = cleanHubPageDayColumns;
     const reloadFn = reloadLiveRowFromDisk;
+    const hubTodayUri = normUri(todayNoteUri);
     bridge.flushPendingEdits = flushFn;
     bridge.hasPendingHubFlush = () =>
       debounceTimerRef.current != null || pendingPersistRef.current != null;
+    bridge.getTodayNoteUri = () => hubTodayUri;
     bridge.getLiveRowUri = () => active?.uri ?? null;
     bridge.getLiveRowMergedMarkdown = () => {
       if (!active) {
@@ -834,6 +836,7 @@ export function TodayHubCanvas({
       if (bridge.flushPendingEdits === flushFn) {
         bridge.flushPendingEdits = async () => {};
         bridge.hasPendingHubFlush = () => false;
+        bridge.getTodayNoteUri = () => null;
         bridge.getLiveRowUri = () => null;
         bridge.getLiveRowMergedMarkdown = () => null;
         bridge.reloadLiveRowFromDisk = () => {};
@@ -847,6 +850,7 @@ export function TodayHubCanvas({
     };
   }, [
     bridgeRef,
+    todayNoteUri,
     active,
     columnCount,
     flushScheduledPersist,

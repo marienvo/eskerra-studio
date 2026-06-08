@@ -77,6 +77,7 @@ function minimalTodayEnv(): ReconcileFsTodayHubEnv {
     todayHubSettingsRef: {current: null},
     todayHubBridgeRef: {
       current: {
+        getTodayNoteUri: () => null,
         getLiveRowUri: () => null,
         getLiveRowMergedMarkdown: () => null,
         reloadLiveRowFromDisk: vi.fn(),
@@ -369,6 +370,7 @@ describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — Today Hub week rows'
       },
       todayHubBridgeRef: {
         current: {
+          getTodayNoteUri: () => null,
           getLiveRowUri,
           hasPendingHubFlush: () => false,
           flushPendingEdits: vi.fn(),
@@ -441,6 +443,42 @@ describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — Today Hub week rows'
     expect(env.inboxContentByUriRef.current[rowUri]).toBe('NEW ROW BODY');
     expect(setInboxContentByUri).toHaveBeenCalled();
     expect(todayHubRowLastPersistedRef.current.get(rowUri)).toBe('NEW ROW BODY');
+  });
+
+  it('merges the inbox cache when a live week row already matches disk', async () => {
+    const rowUri = await weekRowUri();
+    const setInboxContentByUri = vi.fn();
+    const reloadLiveRowFromDisk = vi.fn();
+    const syncedBody = 'SYNCED ROW BODY';
+    const fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn().mockResolvedValue(`${syncedBody}\n`),
+    } as unknown as ReconcileFsOpenMarkdownEnv['fs'];
+
+    const env = minimalEnv({
+      editorWorkspaceTabsRef: {current: []},
+      activeEditorTabIdRef: {current: null},
+      selectedUriRef: {current: HUB},
+      syncWorkspaceModelRemoveOpenTabUri: vi.fn(),
+      fs,
+      vaultRootRef: {current: '/vault'},
+      inboxContentByUriRef: {current: {[rowUri]: 'STALE ROW BODY'}},
+      setInboxContentByUri,
+    });
+
+    await reconcileOpenNotesAfterFsChangeFromVaultWatch(
+      env,
+      hubEnv(() => rowUri, {
+        getLiveRowMergedMarkdown: () => syncedBody,
+        reloadLiveRowFromDisk,
+      }),
+      [rowUri],
+      vi.fn(),
+    );
+
+    expect(reloadLiveRowFromDisk).not.toHaveBeenCalled();
+    expect(env.inboxContentByUriRef.current[rowUri]).toBe(syncedBody);
+    expect(setInboxContentByUri).toHaveBeenCalled();
   });
 
   it('keeps local edits when a live week row diverges from disk', async () => {

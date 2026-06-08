@@ -100,6 +100,7 @@ function syncLiveTodayHubWeekRowFromDiskIfNeeded(
   const normDisk = normalizeVaultMarkdownDiskRead(hubDiskBody);
   if (normLiveMerged === normDisk) {
     today.todayHubRowLastPersistedRef.current.set(rowUri, hubDiskBody);
+    mergeTodayHubRowDiskBodyIntoInboxCache(open, rowUri, hubDiskBody);
     return true;
   }
   const lastPersisted = today.todayHubRowLastPersistedRef.current.get(rowUri);

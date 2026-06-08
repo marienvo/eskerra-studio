@@ -106,24 +106,30 @@ describe('useOpenReminderNavigation', () => {
 
   function makeHubBridge(
     openReminderCell: TodayHubWorkspaceBridge['openReminderCell'],
+    hubTodayNoteUri = '/vault/Hub/Today.md',
   ): {
     bridge: TodayHubReminderBridge;
     switchTodayHubWorkspace: ReturnType<typeof vi.fn>;
     openReminderCell: NonNullable<TodayHubWorkspaceBridge['openReminderCell']>;
+    bridgeRef: RefObject<TodayHubWorkspaceBridge>;
   } {
     const switchTodayHubWorkspace = vi.fn(() => Promise.resolve());
     const fn = vi.fn(openReminderCell ?? (() => Promise.resolve('handled' as const)));
     const bridgeRef = {
-      current: {openReminderCell: fn} as unknown as TodayHubWorkspaceBridge,
+      current: {
+        openReminderCell: fn,
+        getTodayNoteUri: () => hubTodayNoteUri,
+      } as unknown as TodayHubWorkspaceBridge,
     } as RefObject<TodayHubWorkspaceBridge>;
     return {
       bridge: {
-        hubTodayNoteUris: () => ['/vault/Hub/Today.md'],
+        hubTodayNoteUris: () => [hubTodayNoteUri],
         switchTodayHubWorkspace,
         bridgeRef,
       },
       switchTodayHubWorkspace,
       openReminderCell: fn,
+      bridgeRef,
     };
   }
 
@@ -455,6 +461,56 @@ describe('useOpenReminderNavigation', () => {
     await waitFor(() => {
       expect(openReminderCell).toHaveBeenCalledWith('/vault/Hub/2026-06-08.md', 99);
     });
+    expect(openMarkdownInEditor).not.toHaveBeenCalled();
+  });
+
+  it('waits for the target hub canvas after switching away from another hub', async () => {
+    const HUB_A = '/vault/HubA/Today.md';
+    const HUB_B = '/vault/HubB/Today.md';
+    const openMarkdownInEditor = vi.fn(() => Promise.resolve());
+    tauriTest.state.invoke.mockImplementation((command: string) => {
+      if (command === 'reminders_resolve_position') {
+        return Promise.resolve({caretUtf16: 12});
+      }
+      return Promise.resolve(null);
+    });
+    const staleHandler = vi.fn(() => Promise.resolve('out-of-window' as const));
+    const targetHandler = vi.fn(() => Promise.resolve('handled' as const));
+    const bridgeRef = {
+      current: {
+        openReminderCell: staleHandler,
+        getTodayNoteUri: () => HUB_A,
+      } as unknown as TodayHubWorkspaceBridge,
+    } as RefObject<TodayHubWorkspaceBridge>;
+    const switchTodayHubWorkspace = vi.fn(async () => {
+      bridgeRef.current = {
+        openReminderCell: targetHandler,
+        getTodayNoteUri: () => HUB_B,
+      } as unknown as TodayHubWorkspaceBridge;
+    });
+    const hubBridge: TodayHubReminderBridge = {
+      hubTodayNoteUris: () => [HUB_A, HUB_B],
+      switchTodayHubWorkspace,
+      bridgeRef,
+    };
+
+    renderReminderHook({initialVaultHydrateAttemptDone: true, openMarkdownInEditor, hubBridge});
+    await flushMicrotasks();
+
+    act(() => {
+      tauriTest.emitOpenReminder({
+        noteUri: 'file:///vault/HubB/2026-06-08.md',
+        reminderId: 'r-hub-b',
+      });
+    });
+
+    await waitFor(() => {
+      expect(switchTodayHubWorkspace).toHaveBeenCalledWith(HUB_B);
+    });
+    await waitFor(() => {
+      expect(targetHandler).toHaveBeenCalledWith('/vault/HubB/2026-06-08.md', 12);
+    });
+    expect(staleHandler).not.toHaveBeenCalled();
     expect(openMarkdownInEditor).not.toHaveBeenCalled();
   });
 

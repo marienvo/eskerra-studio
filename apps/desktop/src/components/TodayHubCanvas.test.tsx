@@ -234,6 +234,30 @@ describe('TodayHubCanvas — disk truth for non-active week rows', () => {
     });
   });
 
+  it('scrolls the normalized row element when opening a reminder cell from the bridge', async () => {
+    const rowUri = currentWeekRowUri();
+    const rowBody = 'reminder @2026-06-08';
+    const {bridgeRef} = renderCanvas({[rowUri]: rowBody});
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+
+    await waitFor(() => {
+      expect(bridgeRef.current.openReminderCell).not.toBeNull();
+    });
+
+    await act(async () => {
+      const result = await bridgeRef.current.openReminderCell!(rowUri, rowBody.indexOf('@'));
+      expect(result).toBe('handled');
+    });
+
+    const rowEl = document.querySelector(`[data-hub-row-uri="${CSS.escape(rowUri)}"]`);
+    expect(rowEl).not.toBeNull();
+    expect(scrollSpy).toHaveBeenCalled();
+    const scrolledEl = scrollSpy.mock.instances[0];
+    expect(scrolledEl).toBe(rowEl);
+
+    scrollSpy.mockRestore();
+  });
+
   it('keeps active local edits when an external cache update arrives without a live reload', async () => {
     const rowUri = currentWeekRowUri();
     const {rerenderWith} = renderCanvas({[rowUri]: 'disk content'});

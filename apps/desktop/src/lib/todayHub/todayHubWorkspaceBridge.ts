@@ -5,6 +5,8 @@ import type {TodayHubReminderCellOpenResult} from './reminderHubCellTarget';
  */
 export type TodayHubWorkspaceBridge = {
   flushPendingEdits: () => Promise<void>;
+  /** The hub's `Today.md` URI while a canvas is mounted; `null` when idle. */
+  getTodayNoteUri: () => string | null;
   getLiveRowUri: () => string | null;
   getLiveRowMergedMarkdown: () => string | null;
   reloadLiveRowFromDisk: (diskBody: string) => void;
@@ -28,6 +30,7 @@ export type TodayHubWorkspaceBridge = {
 export function createIdleTodayHubWorkspaceBridge(): TodayHubWorkspaceBridge {
   return {
     flushPendingEdits: async () => {},
+    getTodayNoteUri: () => null,
     getLiveRowUri: () => null,
     getLiveRowMergedMarkdown: () => null,
     reloadLiveRowFromDisk: () => {},
