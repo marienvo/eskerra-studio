@@ -63,6 +63,59 @@ async function readTodayHubRowMarkdownNormalized(
   }
 }
 
+function mergeTodayHubRowDiskBodyIntoInboxCache(
+  open: TodayHubOpenCacheEnv,
+  rowUri: string,
+  hubDiskBody: string,
+): void {
+  const nextHubCache = mergeInboxNoteBodyIntoCache(
+    open.inboxContentByUriRef.current,
+    rowUri,
+    hubDiskBody,
+  );
+  if (!nextHubCache) {
+    return;
+  }
+  open.inboxContentByUriRef.current = nextHubCache;
+  open.setInboxContentByUri(prev =>
+    mergeInboxNoteBodyIntoCache(prev, rowUri, hubDiskBody) ?? prev,
+  );
+}
+
+function syncLiveTodayHubWeekRowFromDiskIfNeeded(
+  open: TodayHubOpenCacheEnv,
+  today: ReconcileFsTodayHubEnv,
+  rowUri: string,
+  hubDiskBody: string,
+): boolean {
+  const bridge = today.todayHubBridgeRef.current;
+  if (bridge.getLiveRowUri() !== rowUri) {
+    return false;
+  }
+  const liveMerged = bridge.getLiveRowMergedMarkdown();
+  if (liveMerged == null) {
+    return true;
+  }
+  const normLiveMerged = normalizeVaultMarkdownDiskRead(liveMerged);
+  const normDisk = normalizeVaultMarkdownDiskRead(hubDiskBody);
+  if (normLiveMerged === normDisk) {
+    today.todayHubRowLastPersistedRef.current.set(rowUri, hubDiskBody);
+    mergeTodayHubRowDiskBodyIntoInboxCache(open, rowUri, hubDiskBody);
+    return true;
+  }
+  const lastPersisted = today.todayHubRowLastPersistedRef.current.get(rowUri);
+  if (
+    lastPersisted == null ||
+    normLiveMerged !== normalizeVaultMarkdownDiskRead(lastPersisted)
+  ) {
+    return true;
+  }
+  bridge.reloadLiveRowFromDisk(hubDiskBody);
+  today.todayHubRowLastPersistedRef.current.set(rowUri, hubDiskBody);
+  mergeTodayHubRowDiskBodyIntoInboxCache(open, rowUri, hubDiskBody);
+  return true;
+}
+
 async function syncTodayHubWeekRowFromDiskIfNeeded(
   open: TodayHubOpenCacheEnv,
   today: ReconcileFsTodayHubEnv,
@@ -85,8 +138,7 @@ async function syncTodayHubWeekRowFromDiskIfNeeded(
   if (hubDiskBody === undefined) {
     return;
   }
-  const liveUri = today.todayHubBridgeRef.current.getLiveRowUri();
-  if (liveUri === rowUri) {
+  if (syncLiveTodayHubWeekRowFromDiskIfNeeded(open, today, rowUri, hubDiskBody)) {
     return;
   }
   const cached = open.inboxContentByUriRef.current[rowUri];
@@ -95,17 +147,7 @@ async function syncTodayHubWeekRowFromDiskIfNeeded(
     return;
   }
   today.todayHubRowLastPersistedRef.current.set(rowUri, hubDiskBody);
-  const nextHubCache = mergeInboxNoteBodyIntoCache(
-    open.inboxContentByUriRef.current,
-    rowUri,
-    hubDiskBody,
-  );
-  if (nextHubCache) {
-    open.inboxContentByUriRef.current = nextHubCache;
-    open.setInboxContentByUri(prev =>
-      mergeInboxNoteBodyIntoCache(prev, rowUri, hubDiskBody) ?? prev,
-    );
-  }
+  mergeTodayHubRowDiskBodyIntoInboxCache(open, rowUri, hubDiskBody);
 }
 
 export async function reconcileTodayHubWeekRowsAfterVaultFsChange(

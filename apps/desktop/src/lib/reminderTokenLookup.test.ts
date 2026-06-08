@@ -111,6 +111,29 @@ describe('requestReminderStrikeViaDaemon', () => {
     );
     expect(result).toBe('not-found');
   });
+
+  it('converts editor POSIX paths before lookup and removal', async () => {
+    const {requestReminderStrikeViaDaemon} = await import('./reminderTokenLookup');
+    const noteUri = 'file:///vault/Inbox/note.md';
+    const removeReminder = vi.fn().mockResolvedValue('removed');
+    const result = await requestReminderStrikeViaDaemon(
+      [
+        makeReminder({
+          id: 'rem-0',
+          noteUri,
+          occurrenceOrdinal: 0,
+          normalizedTokenText: '@2026-06-08_0930',
+        }),
+      ],
+      '/vault/Inbox/note.md',
+      'call @2026-06-08_0930',
+      5,
+      {year: 2026, month: 6, day: 8, hour: 9, minute: 30},
+      removeReminder,
+    );
+    expect(result).toBe('removed');
+    expect(removeReminder).toHaveBeenCalledWith(noteUri, 'rem-0');
+  });
 });
 
 describe('findReminderForTokenAtOffset — Today Hub row columns', () => {

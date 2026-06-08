@@ -71,6 +71,25 @@ function minimalEnv(
   };
 }
 
+function minimalTodayEnv(): ReconcileFsTodayHubEnv {
+  return {
+    todayHubRowLastPersistedRef: {current: new Map()},
+    todayHubSettingsRef: {current: null},
+    todayHubBridgeRef: {
+      current: {
+        getTodayNoteUri: () => null,
+        getLiveRowUri: () => null,
+        getLiveRowMergedMarkdown: () => null,
+        reloadLiveRowFromDisk: vi.fn(),
+        hasPendingHubFlush: () => false,
+        flushPendingEdits: vi.fn(),
+        cleanHubPageDayColumns: vi.fn(),
+        openReminderCell: null,
+      },
+    },
+  };
+}
+
 describe('applyExternalOpenNoteDeletedForFsWatch', () => {
   /**
    * Production `syncWorkspaceModelRemoveOpenTabUri` dispatches `removeUrisAction` on the shadow
@@ -165,20 +184,6 @@ describe('applyExternalOpenNoteDeletedForFsWatch', () => {
 });
 
 describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — open-note padding', () => {
-  function minimalTodayEnv(): ReconcileFsTodayHubEnv {
-    return {
-      todayHubRowLastPersistedRef: {current: new Map()},
-      todayHubSettingsRef: {current: null},
-      todayHubBridgeRef: {
-        current: {
-          getLiveRowUri: () => null,
-          hasPendingHubFlush: () => false,
-          flushPendingEdits: vi.fn(),
-        },
-      },
-    };
-  }
-
   it('reloads from disk instead of conflict when editor only has buffer-only padding', async () => {
     const diskBody = '# Title\nedited on disk';
     const fs = {
@@ -218,14 +223,6 @@ describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — open-note padding', 
 });
 
 describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — home-navigated page', () => {
-  function minimalTodayEnv(): ReconcileFsTodayHubEnv {
-    return {
-      todayHubRowLastPersistedRef: {current: new Map()},
-      todayHubSettingsRef: {current: null},
-      todayHubBridgeRef: {current: {getLiveRowUri: () => null, hasPendingHubFlush: () => false, flushPendingEdits: vi.fn()}},
-    };
-  }
-
   it('reconciles the home-navigated page URI when no tab is active', async () => {
     // Scenario: active surface is home (no active editor tab); user navigated to PAGE.
     // A wiki-link rename rewrote PAGE.md on disk. The tab strip only contains RENAMED_TAB.
@@ -345,5 +342,180 @@ describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — home-navigated page'
       PAGE,
       expect.anything(),
     );
+  });
+});
+
+describe('reconcileOpenNotesAfterFsChangeFromVaultWatch — Today Hub week rows', () => {
+  async function weekRowUri(): Promise<string> {
+    const {enumerateTodayHubWeekStarts, todayHubRowUri} = await import('../lib/todayHub');
+    const {vaultUriParentDirectory} = await import('../lib/vaultUriPaths');
+    const hubDir = vaultUriParentDirectory(HUB); // '/vault/A'
+    const weekStart = enumerateTodayHubWeekStarts(new Date(), 'monday')[1]!;
+    return todayHubRowUri(hubDir, weekStart);
+  }
+
+  function hubEnv(
+    getLiveRowUri: () => string | null,
+    overrides?: {
+      getLiveRowMergedMarkdown?: () => string | null;
+      reloadLiveRowFromDisk?: (diskBody: string) => void;
+      todayHubRowLastPersistedRef?: ReconcileFsTodayHubEnv['todayHubRowLastPersistedRef'];
+    },
+  ): ReconcileFsTodayHubEnv {
+    return {
+      todayHubRowLastPersistedRef:
+        overrides?.todayHubRowLastPersistedRef ?? {current: new Map()},
+      todayHubSettingsRef: {
+        current: {perpetualType: 'weekly', columns: [], start: 'monday'},
+      },
+      todayHubBridgeRef: {
+        current: {
+          getTodayNoteUri: () => null,
+          getLiveRowUri,
+          hasPendingHubFlush: () => false,
+          flushPendingEdits: vi.fn(),
+          getLiveRowMergedMarkdown: overrides?.getLiveRowMergedMarkdown ?? (() => null),
+          reloadLiveRowFromDisk: overrides?.reloadLiveRowFromDisk ?? vi.fn(),
+          cleanHubPageDayColumns: vi.fn(),
+          openReminderCell: null,
+        },
+      },
+    };
+  }
+
+  it('updates the inbox cache when a non-live week-row file changes on disk', async () => {
+    const rowUri = await weekRowUri();
+    const setInboxContentByUri = vi.fn();
+    const fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn().mockResolvedValue('NEW ROW BODY\n'),
+    } as unknown as ReconcileFsOpenMarkdownEnv['fs'];
+
+    const env = minimalEnv({
+      editorWorkspaceTabsRef: {current: []},
+      activeEditorTabIdRef: {current: null},
+      selectedUriRef: {current: HUB},
+      syncWorkspaceModelRemoveOpenTabUri: vi.fn(),
+      fs,
+      vaultRootRef: {current: '/vault'},
+      inboxContentByUriRef: {current: {[rowUri]: 'OLD ROW BODY'}},
+      setInboxContentByUri,
+    });
+
+    await reconcileOpenNotesAfterFsChangeFromVaultWatch(env, hubEnv(() => null), [rowUri], vi.fn());
+
+    expect(setInboxContentByUri).toHaveBeenCalled();
+  });
+
+  it('reloads a clean live week row from disk and updates the inbox cache', async () => {
+    const rowUri = await weekRowUri();
+    const setInboxContentByUri = vi.fn();
+    const reloadLiveRowFromDisk = vi.fn();
+    const todayHubRowLastPersistedRef = {current: new Map([[rowUri, 'OLD ROW BODY']])};
+    const fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn().mockResolvedValue('NEW ROW BODY\n'),
+    } as unknown as ReconcileFsOpenMarkdownEnv['fs'];
+
+    const env = minimalEnv({
+      editorWorkspaceTabsRef: {current: []},
+      activeEditorTabIdRef: {current: null},
+      selectedUriRef: {current: HUB},
+      syncWorkspaceModelRemoveOpenTabUri: vi.fn(),
+      fs,
+      vaultRootRef: {current: '/vault'},
+      inboxContentByUriRef: {current: {[rowUri]: 'OLD ROW BODY'}},
+      setInboxContentByUri,
+    });
+
+    await reconcileOpenNotesAfterFsChangeFromVaultWatch(
+      env,
+      hubEnv(() => rowUri, {
+        getLiveRowMergedMarkdown: () => 'OLD ROW BODY',
+        reloadLiveRowFromDisk,
+        todayHubRowLastPersistedRef,
+      }),
+      [rowUri],
+      vi.fn(),
+    );
+
+    expect(reloadLiveRowFromDisk).toHaveBeenCalledWith('NEW ROW BODY');
+    expect(env.inboxContentByUriRef.current[rowUri]).toBe('NEW ROW BODY');
+    expect(setInboxContentByUri).toHaveBeenCalled();
+    expect(todayHubRowLastPersistedRef.current.get(rowUri)).toBe('NEW ROW BODY');
+  });
+
+  it('merges the inbox cache when a live week row already matches disk', async () => {
+    const rowUri = await weekRowUri();
+    const setInboxContentByUri = vi.fn();
+    const reloadLiveRowFromDisk = vi.fn();
+    const syncedBody = 'SYNCED ROW BODY';
+    const fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn().mockResolvedValue(`${syncedBody}\n`),
+    } as unknown as ReconcileFsOpenMarkdownEnv['fs'];
+
+    const env = minimalEnv({
+      editorWorkspaceTabsRef: {current: []},
+      activeEditorTabIdRef: {current: null},
+      selectedUriRef: {current: HUB},
+      syncWorkspaceModelRemoveOpenTabUri: vi.fn(),
+      fs,
+      vaultRootRef: {current: '/vault'},
+      inboxContentByUriRef: {current: {[rowUri]: 'STALE ROW BODY'}},
+      setInboxContentByUri,
+    });
+
+    await reconcileOpenNotesAfterFsChangeFromVaultWatch(
+      env,
+      hubEnv(() => rowUri, {
+        getLiveRowMergedMarkdown: () => syncedBody,
+        reloadLiveRowFromDisk,
+      }),
+      [rowUri],
+      vi.fn(),
+    );
+
+    expect(reloadLiveRowFromDisk).not.toHaveBeenCalled();
+    expect(env.inboxContentByUriRef.current[rowUri]).toBe(syncedBody);
+    expect(setInboxContentByUri).toHaveBeenCalled();
+  });
+
+  it('keeps local edits when a live week row diverges from disk', async () => {
+    const rowUri = await weekRowUri();
+    const setInboxContentByUri = vi.fn();
+    const reloadLiveRowFromDisk = vi.fn();
+    const todayHubRowLastPersistedRef = {current: new Map([[rowUri, 'OLD ROW BODY']])};
+    const fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn().mockResolvedValue('NEW ROW BODY\n'),
+    } as unknown as ReconcileFsOpenMarkdownEnv['fs'];
+
+    const env = minimalEnv({
+      editorWorkspaceTabsRef: {current: []},
+      activeEditorTabIdRef: {current: null},
+      selectedUriRef: {current: HUB},
+      syncWorkspaceModelRemoveOpenTabUri: vi.fn(),
+      fs,
+      vaultRootRef: {current: '/vault'},
+      inboxContentByUriRef: {current: {[rowUri]: 'OLD ROW BODY'}},
+      setInboxContentByUri,
+    });
+
+    await reconcileOpenNotesAfterFsChangeFromVaultWatch(
+      env,
+      hubEnv(() => rowUri, {
+        getLiveRowMergedMarkdown: () => 'LOCAL EDITS',
+        reloadLiveRowFromDisk,
+        todayHubRowLastPersistedRef,
+      }),
+      [rowUri],
+      vi.fn(),
+    );
+
+    expect(reloadLiveRowFromDisk).not.toHaveBeenCalled();
+    expect(env.inboxContentByUriRef.current[rowUri]).toBe('OLD ROW BODY');
+    expect(setInboxContentByUri).not.toHaveBeenCalled();
+    expect(todayHubRowLastPersistedRef.current.get(rowUri)).toBe('OLD ROW BODY');
   });
 });

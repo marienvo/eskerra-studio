@@ -10,6 +10,7 @@
 
 import type {SessionNotification} from './sessionNotifications';
 import type {Reminder} from './reminderIndex';
+import {todayHubRowTitleForNoteUri} from './todayHub/reminderHubCellTarget';
 
 /**
  * Per-row remove lifecycle:
@@ -39,6 +40,11 @@ export type ReminderPaneRow = {
    * only the token; the row then folds the time onto the note-name header.
    */
   displayLine: string;
+  /**
+   * Hub folder name when this reminder lives in a Today Hub cell (`YYYY-MM-DD.md` row); the header
+   * shows it instead of the bare date stem. Undefined for ordinary notes.
+   */
+  displayTitle?: string;
   removeState: ReminderRemoveState;
   /**
    * Brief inline flash when snooze IPC failed (ADR §8). Auto-clears; not
@@ -71,6 +77,7 @@ function resolveRemoveState(
 export function reminderToPaneRow(
   reminder: Reminder,
   prevRemoveState: ReminderRemoveState | undefined,
+  hubTodayNoteUris: readonly string[] = [],
 ): ReminderPaneRow {
   return {
     id: reminder.id,
@@ -84,6 +91,8 @@ export function reminderToPaneRow(
     uiCaretHint: reminder.uiCaretHint?.utf16Offset,
     // Older index without `displayLine` → empty (folds onto the header).
     displayLine: reminder.displayLine ?? '',
+    displayTitle:
+      todayHubRowTitleForNoteUri(reminder.noteUri, hubTodayNoteUris) ?? undefined,
     // Preserve in-flight UI state across index re-reads; reset only to idle
     // when the daemon confirms `removed` (row disappears) or the index no
     // longer contains this id (also gone). A `stale` daemon state clears

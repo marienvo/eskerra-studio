@@ -52,6 +52,8 @@ import {
 import {INBOX_AUTOSAVE_DEBOUNCE_MS} from '../lib/inboxAutosaveScheduler';
 import {todayHubPerfEnabled, todayHubPerfLog} from '../lib/todayHub/todayHubPerf';
 import {todayHubStaticCellDocOffsetFromPointer} from '../lib/todayHub/todayHubCellStaticPointer';
+import {mapFullFileCaretToHubCellLineStart} from '../lib/todayHub/reminderHubCellTarget';
+import type {TodayHubReminderCellOpenResult} from '../lib/todayHub/reminderHubCellTarget';
 import {
   todayHubCanvasCellSurface,
   todayHubCanvasCellWarmOrActive,
@@ -359,6 +361,7 @@ export function TodayHubCanvas({
   /** Invalidates pending double-rAF warm scheduling when the pointer leaves the cell. */
   const hubWarmDeferGenRef = useRef<Record<string, number>>({});
   const hubOpenPerfT0Ref = useRef(0);
+  const canvasRootRef = useRef<HTMLDivElement | null>(null);
 
   const wikiLinkCompletionCandidates = useMemo(
     () => buildInboxWikiLinkCompletionCandidates(noteRefs),
@@ -606,6 +609,26 @@ export function TodayHubCanvas({
     }
   }, [cellEditorRef, columnCount, runRowPersist, todayHubCleanRowBlocked]);
 
+  const reloadLiveRowFromDisk = useCallback(
+    (diskBody: string) => {
+      const a = activeRef.current;
+      if (!a) {
+        return;
+      }
+      const key = normUri(a.uri);
+      const cols = splitTodayRowIntoColumns(diskBody, columnCount);
+      setLocalRowSections(prev => {
+        const next = {...prev, [key]: cols};
+        localRowSectionsRef.current = next;
+        return next;
+      });
+      cellEditorRef.current?.loadMarkdown(cols[a.col] ?? '', {
+        selection: 'preserve',
+      });
+    },
+    [cellEditorRef, columnCount],
+  );
+
   const openCell = useCallback(
     (uri: string, col: number, clickCaret: number | null = null) => {
       const key = normUri(uri);
@@ -671,6 +694,40 @@ export function TodayHubCanvas({
       }
     },
     [columnCount, flushScheduledPersist],
+  );
+
+  /**
+   * Bridge entry for reminder click-to-open (Gnome notification or in-pane panel). The row's week
+   * must be one this hub renders; otherwise the caller opens the plain note. Hydrates the row if it
+   * is not warm, opens the column holding the token at its line start, and scrolls the row into view.
+   */
+  const openReminderCellFromBridge = useCallback(
+    async (rowUri: string, caretUtf16: number): Promise<TodayHubReminderCellOpenResult> => {
+      const key = normUri(rowUri);
+      if (!rowUrisRef.current.some(r => normUri(r) === key)) {
+        return 'out-of-window';
+      }
+      if (inboxContentByUriRef.current[key] === undefined) {
+        await prehydrateTodayHubRows([rowUri]);
+      }
+      const raw = inboxContentByUriRef.current[key] ?? '';
+      const {col, sectionCaret} = mapFullFileCaretToHubCellLineStart(
+        raw,
+        columnCount,
+        caretUtf16,
+      );
+      openCell(key, col, sectionCaret);
+      requestAnimationFrame(() => {
+        const rowEl = canvasRootRef.current?.querySelector(
+          `[data-hub-row-uri="${CSS.escape(key)}"]`,
+        );
+        if (rowEl instanceof HTMLElement) {
+          rowEl.scrollIntoView({block: 'center'});
+        }
+      });
+      return 'handled';
+    },
+    [columnCount, openCell, prehydrateTodayHubRows],
   );
 
   /**
@@ -753,9 +810,12 @@ export function TodayHubCanvas({
     const bridge = bridgeRef.current;
     const flushFn = flushScheduledPersist;
     const cleanFn = cleanHubPageDayColumns;
+    const reloadFn = reloadLiveRowFromDisk;
+    const hubTodayUri = normUri(todayNoteUri);
     bridge.flushPendingEdits = flushFn;
     bridge.hasPendingHubFlush = () =>
       debounceTimerRef.current != null || pendingPersistRef.current != null;
+    bridge.getTodayNoteUri = () => hubTodayUri;
     bridge.getLiveRowUri = () => active?.uri ?? null;
     bridge.getLiveRowMergedMarkdown = () => {
       if (!active) {
@@ -768,19 +828,36 @@ export function TodayHubCanvas({
         inboxContentByUriRef.current,
       );
     };
+    bridge.reloadLiveRowFromDisk = reloadFn;
     bridge.cleanHubPageDayColumns = cleanFn;
+    const openReminderFn = openReminderCellFromBridge;
+    bridge.openReminderCell = openReminderFn;
     return () => {
       if (bridge.flushPendingEdits === flushFn) {
         bridge.flushPendingEdits = async () => {};
         bridge.hasPendingHubFlush = () => false;
+        bridge.getTodayNoteUri = () => null;
         bridge.getLiveRowUri = () => null;
         bridge.getLiveRowMergedMarkdown = () => null;
+        bridge.reloadLiveRowFromDisk = () => {};
       }
       if (bridge.cleanHubPageDayColumns === cleanFn) {
         bridge.cleanHubPageDayColumns = async () => {};
       }
+      if (bridge.openReminderCell === openReminderFn) {
+        bridge.openReminderCell = null;
+      }
     };
-  }, [bridgeRef, active, columnCount, flushScheduledPersist, cleanHubPageDayColumns]);
+  }, [
+    bridgeRef,
+    todayNoteUri,
+    active,
+    columnCount,
+    flushScheduledPersist,
+    cleanHubPageDayColumns,
+    reloadLiveRowFromDisk,
+    openReminderCellFromBridge,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -957,6 +1034,7 @@ export function TodayHubCanvas({
   return (
     <>
     <div
+      ref={canvasRootRef}
       className="today-hub-canvas"
       role="region"
       aria-label="Today hub weekly canvas"
@@ -976,6 +1054,7 @@ export function TodayHubCanvas({
           return (
             <div
               key={uri}
+              data-hub-row-uri={uri}
               className={
                 ri === 0
                   ? 'today-hub-canvas__row today-hub-canvas__row--previous-week'

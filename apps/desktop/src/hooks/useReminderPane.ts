@@ -102,7 +102,10 @@ export type UseReminderPaneResult = {
   snoozeReminder: (noteUri: string, reminderId: string, minutes: number) => Promise<void>;
 };
 
-export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult {
+export function useReminderPane(
+  vaultRoot: string | null,
+  hubTodayNoteUris: readonly string[] = [],
+): UseReminderPaneResult {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [rowStates, setRowStates] = useState<ReadonlyMap<string, ReminderRemoveState>>(
     new Map(),
@@ -226,10 +229,10 @@ export function useReminderPane(vaultRoot: string | null): UseReminderPaneResult
   const rows: readonly ReminderPaneRow[] = useMemo(
     () =>
       reminders.map(r => ({
-        ...reminderToPaneRow(r, rowStates.get(r.id)),
+        ...reminderToPaneRow(r, rowStates.get(r.id), hubTodayNoteUris),
         snoozeUnavailableHint: snoozeTransientIds.has(r.id),
       })),
-    [reminders, rowStates, snoozeTransientIds],
+    [reminders, rowStates, snoozeTransientIds, hubTodayNoteUris],
   );
 
   const removeReminder = useCallback(

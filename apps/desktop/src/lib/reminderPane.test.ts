@@ -64,6 +64,35 @@ describe('reminderToPaneRow', () => {
     expect(reminderToPaneRow(reminder(), undefined).displayLine).toBe('');
   });
 
+  it('leaves displayTitle undefined for an ordinary note', () => {
+    const row = reminderToPaneRow(reminder(), undefined, ['/vault/Hub/Today.md']);
+    expect(row.displayTitle).toBeUndefined();
+  });
+
+  it('sets displayTitle to the hub folder name for a hub-row reminder', () => {
+    const row = reminderToPaneRow(
+      reminder({
+        noteUri: 'file:///vault/Hub/2026-06-08.md',
+        vaultRelativePath: 'Hub/2026-06-08.md',
+      }),
+      undefined,
+      ['/vault/Hub/Today.md'],
+    );
+    expect(row.displayTitle).toBe('Hub');
+  });
+
+  it('sets displayTitle to the hub folder name for a reminder on the hub Today note', () => {
+    const row = reminderToPaneRow(
+      reminder({
+        noteUri: 'file:///vault/Hub/Today.md',
+        vaultRelativePath: 'Hub/Today.md',
+      }),
+      undefined,
+      ['/vault/Hub/Today.md'],
+    );
+    expect(row.displayTitle).toBe('Hub');
+  });
+
   it('keeps a `removing` spinner across index re-reads while not stale', () => {
     const row = reminderToPaneRow(reminder({state: 'notified'}), 'removing');
     expect(row.removeState).toBe('removing');

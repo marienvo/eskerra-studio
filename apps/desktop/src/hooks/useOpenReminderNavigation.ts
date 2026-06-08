@@ -3,7 +3,15 @@ import {invoke, isTauri} from '@tauri-apps/api/core';
 import {type RefObject, useCallback, useEffect, useRef} from 'react';
 
 import type {NoteMarkdownEditorHandle} from '../editor/noteEditor/NoteMarkdownEditor';
+import {normalizeEditorDocUri} from '../lib/editorDocumentHistory';
+import type {TodayHubWorkspaceBridge} from '../lib/todayHub';
+import {
+  findTodayHubRowMatch,
+  reminderFileUriToAbsolutePath,
+} from '../lib/todayHub/reminderHubCellTarget';
 import type {OpenMarkdownInEditorOptions} from './workspaceOpenMarkdownCommand';
+
+export {reminderFileUriToAbsolutePath};
 
 type OpenReminderRequest = {
   noteUri: string;
@@ -15,29 +23,62 @@ type ResolvedReminderPosition = {
   caretUtf16: number;
 };
 
-export function reminderFileUriToAbsolutePath(noteUri: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(noteUri);
-  } catch {
-    return null;
-  }
+/**
+ * Lets {@link navigateToReminder} route a reminder that lives in a Today Hub cell to the hub canvas
+ * instead of opening its backing week-note as a plain note.
+ */
+export type TodayHubReminderBridge = {
+  /** Current hub `Today.md` URIs (used to recognise a reminder's week-note as a hub row). */
+  hubTodayNoteUris: () => readonly string[];
+  /** Make the hub holding the row the active workspace so its canvas mounts. */
+  switchTodayHubWorkspace: (hubTodayNoteUri: string) => Promise<void>;
+  /** Live canvas bridge; `openReminderCell` becomes non-null once a hub canvas is mounted. */
+  bridgeRef: RefObject<TodayHubWorkspaceBridge>;
+};
 
-  if (url.protocol !== 'file:' || (url.host !== '' && url.host !== 'localhost')) {
-    return null;
+/** Poll the canvas bridge for the target hub's `openReminderCell` after a hub switch. */
+async function waitForCanvasReminderOpen(
+  bridgeRef: RefObject<TodayHubWorkspaceBridge>,
+  expectedHubTodayNoteUri: string,
+  maxFrames = 120,
+): Promise<TodayHubWorkspaceBridge['openReminderCell']> {
+  const expectedHub = normalizeEditorDocUri(expectedHubTodayNoteUri);
+  for (let i = 0; i < maxFrames; i++) {
+    const bridge = bridgeRef.current;
+    const fn = bridge?.openReminderCell ?? null;
+    const mountedHub = bridge?.getTodayNoteUri?.() ?? null;
+    if (
+      fn != null &&
+      mountedHub != null &&
+      normalizeEditorDocUri(mountedHub) === expectedHub
+    ) {
+      return fn;
+    }
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   }
-  if (url.search !== '' || url.hash !== '') {
-    return null;
-  }
+  return null;
+}
 
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(url.pathname);
-  } catch {
-    return null;
+/**
+ * Routes a hub-cell reminder to the canvas. Returns `true` when the canvas opened the cell, or
+ * `false` when the row's week is outside the hub window / the canvas never mounted (caller then
+ * falls back to opening the plain note).
+ */
+async function tryOpenReminderInHubCell(
+  match: {hubTodayNoteUri: string; rowUri: string},
+  caretUtf16: number,
+  hubBridge: TodayHubReminderBridge,
+): Promise<boolean> {
+  await hubBridge.switchTodayHubWorkspace(match.hubTodayNoteUri);
+  const openCell = await waitForCanvasReminderOpen(
+    hubBridge.bridgeRef,
+    match.hubTodayNoteUri,
+  );
+  if (openCell == null) {
+    return false;
   }
-
-  return decodedPath.startsWith('/') ? decodedPath : null;
+  const result = await openCell(match.rowUri, caretUtf16).catch(() => null);
+  return result === 'handled';
 }
 
 function openReminderRequestKey(req: OpenReminderRequest): string {
@@ -48,10 +89,29 @@ export async function navigateToReminder(
   req: OpenReminderRequest,
   openMarkdownInEditor: (uri: string, options?: OpenMarkdownInEditorOptions) => Promise<void>,
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>,
+  hubBridge?: TodayHubReminderBridge,
 ): Promise<void> {
   const notePath = reminderFileUriToAbsolutePath(req.noteUri);
   if (notePath == null) {
     return;
+  }
+
+  // Today Hub cells live in `YYYY-MM-DD.md` week-notes beside the hub's `Today.md`. Route those to
+  // the hub canvas (open cell + caret at the token's line) rather than opening the bare week-note.
+  const hubMatch = hubBridge
+    ? findTodayHubRowMatch(notePath, hubBridge.hubTodayNoteUris())
+    : null;
+  if (hubMatch != null) {
+    const resolved = await invoke<ResolvedReminderPosition | null>('reminders_resolve_position', {
+      noteUri: req.noteUri,
+      reminderId: req.reminderId,
+    }).catch(() => null);
+    const caret = resolved?.caretUtf16 ?? req.uiCaretHint ?? 0;
+    const handled = await tryOpenReminderInHubCell(hubMatch, caret, hubBridge!).catch(() => false);
+    if (handled) {
+      return;
+    }
+    // Out of window / canvas unavailable: fall through to opening the plain week-note.
   }
 
   await openMarkdownInEditor(notePath);
@@ -105,10 +165,12 @@ export function useOpenReminderNavigation({
   openMarkdownInEditor,
   inboxEditorRef,
   initialVaultHydrateAttemptDone,
+  hubBridge,
 }: {
   openMarkdownInEditor: (uri: string, options?: OpenMarkdownInEditorOptions) => Promise<void>;
   inboxEditorRef: RefObject<NoteMarkdownEditorHandle | null>;
   initialVaultHydrateAttemptDone: boolean;
+  hubBridge?: TodayHubReminderBridge;
 }): void {
   const pendingRequestsRef = useRef<OpenReminderRequest[]>([]);
   const pendingRequestKeysRef = useRef<Set<string>>(new Set());
@@ -129,13 +191,13 @@ export function useOpenReminderNavigation({
     pendingRequestKeysRef.current.delete(key);
     activeRequestKeyRef.current = key;
 
-    navigateToReminder(req, openMarkdownInEditor, inboxEditorRef)
+    navigateToReminder(req, openMarkdownInEditor, inboxEditorRef, hubBridge)
       .catch(() => undefined)
       .finally(() => {
         activeRequestKeyRef.current = null;
         drainPendingRef.current();
       });
-  }, [initialVaultHydrateAttemptDone, openMarkdownInEditor, inboxEditorRef]);
+  }, [initialVaultHydrateAttemptDone, openMarkdownInEditor, inboxEditorRef, hubBridge]);
 
   const enqueueOpenReminder = useCallback((req: OpenReminderRequest) => {
     const key = openReminderRequestKey(req);
