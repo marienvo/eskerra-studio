@@ -1,5 +1,10 @@
 import {describe, expect, it, vi} from 'vitest';
 
+import {
+  mergeTodayRowColumns,
+  todayHubColumnOffsetToRowOffset,
+} from './todayHub';
+
 import type {Reminder} from './reminderIndex';
 import {
   findReminderForLiveToken,
@@ -105,6 +110,48 @@ describe('requestReminderStrikeViaDaemon', () => {
       vi.fn(),
     );
     expect(result).toBe('not-found');
+  });
+});
+
+describe('findReminderForTokenAtOffset — Today Hub row columns', () => {
+  it('resolves the second identical token in a later column using row offsets', () => {
+    const noteUri = 'file:///vault/Today/2026-06-02.md';
+    const token = '@2026-06-08_0930';
+    const sections = [`first ${token}`, `second ${token}`];
+    const rowText = mergeTodayRowColumns(sections);
+    const col1Offset = sections[1]!.indexOf(token);
+    const rowOffset = todayHubColumnOffsetToRowOffset(sections, 1, col1Offset);
+    const reminder = findReminderForTokenAtOffset(
+      [
+        makeReminder({
+          id: 'rem-col-1',
+          noteUri,
+          occurrenceOrdinal: 1,
+          normalizedTokenText: token,
+        }),
+      ],
+      noteUri,
+      rowText,
+      rowOffset,
+      {year: 2026, month: 6, day: 8, hour: 9, minute: 30},
+    );
+    expect(reminder?.id).toBe('rem-col-1');
+    expect(
+      findReminderForTokenAtOffset(
+        [
+          makeReminder({
+            id: 'rem-col-1',
+            noteUri,
+            occurrenceOrdinal: 1,
+            normalizedTokenText: token,
+          }),
+        ],
+        noteUri,
+        sections[1]!,
+        col1Offset,
+        {year: 2026, month: 6, day: 8, hour: 9, minute: 30},
+      ),
+    ).toBeNull();
   });
 });
 

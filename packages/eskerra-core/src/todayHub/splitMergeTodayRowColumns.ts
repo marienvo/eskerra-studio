@@ -65,6 +65,25 @@ export function mergeTodayRowColumns(sections: string[]): string {
   return sections.join(TODAY_HUB_SECTION_DELIMITER);
 }
 
+/**
+ * Maps a byte offset inside one column section to the offset in
+ * `mergeTodayRowColumns(sections)` (the on-disk row body the reminder daemon scans).
+ */
+export function todayHubColumnOffsetToRowOffset(
+  sections: readonly string[],
+  columnIndex: number,
+  columnOffset: number,
+): number {
+  if (columnIndex < 0 || columnIndex >= sections.length) {
+    throw new Error('columnIndex out of range');
+  }
+  let rowOffset = 0;
+  for (let i = 0; i < columnIndex; i++) {
+    rowOffset += sections[i]!.length + TODAY_HUB_SECTION_DELIMITER.length;
+  }
+  return rowOffset + columnOffset;
+}
+
 /** True if every section is empty or whitespace-only. */
 export function todayHubRowSectionsAllBlank(sections: string[]): boolean {
   return sections.every(s => s.trim() === '');

@@ -9,6 +9,7 @@ export {
   normalizeTodayHubRowForDisk,
   parseTodayHubFrontmatter,
   splitTodayRowIntoColumns,
+  todayHubColumnOffsetToRowOffset,
   startOfLocalWeek,
   startOfLocalWeekMonday,
   stripTodayHubDelimiterOnlyLinesFromColumn,

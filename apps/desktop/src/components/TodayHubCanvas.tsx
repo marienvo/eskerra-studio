@@ -40,6 +40,7 @@ import {
   mergeTodayRowColumns,
   splitTodayRowIntoColumns,
   todayHubColumnCount,
+  todayHubColumnOffsetToRowOffset,
   todayHubRowUri,
   todayHubWeekEndInclusive,
   todayHubWeekProgress,
@@ -842,12 +843,17 @@ export function TodayHubCanvas({
         inboxContentByUriRef.current[key] ?? '',
         columnCount,
       );
-    const cellText = sections[picker.col] ?? '';
+    const rowText = mergeTodayRowColumns(sections);
+    const rowOffset = todayHubColumnOffsetToRowOffset(
+      sections,
+      picker.col,
+      picker.from,
+    );
     return requestReminderStrikeViaDaemon(
       remindersRef.current,
       picker.uri,
-      cellText,
-      picker.from,
+      rowText,
+      rowOffset,
       picker.initialValue,
       onRemoveReminderRef.current,
     );

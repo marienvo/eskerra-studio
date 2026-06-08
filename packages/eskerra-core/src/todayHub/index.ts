@@ -51,5 +51,6 @@ export {
   normalizeTodayHubRowForDisk,
   splitTodayRowIntoColumns,
   stripTodayHubDelimiterOnlyLinesFromColumn,
+  todayHubColumnOffsetToRowOffset,
   todayHubRowSectionsAllBlank,
 } from './splitMergeTodayRowColumns';

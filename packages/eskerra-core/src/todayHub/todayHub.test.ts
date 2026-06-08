@@ -9,6 +9,7 @@ import {
   normalizeTodayHubRowForDisk,
   parseTodayHubFrontmatter,
   splitTodayRowIntoColumns,
+  todayHubColumnOffsetToRowOffset,
   startOfLocalWeek,
   startOfLocalWeekMonday,
   todayHubColumnCount,
@@ -339,6 +340,17 @@ describe('splitTodayRowIntoColumns / mergeTodayRowColumns', () => {
   it('todayHubRowSectionsAllBlank', () => {
     expect(todayHubRowSectionsAllBlank(['', '  \n'])).toBe(true);
     expect(todayHubRowSectionsAllBlank(['x'])).toBe(false);
+  });
+
+  it('todayHubColumnOffsetToRowOffset maps column-local offsets into merged row text', () => {
+    const sections = ['call @2026-06-08_0930', 'later @2026-06-08_0930'];
+    const rowText = mergeTodayRowColumns(sections);
+    const secondTokenInCol1 = sections[1]!.indexOf('@2026-06-08_0930');
+    const rowOffset = todayHubColumnOffsetToRowOffset(sections, 1, secondTokenInCol1);
+    expect(rowText.slice(rowOffset, rowOffset + '@2026-06-08_0930'.length)).toBe(
+      '@2026-06-08_0930',
+    );
+    expect(rowOffset).toBeGreaterThan(sections[0]!.length);
   });
 });
 

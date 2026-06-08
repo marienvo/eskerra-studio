@@ -100,7 +100,10 @@ same cadence as the editor.
 activate. Date/time confirm splices the token via `applyTodayHubCellDateTokenReplace`
 (updates `localRowSections` without opening the cell) and `schedulePersist`. Checking
 **Completed** routes through `RemoveReminder` IPC (same single-writer path as the inbox
-editor and Notifications pane); the hub never writes `@~~…~~` locally on strike. Pill
+editor and Notifications pane); the hub never writes `@~~…~~` locally on strike. Reminder
+lookup must use **`mergeTodayRowColumns(sections)`** and map the pill's column-local
+`from` through **`todayHubColumnOffsetToRowOffset`** — the daemon indexes
+`occurrenceOrdinal` over the full row file, not a single column. Pill
 `data-doc-from` / `data-doc-to` cover the **full** struck span (`@~~…~~`), not the inner date.
 
 **Rule:** the read-mode pill placement (`collectDateTokenPillsForLine`) must mirror CodeMirror's
