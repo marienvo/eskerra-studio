@@ -2681,6 +2681,13 @@ button.primary.destructive {
   --nb-editor-heading-gutter: 9.25ch;
   /* Extra inline start per nested list level (`cm-md-list-line--nest-*`). */
   --nb-editor-list-nest-step: 0.5rem;
+  /*
+   * Deterministic tab advance for leading indent on list lines (set as a `tab-size` *length* so the
+   * hanging-indent math below is exact regardless of the body font). Tuned to ~the old 4-space tab.
+   */
+  --nb-editor-list-tab: 1.3rem;
+  /* Hanging-indent allowance for the marker column (bullet/number + trailing space after the mark). */
+  --nb-editor-list-hang-marker: 0.6ch;
   /* Fold gutter column width; matches rail + `EditorView.theme` + `.cm-gutters` in App.css. */
   --nb-editor-fold-gutter-width: 1.375rem;
   /* Max width of the text column inside `.note-markdown-editor-page` (excluding fold rail). */
@@ -3333,6 +3340,8 @@ button.primary.destructive {
   .note-markdown-editor-host
   .cm-line[class*='cm-md-list-line'] {
   overflow-wrap: anywhere;
+  /* Deterministic leading-tab advance so the per-nest hanging-indent below is pixel-exact. */
+  tab-size: var(--nb-editor-list-tab);
 }
 
 /*
@@ -5818,37 +5827,76 @@ button.primary.destructive {
   padding-bottom: 0.28em;
 }
 
-/* List: top-level uses mark pull only; nested items add strong visual indent per depth. */
+/*
+ * List: top-level uses mark pull only; nested items add strong visual indent per depth.
+ *
+ * Hanging indent for soft wrap: `padding-inline-start` pushes the whole line right, and a matching
+ * negative `text-indent` pulls only the first visual segment back. The first line therefore renders
+ * unchanged, while wrapped/continuation segments hang on the text column (level with the text after
+ * the bullet) instead of falling back to the bare padding edge. The pulled-back amount equals the
+ * real content advance on the first segment: `N` leading tabs (`--nb-editor-list-tab` each, made
+ * deterministic above) plus the marker column. Top-level items (no `--nest-*`) only need the marker
+ * column; nested levels override with the full (nest + tabs + marker) value via later cascade.
+ */
+[data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line {
+  padding-inline-start: var(--nb-editor-list-hang-marker);
+  text-indent: calc(-1 * var(--nb-editor-list-hang-marker));
+}
+
 [data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line--nest-1 {
-  padding-inline-start: calc(1 * var(--nb-editor-list-nest-step));
+  padding-inline-start: calc(
+    1 * var(--nb-editor-list-nest-step) + 1 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)
+  );
+  text-indent: calc(-1 * (1 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)));
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line--nest-2 {
-  padding-inline-start: calc(2 * var(--nb-editor-list-nest-step));
+  padding-inline-start: calc(
+    2 * var(--nb-editor-list-nest-step) + 2 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)
+  );
+  text-indent: calc(-1 * (2 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)));
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line--nest-3 {
-  padding-inline-start: calc(3 * var(--nb-editor-list-nest-step));
+  padding-inline-start: calc(
+    3 * var(--nb-editor-list-nest-step) + 3 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)
+  );
+  text-indent: calc(-1 * (3 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)));
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line--nest-4 {
-  padding-inline-start: calc(4 * var(--nb-editor-list-nest-step));
+  padding-inline-start: calc(
+    4 * var(--nb-editor-list-nest-step) + 4 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)
+  );
+  text-indent: calc(-1 * (4 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)));
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line--nest-5 {
-  padding-inline-start: calc(5 * var(--nb-editor-list-nest-step));
+  padding-inline-start: calc(
+    5 * var(--nb-editor-list-nest-step) + 5 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)
+  );
+  text-indent: calc(-1 * (5 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)));
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line--nest-6 {
-  padding-inline-start: calc(6 * var(--nb-editor-list-nest-step));
+  padding-inline-start: calc(
+    6 * var(--nb-editor-list-nest-step) + 6 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)
+  );
+  text-indent: calc(-1 * (6 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)));
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line--nest-7 {
-  padding-inline-start: calc(7 * var(--nb-editor-list-nest-step));
+  padding-inline-start: calc(
+    7 * var(--nb-editor-list-nest-step) + 7 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)
+  );
+  text-indent: calc(-1 * (7 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)));
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-line.cm-md-list-line--nest-8 {
-  padding-inline-start: calc(8 * var(--nb-editor-list-nest-step));
+  padding-inline-start: calc(
+    8 * var(--nb-editor-list-nest-step) + 8 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)
+  );
+  text-indent: calc(-1 * (8 * var(--nb-editor-list-tab) + var(--nb-editor-list-hang-marker)));
 }
 
 [data-app-surface='capture'] .note-markdown-editor-host .cm-foldGutter {
