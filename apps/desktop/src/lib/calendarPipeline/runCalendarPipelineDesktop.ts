@@ -118,6 +118,15 @@ async function normalizeAndReadAgenda(
   return {bullets: parseAgendaBullets(normalized, now), wroteAgenda};
 }
 
+export function redactCalendarFeedUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin;
+  } catch {
+    return '[invalid-url]';
+  }
+}
+
 async function fetchHubIcsEvents(
   config: TodayHubCalendarConfig,
   now: Date,
@@ -126,17 +135,18 @@ async function fetchHubIcsEvents(
   const events: IcsEvent[] = [];
   let failed = 0;
   for (const url of config.icsUrls) {
+    const safeUrl = redactCalendarFeedUrl(url);
     const startedAt = Date.now();
     try {
       const text = await fetchIcs(url, config.timeoutMs);
       const parsed = parseIcsEvents(text, {now, daysAhead: config.daysAhead});
       events.push(...parsed);
       console.info(
-        `[calendar-pipeline] Fetched ICS (${parsed.length} events, ${Date.now() - startedAt}ms): ${url}`,
+        `[calendar-pipeline] Fetched ICS (${parsed.length} events, ${Date.now() - startedAt}ms): ${safeUrl}`,
       );
     } catch (err) {
       failed += 1;
-      console.error(`[calendar-pipeline] ICS fetch failed (${url}):`, err);
+      console.error(`[calendar-pipeline] ICS fetch failed (${safeUrl}):`, err);
     }
   }
   return {events, failed};

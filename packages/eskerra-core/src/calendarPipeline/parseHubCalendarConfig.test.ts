@@ -2,7 +2,12 @@ import {readFileSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
-import {parseHubCalendarConfig} from './parseHubCalendarConfig';
+import {
+  MAX_ICS_DAYS_AHEAD,
+  MAX_ICS_FEEDS_PER_HUB,
+  MAX_ICS_TIMEOUT_MS,
+  parseHubCalendarConfig,
+} from './parseHubCalendarConfig';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WORK_TODAY_FIXTURE = resolve(HERE, '../../../../mock-vault/Work/Today.md');
@@ -72,5 +77,28 @@ describe('parseHubCalendarConfig', () => {
     const config = parseHubCalendarConfig(markdown);
     expect(config?.icsUrls).toEqual([]);
     expect(config?.mdAgenda).toBeNull();
+  });
+
+  it('caps network-facing calendar settings from frontmatter', () => {
+    const urls = Array.from(
+      {length: MAX_ICS_FEEDS_PER_HUB + 3},
+      (_, i) => `https://example.com/${i}.ics`,
+    );
+    const markdown = [
+      '---',
+      'icsUrl:',
+      ...urls.map(url => `  - ${url}`),
+      'daysAhead: 999',
+      'timeoutMs: 999999',
+      'columns:',
+      '  - Calendar',
+      '---',
+    ].join('\n');
+
+    const config = parseHubCalendarConfig(markdown);
+
+    expect(config?.icsUrls).toEqual(urls.slice(0, MAX_ICS_FEEDS_PER_HUB));
+    expect(config?.daysAhead).toBe(MAX_ICS_DAYS_AHEAD);
+    expect(config?.timeoutMs).toBe(MAX_ICS_TIMEOUT_MS);
   });
 });

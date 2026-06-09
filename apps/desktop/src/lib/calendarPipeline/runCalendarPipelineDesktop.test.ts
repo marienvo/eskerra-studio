@@ -3,7 +3,10 @@ import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it, vi} from 'vitest';
 import type {VaultDirEntry, VaultFilesystem} from '@eskerra/core';
-import {runCalendarPipelineDesktop} from './runCalendarPipelineDesktop';
+import {
+  redactCalendarFeedUrl,
+  runCalendarPipelineDesktop,
+} from './runCalendarPipelineDesktop';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MANUAL_WEEK_ROW_FIXTURE = resolve(
@@ -93,6 +96,13 @@ function readManualWeekRowFixture(): string {
 const REFS = [{uri: '/vault/Work/Today.md', name: 'Today.md'}];
 
 describe('runCalendarPipelineDesktop', () => {
+  it('redacts calendar feed query and path details for logs', () => {
+    expect(redactCalendarFeedUrl('https://example.com/private/token/calendar.ics?secret=abc')).toBe(
+      'https://example.com',
+    );
+    expect(redactCalendarFeedUrl('not a url')).toBe('[invalid-url]');
+  });
+
   it('normalizes the agenda and upserts the Calendar column of the affected week row', async () => {
     const fs = makeFsWithWorkHub();
     const fetchIcs = vi.fn(async () => ICS);

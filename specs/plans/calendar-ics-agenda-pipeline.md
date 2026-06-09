@@ -33,6 +33,11 @@ Parsed by `parseHubCalendarConfig` (`packages/eskerra-core/src/calendarPipeline`
   (`apps/desktop/src-tauri/src/fetch_ics.rs`, reqwest + rustls-tls). Doing the request off the
   renderer bypasses webview CORS for Outlook/Google endpoints and follows redirects. The JS wrapper is
   `fetchIcsDesktop`.
+  - Security boundary: only public `https://` feeds are allowed. Localhost, loopback, private,
+    link-local, multicast, unspecified, and hosts resolving to those addresses are rejected. Redirect
+    targets are revalidated before following.
+  - Resource caps: per-feed timeout is clamped to 500-15000ms, response bodies are capped at 2MB, and
+    logs redact feed URL paths/query strings because calendar URLs often contain bearer-like tokens.
 - `parseIcsEvents` (pure, in core) turns ICS text into `{start, summary}[]`:
   - `VEVENT` only; window `[startOfDay(now) .. endOfDay(now + daysAhead)]`.
   - **All-day events are skipped** (`VALUE=DATE` or 8-digit `DTSTART`).
@@ -189,6 +194,8 @@ calendar source fails. No startup-path work.
 - **TS vs Rust:** network fetch + file I/O in Rust (CORS-safe, off-renderer, native disk);
   parsing/transform in TS (small data — one user's calendars — so default-TS applies). No new TS deps.
 - **Mitigations:** yield between hubs; skip no-op writes; touch only affected week files.
+- **Resource caps:** max 10 ICS feeds per hub; max `daysAhead` 60; max `timeoutMs` 15000; max ICS
+  body 2MB; no startup-path fetches.
 
 ## Tests
 

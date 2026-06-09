@@ -11,6 +11,9 @@ export const CALENDAR_COLUMN_LABEL = 'Calendar';
 
 export const DEFAULT_ICS_DAYS_AHEAD = 7;
 export const DEFAULT_ICS_TIMEOUT_MS = 8000;
+export const MAX_ICS_DAYS_AHEAD = 60;
+export const MAX_ICS_TIMEOUT_MS = 15000;
+export const MAX_ICS_FEEDS_PER_HUB = 10;
 
 export type TodayHubCalendarConfig = {
   /** ICS feed URLs to fetch for this hub (always an array; may be empty). */
@@ -45,7 +48,7 @@ function stripFrontmatterFences(frontmatter: string): string {
   return lines.join('\n');
 }
 
-function coerceToStringArray(value: unknown): string[] {
+function coerceToStringArray(value: unknown, maxItems = Number.POSITIVE_INFINITY): string[] {
   if (value == null) {
     return [];
   }
@@ -63,7 +66,7 @@ function coerceToStringArray(value: unknown): string[] {
         }
       }
     }
-    return out;
+    return out.slice(0, maxItems);
   }
   return [];
 }
@@ -76,12 +79,17 @@ function coerceToTrimmedStringOrNull(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function coercePositiveIntOrDefault(value: unknown, fallback: number, minValue: number): number {
+function coercePositiveIntOrDefault(
+  value: unknown,
+  fallback: number,
+  minValue: number,
+  maxValue: number,
+): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) {
     return fallback;
   }
-  return Math.max(minValue, Math.floor(n));
+  return Math.min(maxValue, Math.max(minValue, Math.floor(n)));
 }
 
 /**
@@ -111,10 +119,20 @@ export function parseHubCalendarConfig(markdown: string): TodayHubCalendarConfig
       const parsed = parseYaml(stripFrontmatterFences(frontmatter)) as unknown;
       if (parsed != null && typeof parsed === 'object') {
         const record = parsed as Record<string, unknown>;
-        icsUrls = coerceToStringArray(record.icsUrl);
+        icsUrls = coerceToStringArray(record.icsUrl, MAX_ICS_FEEDS_PER_HUB);
         mdAgenda = coerceToTrimmedStringOrNull(record.mdAgenda);
-        daysAhead = coercePositiveIntOrDefault(record.daysAhead, DEFAULT_ICS_DAYS_AHEAD, 0);
-        timeoutMs = coercePositiveIntOrDefault(record.timeoutMs, DEFAULT_ICS_TIMEOUT_MS, 500);
+        daysAhead = coercePositiveIntOrDefault(
+          record.daysAhead,
+          DEFAULT_ICS_DAYS_AHEAD,
+          0,
+          MAX_ICS_DAYS_AHEAD,
+        );
+        timeoutMs = coercePositiveIntOrDefault(
+          record.timeoutMs,
+          DEFAULT_ICS_TIMEOUT_MS,
+          500,
+          MAX_ICS_TIMEOUT_MS,
+        );
       }
     } catch {
       // Malformed YAML: fall back to defaults rather than throwing.
