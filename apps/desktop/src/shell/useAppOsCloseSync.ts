@@ -68,7 +68,7 @@ export function useAppOsCloseSync({
   manualSyncRunning,
   runManualSync,
   notify,
-  gitStatus = null,
+  gitStatus,
   fetchFreshGitStatusForClose,
   closeSyncTimeoutMs,
   closeSyncIndicatorDelayMs = 200,

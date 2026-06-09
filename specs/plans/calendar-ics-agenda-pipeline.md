@@ -177,9 +177,10 @@ the existing vault-watch reconcile + live-row disk sync update any open hub row.
 hand-mutate `inboxContentByUri` / `todayHubRowLastPersistedRef` (respects the note-body-cache
 invariants).
 
-Trigger: a manual "Refresh calendars" action sits next to the podcast RSS-sync action in the Episodes
-pane header (`useCalendarPipelineTrigger` → `runDesktopCalendarPipeline`, run-coalesced). No
-startup-path work.
+Trigger: the main vault sync action runs the calendar pipeline before Git sync
+(`useCalendarPipelineTrigger` → `runDesktopCalendarPipeline`, run-coalesced). The status-bar sync
+button and sync-before-close both run calendar sync first; Git sync proceeds afterward even when a
+calendar source fails. No startup-path work.
 
 ## Performance budget
 

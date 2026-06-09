@@ -1,6 +1,8 @@
 import {useCallback, type MutableRefObject} from 'react';
+import type {VaultFilesystem} from '@eskerra/core';
 
 import {useLiveRef} from '../../hooks/useLiveRef';
+import {useCalendarPipelineTrigger} from '../../hooks/useCalendarPipelineTrigger';
 import type {PaneVisibilityController} from '../usePaneVisibility';
 import {useAppGitSyncOrchestration} from '../useAppGitSyncOrchestration';
 import {useAppMainWindowKeyboardEffects} from '../useAppMainWindowKeyboardEffects';
@@ -10,6 +12,8 @@ import type {useDesktopPodcastPlayback} from '../../hooks/useDesktopPodcastPlayb
 
 type UseAppMainWindowChromeSessionArgs = {
   vaultRoot: string | null;
+  fs: VaultFilesystem;
+  vaultMarkdownRefs: readonly {uri: string; name: string}[];
   busy: boolean;
   canReopenClosedEditorTab: boolean;
   reopenLastClosedEditorTab: () => void;
@@ -34,6 +38,8 @@ type UseAppMainWindowChromeSessionArgs = {
 
 export function useAppMainWindowChromeSession({
   vaultRoot,
+  fs,
+  vaultMarkdownRefs,
   busy,
   canReopenClosedEditorTab,
   reopenLastClosedEditorTab,
@@ -69,6 +75,7 @@ export function useAppMainWindowChromeSession({
     renameLinkProgress,
     openNotificationsPanel,
   });
+  const calendarSync = useCalendarPipelineTrigger(vaultRoot, fs, vaultMarkdownRefs);
 
   const gitSync = useAppGitSyncOrchestration({
     vaultPath: vaultRoot,
@@ -76,6 +83,7 @@ export function useAppMainWindowChromeSession({
     notify: notifications.pushItem,
     desktopPlaybackRef,
     flushInboxSave,
+    runBeforeGitSync: calendarSync.runCalendarSync,
   });
 
   // Keep a ref to gitStatusForDisplay so keyboard effects can check preflight
@@ -103,6 +111,7 @@ export function useAppMainWindowChromeSession({
 
   return {
     notifications,
+    calendarSync,
     gitSync,
   };
 }

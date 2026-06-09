@@ -122,6 +122,7 @@ describe('useAppGitSyncOrchestration close handling', () => {
     programmaticClose = vi.fn();
 
     mockGetVaultGitStatus.mockReset();
+    mockGetVaultGitStatus.mockResolvedValue(localChangesStatus());
     mockUseGitSyncTransientStatus.mockReturnValue({
       transient: null,
       show: vi.fn(),
@@ -180,24 +181,48 @@ describe('useAppGitSyncOrchestration close handling', () => {
     expect(refreshGitStatus).toHaveBeenCalledWith({silent: true});
   });
 
-  it('flushes before the returned manual sync runner and forwards options', async () => {
+  it('flushes and runs calendar sync before the returned manual sync runner', async () => {
     const order: string[] = [];
     const flushInboxSave = vi.fn(async () => {
       order.push('flush');
+    });
+    const runBeforeGitSync = vi.fn(async () => {
+      order.push('calendar');
     });
     runManualSync.mockImplementation(async () => {
       order.push('sync');
       return true;
     });
 
-    const {result} = renderOrchestration({flushInboxSave});
+    const {result} = renderOrchestration({flushInboxSave, runBeforeGitSync});
 
     await act(async () => {
       await result.current.manualGitSync.run({silent: true});
     });
 
-    expect(order).toEqual(['flush', 'sync']);
+    expect(order).toEqual(['flush', 'calendar', 'sync']);
     expect(runManualSync).toHaveBeenCalledWith({silent: true});
+  });
+
+  it('still runs manual sync when calendar sync rejects', async () => {
+    const order: string[] = [];
+    const runBeforeGitSync = vi.fn(async () => {
+      order.push('calendar');
+      throw new Error('calendar failed');
+    });
+    runManualSync.mockImplementation(async () => {
+      order.push('sync');
+      return true;
+    });
+
+    const {result} = renderOrchestration({runBeforeGitSync});
+
+    await act(async () => {
+      await result.current.manualGitSync.run();
+    });
+
+    expect(order).toEqual(['calendar', 'sync']);
+    expect(runManualSync).toHaveBeenCalledTimes(1);
   });
 
   it('rejects concurrent manual sync calls while the pre-sync flush is in progress', async () => {
@@ -241,17 +266,20 @@ describe('useAppGitSyncOrchestration close handling', () => {
     expect(runManualSync).toHaveBeenCalledTimes(1);
   });
 
-  it('passes the flush-before-sync runner to startup sync and autosync', async () => {
+  it('passes the flush-only runner to startup sync and autosync', async () => {
     const order: string[] = [];
     const flushInboxSave = vi.fn(async () => {
       order.push('flush');
+    });
+    const runBeforeGitSync = vi.fn(async () => {
+      order.push('calendar');
     });
     runManualSync.mockImplementation(async () => {
       order.push('sync');
       return true;
     });
 
-    renderOrchestration({flushInboxSave});
+    renderOrchestration({flushInboxSave, runBeforeGitSync});
 
     const startupRun = mockUseVaultGitStartupSync.mock.calls[0][0].runManualSync;
     const autosyncRun = mockUseVaultGitAutosyncScheduler.mock.calls[0][0].runManualSync;
@@ -266,6 +294,7 @@ describe('useAppGitSyncOrchestration close handling', () => {
       await autosyncRun({silent: true});
     });
     expect(order).toEqual(['flush', 'sync']);
+    expect(runBeforeGitSync).not.toHaveBeenCalled();
   });
 
   it('passes saveSettledNonce to startup sync so recent app writes do not startup-sync immediately', () => {
@@ -284,10 +313,13 @@ describe('useAppGitSyncOrchestration close handling', () => {
     expect(mockUseVaultGitStartupSync.mock.calls[0][0].initialRemoteStatusSettled).toBe(false);
   });
 
-  it('flushes and uses fresh status before title-bar close preflight', async () => {
+  it('runs calendar sync before title-bar close Git sync', async () => {
     const order: string[] = [];
     const flushInboxSave = vi.fn(async () => {
       order.push('flush');
+    });
+    const runBeforeGitSync = vi.fn(async () => {
+      order.push('calendar');
     });
     mockGetVaultGitStatus.mockImplementation(async () => {
       order.push('fresh-status');
@@ -298,16 +330,40 @@ describe('useAppGitSyncOrchestration close handling', () => {
       return true;
     });
 
-    const {result} = renderOrchestration({flushInboxSave});
+    const {result} = renderOrchestration({flushInboxSave, runBeforeGitSync});
 
     act(() => {
       result.current.handleWindowCloseRequest({instant: false});
     });
 
     await waitFor(() => expect(runManualSync).toHaveBeenCalledTimes(1));
-    expect(order).toEqual(['flush', 'fresh-status', 'sync']);
+    expect(order).toEqual(['flush', 'calendar', 'fresh-status', 'sync']);
     expect(flushInboxSave).toHaveBeenCalledTimes(1);
     expect(programmaticClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs calendar sync before closing when fresh Git status is clean', async () => {
+    const order: string[] = [];
+    const flushInboxSave = vi.fn(async () => {
+      order.push('flush');
+    });
+    const runBeforeGitSync = vi.fn(async () => {
+      order.push('calendar');
+    });
+    mockGetVaultGitStatus.mockImplementation(async () => {
+      order.push('fresh-status');
+      return cleanStatus();
+    });
+
+    const {result} = renderOrchestration({flushInboxSave, runBeforeGitSync});
+
+    act(() => {
+      result.current.handleWindowCloseRequest({instant: false});
+    });
+
+    await waitFor(() => expect(programmaticClose).toHaveBeenCalledTimes(1));
+    expect(order).toEqual(['flush', 'calendar', 'fresh-status']);
+    expect(runManualSync).not.toHaveBeenCalled();
   });
 
   it('wraps non-instant title-bar close in markCloseSyncActive so overlay is driven', async () => {
@@ -321,6 +377,7 @@ describe('useAppGitSyncOrchestration close handling', () => {
       });
     });
     const markDeferred = new Promise<void>(resolve => { resolveMark = resolve; });
+    mockGetVaultGitStatus.mockResolvedValue(localChangesStatus());
     runManualSync.mockImplementation(async () => {
       order.push('sync');
       resolveMark();

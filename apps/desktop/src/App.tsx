@@ -262,6 +262,8 @@ export default function App() {
 
   const chromeSession = useAppMainWindowChromeSession({
     vaultRoot,
+    fs,
+    vaultMarkdownRefs,
     busy,
     canReopenClosedEditorTab: tabsController.canReopenClosedEditorTab,
     reopenLastClosedEditorTab: tabsController.reopenLastClosedEditorTab,

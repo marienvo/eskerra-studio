@@ -21,12 +21,11 @@ import {
   formatVaultGitSyncSuccessChip,
   getManualSyncDisabledReason,
 } from '../lib/gitSyncManualView';
-import {buildCloseSyncRunner, handleManualSyncCloseRequest} from '../lib/manualSyncClose';
+import {shouldRunVaultGitSync} from '../lib/gitSyncPreflight';
+import {handleManualSyncCloseRequest} from '../lib/manualSyncClose';
 import {getVaultGitStatus, type GitStatusResult, type SyncRunResult} from '../lib/tauriVaultGitSync';
 import type {SessionNotificationTone} from '../lib/sessionNotifications';
 import type {useDesktopPodcastPlayback} from '../hooks/useDesktopPodcastPlayback';
-import {flushEmojiUsageToStore} from '../lib/emojiUsageStore';
-import {flushQuickOpenUsageToStore} from '../lib/quickOpenUsageStore';
 import {useAppOsCloseSync} from './useAppOsCloseSync';
 
 export type UseAppGitSyncOrchestrationArgs = {
@@ -35,6 +34,7 @@ export type UseAppGitSyncOrchestrationArgs = {
   notify: (tone: SessionNotificationTone, text: string) => void;
   desktopPlaybackRef: MutableRefObject<ReturnType<typeof useDesktopPodcastPlayback>>;
   flushInboxSave: () => void | Promise<void>;
+  runBeforeGitSync?: () => void | Promise<unknown>;
 };
 
 export type UseAppGitSyncOrchestrationResult = {
@@ -71,6 +71,7 @@ export function useAppGitSyncOrchestration({
   notify,
   desktopPlaybackRef,
   flushInboxSave,
+  runBeforeGitSync,
 }: UseAppGitSyncOrchestrationArgs): UseAppGitSyncOrchestrationResult {
   const {
     branch: currentGitBranch,
@@ -166,11 +167,39 @@ export function useAppGitSyncOrchestration({
   const manualSyncUnavailable = vaultPath == null || manualSyncDisabledReason != null;
   const manualSyncLabel = manualSyncDisabledReason ?? 'Sync vault';
   const vaultGitSyncApplies = vaultPath != null && !vaultIsNotGitRepository;
-  const runManualSyncForClose = useMemo(
-    () => buildCloseSyncRunner(runManualGitSync),
-    [runManualGitSync],
-  );
   const flushThenRunManualSync = useCallback(
+    async (opts?: {readonly silent?: boolean}) => {
+      if (flushBeforeManualSyncBusyRef.current || manualGitSync.running) {
+        return false;
+      }
+
+      flushBeforeManualSyncBusyRef.current = true;
+      setFlushBeforeManualSyncRunning(true);
+      const runPromise = (async () => {
+        try {
+          await flushInboxSave();
+        } catch {
+          // Keep Git sync available even if an autosave flush reports a stale error.
+        }
+        try {
+          await runBeforeGitSync?.();
+        } catch {
+          // Calendar/feed pre-sync failures must not block the vault Git sync.
+        }
+        return runManualGitSync(opts);
+      })();
+      flushBeforeManualSyncPromiseRef.current = runPromise;
+      try {
+        return await runPromise;
+      } finally {
+        flushBeforeManualSyncBusyRef.current = false;
+        flushBeforeManualSyncPromiseRef.current = null;
+        setFlushBeforeManualSyncRunning(false);
+      }
+    },
+    [flushInboxSave, manualGitSync.running, runBeforeGitSync, runManualGitSync],
+  );
+  const flushThenRunGitOnlySync = useCallback(
     async (opts?: {readonly silent?: boolean}) => {
       if (flushBeforeManualSyncBusyRef.current || manualGitSync.running) {
         return false;
@@ -197,13 +226,6 @@ export function useAppGitSyncOrchestration({
     },
     [flushInboxSave, manualGitSync.running, runManualGitSync],
   );
-  const waitForFlushThenManualSync = useCallback((): Promise<boolean> | null => {
-    return (
-      flushBeforeManualSyncPromiseRef.current ??
-      waitForManualGitSync?.() ??
-      null
-    );
-  }, [waitForManualGitSync]);
   const fetchFreshGitStatusForClose = useCallback(async (): Promise<GitStatusResult | null> => {
     if (vaultPath == null || currentGitBranch == null) {
       return gitStatusForDisplay;
@@ -214,6 +236,56 @@ export function useAppGitSyncOrchestration({
       return gitStatusForDisplay;
     }
   }, [currentGitBranch, gitStatusForDisplay, vaultPath]);
+  const runPreSyncThenCloseGitSync = useCallback(async (): Promise<boolean> => {
+    if (flushBeforeManualSyncBusyRef.current || manualGitSync.running) {
+      return false;
+    }
+
+    flushBeforeManualSyncBusyRef.current = true;
+    setFlushBeforeManualSyncRunning(true);
+    const runPromise = (async () => {
+      try {
+        await flushInboxSave();
+      } catch {
+        // Keep close available even if an autosave flush reports a stale error.
+      }
+      try {
+        await runBeforeGitSync?.();
+      } catch {
+        // Calendar/feed pre-sync failures must not block sync-before-close.
+      }
+      const gitStatusForClose = await fetchFreshGitStatusForClose();
+      if (!shouldRunVaultGitSync(gitStatusForClose, 'close')) {
+        return true;
+      }
+      return runManualGitSync({silent: true});
+    })();
+    flushBeforeManualSyncPromiseRef.current = runPromise;
+    try {
+      return await runPromise;
+    } finally {
+      flushBeforeManualSyncBusyRef.current = false;
+      flushBeforeManualSyncPromiseRef.current = null;
+      setFlushBeforeManualSyncRunning(false);
+    }
+  }, [
+    fetchFreshGitStatusForClose,
+    flushInboxSave,
+    manualGitSync.running,
+    runBeforeGitSync,
+    runManualGitSync,
+  ]);
+  const runManualSyncForClose = useCallback(
+    () => runPreSyncThenCloseGitSync(),
+    [runPreSyncThenCloseGitSync],
+  );
+  const waitForFlushThenManualSync = useCallback((): Promise<boolean> | null => {
+    return (
+      flushBeforeManualSyncPromiseRef.current ??
+      waitForManualGitSync?.() ??
+      null
+    );
+  }, [waitForManualGitSync]);
   const {programmaticClose, closeSyncInProgress, markCloseSyncActive} = useAppOsCloseSync({
     desktopPlaybackRef,
     flushInboxSave,
@@ -222,8 +294,6 @@ export function useAppGitSyncOrchestration({
     manualSyncRunning,
     runManualSync: runManualSyncForClose,
     notify,
-    gitStatus: gitStatusForDisplay,
-    fetchFreshGitStatusForClose,
     waitForCurrentRun: waitForFlushThenManualSync,
   });
   const closeSyncDisabledNoticeRef = useRef<string | null>(null);
@@ -253,16 +323,11 @@ export function useAppGitSyncOrchestration({
             notify,
             notifyDisabled,
             showCloseSyncFeedback: true,
-            gitStatus: gitStatusForDisplay,
           });
           return;
         }
 
         await markCloseSyncActive(async () => {
-          try { await flushInboxSave(); } catch { /* ignore flush errors on close */ }
-          try { await flushEmojiUsageToStore(); } catch { /* ignore */ }
-          try { await flushQuickOpenUsageToStore(); } catch { /* ignore */ }
-          const gitStatusForClose = await fetchFreshGitStatusForClose();
           await handleManualSyncCloseRequest({
             instant: false,
             manualSyncRequired: vaultGitSyncApplies,
@@ -273,16 +338,12 @@ export function useAppGitSyncOrchestration({
             notify,
             notifyDisabled,
             showCloseSyncFeedback: true,
-            gitStatus: gitStatusForClose,
             waitForCurrentRun: waitForFlushThenManualSync,
           });
         });
       })();
     },
     [
-      fetchFreshGitStatusForClose,
-      flushInboxSave,
-      gitStatusForDisplay,
       manualSyncRunning,
       waitForFlushThenManualSync,
       manualSyncDisabledReason,
@@ -301,7 +362,7 @@ export function useAppGitSyncOrchestration({
     gitStatus: gitStatusForDisplay,
     manualSyncDisabledReason,
     manualSyncRunning,
-    runManualSync: flushThenRunManualSync,
+    runManualSync: flushThenRunGitOnlySync,
     notify,
     localWriteNonce: saveSettledNonce,
     initialRemoteStatusSettled,
@@ -316,7 +377,7 @@ export function useAppGitSyncOrchestration({
     gitStatusRevision,
     manualSyncDisabledReason,
     manualSyncRunning,
-    runManualSync: flushThenRunManualSync,
+    runManualSync: flushThenRunGitOnlySync,
     gitOperationBusyRef: backgroundGitOperationBusyRef,
   });
   const gitAutosyncCountdownTime = useVaultGitAutosyncCountdown({

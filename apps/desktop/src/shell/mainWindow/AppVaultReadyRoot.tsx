@@ -25,7 +25,6 @@ import type {useAppPaletteLayerState} from './useAppPaletteLayerState';
 import type {useAppMainWindowChromeSession} from './useAppMainWindowChromeSession';
 import type {PaneNotification} from '../../lib/reminderPane';
 import type {useAppPodcastPlayback} from '../../hooks/useAppPodcastPlayback';
-import {useCalendarPipelineTrigger} from '../../hooks/useCalendarPipelineTrigger';
 
 type AppPage = 'vault' | 'settings';
 
@@ -168,6 +167,10 @@ export function AppVaultReadyRoot({
       handleWindowCloseRequest,
       closeSyncInProgress,
     },
+    calendarSync: {
+      calendarSyncing,
+      calendarSyncPercent,
+    },
   } = chromeSession;
 
   const {
@@ -179,9 +182,6 @@ export function AppVaultReadyRoot({
     toolbarNowPlaying,
     playbackTransport,
   } = podcastPlayback;
-
-  const {handleCalendarRefresh, calendarSyncing, calendarSyncPercent} =
-    useCalendarPipelineTrigger(vaultRoot, fs, vaultMarkdownRefs);
 
   return (
     <AppThemeShell
@@ -251,7 +251,6 @@ export function AppVaultReadyRoot({
               handleEpisodesRssSync={handleEpisodesRssSync}
               rssSyncing={rssSyncing}
               rssSyncPercent={rssSyncPercent}
-              onCalendarRefresh={handleCalendarRefresh}
               calendarSyncing={calendarSyncing}
               calendarSyncPercent={calendarSyncPercent}
               onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}

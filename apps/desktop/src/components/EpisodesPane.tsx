@@ -22,8 +22,6 @@ export type EpisodesPaneProps = {
   onRssSync?: () => void;
   rssSyncing?: boolean;
   rssSyncPercent?: number | null;
-  /** Manual trigger for the calendar → Today Hub pipeline (sibling of the RSS-sync action). */
-  onCalendarRefresh?: () => void;
   calendarSyncing?: boolean;
   calendarSyncPercent?: number | null;
 };
@@ -251,7 +249,6 @@ export function EpisodesPane({
   onRssSync,
   rssSyncing = false,
   rssSyncPercent = null,
-  onCalendarRefresh,
   calendarSyncing = false,
   calendarSyncPercent = null,
 }: EpisodesPaneProps) {
@@ -283,38 +280,21 @@ export function EpisodesPane({
     <div className="panel-surface episodes-pane-root" data-app-surface="consume">
       <div className="pane-header pane-header--episodes pane-header--workspace-panel">
         <span className="pane-title">Episodes</span>
-        {onRssSync != null || onCalendarRefresh != null ? (
+        {onRssSync != null ? (
           <div className="pane-header-trailing-actions">
-            {onCalendarRefresh != null ? (
-              <button
-                type="button"
-                className="pane-header-add-btn icon-btn-ghost app-tooltip-trigger"
-                onClick={onCalendarRefresh}
-                disabled={calendarSyncing}
-                aria-label="Refresh calendars"
-                data-tooltip="Refresh calendars"
-                data-tooltip-placement="inline-start"
-              >
-                <span className="pane-header-add-btn__glyph" aria-hidden>
-                  <MaterialIcon name="calendar_today" size={12} />
-                </span>
-              </button>
-            ) : null}
-            {onRssSync != null ? (
-              <button
-                type="button"
-                className="pane-header-add-btn icon-btn-ghost app-tooltip-trigger"
-                onClick={onRssSync}
-                disabled={rssSyncing}
-                aria-label="Refresh podcast feeds"
-                data-tooltip="Refresh podcast feeds"
-                data-tooltip-placement="inline-start"
-              >
-                <span className="pane-header-add-btn__glyph" aria-hidden>
-                  <MaterialIcon name="sync" size={12} />
-                </span>
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="pane-header-add-btn icon-btn-ghost app-tooltip-trigger"
+              onClick={onRssSync}
+              disabled={rssSyncing}
+              aria-label="Refresh podcast feeds"
+              data-tooltip="Refresh podcast feeds"
+              data-tooltip-placement="inline-start"
+            >
+              <span className="pane-header-add-btn__glyph" aria-hidden>
+                <MaterialIcon name="sync" size={12} />
+              </span>
+            </button>
           </div>
         ) : null}
       </div>

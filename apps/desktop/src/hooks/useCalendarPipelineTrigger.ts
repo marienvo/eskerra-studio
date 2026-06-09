@@ -5,7 +5,7 @@ import {runDesktopCalendarPipeline} from '../lib/calendarPipeline/runCalendarPip
 
 export type CalendarPipelineTrigger = {
   /** Runs the calendar pipeline on demand (coalesced). No-op while a run is in flight. */
-  handleCalendarRefresh: () => void;
+  runCalendarSync: () => Promise<boolean>;
   calendarSyncing: boolean;
   calendarSyncPercent: number | null;
 };
@@ -25,9 +25,9 @@ export function useCalendarPipelineTrigger(
   const [calendarSyncing, setCalendarSyncing] = useState(false);
   const [calendarSyncPercent, setCalendarSyncPercent] = useState<number | null>(null);
 
-  const handleCalendarRefresh = useCallback(async () => {
+  const runCalendarSync = useCallback(async (): Promise<boolean> => {
     if (vaultRoot == null || runningRef.current) {
-      return;
+      return false;
     }
     runningRef.current = true;
     setCalendarSyncing(true);
@@ -41,8 +41,10 @@ export function useCalendarPipelineTrigger(
           }
         },
       });
+      return true;
     } catch {
       // Per-hub/per-feed errors are already logged inside the runner.
+      return false;
     } finally {
       runningRef.current = false;
       setCalendarSyncing(false);
@@ -50,5 +52,5 @@ export function useCalendarPipelineTrigger(
     }
   }, [vaultRoot, fs, vaultMarkdownRefs]);
 
-  return {handleCalendarRefresh, calendarSyncing, calendarSyncPercent};
+  return {runCalendarSync, calendarSyncing, calendarSyncPercent};
 }

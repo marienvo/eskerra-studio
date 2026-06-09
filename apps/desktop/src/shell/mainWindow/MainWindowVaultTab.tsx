@@ -59,7 +59,6 @@ type MainWindowVaultTabProps = {
   handleEpisodesRssSync: () => void;
   rssSyncing: boolean;
   rssSyncPercent: number | null;
-  onCalendarRefresh: () => void;
   calendarSyncing: boolean;
   calendarSyncPercent: number | null;
   onMuteLinkSnippetDomain: (domain: string) => Promise<void>;
@@ -101,7 +100,6 @@ export function MainWindowVaultTab({
   handleEpisodesRssSync,
   rssSyncing,
   rssSyncPercent,
-  onCalendarRefresh,
   calendarSyncing,
   calendarSyncPercent,
   onMuteLinkSnippetDomain,
@@ -202,7 +200,6 @@ export function MainWindowVaultTab({
             onRssSync={handleEpisodesRssSync}
             rssSyncing={rssSyncing}
             rssSyncPercent={rssSyncPercent}
-            onCalendarRefresh={onCalendarRefresh}
             calendarSyncing={calendarSyncing}
             calendarSyncPercent={calendarSyncPercent}
           />
