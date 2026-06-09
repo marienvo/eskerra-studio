@@ -347,6 +347,21 @@ export {
   vaultSearchBestFieldRank,
 } from './vaultSearch/vaultSearchTypes';
 export {
+  CALENDAR_COLUMN_LABEL,
+  bucketCalendarWeekEntries,
+  normalizeAgenda,
+  parseAgendaBullets,
+  parseHubCalendarConfig,
+  parseIcsEvents,
+  upsertCalendarColumn,
+  type AgendaBullet,
+  type BucketCalendarWeekEntriesInput,
+  type IcsEvent,
+  type ParseIcsEventsOptions,
+  type TodayHubCalendarConfig,
+  type UpsertCalendarColumnInput,
+} from './calendarPipeline';
+export {
   mergeTodayHubRowAfterCleaningNonEmptyColumns,
   TODAY_HUB_SECTION_DELIMITER,
   TODAY_HUB_START_DAYS,
@@ -372,6 +387,7 @@ export {
   todayHubFolderLabelFromUri,
   todayHubFolderLabelFromVaultMarkdownRef,
   todayHubRowSectionsAllBlank,
+  weekStartForDate,
   todayHubRowUri,
   todayHubRowUriFromTodayNoteUri,
   todayHubStartJsDay,

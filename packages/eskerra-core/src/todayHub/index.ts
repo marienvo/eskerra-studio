@@ -27,6 +27,7 @@ export {
   todayHubWeekEndInclusive,
   todayHubWeekProgress,
   todayHubWeekProgressSegments,
+  weekStartForDate,
   type TodayHubWeekendMergePair,
   type TodayHubWeekProgress,
   type TodayHubWeekProgressSegment,

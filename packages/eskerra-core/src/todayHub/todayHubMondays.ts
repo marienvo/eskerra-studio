@@ -29,6 +29,14 @@ export function addLocalCalendarDays(date: Date, deltaDays: number): Date {
 }
 
 /**
+ * Local-calendar week-start date of the week containing `date`, for a hub's configured start day.
+ * Same bucketing as {@link enumerateTodayHubWeekStarts} (the row a given date belongs to).
+ */
+export function weekStartForDate(date: Date, start: TodayHubStartDay): Date {
+  return startOfLocalWeek(date, todayHubStartJsDay(start));
+}
+
+/**
  * 53 consecutive week-start dates: previous week's anchor, then +7 days each step (local date).
  * Row files use `YYYY-MM-DD` of each anchor day.
  */

@@ -22,10 +22,30 @@ export type EpisodesPaneProps = {
   onRssSync?: () => void;
   rssSyncing?: boolean;
   rssSyncPercent?: number | null;
+  /** Manual trigger for the calendar → Today Hub pipeline (sibling of the RSS-sync action). */
+  onCalendarRefresh?: () => void;
+  calendarSyncing?: boolean;
+  calendarSyncPercent?: number | null;
 };
 
 function episodeListLabel(text: string): string {
   return text.replaceAll('**', '').trim();
+}
+
+/** Percent of whichever sync (podcast RSS, then calendar) is currently active, else `null`. */
+function pickActiveSyncPercent(
+  rssSyncing: boolean,
+  rssSyncPercent: number | null,
+  calendarSyncing: boolean,
+  calendarSyncPercent: number | null,
+): number | null {
+  if (rssSyncing) {
+    return rssSyncPercent;
+  }
+  if (calendarSyncing) {
+    return calendarSyncPercent;
+  }
+  return null;
 }
 
 function MusicNotePlaceholderIcon(): ReactElement {
@@ -231,16 +251,24 @@ export function EpisodesPane({
   onRssSync,
   rssSyncing = false,
   rssSyncPercent = null,
+  onCalendarRefresh,
+  calendarSyncing = false,
+  calendarSyncPercent = null,
 }: EpisodesPaneProps) {
   const episodesRefreshVisible = useDeferredLoadingIndicator(catalogLoading, 100);
-  const refreshStripVisible = rssSyncing || episodesRefreshVisible;
+  const refreshStripVisible = rssSyncing || calendarSyncing || episodesRefreshVisible;
+  const activeSyncPercent = pickActiveSyncPercent(
+    rssSyncing,
+    rssSyncPercent,
+    calendarSyncing,
+    calendarSyncPercent,
+  );
   const determinateRssPercent =
-    rssSyncing &&
-    rssSyncPercent != null &&
-    Number.isFinite(rssSyncPercent) &&
-    rssSyncPercent >= 0 &&
-    rssSyncPercent <= 100
-      ? rssSyncPercent
+    activeSyncPercent != null &&
+    Number.isFinite(activeSyncPercent) &&
+    activeSyncPercent >= 0 &&
+    activeSyncPercent <= 100
+      ? activeSyncPercent
       : null;
   const refreshStripFill = determinateRssPercent != null
     ? (
@@ -255,21 +283,38 @@ export function EpisodesPane({
     <div className="panel-surface episodes-pane-root" data-app-surface="consume">
       <div className="pane-header pane-header--episodes pane-header--workspace-panel">
         <span className="pane-title">Episodes</span>
-        {onRssSync != null ? (
+        {onRssSync != null || onCalendarRefresh != null ? (
           <div className="pane-header-trailing-actions">
-            <button
-              type="button"
-              className="pane-header-add-btn icon-btn-ghost app-tooltip-trigger"
-              onClick={onRssSync}
-              disabled={rssSyncing}
-              aria-label="Refresh podcast feeds"
-              data-tooltip="Refresh podcast feeds"
-              data-tooltip-placement="inline-start"
-            >
-              <span className="pane-header-add-btn__glyph" aria-hidden>
-                <MaterialIcon name="sync" size={12} />
-              </span>
-            </button>
+            {onCalendarRefresh != null ? (
+              <button
+                type="button"
+                className="pane-header-add-btn icon-btn-ghost app-tooltip-trigger"
+                onClick={onCalendarRefresh}
+                disabled={calendarSyncing}
+                aria-label="Refresh calendars"
+                data-tooltip="Refresh calendars"
+                data-tooltip-placement="inline-start"
+              >
+                <span className="pane-header-add-btn__glyph" aria-hidden>
+                  <MaterialIcon name="calendar_today" size={12} />
+                </span>
+              </button>
+            ) : null}
+            {onRssSync != null ? (
+              <button
+                type="button"
+                className="pane-header-add-btn icon-btn-ghost app-tooltip-trigger"
+                onClick={onRssSync}
+                disabled={rssSyncing}
+                aria-label="Refresh podcast feeds"
+                data-tooltip="Refresh podcast feeds"
+                data-tooltip-placement="inline-start"
+              >
+                <span className="pane-header-add-btn__glyph" aria-hidden>
+                  <MaterialIcon name="sync" size={12} />
+                </span>
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>

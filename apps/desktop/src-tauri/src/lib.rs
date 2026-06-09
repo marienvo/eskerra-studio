@@ -1,4 +1,5 @@
 mod crash_log;
+mod fetch_ics;
 mod link_rich_metadata;
 #[cfg(target_os = "linux")]
 mod linux_app_identity;
@@ -123,6 +124,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             tiling::get_window_tiling_detection,
             r2_http::r2_signed_fetch,
+            fetch_ics::fetch_ics,
             link_rich_metadata::fetch_link_rich_metadata,
             vault::vault_set_session,
             vault::vault_get_session,
