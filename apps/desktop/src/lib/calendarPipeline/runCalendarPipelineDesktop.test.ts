@@ -45,7 +45,7 @@ const ICS = [
   'BEGIN:VEVENT',
   'UID:evt-1',
   'SUMMARY:Team sync',
-  'DTSTART:20260116T090000Z',
+  'DTSTART:20260116T100000',
   'END:VEVENT',
   'END:VCALENDAR',
 ].join('\r\n');
@@ -108,7 +108,7 @@ describe('runCalendarPipelineDesktop', () => {
     const row = fs.files.get(rowUri)!;
     // Calendar column holds the bucketed bodies; ICS timed before untimed agenda.
     expect(row).toContain('**January**');
-    // DTSTART:20260116T090000Z = 09:00 UTC = 10:00 CET (host local time used for display).
+    // Floating DTSTART is host-local, so this assertion is timezone-independent.
     expect(row).toContain('**Fri 16:** 10:00 Team sync');
     expect(row).toContain('**Fri 16:** Coffee with Sam');
     // Other column delimiter preserved.
