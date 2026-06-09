@@ -66,4 +66,21 @@ describe('parseAgendaBullets', () => {
     expect(bullets[0].date.getMonth()).toBe(5);
     expect(bullets[0].date.getDate()).toBe(1);
   });
+
+  it('ignores indented sub-bullets inside a day block', () => {
+    const bullets = parseAgendaBullets(
+      [
+        '## ☀️ June',
+        '',
+        '### Monday, June 1st, 2026',
+        '',
+        '- Doctor appointment',
+        '  - Bring insurance card',
+        '    - Print forms',
+      ].join('\n'),
+      NOW,
+    );
+    expect(bullets).toHaveLength(1);
+    expect(bullets[0].body).toBe('Doctor appointment');
+  });
 });

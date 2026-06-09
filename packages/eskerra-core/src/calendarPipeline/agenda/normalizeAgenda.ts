@@ -1,5 +1,5 @@
 /**
- * Agenda normalization (Deel 2 of the calendar pipeline).
+ * Agenda normalization (Part 2 of the calendar pipeline).
  *
  * Pure, deterministic transform of a hub's `mdAgenda` markdown: canonical H3 titles
  * (`Weekday, Month Ordinal, Year` / `..., Rule`), month ordering from `now`, recurrence resolution,

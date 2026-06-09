@@ -1,5 +1,5 @@
 /**
- * Shared helpers for the agenda normalizer and bullet parser (Deel 2 of the calendar pipeline).
+ * Shared helpers for the agenda normalizer and bullet parser (Part 2 of the calendar pipeline).
  * Ported from the legacy `Scripts/processors` calendar handler; behavior is intentionally preserved.
  * All time decisions derive from an injected `now` (deterministic under `TZ=UTC`).
  */

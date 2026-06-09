@@ -108,13 +108,12 @@ function inferYearForAgendaEntry(monthIdx: number, explicitYear: number | null, 
   return monthIdx >= now.getMonth() ? now.getFullYear() : now.getFullYear() + 1;
 }
 
-/** Top-level bullet lines (`^\s*-\s+`), body after the dash, trimmed. */
+/** Top-level bullet lines (`^-\s+`), body after the dash, trimmed. Indented sub-bullets are ignored. */
 function extractBulletLines(content: string): string[] {
   return content
     .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(l => /^\s*-\s+/.test(l))
-    .map(l => l.replace(/^\s*-\s+/, '').trim());
+    .filter(l => /^-\s+/.test(l))
+    .map(l => l.replace(/^-\s+/, '').trim());
 }
 
 function parseLeadingTimeMinutes(body: string): number | null {

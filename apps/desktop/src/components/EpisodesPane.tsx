@@ -263,18 +263,18 @@ export function EpisodesPane({
     calendarSyncing,
     calendarSyncPercent,
   );
-  const determinateRssPercent =
+  const determinateSyncPercent =
     activeSyncPercent != null &&
     Number.isFinite(activeSyncPercent) &&
     activeSyncPercent >= 0 &&
     activeSyncPercent <= 100
       ? activeSyncPercent
       : null;
-  const refreshStripFill = determinateRssPercent != null
+  const refreshStripFill = determinateSyncPercent != null
     ? (
       <div
         className="episodes-refresh-strip__fill"
-        style={{width: `${determinateRssPercent}%`}}
+        style={{width: `${determinateSyncPercent}%`}}
       />
       )
     : <div className="episodes-refresh-strip__segment" />;
