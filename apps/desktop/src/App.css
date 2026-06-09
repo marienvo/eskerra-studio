@@ -2687,7 +2687,7 @@ button.primary.destructive {
    */
   --nb-editor-list-tab: 1.3rem;
   /* Hanging-indent allowance for the marker column (bullet/number + trailing space after the mark). */
-  --nb-editor-list-hang-marker: 0.6ch;
+  --nb-editor-list-hang-marker: 0.6rem;
   /* Fold gutter column width; matches rail + `EditorView.theme` + `.cm-gutters` in App.css. */
   --nb-editor-fold-gutter-width: 1.375rem;
   /* Max width of the text column inside `.note-markdown-editor-page` (excluding fold rail). */
@@ -5205,36 +5205,10 @@ button.primary.destructive {
 [data-app-surface='capture']
   .note-markdown-editor-host
   .cm-eskerra-table-shell__cm-host
-  .cm-line.cm-md-list-line--nest-1,
-[data-app-surface='capture']
-  .note-markdown-editor-host
-  .cm-eskerra-table-shell__cm-host
-  .cm-line.cm-md-list-line--nest-2,
-[data-app-surface='capture']
-  .note-markdown-editor-host
-  .cm-eskerra-table-shell__cm-host
-  .cm-line.cm-md-list-line--nest-3,
-[data-app-surface='capture']
-  .note-markdown-editor-host
-  .cm-eskerra-table-shell__cm-host
-  .cm-line.cm-md-list-line--nest-4,
-[data-app-surface='capture']
-  .note-markdown-editor-host
-  .cm-eskerra-table-shell__cm-host
-  .cm-line.cm-md-list-line--nest-5,
-[data-app-surface='capture']
-  .note-markdown-editor-host
-  .cm-eskerra-table-shell__cm-host
-  .cm-line.cm-md-list-line--nest-6,
-[data-app-surface='capture']
-  .note-markdown-editor-host
-  .cm-eskerra-table-shell__cm-host
-  .cm-line.cm-md-list-line--nest-7,
-[data-app-surface='capture']
-  .note-markdown-editor-host
-  .cm-eskerra-table-shell__cm-host
-  .cm-line.cm-md-list-line--nest-8 {
+  .cm-line[class*='cm-md-list-line'] {
+  /* Cell editors skip root-document list chrome; reset hanging-indent too. */
   padding-inline-start: 0;
+  text-indent: 0;
 }
 
 [data-app-surface='capture']
