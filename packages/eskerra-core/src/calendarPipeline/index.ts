@@ -1,5 +1,7 @@
 export {
   CALENDAR_COLUMN_LABEL,
+  DEFAULT_ICS_DAYS_AHEAD,
+  DEFAULT_ICS_TIMEOUT_MS,
   parseHubCalendarConfig,
   type TodayHubCalendarConfig,
 } from './parseHubCalendarConfig';
@@ -15,6 +17,24 @@ export {
   type BucketCalendarWeekEntriesInput,
 } from './bucketCalendarWeekEntries';
 export {
-  upsertCalendarColumn,
-  type UpsertCalendarColumnInput,
-} from './upsertCalendarColumn';
+  calendarItemKey,
+  normalizeCalendarTitle,
+  type CalendarItemKeyInput,
+} from './cellMerge/calendarItemKey';
+export {parseCalendarCellLines} from './cellMerge/parseCalendarCellLines';
+export {
+  compareCalendarItems,
+  renderCalendarCellFromScratch,
+  renderCalendarItemLine,
+  renderMonthHeadingLine,
+} from './cellMerge/renderCalendarCellLines';
+export {
+  isCalendarItemInUpsertScope,
+  mergeCalendarCellContent,
+} from './cellMerge/mergeCalendarCellContent';
+export {
+  upsertCalendarColumnInRow,
+  type UpsertCalendarColumnInRowInput,
+  type UpsertCalendarColumnInRowResult,
+} from './cellMerge/upsertCalendarColumnInRow';
+export type {CalendarCellLine, CalendarItem, CalendarItemSource} from './cellMerge/types';

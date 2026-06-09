@@ -1,7 +1,15 @@
+import {readFileSync} from 'node:fs';
+import {dirname, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {describe, expect, it, vi} from 'vitest';
 import type {VaultDirEntry, VaultFilesystem} from '@eskerra/core';
 import {runCalendarPipelineDesktop} from './runCalendarPipelineDesktop';
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+const MANUAL_WEEK_ROW_FIXTURE = resolve(
+  HERE,
+  '__fixtures__/work-week-row-with-manual-calendar.md',
+);
 const NOW = new Date(2026, 0, 15); // Thursday, Jan 15 2026 (week of Mon Jan 12)
 
 const WORK_TODAY = [
@@ -78,6 +86,10 @@ function makeFsWithWorkHub(): FakeVaultFs {
   return fs;
 }
 
+function readManualWeekRowFixture(): string {
+  return readFileSync(MANUAL_WEEK_ROW_FIXTURE, 'utf8');
+}
+
 const REFS = [{uri: '/vault/Work/Today.md', name: 'Today.md'}];
 
 describe('runCalendarPipelineDesktop', () => {
@@ -96,6 +108,7 @@ describe('runCalendarPipelineDesktop', () => {
     const row = fs.files.get(rowUri)!;
     // Calendar column holds the bucketed bodies; ICS timed before untimed agenda.
     expect(row).toContain('**January**');
+    // DTSTART:20260116T090000Z = 09:00 UTC = 10:00 CET (host local time used for display).
     expect(row).toContain('**Fri 16:** 10:00 Team sync');
     expect(row).toContain('**Fri 16:** Coffee with Sam');
     // Other column delimiter preserved.
@@ -111,7 +124,38 @@ describe('runCalendarPipelineDesktop', () => {
     const result = await runCalendarPipelineDesktop(fs, '/vault', REFS, {now: NOW, fetchIcs});
     expect(fs.writes).toEqual([]);
     expect(result.rowFilesWritten).toBe(0);
+    expect(result.rowFilesSkipped).toBe(0);
     expect(result.agendaFilesWritten).toBe(0);
+  });
+
+  it('preserves manual Calendar fixture lines while adding missing agenda items', async () => {
+    const fs = makeFsWithWorkHub();
+    const rowUri = '/vault/Work/2026-01-12.md';
+    fs.files.set(rowUri, readManualWeekRowFixture());
+
+    const result = await runCalendarPipelineDesktop(fs, '/vault', REFS, {
+      now: NOW,
+      fetchIcs: vi.fn(async () => ['BEGIN:VCALENDAR', 'VERSION:2.0', 'END:VCALENDAR'].join('\r\n')),
+    });
+
+    expect(result.rowFilesWritten).toBe(1);
+    expect(result.rowFilesSkipped).toBe(0);
+    expect(fs.files.get(rowUri)).toMatchInlineSnapshot(`
+      "Opening note for the week
+
+      ::today-section::
+
+      - Prepare status update
+      - Review proposal
+
+      ::today-section::
+
+      **January**
+      - call Alex about venue
+      Keep this paragraph exactly.
+      **Fri 16:** Coffee with Sam
+      **Sat 17:** Manual workshop"
+    `);
   });
 
   it('skips hubs without a Calendar column', async () => {
@@ -153,5 +197,39 @@ describe('runCalendarPipelineDesktop', () => {
     await runCalendarPipelineDesktop(fs, '/vault', REFS, {now: NOW, fetchIcs: vi.fn(async () => ICS)});
     // Jan 5 is the previous week (past) -> its row file must not be created.
     expect(fs.files.has('/vault/Work/2026-01-05.md')).toBe(false);
+  });
+
+  it('skips a row that is currently live-edited in the canvas', async () => {
+    const fs = makeFsWithWorkHub();
+    const rowUri = '/vault/Work/2026-01-12.md';
+    const result = await runCalendarPipelineDesktop(fs, '/vault', REFS, {
+      now: NOW,
+      fetchIcs: vi.fn(async () => ICS),
+      isRowLiveEdited: uri => uri === rowUri,
+    });
+    expect(fs.files.has(rowUri)).toBe(false);
+    expect(result.rowFilesSkipped).toBe(1);
+    expect(result.rowFilesWritten).toBe(0);
+  });
+
+  it('skips a row with an ambiguous column split and fires onSplitSkip (fail closed)', async () => {
+    const fs = makeFsWithWorkHub();
+    const rowUri = '/vault/Work/2026-01-12.md';
+    // Work hub has 3 columns (columnCount=3) so needs 2 delimiters; pre-populate with only 1.
+    fs.files.set(rowUri, 'week start\n\n::today-section::\n\nnext actions only — no second delimiter');
+    const onSplitSkip = vi.fn();
+    const result = await runCalendarPipelineDesktop(fs, '/vault', REFS, {
+      now: NOW,
+      fetchIcs: vi.fn(async () => ICS),
+      onSplitSkip,
+    });
+    expect(onSplitSkip).toHaveBeenCalledOnce();
+    expect(onSplitSkip).toHaveBeenCalledWith(
+      expect.objectContaining({rowUri, reason: 'ambiguous-column-split'}),
+    );
+    expect(result.rowFilesSkipped).toBe(1);
+    expect(result.rowFilesWritten).toBe(0);
+    // Row file must not have been overwritten.
+    expect(fs.files.get(rowUri)).toContain('no second delimiter');
   });
 });

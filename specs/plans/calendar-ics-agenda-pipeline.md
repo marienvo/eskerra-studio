@@ -67,16 +67,97 @@ normalized agenda's `###` day blocks (leading `HH:MM` ⇒ `timed`).
 Each week-row file (`{hubDir}/YYYY-MM-DD.md`, the 53-week canvas grid) is one "row".
 
 - `bucketCalendarWeekEntries` maps every agenda bullet + ICS event to its hub week-start
-  (`weekStartForDate`) and renders the Calendar body as **real markdown lines** (no `<br>`):
-  - a `**{month-emoji} {Month}**` heading the first time a month appears in a cell, then one
-    `**{Wd} {day}:** {body}` line per item.
-  - Sort: by date, timed-before-untimed, time, then source (agenda before calendar).
-  - Dedup: a calendar timed event is dropped when an agenda bullet shares the same day + time;
-    otherwise items dedup on normalized title with **agenda precedence**.
-  - Timed agenda bullets keep a `[🗓️](<mdAgenda>)` link prefix.
-- `upsertCalendarColumn` merges the bucketed body into only the Calendar split-segment of the existing
-  row: **additive** (preserve other columns and existing/user lines; append missing managed lines
-  only; never wipe), then `normalizeTodayHubRowForDisk`. **Idempotent** for a fixed desired body.
+  (`weekStartForDate`) and returns structured `CalendarItem[]` buckets, not finished markdown. Rendering
+  happens only inside the Calendar-cell merge layer.
+- Item sort order is deterministic: date, timed-before-untimed, time, then source (agenda before
+  calendar). Timed agenda bullets keep a `[🗓️](<mdAgenda>)` link prefix.
+- Dedup uses the same `calendarItemKey` contract as the cell merge: a calendar timed event is dropped
+  when an agenda bullet shares the same day + time; untimed items dedup by day + normalized title with
+  **agenda precedence**.
+
+## Part 3b — Calendar-cell merge contract
+
+The Calendar column merge is deliberately **insert-only**. Existing Calendar cell text is never
+re-rendered, reordered, or deleted. Parsing existing lines is read-only and is used only to find
+identity keys, month headings, and best-effort insert positions. If the row cannot be split into the
+configured column count, the pipeline fails closed and skips the write.
+
+### Never allowed
+
+- Replacing the whole Calendar segment with generated body.
+- Touching other row columns. Only the split segment at `calendarColumnIndex` may change.
+- Deleting existing Calendar lines. Canceled or stale source events remain visible until the user edits
+  them.
+- Writing week-entry files before the current week-start.
+
+### Allowed
+
+- Add missing pipeline lines in a best-effort chronological position.
+- Add a month heading only when that month is not already represented in the cell.
+- Return byte-identical output for the same `now`, sources, and existing cell, so the runner skips
+  no-op disk writes.
+
+### Existing line classification
+
+Each non-empty Calendar cell line is classified by `parseCalendarCellLines`:
+
+| Type | Recognition | Merge behavior |
+|------|-------------|----------------|
+| `MonthHeading` | `**{optional emoji} {Month}**` with fuzzy month matching | Preserve; add another heading only if that month is absent |
+| `PipelineItem` | `**{Wd} {day}:** {body}` with a 3-letter weekday and day `1..31` | Dedup by item key; existing line wins |
+| `UserFreeform` | Anything else | Always preserve; never dedup away |
+
+User freeform examples include bullets, paragraphs, checklist lines, and calendar-like lines that do
+not match the exact pipeline item shape.
+
+### Item keys
+
+`calendarItemKey` is shared by bucketing and cell merge:
+
+- Timed: `{YYYY-MM-DD}|{HH:MM}`.
+- Untimed: `{YYYY-MM-DD}|{normalizedTitle}`.
+
+`normalizedTitle` strips the agenda icon link prefix, normalizes wiki-link markup, removes a leading
+time, collapses whitespace, and compares case-insensitively. If an incoming item has the same key as
+an existing `PipelineItem`, it is not inserted again, even if the existing body text differs. This
+lets user edits to generated-looking lines win and prevents append loops.
+
+### Insert order
+
+Existing lines keep their exact bytes and relative order. For each missing incoming item:
+
+1. Sort incoming items by date, timed-before-untimed, time, source (`agenda` before `calendar`), then
+   original order.
+2. Insert before the first existing or newly inserted `PipelineItem` that sorts later; otherwise append
+   at the end of the cell. `UserFreeform` lines are ignored for positioning but are never moved.
+3. Insert the item's month heading immediately before the item only when no existing month heading or
+   earlier inserted heading represents that month.
+4. If the cell is blank, render the full sorted owned cell from scratch.
+
+### Upsert scope
+
+Only in-scope incoming items are proposed for insertion:
+
+| Source | Scope |
+|--------|-------|
+| ICS timed | `start > now` only |
+| ICS untimed | today and future |
+| Agenda untimed | strictly future days (`day > today`) |
+| Agenda timed | today and future |
+
+Past week rows are frozen at the runner level. Existing out-of-scope lines are preserved.
+
+### Row-level fail-closed behavior
+
+`upsertCalendarColumnInRow` splits rows with `splitTodayRowIntoColumns`, merges only the Calendar
+segment with `mergeCalendarCellContent`, and writes back through `mergeTodayRowColumns` +
+`normalizeTodayHubRowForDisk`. If a non-blank row has anything other than `columnCount - 1`
+canonical `::today-section::` delimiters, or if `calendarColumnIndex` is out of range, it returns
+`{kind: "skip"}`. The desktop runner reports that skip as warning telemetry and does not write.
+
+The key append-loop guard is covered by round-trip tests: a rendered pipeline line parsed from the
+cell must produce the same `calendarItemKey` as the original structured item, and applying the same
+merge twice must be byte-identical.
 
 ## Orchestration (desktop)
 

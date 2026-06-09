@@ -14,7 +14,7 @@ function agendaBullet(over: Partial<AgendaBullet> & {date: Date; body: string}):
 }
 
 describe('bucketCalendarWeekEntries', () => {
-  it('groups items by Monday week-start and renders month heading + day lines', () => {
+  it('groups structured items by Monday week-start stem', () => {
     const result = bucketCalendarWeekEntries({
       start: 'monday',
       agendaBullets: [
@@ -22,43 +22,45 @@ describe('bucketCalendarWeekEntries', () => {
       ],
       icsEvents: [],
     });
-    // April 27 2026 is a Monday -> its own week stem.
     expect([...result.keys()]).toEqual(['2026-04-27']);
-    expect(result.get('2026-04-27')).toBe(['**☔️ April**', "**Mon 27:** 👑 King's Day"].join('\n'));
+    const items = result.get('2026-04-27')!;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      body: "👑 King's Day",
+      timed: false,
+      monthHeading: '☔️ April',
+      source: 'agenda',
+      monthIdx: 3,
+    });
+    expect(items[0].date.getDate()).toBe(27);
   });
 
-  it('orders timed before untimed, then by time, then agenda before calendar', () => {
-    const day = new Date(2026, 0, 19); // Monday Jan 19 2026
+  it('carries an instant and time for ICS events', () => {
     const result = bucketCalendarWeekEntries({
       start: 'monday',
-      agendaBullets: [
-        agendaBullet({date: day, body: '🎂 Birthday'}),
-        agendaBullet({date: day, body: '08:00 Gym', timed: true, timeMinutes: 480}),
-      ],
-      icsEvents: [{start: new Date(2026, 0, 19, 9, 0), summary: 'Standup'}],
+      agendaBullets: [],
+      icsEvents: [{start: new Date(2026, 0, 20, 9, 0), summary: 'Standup'}],
     });
-    const body = result.get('2026-01-19');
-    expect(body).toBe(
-      ['**January**', '**Mon 19:** 08:00 Gym', '**Mon 19:** 09:00 Standup', '**Mon 19:** 🎂 Birthday'].join(
-        '\n',
-      ),
-    );
+    const items = result.get('2026-01-19')!;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({body: '09:00 Standup', timed: true, source: 'calendar', timeMinutes: 540});
+    expect(items[0].instant?.getTime()).toBe(new Date(2026, 0, 20, 9, 0).getTime());
   });
 
-  it('drops a calendar timed event when an agenda bullet has the same day and time', () => {
-    const day = new Date(2026, 0, 20, 0, 0);
+  it('drops a calendar timed event when an agenda bullet shares its key (agenda precedence)', () => {
     const result = bucketCalendarWeekEntries({
       start: 'monday',
       agendaBullets: [
         agendaBullet({date: new Date(2026, 0, 20), body: '14:00 Sync', timed: true, timeMinutes: 840}),
       ],
-      icsEvents: [{start: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 14, 0), summary: 'Sync'}],
+      icsEvents: [{start: new Date(2026, 0, 20, 14, 0), summary: 'Sync'}],
     });
-    const body = result.get('2026-01-19'); // week of Jan 19 (Mon)
-    expect(body).toBe(['**January**', '**Tue 20:** 14:00 Sync'].join('\n'));
+    const items = result.get('2026-01-19')!;
+    expect(items).toHaveLength(1);
+    expect(items[0].source).toBe('agenda');
   });
 
-  it('adds the agenda 🗓️ link prefix to timed agenda bullets only', () => {
+  it('prefixes the agenda 🗓️ link to timed agenda bodies only', () => {
     const result = bucketCalendarWeekEntries({
       start: 'monday',
       mdAgenda: '🗓️ Personal agenda.md',
@@ -68,9 +70,11 @@ describe('bucketCalendarWeekEntries', () => {
       ],
       icsEvents: [],
     });
-    const body = result.get('2026-01-19');
-    expect(body).toContain('**Mon 19:** [🗓️](<🗓️ Personal agenda.md>) 08:00 Gym');
-    expect(body).toContain('**Mon 19:** 🎂 Birthday');
+    const items = result.get('2026-01-19')!;
+    const gym = items.find(i => i.timed)!;
+    const birthday = items.find(i => !i.timed)!;
+    expect(gym.body).toBe('[🗓️](<🗓️ Personal agenda.md>) 08:00 Gym');
+    expect(birthday.body).toBe('🎂 Birthday');
   });
 
   it('respects a Sunday week-start', () => {
@@ -79,11 +83,10 @@ describe('bucketCalendarWeekEntries', () => {
       agendaBullets: [agendaBullet({date: new Date(2026, 0, 19), body: 'Item'})],
       icsEvents: [],
     });
-    // Jan 19 2026 is Monday; with Sunday start the week begins Jan 18.
     expect([...result.keys()]).toEqual(['2026-01-18']);
   });
 
-  it('returns an empty map when there is nothing to render', () => {
+  it('returns an empty map for no input', () => {
     expect(bucketCalendarWeekEntries({start: 'monday', agendaBullets: [], icsEvents: []}).size).toBe(0);
   });
 });

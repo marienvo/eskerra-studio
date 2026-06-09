@@ -9,13 +9,15 @@ import {
   sortedTodayHubNoteUrisFromRefs,
   todayHubRowUriFromTodayNoteUri,
   todayHubWeekProgress,
-  upsertCalendarColumn,
+  upsertCalendarColumnInRow,
   type AgendaBullet,
+  type CalendarItem,
   type IcsEvent,
   type TodayHubCalendarConfig,
   type VaultFilesystem,
 } from '@eskerra/core';
 
+import {captureObservabilityMessage} from '../../observability/captureObservabilityMessage';
 import {fetchIcsDesktop} from './fetchIcsDesktop';
 
 export type VaultMarkdownRefLike = {uri: string; name: string};
@@ -25,6 +27,8 @@ export type DesktopCalendarPipelineResult = {
   hubsSkipped: number;
   agendaFilesWritten: number;
   rowFilesWritten: number;
+  /** Week-row files left untouched by a fail-closed split skip or an active live-row edit. */
+  rowFilesSkipped: number;
   failedFetches: number;
 };
 
@@ -39,7 +43,24 @@ export type RunCalendarPipelineDesktopOptions = {
   /** Injected for tests; defaults to the Rust `fetch_ics` command. */
   fetchIcs?: (url: string, timeoutMs?: number) => Promise<string>;
   onProgress?: (payload: DesktopCalendarPipelineProgress) => void;
+  /**
+   * Returns true when the given week-row URI is the one currently being edited in the canvas. Those
+   * rows are skipped so the pipeline never overwrites possibly-newer editor content.
+   */
+  isRowLiveEdited?: (rowUri: string) => boolean;
+  /** Fail-closed observability hook; defaults to a Sentry warning. */
+  onSplitSkip?: (info: {rowUri: string; reason: string}) => void;
 };
+
+function reportSplitSkip(rowUri: string, reason: string): void {
+  captureObservabilityMessage({
+    message: 'eskerra.desktop.calendar_pipeline_row_skipped',
+    level: 'warning',
+    fingerprint: ['calendar-pipeline', 'row-skipped', reason],
+    tags: {reason},
+    extra: {rowUri},
+  });
+}
 
 function stripTrailingSlashes(s: string): string {
   let end = s.length;
@@ -121,38 +142,58 @@ async function fetchHubIcsEvents(
   return {events, failed};
 }
 
-/** Upsert bucketed Calendar bodies into current/future week-row files, skipping past weeks + no-ops. */
+/**
+ * Upsert structured Calendar items into current/future week-row files (past weeks untouched). Uses a
+ * tight read-modify-write (re-read each row immediately before merging), skips the actively-edited
+ * live row, fails closed on ambiguous column splits, and skips no-op writes.
+ */
 async function writeHubWeekRows(
   fs: VaultFilesystem,
   todayNoteUri: string,
   config: TodayHubCalendarConfig,
-  bucketed: Map<string, string>,
+  bucketed: Map<string, CalendarItem[]>,
   now: Date,
-): Promise<number> {
+  options: Pick<RunCalendarPipelineDesktopOptions, 'isRowLiveEdited' | 'onSplitSkip'>,
+): Promise<{written: number; skipped: number}> {
   let written = 0;
+  let skipped = 0;
+  const reportSkip = options.onSplitSkip ?? (info => reportSplitSkip(info.rowUri, info.reason));
   for (const weekStart of enumerateTodayHubWeekStarts(now, config.start)) {
     if (todayHubWeekProgress(weekStart, now).kind === 'past') {
       continue;
     }
     const stem = formatTodayHubMondayStem(weekStart);
-    const desiredCalendarBody = bucketed.get(stem);
-    if (desiredCalendarBody == null || desiredCalendarBody.length === 0) {
+    const items = bucketed.get(stem);
+    if (items == null || items.length === 0) {
       continue;
     }
     const rowUri = todayHubRowUriFromTodayNoteUri(todayNoteUri, weekStart);
+    if (options.isRowLiveEdited?.(rowUri) === true) {
+      // Never overwrite a row the user is actively editing in the canvas.
+      skipped += 1;
+      continue;
+    }
+    // Tight read-modify-write: read the row immediately before merging so concurrent external edits
+    // are folded in.
     const existing = (await readFileOrNull(fs, rowUri)) ?? '';
-    const next = upsertCalendarColumn({
+    const result = upsertCalendarColumnInRow({
       rowBody: existing,
       columnCount: config.columnCount,
       calendarColumnIndex: config.calendarColumnIndex,
-      desiredCalendarBody,
+      items,
+      weekStart,
+      now,
     });
-    if (next !== existing) {
-      await fs.writeFile(rowUri, next, {encoding: 'utf8'});
+    if (result.kind === 'write') {
+      await fs.writeFile(rowUri, result.rowBody, {encoding: 'utf8'});
       written += 1;
+    } else if (result.kind === 'skip') {
+      skipped += 1;
+      reportSkip({rowUri, reason: result.reason});
+      console.warn(`[calendar-pipeline] Row skipped (${result.reason}): ${rowUri}`);
     }
   }
-  return written;
+  return {written, skipped};
 }
 
 async function processHub(
@@ -161,6 +202,7 @@ async function processHub(
   todayNoteUri: string,
   now: Date,
   fetchIcs: (url: string, timeoutMs?: number) => Promise<string>,
+  options: Pick<RunCalendarPipelineDesktopOptions, 'isRowLiveEdited' | 'onSplitSkip'>,
   result: DesktopCalendarPipelineResult,
 ): Promise<void> {
   const todayMd = await readFileOrNull(fs, todayNoteUri);
@@ -189,11 +231,12 @@ async function processHub(
     start: config.start,
     mdAgenda: config.mdAgenda,
   });
-  const written = await writeHubWeekRows(fs, todayNoteUri, config, bucketed, now);
+  const {written, skipped} = await writeHubWeekRows(fs, todayNoteUri, config, bucketed, now, options);
   result.rowFilesWritten += written;
+  result.rowFilesSkipped += skipped;
   result.hubsProcessed += 1;
   console.info(
-    `[calendar-pipeline] Hub done (${written} rows, ${Date.now() - transformStartedAt}ms): ${todayNoteUri}`,
+    `[calendar-pipeline] Hub done (${written} rows written, ${skipped} skipped, ${Date.now() - transformStartedAt}ms): ${todayNoteUri}`,
   );
 }
 
@@ -220,6 +263,7 @@ export async function runCalendarPipelineDesktop(
     hubsSkipped: 0,
     agendaFilesWritten: 0,
     rowFilesWritten: 0,
+    rowFilesSkipped: 0,
     failedFetches: 0,
   };
 
@@ -228,7 +272,7 @@ export async function runCalendarPipelineDesktop(
   let done = 0;
   for (const todayNoteUri of hubUris) {
     try {
-      await processHub(fs, baseUri, todayNoteUri, now, fetchIcs, result);
+      await processHub(fs, baseUri, todayNoteUri, now, fetchIcs, options ?? {}, result);
     } catch (err) {
       console.error(`[calendar-pipeline] Hub failed: ${todayNoteUri}`, err);
       result.hubsSkipped += 1;
