@@ -39,6 +39,38 @@ describe('normalizeAgenda', () => {
     expect(out.endsWith('\n')).toBe(true);
     expect(out.endsWith('\n\n')).toBe(false);
   });
+
+  it('keeps ↺m entry on Jan 31 when now is Jan 15 (no overflow needed)', () => {
+    const md = [
+      '## January',
+      '',
+      '### Friday, January 31st, 2026, ↺m',
+      '',
+      '- Stand-up',
+    ].join('\n');
+    const now = new Date(2026, 0, 15); // Jan 15 — entry is still in the future
+    const out = normalizeAgenda(md, now);
+    expect(out).toContain('January');
+    expect(out).toMatch(/31st/);
+    expect(out).toContain('Stand-up');
+  });
+
+  it('clamps ↺m title to Feb 28 when anchor is Jan 31 and now is Jan 31 (today boundary)', () => {
+    // When now = Jan 31, the anchor date equals today — ensureFutureOrToday returns Jan 31 (no advance).
+    // The title should keep Jan 31, not overflow to Mar 3.
+    const md = [
+      '## January',
+      '',
+      '### Friday, January 31st, 2026, ↺m',
+      '',
+      '- Stand-up',
+    ].join('\n');
+    const now = new Date(2026, 0, 31); // Jan 31 itself
+    const out = normalizeAgenda(md, now);
+    expect(out).toContain('January');
+    expect(out).toMatch(/31st/);
+    expect(out).not.toContain('March');
+  });
 });
 
 describe('parseAgendaBullets', () => {

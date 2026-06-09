@@ -61,11 +61,44 @@ export function headingText(line: string, level: 2 | 3): string | null {
   return m ? (m[1] ?? '').trim() : null;
 }
 
-/** Split a markdown string into YAML frontmatter and body (legacy regex form, preserved). */
+/** Split a markdown string into YAML frontmatter and body. Linear scanner \u2014 no regex backtracking. */
 export function splitFrontmatter(md: string): {frontmatter: string; body: string} {
-  const m = md.match(/^(\uFEFF?---\s*\n[\s\S]*?\n---)\s*\n?/);
-  if (m) {
-    return {frontmatter: m[1], body: md.slice(m[0].length)};
+  let i = 0;
+  if (md.charCodeAt(0) === 0xFEFF) i = 1; // skip optional BOM
+  // Opening line must be --- (optionally followed by spaces/tabs, then newline)
+  if (md.charCodeAt(i) !== 45 || md.charCodeAt(i + 1) !== 45 || md.charCodeAt(i + 2) !== 45) {
+    return {frontmatter: '', body: md};
+  }
+  let j = i + 3;
+  while (j < md.length && (md.charCodeAt(j) === 32 || md.charCodeAt(j) === 9)) j++;
+  if (md.charCodeAt(j) === 13) j++; // optional \r
+  if (j >= md.length || md.charCodeAt(j) !== 10) return {frontmatter: '', body: md};
+  j++; // consume \n
+  // Scan line by line for closing ---
+  while (j < md.length) {
+    const lineStart = j;
+    while (j < md.length && md.charCodeAt(j) !== 10 && md.charCodeAt(j) !== 13) j++;
+    // Closing line: exactly --- with optional trailing spaces/tabs
+    if (
+      j - lineStart >= 3 &&
+      md.charCodeAt(lineStart) === 45 &&
+      md.charCodeAt(lineStart + 1) === 45 &&
+      md.charCodeAt(lineStart + 2) === 45
+    ) {
+      let isClose = true;
+      for (let k = lineStart + 3; k < j; k++) {
+        const c = md.charCodeAt(k);
+        if (c !== 32 && c !== 9) { isClose = false; break; }
+      }
+      if (isClose) {
+        const frontmatter = md.slice(0, j);
+        if (j < md.length && md.charCodeAt(j) === 13) j++;
+        if (j < md.length && md.charCodeAt(j) === 10) j++;
+        return {frontmatter, body: md.slice(j)};
+      }
+    }
+    if (j < md.length && md.charCodeAt(j) === 13) j++;
+    if (j < md.length && md.charCodeAt(j) === 10) j++;
   }
   return {frontmatter: '', body: md};
 }

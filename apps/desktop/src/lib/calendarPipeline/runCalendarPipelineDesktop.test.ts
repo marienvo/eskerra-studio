@@ -1,11 +1,13 @@
 import {readFileSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, expect, it, vi} from 'vitest';
+import {beforeEach, describe, expect, it, vi} from 'vitest';
 import type {VaultDirEntry, VaultFilesystem} from '@eskerra/core';
 import {
+  __resetForTests,
   redactCalendarFeedUrl,
   runCalendarPipelineDesktop,
+  runDesktopCalendarPipeline,
 } from './runCalendarPipelineDesktop';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -94,6 +96,10 @@ function readManualWeekRowFixture(): string {
 }
 
 const REFS = [{uri: '/vault/Work/Today.md', name: 'Today.md'}];
+
+beforeEach(() => {
+  __resetForTests();
+});
 
 describe('runCalendarPipelineDesktop', () => {
   it('redacts calendar feed query and path details for logs', () => {
@@ -241,5 +247,57 @@ describe('runCalendarPipelineDesktop', () => {
     expect(result.rowFilesWritten).toBe(0);
     // Row file must not have been overwritten.
     expect(fs.files.get(rowUri)).toContain('no second delimiter');
+  });
+});
+
+describe('runDesktopCalendarPipeline (coalescing)', () => {
+  it('coalesces concurrent calls into one run with a shared result', async () => {
+    const fs = makeFsWithWorkHub();
+    const fetchIcs = vi.fn(async () => ICS);
+
+    const [r1, r2] = await Promise.all([
+      runDesktopCalendarPipeline(fs, '/vault', REFS, {now: NOW, fetchIcs}),
+      runDesktopCalendarPipeline(fs, '/vault', REFS, {now: NOW, fetchIcs}),
+    ]);
+
+    expect(r1).toBe(r2);
+    expect(fetchIcs).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers onProgress events to every concurrent caller', async () => {
+    const fs = makeFsWithWorkHub();
+    const fetchIcs = vi.fn(async () => ICS);
+    const progressA: number[] = [];
+    const progressB: number[] = [];
+
+    await Promise.all([
+      runDesktopCalendarPipeline(fs, '/vault', REFS, {
+        now: NOW,
+        fetchIcs,
+        onProgress: p => progressA.push(p.percent),
+      }),
+      runDesktopCalendarPipeline(fs, '/vault', REFS, {
+        now: NOW,
+        fetchIcs,
+        onProgress: p => progressB.push(p.percent),
+      }),
+    ]);
+
+    expect(progressA).toContain(100);
+    expect(progressB).toContain(100);
+    expect(progressA).toEqual(progressB);
+  });
+
+  it('resets after run completes so a second call starts a fresh run', async () => {
+    const fs = makeFsWithWorkHub();
+    const fetchIcs = vi.fn(async () => ICS);
+
+    const r1 = await runDesktopCalendarPipeline(fs, '/vault', REFS, {now: NOW, fetchIcs});
+    const r2 = await runDesktopCalendarPipeline(fs, '/vault', REFS, {now: NOW, fetchIcs});
+
+    // Both complete, second run performed a second fetch
+    expect(fetchIcs).toHaveBeenCalledTimes(2);
+    // Results are separate objects (different runs)
+    expect(r1).not.toBe(r2);
   });
 });

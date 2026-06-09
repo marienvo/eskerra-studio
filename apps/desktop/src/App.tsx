@@ -264,6 +264,7 @@ export default function App() {
     vaultRoot,
     fs,
     vaultMarkdownRefs,
+    todayHubBridgeRef: todayHubController.todayHubBridgeRef,
     busy,
     canReopenClosedEditorTab: tabsController.canReopenClosedEditorTab,
     reopenLastClosedEditorTab: tabsController.reopenLastClosedEditorTab,

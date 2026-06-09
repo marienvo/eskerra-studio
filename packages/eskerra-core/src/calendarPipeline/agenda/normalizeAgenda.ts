@@ -166,6 +166,25 @@ function splitOutImportantOneBullets(content: string): {kept: string; moved: str
   return {kept: trimBlankEdges(kept.join('\n')), moved: movedBlocks.filter(b => b.length > 0)};
 }
 
+// --- String helpers ----------------------------------------------------------
+
+/** Collapses runs of 3+ consecutive newlines to exactly two. Linear — no regex backtracking. */
+function collapseNewlineRunsToDouble(s: string): string {
+  if (!s.includes('\n\n\n')) return s;
+  let out = '';
+  let nl = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) === 10) {
+      nl++;
+      if (nl <= 2) out += '\n';
+    } else {
+      nl = 0;
+      out += s[i]!;
+    }
+  }
+  return out;
+}
+
 // --- Recurrence engine -------------------------------------------------------
 
 type Weekday2 = 'su' | 'mo' | 'tu' | 'we' | 'th' | 'fr' | 'sa';
@@ -217,19 +236,19 @@ function computeNextOccurrence(
         return ensureFutureOrToday(nd);
       }
       if (rule === '↺m') {
-        const nd = new Date(d);
-        const targetDay = d.getDate();
-        nd.setMonth(nd.getMonth() + 1);
-        const eom = endOfMonth(nd.getFullYear(), nd.getMonth());
-        nd.setDate(Math.min(targetDay, eom));
+        const day = d.getDate();
+        const rawMonth = d.getMonth() + 1;
+        const y = d.getFullYear() + Math.floor(rawMonth / 12);
+        const m = rawMonth % 12;
+        const nd = new Date(y, m, Math.min(day, endOfMonth(y, m)));
         return ensureFutureOrToday(nd);
       }
       if (rule === '↺q') {
-        const nd = new Date(d);
-        const targetDay = d.getDate();
-        nd.setMonth(nd.getMonth() + 3);
-        const eom = endOfMonth(nd.getFullYear(), nd.getMonth());
-        nd.setDate(Math.min(targetDay, eom));
+        const day = d.getDate();
+        const rawMonth = d.getMonth() + 3;
+        const y = d.getFullYear() + Math.floor(rawMonth / 12);
+        const m = rawMonth % 12;
+        const nd = new Date(y, m, Math.min(day, endOfMonth(y, m)));
         return ensureFutureOrToday(nd);
       }
       const nd = new Date(d);
@@ -418,14 +437,37 @@ function ensureRecurringEntry(
   return {entry, monthIdx: mIdx};
 }
 
-/** Remove any leading/trailing == wrappers from an H3 line. */
+/** Remove any leading/trailing == wrappers from an H3 line. Linear scanner — no regex backtracking. */
 function normalizeH3TitleEquals(line: string): string {
-  return line.replace(/^###\s+=+\s*(.*?)\s*=+\s*$/, '### $1');
+  if (!line.startsWith('### ')) return line;
+  let s = line.slice(4);
+  // Skip leading spaces/tabs
+  let start = 0;
+  while (start < s.length && (s.charCodeAt(start) === 32 || s.charCodeAt(start) === 9)) start++;
+  if (start >= s.length || s.charCodeAt(start) !== 61) return line; // no leading '='
+  while (start < s.length && s.charCodeAt(start) === 61) start++;
+  while (start < s.length && (s.charCodeAt(start) === 32 || s.charCodeAt(start) === 9)) start++;
+  let end = s.length;
+  while (end > start && (s.charCodeAt(end - 1) === 32 || s.charCodeAt(end - 1) === 9)) end--;
+  if (end <= start || s.charCodeAt(end - 1) !== 61) return line; // no trailing '='
+  while (end > start && s.charCodeAt(end - 1) === 61) end--;
+  while (end > start && (s.charCodeAt(end - 1) === 32 || s.charCodeAt(end - 1) === 9)) end--;
+  return '### ' + s.slice(start, end);
 }
 
-/** Strip == wrappers from a bare title (no leading ###). */
+/** Strip == wrappers from a bare title (no leading ###). Linear scanner — no regex backtracking. */
 function stripEqualsFromTitleText(t: string): string {
-  return t.replace(/^\s*=+\s*(.*?)\s*=+\s*$/, '$1').trim();
+  let start = 0;
+  while (start < t.length && (t.charCodeAt(start) === 32 || t.charCodeAt(start) === 9)) start++;
+  if (start >= t.length || t.charCodeAt(start) !== 61) return t.trim();
+  while (start < t.length && t.charCodeAt(start) === 61) start++;
+  while (start < t.length && (t.charCodeAt(start) === 32 || t.charCodeAt(start) === 9)) start++;
+  let end = t.length;
+  while (end > start && (t.charCodeAt(end - 1) === 32 || t.charCodeAt(end - 1) === 9)) end--;
+  if (end <= start || t.charCodeAt(end - 1) !== 61) return t.trim();
+  while (end > start && t.charCodeAt(end - 1) === 61) end--;
+  while (end > start && (t.charCodeAt(end - 1) === 32 || t.charCodeAt(end - 1) === 9)) end--;
+  return t.slice(start, end).trim();
 }
 
 // --- Parsing -----------------------------------------------------------------
@@ -946,7 +988,7 @@ function render(doc: ParsedDoc, today: Date): string {
     }
   }
 
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '') + '\n';
+  return collapseNewlineRunsToDouble(out.join('\n')).replace(/\s+$/, '') + '\n';
 }
 
 /**

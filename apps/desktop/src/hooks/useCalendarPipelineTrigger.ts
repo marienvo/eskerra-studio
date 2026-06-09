@@ -1,4 +1,5 @@
 import {useCallback, useRef, useState} from 'react';
+import type {MutableRefObject} from 'react';
 import type {VaultFilesystem} from '@eskerra/core';
 
 import {runDesktopCalendarPipeline} from '../lib/calendarPipeline/runCalendarPipelineDesktop';
@@ -20,6 +21,10 @@ export function useCalendarPipelineTrigger(
   vaultRoot: string | null,
   fs: VaultFilesystem,
   vaultMarkdownRefs: readonly {uri: string; name: string}[],
+  todayHubBridgeRef: MutableRefObject<{
+    flushPendingEdits: () => Promise<void>;
+    getLiveRowUri: () => string | null;
+  }>,
 ): CalendarPipelineTrigger {
   const runningRef = useRef(false);
   const [calendarSyncing, setCalendarSyncing] = useState(false);
@@ -32,7 +37,9 @@ export function useCalendarPipelineTrigger(
     runningRef.current = true;
     setCalendarSyncing(true);
     setCalendarSyncPercent(null);
+    const bridge = todayHubBridgeRef.current;
     try {
+      await bridge.flushPendingEdits().catch(() => undefined);
       await runDesktopCalendarPipeline(fs, vaultRoot, vaultMarkdownRefs, {
         onProgress: payload => {
           const n = payload.percent;
@@ -40,6 +47,7 @@ export function useCalendarPipelineTrigger(
             setCalendarSyncPercent(n);
           }
         },
+        isRowLiveEdited: uri => bridge.getLiveRowUri() === uri,
       });
       return true;
     } catch {
@@ -50,7 +58,7 @@ export function useCalendarPipelineTrigger(
       setCalendarSyncing(false);
       setCalendarSyncPercent(null);
     }
-  }, [vaultRoot, fs, vaultMarkdownRefs]);
+  }, [vaultRoot, fs, vaultMarkdownRefs, todayHubBridgeRef]);
 
   return {runCalendarSync, calendarSyncing, calendarSyncPercent};
 }

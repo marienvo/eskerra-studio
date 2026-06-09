@@ -110,4 +110,22 @@ describe('parseIcsEvents', () => {
       'Zebra',
     ]);
   });
+
+  it('clamps month-end overflow for MONTHLY RRULE (Feb 28, Mar 31, Apr 30 from Jan 31 anchor)', () => {
+    // COUNT=4 so we see: Jan 31 (filtered, before fromMs), Feb 28 (clamped), Mar 31, Apr 30 (clamped).
+    const ics = wrap(
+      vevent([
+        'UID:monthly-end',
+        'SUMMARY:End of month',
+        'DTSTART:20260131T100000',
+        'RRULE:FREQ=MONTHLY;COUNT=4',
+      ]),
+    );
+    const now = new Date(2026, 1, 1); // Feb 1 — Jan 31 occurrence falls before window
+    const events = parseIcsEvents(ics, {now, daysAhead: 100});
+    const dates = events.map(e =>
+      `${e.start.getFullYear()}-${String(e.start.getMonth() + 1).padStart(2, '0')}-${String(e.start.getDate()).padStart(2, '0')}`,
+    );
+    expect(dates).toEqual(['2026-02-28', '2026-03-31', '2026-04-30']);
+  });
 });

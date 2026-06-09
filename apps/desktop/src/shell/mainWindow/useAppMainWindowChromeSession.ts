@@ -14,6 +14,10 @@ type UseAppMainWindowChromeSessionArgs = {
   vaultRoot: string | null;
   fs: VaultFilesystem;
   vaultMarkdownRefs: readonly {uri: string; name: string}[];
+  todayHubBridgeRef: MutableRefObject<{
+    flushPendingEdits: () => Promise<void>;
+    getLiveRowUri: () => string | null;
+  }>;
   busy: boolean;
   canReopenClosedEditorTab: boolean;
   reopenLastClosedEditorTab: () => void;
@@ -40,6 +44,7 @@ export function useAppMainWindowChromeSession({
   vaultRoot,
   fs,
   vaultMarkdownRefs,
+  todayHubBridgeRef,
   busy,
   canReopenClosedEditorTab,
   reopenLastClosedEditorTab,
@@ -75,7 +80,7 @@ export function useAppMainWindowChromeSession({
     renameLinkProgress,
     openNotificationsPanel,
   });
-  const calendarSync = useCalendarPipelineTrigger(vaultRoot, fs, vaultMarkdownRefs);
+  const calendarSync = useCalendarPipelineTrigger(vaultRoot, fs, vaultMarkdownRefs, todayHubBridgeRef);
 
   const gitSync = useAppGitSyncOrchestration({
     vaultPath: vaultRoot,

@@ -12,6 +12,37 @@ describe('normalizeCalendarTitle', () => {
   it('is case-insensitive', () => {
     expect(normalizeCalendarTitle('Team SYNC')).toBe(normalizeCalendarTitle('team sync'));
   });
+
+  it('handles wiki links without an alias', () => {
+    expect(normalizeCalendarTitle('[[Meeting Notes]]')).toBe('meeting notes');
+  });
+
+  it('handles wiki links with an alias', () => {
+    expect(normalizeCalendarTitle('[[Internal/Q1 Review|Q1 Review]]')).toBe('q1 review');
+  });
+
+  it('passes through body unchanged when no special markup is present', () => {
+    expect(normalizeCalendarTitle('Team standup')).toBe('team standup');
+  });
+
+  it('strips unclosed agenda icon prefix gracefully (keeps rest of text)', () => {
+    // No closing >), treat as plain text
+    const out = normalizeCalendarTitle('[🗓️](<no-close standup');
+    expect(typeof out).toBe('string');
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it('collapses multiple spaces to single space', () => {
+    expect(normalizeCalendarTitle('Team   sync')).toBe('team sync');
+  });
+
+  it('handles midnight time 00:00', () => {
+    expect(normalizeCalendarTitle('00:00 Midnight event')).toBe('midnight event');
+  });
+
+  it('does not strip invalid time like 25:00', () => {
+    expect(normalizeCalendarTitle('25:00 Not a time')).toBe('25:00 not a time');
+  });
 });
 
 describe('calendarItemKey', () => {

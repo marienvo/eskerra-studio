@@ -176,10 +176,24 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
-function addMonths(date: Date, months: number): Date {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
+/**
+ * Returns the date `totalMonths` calendar months after `dtstart`, preserving the anchor day from
+ * `dtstart` (clamped to the target month's last day) and the original time-of-day. This avoids
+ * the setMonth overflow problem AND the anchor-day drift that occurs when stepping through
+ * clamped intermediate months (e.g. Jan 31 → Feb 28 → Mar 28 with naïve step-by-step addition).
+ */
+function addMonthsFromAnchor(dtstart: Date, totalMonths: number): Date {
+  const anchorDay = dtstart.getDate();
+  const target = new Date(dtstart.getFullYear(), dtstart.getMonth() + totalMonths, 1);
+  const eom = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(anchorDay, eom));
+  target.setHours(
+    dtstart.getHours(),
+    dtstart.getMinutes(),
+    dtstart.getSeconds(),
+    dtstart.getMilliseconds(),
+  );
+  return target;
 }
 
 function addYears(date: Date, years: number): Date {
@@ -233,6 +247,7 @@ function* expandOccurrences(
   }
 
   let current = new Date(dtstart);
+  let monthStep = 0;
   while (guard < MAX_OCCURRENCES) {
     if (current.getTime() > hardEndMs) {
       return;
@@ -248,7 +263,8 @@ function* expandOccurrences(
     } else if (rule.freq === 'WEEKLY') {
       current = addDays(current, 7 * rule.interval);
     } else if (rule.freq === 'MONTHLY') {
-      current = addMonths(current, rule.interval);
+      monthStep++;
+      current = addMonthsFromAnchor(dtstart, monthStep * rule.interval);
     } else {
       current = addYears(current, rule.interval);
     }

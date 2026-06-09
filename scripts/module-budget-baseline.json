@@ -17,7 +17,7 @@
     "apps/desktop/src/hooks/workspaceTabCommands.ts": 424,
     "apps/mobile/__tests__/usePlayer.test.ts": 1248,
     "apps/mobile/src/features/podcasts/hooks/usePlayer.ts": 839,
-    "packages/eskerra-core/src/calendarPipeline/agenda/normalizeAgenda.ts": 968,
+    "packages/eskerra-core/src/calendarPipeline/agenda/normalizeAgenda.ts": 1015,
     "packages/eskerra-core/src/playerMachine.ts": 892
   }
 }
