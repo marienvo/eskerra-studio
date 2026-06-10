@@ -48,6 +48,19 @@ function isBlank(text: string): boolean {
   return text.trim().length === 0;
 }
 
+/**
+ * Resolves a bare `monthIdx` (month headings carry no year) to a comparable `year*12+month` ordinal,
+ * using the week range. A week spans at most two adjacent months, so a non-`weekStart` month must be
+ * the `weekStart + 6` month — this keeps Dec→Jan week boundaries chronologically ordered.
+ */
+function monthOrdinalInWeek(weekStart: Date, monthIdx: number): number {
+  if (monthIdx === weekStart.getMonth()) {
+    return weekStart.getFullYear() * 12 + monthIdx;
+  }
+  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
+  return weekEnd.getFullYear() * 12 + monthIdx;
+}
+
 /** Sort key tuple comparison reusing the chronological item comparator on a synthetic item. */
 function lineSortsAfter(line: Extract<CalendarCellLine, {kind: 'pipelineItem'}>, item: CalendarItem): boolean {
   const lineAsItem: CalendarItem = {
@@ -125,11 +138,18 @@ export function mergeCalendarCellContent(
   }
 
   for (const item of toInsert) {
-    // Insert position: before the first existing pipelineItem that sorts after this item; else end.
+    // Insert position: before the first existing line that sorts after this item; else end. We stop
+    // at a later-month heading too (not just pipeline items), so a new earlier-month heading lands
+    // before an already-present later-month heading instead of nesting under it.
     let insertIdx = workingLines.length;
+    const itemMonthOrd = item.date.getFullYear() * 12 + item.date.getMonth();
     for (let i = 0; i < workingLines.length; i++) {
       const line = classifiedByIndex.get(i);
       if (line?.kind === 'pipelineItem' && lineSortsAfter(line, item)) {
+        insertIdx = i;
+        break;
+      }
+      if (line?.kind === 'monthHeading' && monthOrdinalInWeek(weekStart, line.monthIdx) > itemMonthOrd) {
         insertIdx = i;
         break;
       }

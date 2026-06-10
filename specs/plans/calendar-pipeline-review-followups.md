@@ -23,6 +23,32 @@ Only **#1** (SSRF), **#4** (EXDATE/CANCELLED), and **#7** (timed key) needed new
 | 8 | CodeQL ReDoS (63–68) | Already resolved — no open code-scanning alerts. |
 | 9 | `determinateRssPercent` name | Already done — renamed `determinateSyncPercent`. |
 | 10 | Coalescing-wrapper test | Already done — `runDesktopCalendarPipeline (coalescing)` suite present. |
+| 11 | CodeQL ReDoS regression (alert 68) | Fixed: `normalizeAgenda` trailing-trim now uses `trimEnd()` instead of `/\s+$/`. |
+| 12 | Cross-month heading order | Fixed: insertion-point search stops at later-month headings so an earlier-month block lands first. |
+
+## Second pass — findings on commit `2f5909ed`
+
+After the first follow-up pass landed, the bots re-reviewed the head commit and surfaced two more items
+(both fixed in this pass):
+
+### 11. CodeQL ReDoS still open (alert 68, high) — `normalizeAgenda.ts:991`
+The earlier ReDoS sweep shifted line numbers and left one polynomial regex on feed input: the final
+trailing-whitespace trim `… .replace(/\s+$/, '') + '\n'`. `/\s+$/` backtracks on long whitespace runs.
+
+- Fix: replace with `.trimEnd()` (linear, semantically identical for the trailing run). No new test —
+  the `normalizeAgenda` golden snapshot stays byte-identical and is the regression anchor.
+
+### 12. Cross-month heading order — `cellMerge/mergeCalendarCellContent.ts`
+The insertion-point search only stopped at later-sorting `pipelineItem` lines, ignoring `monthHeading`
+lines. On a cross-month week first filled with later-month content (e.g. February), a subsequently
+merged earlier-month item (January) was spliced at the first later-month *item* — i.e. *after* the
+later-month heading — yielding `February → January → …`.
+
+- Fix: also stop at a `monthHeading` whose resolved month sorts after the incoming item. Headings carry
+  no year, so a `monthOrdinalInWeek` helper resolves `monthIdx` to a `year*12+month` ordinal via the
+  week range (handles Dec→Jan week boundaries).
+- Test: cross-month week (Jan 26–Feb 1) — Feb-only cell + a merged Jan item asserts the January block
+  precedes February, plus a second-run idempotence check.
 
 The pipeline core is well-structured and well-tested; every item below is an edge-case fix with an
 isolated, testable change. The `normalizeAgenda` golden snapshot is the regression anchor — verify

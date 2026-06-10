@@ -80,6 +80,33 @@ describe('mergeCalendarCellContent', () => {
     expect(out).toContain('**Tue 28:** New');
   });
 
+  it('inserts an earlier-month heading before an existing later-month heading (cross-month week)', () => {
+    // Week of Jan 26 2026 spans Jan 26..Feb 1. Cell first filled with a February-only event, then a
+    // January item arrives on a later run: the January block must precede the February block.
+    const crossWeek = new Date(2026, 0, 26); // Mon Jan 26
+    const crossNow = new Date(2026, 0, 26, 12, 0);
+    const existing = ['**February**', '**Sun 1:** Feb event'].join('\n');
+    const out = mergeCalendarCellContent(
+      existing,
+      [item({date: new Date(2026, 0, 28), body: 'Jan event', monthIdx: 0, monthHeading: 'January'})],
+      crossWeek,
+      crossNow,
+    );
+    expect(out).toBe(
+      ['**January**', '**Wed 28:** Jan event', '**February**', '**Sun 1:** Feb event'].join('\n'),
+    );
+    expectExistingSubsetOfOutput(existing, out);
+    // Stable on a second run.
+    expect(
+      mergeCalendarCellContent(
+        out,
+        [item({date: new Date(2026, 0, 28), body: 'Jan event', monthIdx: 0, monthHeading: 'January'})],
+        crossWeek,
+        crossNow,
+      ),
+    ).toBe(out);
+  });
+
   it('is idempotent on a second merge with identical input', () => {
     const incoming = [
       item({date: new Date(2026, 0, 20), body: 'A'}),
