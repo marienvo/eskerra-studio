@@ -77,8 +77,11 @@ Each week-row file (`{hubDir}/YYYY-MM-DD.md`, the 53-week canvas grid) is one "r
 - Item sort order is deterministic: date, timed-before-untimed, time, then source (agenda before
   calendar). Timed agenda bullets keep a `[🗓️](<mdAgenda>)` link prefix.
 - Dedup uses the same `calendarItemKey` contract as the cell merge: a calendar timed event is dropped
-  when an agenda bullet shares the same day + time; untimed items dedup by day + normalized title with
-  **agenda precedence**.
+  when an agenda bullet shares the same day + time + normalized title; untimed items dedup by day +
+  normalized title with **agenda precedence**. Two distinct events at the same minute (overlapping
+  meetings) stay distinct because the title is part of the timed key. Trade-off: a user who edits the
+  visible title of a timed Calendar line changes its key, so the canonical line is re-inserted once
+  (one duplicate) on the next refresh rather than being silently dropped.
 
 ## Part 3b — Calendar-cell merge contract
 
@@ -119,7 +122,7 @@ not match the exact pipeline item shape.
 
 `calendarItemKey` is shared by bucketing and cell merge:
 
-- Timed: `{YYYY-MM-DD}|{HH:MM}`.
+- Timed: `{YYYY-MM-DD}|{HH:MM}|{normalizedTitle}`.
 - Untimed: `{YYYY-MM-DD}|{normalizedTitle}`.
 
 `normalizedTitle` strips the agenda icon link prefix, normalizes wiki-link markup, removes a leading

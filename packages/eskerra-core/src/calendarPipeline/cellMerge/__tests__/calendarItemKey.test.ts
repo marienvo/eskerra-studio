@@ -48,9 +48,9 @@ describe('normalizeCalendarTitle', () => {
 describe('calendarItemKey', () => {
   const date = new Date(2026, 0, 19); // Jan 19 2026
 
-  it('builds a date|time key for timed items', () => {
-    expect(calendarItemKey({date, timed: true, timeMinutes: 9 * 60 + 30, body: '09:30 X'})).toBe(
-      '2026-01-19|09:30',
+  it('builds a date|time|title key for timed items', () => {
+    expect(calendarItemKey({date, timed: true, timeMinutes: 9 * 60 + 30, body: '09:30 Dentist'})).toBe(
+      '2026-01-19|09:30|dentist',
     );
   });
 
@@ -60,9 +60,15 @@ describe('calendarItemKey', () => {
     );
   });
 
-  it('gives the same timed key regardless of body text differences', () => {
-    const a = calendarItemKey({date, timed: true, timeMinutes: 600, body: '10:00 Sync'});
-    const b = calendarItemKey({date, timed: true, timeMinutes: 600, body: '10:00 Sync (moved)'});
+  it('keeps two distinct events at the same minute distinct', () => {
+    const standup = calendarItemKey({date, timed: true, timeMinutes: 540, body: '09:00 Standup'});
+    const planning = calendarItemKey({date, timed: true, timeMinutes: 540, body: '09:00 Planning'});
+    expect(standup).not.toBe(planning);
+  });
+
+  it('dedups the same timed event regardless of leading-time prefix presence', () => {
+    const a = calendarItemKey({date, timed: true, timeMinutes: 600, body: '10:00 Team sync'});
+    const b = calendarItemKey({date, timed: true, timeMinutes: 600, body: 'Team sync'});
     expect(a).toBe(b);
   });
 });

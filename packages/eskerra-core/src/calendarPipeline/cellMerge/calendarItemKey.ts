@@ -2,7 +2,8 @@
  * Identity keys for Calendar items, shared between bucketing (agenda vs ICS dedup) and cell merge
  * (incoming vs existing dedup). See `specs/plans/calendar-ics-agenda-pipeline.md` (Part 3b).
  *
- * - Timed:   `"{YYYY-MM-DD}|{HH:MM}"` — calendar day of the item + clock time.
+ * - Timed:   `"{YYYY-MM-DD}|{HH:MM}|{normalizedTitle}"` — day + clock time + title, so two distinct
+ *            events at the same minute (overlapping meetings) stay distinct instead of colliding.
  * - Untimed: `"{YYYY-MM-DD}|{normalizedTitle}"`.
  */
 import {collapseAsciiWhitespaceRunsToSpace, isAsciiWhitespaceCode} from '../../stringScanners';
@@ -96,7 +97,7 @@ export type CalendarItemKeyInput = {
 /** Stable identity for a calendar item; equal keys are treated as the same item across runs. */
 export function calendarItemKey(item: CalendarItemKeyInput): string {
   if (item.timed && item.timeMinutes != null) {
-    return `${localDayKey(item.date)}|${timeKey(item.timeMinutes)}`;
+    return `${localDayKey(item.date)}|${timeKey(item.timeMinutes)}|${normalizeCalendarTitle(item.body)}`;
   }
   return `${localDayKey(item.date)}|${normalizeCalendarTitle(item.body)}`;
 }

@@ -90,8 +90,22 @@ describe('mergeCalendarCellContent', () => {
     expect(twice).toBe(once);
   });
 
-  it('keeps a user-edited body when the key is unchanged (timed)', () => {
-    const existing = ['**January**', '**Tue 20:** 14:00 X (my notes)'].join('\n');
+  it('keeps two distinct timed events at the same minute (title is part of the key)', () => {
+    const existing = ['**January**', '**Tue 20:** 09:00 Standup'].join('\n');
+    const out = mergeCalendarCellContent(
+      existing,
+      [item({date: new Date(2026, 0, 20), body: '09:00 Planning', timed: true, timeMinutes: 540})],
+      WEEK_START,
+      NOW,
+    );
+    // Different title at the same minute is a different item — both are kept.
+    expect(out).toContain('**Tue 20:** 09:00 Standup');
+    expect(out).toContain('**Tue 20:** 09:00 Planning');
+  });
+
+  it('re-dedups a timed item whose existing line carries the canonical title verbatim', () => {
+    // Insert-only stability: an unedited canonical timed line is not re-inserted on the next run.
+    const existing = ['**January**', '**Tue 20:** 14:00 X'].join('\n');
     const out = mergeCalendarCellContent(
       existing,
       [item({date: new Date(2026, 0, 20), body: '14:00 X', timed: true, timeMinutes: 840})],
