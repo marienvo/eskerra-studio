@@ -57,6 +57,17 @@ describe('mergeCalendarCellContent', () => {
     expect(out).toBe(existing);
   });
 
+  it('does not re-insert an item whose existing line is struck/completed (@~~…~~)', () => {
+    const existing = '@~~2026-01-20_0930~~ Stand-up B2B';
+    const out = mergeCalendarCellContent(
+      existing,
+      [item({date: new Date(2026, 0, 20), body: 'Stand-up B2B', timed: true, timeMinutes: 570})],
+      NOW,
+    );
+    // The struck line is recognized as the same ID — no duplicate appended.
+    expect(out).toBe(existing);
+  });
+
   it('preserves a manual freeform line while inserting a new item', () => {
     const existing = ['@2026-01-20 🎂 Birthday', '- bellen met X'].join('\n');
     const out = mergeCalendarCellContent(

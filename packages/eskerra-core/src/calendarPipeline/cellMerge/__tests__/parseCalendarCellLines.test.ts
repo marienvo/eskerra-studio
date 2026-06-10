@@ -42,6 +42,32 @@ describe('parseCalendarCellLines', () => {
     expect(line.body).toBe('Team day');
   });
 
+  it('recognizes a struck (@~~…~~) line as a pipelineItem with the same date/time', () => {
+    const [line] = parseCalendarCellLines('@~~2026-06-12_0930~~ Stand-up B2B');
+    expect(line.kind).toBe('pipelineItem');
+    if (line.kind !== 'pipelineItem') throw new Error('expected pipelineItem');
+    expect(line.timed).toBe(true);
+    expect(line.timeMinutes).toBe(9 * 60 + 30);
+    expect(line.date.getMonth()).toBe(5);
+    expect(line.date.getDate()).toBe(12);
+    expect(line.body).toBe('Stand-up B2B');
+  });
+
+  it('recognizes a struck line with the daemon \\_ escape noise', () => {
+    const [line] = parseCalendarCellLines('@~~2026-06-12\\_0930~~ Stand-up B2B');
+    expect(line.kind).toBe('pipelineItem');
+    if (line.kind !== 'pipelineItem') throw new Error('expected pipelineItem');
+    expect(line.timeMinutes).toBe(9 * 60 + 30);
+  });
+
+  it('recognizes a date-only struck line', () => {
+    const [line] = parseCalendarCellLines('@~~2026-06-12~~ Team day');
+    expect(line.kind).toBe('pipelineItem');
+    if (line.kind !== 'pipelineItem') throw new Error('expected pipelineItem');
+    expect(line.timed).toBe(false);
+    expect(line.body).toBe('Team day');
+  });
+
   it('treats a legacy **Wd d:** line as freeform (no breaking migration)', () => {
     const [line] = parseCalendarCellLines('**Mon 19:** 09:00 Standup');
     expect(line.kind).toBe('freeform');

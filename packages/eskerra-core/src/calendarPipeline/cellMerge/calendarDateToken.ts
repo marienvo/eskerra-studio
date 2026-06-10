@@ -1,7 +1,8 @@
 /**
  * Minimal `@YYYY-MM-DD` / `@YYYY-MM-DD_HHMM` token helpers scoped to the calendar pipeline.
  * Mirrors the grammar in `apps/desktop/src/editor/noteEditor/dateToken/dateToken.ts` without
- * importing it (core must stay framework-agnostic).
+ * importing it (core must stay framework-agnostic). Struck reminders (`@~~…~~`, daemon-completed)
+ * are recognized too, so a completed line still dedups by its underlying date/time key.
  */
 
 function pad2(n: number): string {
@@ -17,23 +18,26 @@ export function formatCalendarToken(date: Date, timeMinutes: number | null): str
   return `@${d}`;
 }
 
-// `@YYYY-MM-DD_HHMM rest` or `@YYYY-MM-DD rest` at the start of a line.
+// Live: `@YYYY-MM-DD_HHMM rest` or `@YYYY-MM-DD rest` at the start of a line.
 const TOKEN_LINE_RE = /^(@(\d{4})-(\d{2})-(\d{2})(?:_(\d{2})(\d{2}))?)(?:\s(.*))?$/;
+// Struck (daemon-completed): `@~~YYYY-MM-DD_HHMM~~ rest`, with an optional `\` escape before `_`.
+const STRUCK_TOKEN_LINE_RE =
+  /^(@~~(\d{4})-(\d{2})-(\d{2})(?:\\?_(\d{2})(\d{2}))?~~)(?:\s(.*))?$/;
 
 export type ParsedCalendarTokenLine = {
   token: string;
   date: Date;
   timed: boolean;
   timeMinutes: number | null;
+  /** True when the source line was a struck (`@~~…~~`) completed reminder. */
+  struck: boolean;
   rest: string;
 };
 
-/** Returns null when the line does not start with a valid calendar token. */
-export function parseCalendarTokenLine(line: string): ParsedCalendarTokenLine | null {
-  const m = TOKEN_LINE_RE.exec(line);
-  if (!m) {
-    return null;
-  }
+function buildParsed(
+  m: RegExpExecArray,
+  struck: boolean,
+): ParsedCalendarTokenLine | null {
   const year = Number(m[2]);
   const month = Number(m[3]) - 1;
   const day = Number(m[4]);
@@ -48,7 +52,20 @@ export function parseCalendarTokenLine(line: string): ParsedCalendarTokenLine | 
     if (h > 23 || min > 59) {
       return null;
     }
-    return {token, date, timed: true, timeMinutes: h * 60 + min, rest: m[7] ?? ''};
+    return {token, date, timed: true, timeMinutes: h * 60 + min, struck, rest: m[7] ?? ''};
   }
-  return {token, date, timed: false, timeMinutes: null, rest: m[7] ?? ''};
+  return {token, date, timed: false, timeMinutes: null, struck, rest: m[7] ?? ''};
+}
+
+/** Returns null when the line does not start with a valid (live or struck) calendar token. */
+export function parseCalendarTokenLine(line: string): ParsedCalendarTokenLine | null {
+  const struckMatch = STRUCK_TOKEN_LINE_RE.exec(line);
+  if (struckMatch) {
+    return buildParsed(struckMatch, true);
+  }
+  const m = TOKEN_LINE_RE.exec(line);
+  if (!m) {
+    return null;
+  }
+  return buildParsed(m, false);
 }
