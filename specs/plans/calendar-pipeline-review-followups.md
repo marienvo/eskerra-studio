@@ -1,11 +1,28 @@
 # Calendar pipeline — PR #153 review follow-ups
 
-Status: planned. Tracks the actionable findings from the automated reviews on PR #153
+Status: resolved. Tracks the actionable findings from the automated reviews on PR #153
 (`ics-agenda-and-yearlog`): Greptile, Codex, and CodeQL / GitHub Advanced Security.
 
 Companion to [`calendar-ics-agenda-pipeline.md`](calendar-ics-agenda-pipeline.md), which is the
 authoritative design for the pipeline itself. This file is the punch-list to get that PR mergeable
 and to close the correctness gaps the bots flagged.
+
+Most bot comments were against earlier commits and had already been addressed by `d4963c86`
+("Fix CodeQL ReDoS alerts, month-end overflow, and wire live-row bridge") by the time this pass ran.
+Only **#1** (SSRF), **#4** (EXDATE/CANCELLED), and **#7** (timed key) needed new work.
+
+| # | Item | Outcome |
+|---|------|---------|
+| 1 | SSRF via IPv4-mapped IPv6 | Fixed: unwrap `to_ipv4_mapped()` in `is_disallowed_ip` + tests. |
+| 2 | Live-row skip in trigger | Already done — `getLiveRowUri` wired in `TodayHubCanvas`, predicate used in runner. |
+| 3 | Timezone-dependent CI test | Already done — fixture uses floating `DTSTART:20260116T100000`. |
+| 4 | EXDATE / STATUS:CANCELLED | Fixed: both parsed and excluded in `parseIcsEvents` + tests. |
+| 5 | Monthly RRULE overflow | Already done — `addMonthsFromAnchor`. |
+| 6 | Agenda `↺m` overflow | Already done — explicit month construction + `endOfMonth` clamp. |
+| 7 | Timed dedup key | Fixed: title added to timed key (overlapping events kept distinct); trade-off documented. |
+| 8 | CodeQL ReDoS (63–68) | Already resolved — no open code-scanning alerts. |
+| 9 | `determinateRssPercent` name | Already done — renamed `determinateSyncPercent`. |
+| 10 | Coalescing-wrapper test | Already done — `runDesktopCalendarPipeline (coalescing)` suite present. |
 
 The pipeline core is well-structured and well-tested; every item below is an edge-case fix with an
 isolated, testable change. The `normalizeAgenda` golden snapshot is the regression anchor — verify
