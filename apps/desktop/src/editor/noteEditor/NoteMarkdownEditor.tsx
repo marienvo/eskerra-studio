@@ -23,7 +23,7 @@ import {
   createNoteMarkdownPasteHandlers,
   normalizeMainEditorPastedMarkdown,
 } from './noteMarkdownEditorPaste';
-import {createNoteMarkdownPointerLinkHandlers} from './noteMarkdownPointerLinks';
+import {createNoteMarkdownPointerLinkHandlers, type DateTokenStrikeToggleHandler} from './noteMarkdownPointerLinks';
 import {foldedRangesPresent} from './noteMarkdownFoldStatus';
 import {foldableRangesPresent} from './nestedFoldAll';
 import type {
@@ -46,6 +46,7 @@ import {
   parseDateTokenSpan,
   type DateTokenValue,
 } from './dateToken/dateToken';
+import {dateTokenAtPosition} from './dateToken/dateTokenClick';
 import type {DateTokenPickerOverlayAnchor} from './dateToken/dateTokenPickerOverlayPosition';
 import type {
   DateTokenPickerOpenHandler,
@@ -179,10 +180,15 @@ const NoteMarkdownEditorImpl = forwardRef<
   const onOpenDateTokenPickerRef = useRef<DateTokenPickerOpenHandler | undefined>(
     undefined,
   );
+  const onToggleDateTokenStrikeRef = useRef<DateTokenStrikeToggleHandler | undefined>(
+    undefined,
+  );
   const remindersRef = useRef<readonly Reminder[]>(props.reminders ?? []);
   remindersRef.current = props.reminders ?? [];
   const removeReminderRef = useRef(props.onRemoveReminder);
   removeReminderRef.current = props.onRemoveReminder;
+  const onEditorErrorRef = useRef(props.onEditorError);
+  onEditorErrorRef.current = props.onEditorError;
   const [dateTokenPicker, setDateTokenPicker] =
     useState<DateTokenPickerOverlayState | null>(null);
   const [tableCellMenuOpen, setTableCellMenuOpen] = useState(false);
@@ -236,6 +242,7 @@ const NoteMarkdownEditorImpl = forwardRef<
     const {onEditorClick, onEditorMiddleClick, onEditorMouseUp} =
       createNoteMarkdownPointerLinkHandlers({
         onOpenDateTokenPicker: () => onOpenDateTokenPickerRef.current,
+        onToggleDateTokenStrike: () => onToggleDateTokenStrikeRef.current,
         onWikiLinkActivate: p => shell.onWikiLinkActivateRef.current(p),
         onMarkdownRelativeLinkActivate: p =>
           shell.onMarkdownRelativeLinkActivateRef.current(p),
@@ -343,6 +350,52 @@ const NoteMarkdownEditorImpl = forwardRef<
     };
     return () => {
       onOpenDateTokenPickerRef.current = undefined;
+    };
+  }, [shell.readOnlyRef, shell.activeNotePathRef]);
+
+  useLayoutEffect(() => {
+    onToggleDateTokenStrikeRef.current = (view, pos) => {
+      if (shell.readOnlyRef.current || !view.state.facet(EditorView.editable)) {
+        return;
+      }
+      const hit = dateTokenAtPosition(view.state, pos, {includeBoundaries: true});
+      if (!hit) {
+        return;
+      }
+      if (hit.value.struck) {
+        view.dispatch({
+          changes: {from: hit.from, to: hit.to, insert: formatDateToken({...hit.value, struck: false})},
+        });
+      } else {
+        void (async () => {
+          const noteUri = shell.activeNotePathRef.current;
+          if (!noteUri) {
+            return;
+          }
+          const result = await requestReminderStrikeViaDaemon(
+            remindersRef.current,
+            noteUri,
+            view.state.doc.toString(),
+            hit.from,
+            hit.value,
+            async (uri, id) => {
+              const remove = removeReminderRef.current;
+              if (!remove) {
+                return 'remove-unavailable';
+              }
+              return remove(uri, id);
+            },
+          );
+          if (result !== 'removed') {
+            onEditorErrorRef.current?.(
+              'Could not mark reminder as done — daemon unavailable.',
+            );
+          }
+        })();
+      }
+    };
+    return () => {
+      onToggleDateTokenStrikeRef.current = undefined;
     };
   }, [shell.readOnlyRef, shell.activeNotePathRef]);
 

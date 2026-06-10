@@ -72,17 +72,7 @@ class DateTokenPillWidget extends WidgetType {
     const span = document.createElement('span');
     if (this.completed) {
       span.className = `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_COMPLETED_CLASS}`;
-      span.setAttribute('data-date-token', '');
-      const emoji = document.createElement('span');
-      emoji.className = 'cm-date-token-pill__emoji';
-      emoji.textContent = '✔️';
-      const label = document.createElement('span');
-      label.className = 'cm-date-token-pill__label';
-      label.textContent = this.label;
-      span.append(emoji, label);
-      return span;
-    }
-    if (this.past) {
+    } else if (this.past) {
       span.className = `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`;
     } else if (this.future) {
       span.className = `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_FUTURE_CLASS}`;
@@ -90,7 +80,17 @@ class DateTokenPillWidget extends WidgetType {
       span.className = CM_DATE_TOKEN_PILL_CLASS;
     }
     span.setAttribute('data-date-token', '');
-    span.textContent = `${this.past ? '☑️' : '🔔'} ${this.label}`;
+    const emojiChar = this.completed ? '✔️' : (this.past ? '☑️' : '🔔');
+    const emoji = document.createElement('span');
+    emoji.className = 'cm-date-token-pill__emoji';
+    emoji.setAttribute('data-date-token-toggle', '');
+    emoji.setAttribute('role', 'button');
+    emoji.setAttribute('aria-label', this.completed ? 'Unmark as done' : 'Mark as done');
+    emoji.textContent = emojiChar;
+    const label = document.createElement('span');
+    label.className = 'cm-date-token-pill__label';
+    label.textContent = this.label;
+    span.append(emoji, label);
     return span;
   }
 

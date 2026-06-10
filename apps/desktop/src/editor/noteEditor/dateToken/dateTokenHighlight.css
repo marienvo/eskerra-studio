@@ -89,3 +89,13 @@
 .note-markdown-editor-host .cm-date-token-pill--completed .cm-date-token-pill__label {
   text-decoration: line-through;
 }
+
+.note-markdown-editor-host .cm-date-token-pill__emoji {
+  opacity: 0.85;
+  border-radius: 2px;
+  transition: opacity 0.1s;
+}
+
+.note-markdown-editor-host .cm-date-token-pill__emoji:hover {
+  opacity: 1;
+}

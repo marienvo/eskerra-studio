@@ -19,11 +19,18 @@ import {
 } from './linkClickUseMousedownPosition';
 import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {wikiLinkPointerActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPosition';
-import {openDateTokenPickerAtClickPosition} from './dateToken/dateTokenClick';
+import {openDateTokenPickerAtClickPosition, dateTokenAtPosition} from './dateToken/dateTokenClick';
 import type {DateTokenPickerOpenHandler} from './dateToken/dateTokenTrigger';
+
+export type DateTokenStrikeToggleHandler = (
+  view: EditorView,
+  pos: number,
+  event: MouseEvent,
+) => void;
 
 export type NoteMarkdownPointerLinkHandlers = {
   onOpenDateTokenPicker?: () => DateTokenPickerOpenHandler | undefined;
+  onToggleDateTokenStrike?: () => DateTokenStrikeToggleHandler | undefined;
   onWikiLinkActivate: (payload: {
     inner: string;
     at: number;
@@ -209,6 +216,17 @@ export function createNoteMarkdownPointerLinkHandlers(
       }
       if (consumeDateTokenPickerOpenedForGesture(view)) {
         return false;
+      }
+      if (
+        event.target instanceof Element
+        && event.target.closest('[data-date-token-toggle]') !== null
+      ) {
+        const toggle = handlers.onToggleDateTokenStrike?.();
+        if (toggle && dateTokenAtPosition(view.state, pos, {includeBoundaries: true})) {
+          toggle(view, pos, event);
+          markDateTokenPickerOpenedForGesture(view);
+          return false;
+        }
       }
       if (
         openDateTokenPickerAtClickPosition(

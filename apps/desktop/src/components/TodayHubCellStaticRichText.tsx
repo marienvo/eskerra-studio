@@ -298,6 +298,14 @@ export type TodayHubDateTokenPillActivatePayload = {
   readonly anchorRect: DateTokenPickerOverlayAnchor;
 };
 
+export type TodayHubDateTokenPillTogglePayload = {
+  readonly uri: string;
+  readonly col: number;
+  readonly from: number;
+  readonly to: number;
+  readonly value: DateTokenValue;
+};
+
 export type TodayHubCellStaticRichTextProps = {
   cellText: string;
   rowUri: string;
@@ -311,6 +319,7 @@ export type TodayHubCellStaticRichTextProps = {
   ) => void;
   onMarkdownExternalLinkOpen: (payload: {href: string; at: number}) => void;
   onDateTokenPillActivate?: (payload: TodayHubDateTokenPillActivatePayload) => void;
+  onDateTokenPillToggle?: (payload: TodayHubDateTokenPillTogglePayload) => void;
   linkSnippetBlockedDomains?: ReadonlyArray<string>;
   onMuteLinkSnippetDomain?: (domain: string) => void;
 };
@@ -329,6 +338,7 @@ export function TodayHubCellStaticRichText({
   onMarkdownRelativeLinkActivate,
   onMarkdownExternalLinkOpen,
   onDateTokenPillActivate,
+  onDateTokenPillToggle,
   col,
   linkSnippetBlockedDomains,
   onMuteLinkSnippetDomain,
@@ -450,17 +460,36 @@ export function TodayHubCellStaticRichText({
                       });
                     }}
                   >
-                    {part.completed && (
-                      <>
-                        <span className="cm-date-token-pill__emoji">✔️</span>
-                        <span className="cm-date-token-pill__label">
-                          {part.label}
-                        </span>
-                      </>
-                    )}
-                    {!part.completed && (
-                      <>{`${part.past ? '☑️' : '🔔'} ${part.label}`}</>
-                    )}
+                    <span
+                      className="cm-date-token-pill__emoji"
+                      data-date-token-toggle=""
+                      role="button"
+                      aria-label={part.completed ? 'Unmark as done' : 'Mark as done'}
+                      onPointerDown={e => {
+                        if (e.button !== 0 || !onDateTokenPillToggle) {
+                          return;
+                        }
+                        const tokenText = cellText.slice(part.from, part.to);
+                        const value = parseDateTokenSpan(tokenText);
+                        if (!value) {
+                          return;
+                        }
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onDateTokenPillToggle({
+                          uri: rowUri,
+                          col,
+                          from: part.from,
+                          to: part.to,
+                          value,
+                        });
+                      }}
+                    >
+                      {part.completed ? '✔️' : part.past ? '☑️' : '🔔'}
+                    </span>
+                    <span className="cm-date-token-pill__label">
+                      {part.label}
+                    </span>
                   </span>
                 ) : (
                   <Fragment key={`seg-${pi}`}>
