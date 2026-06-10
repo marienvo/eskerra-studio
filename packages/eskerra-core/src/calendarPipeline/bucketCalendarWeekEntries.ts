@@ -9,7 +9,6 @@
 
 import type {TodayHubStartDay} from '../todayHub/parseTodayHubFrontmatter';
 import {formatTodayHubMondayStem, weekStartForDate} from '../todayHub/todayHubMondays';
-import {monthLong} from './agenda/agendaShared';
 import type {AgendaBullet} from './agenda/parseAgendaBullets';
 import {calendarItemKey} from './cellMerge/calendarItemKey';
 import type {CalendarItem} from './cellMerge/types';
@@ -22,10 +21,6 @@ export type BucketCalendarWeekEntriesInput = {
   /** Relative path/filename of the agenda source, used for the timed-bullet `[🗓️](<...>)` prefix. */
   mdAgenda?: string | null;
 };
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0');
-}
 
 function localCalendarDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -43,6 +38,15 @@ function buildAgendaIconPrefix(mdAgenda: string | null | undefined): string | nu
   return `[🗓️](<${withExt}>)`;
 }
 
+/** Strip a leading `HH:MM ` from body text when a time string is provided. */
+function stripLeadingTime(body: string, time: string | null): string {
+  if (time == null) {
+    return body;
+  }
+  const prefix = `${time} `;
+  return body.startsWith(prefix) ? body.slice(prefix.length) : body;
+}
+
 /**
  * Returns a map from week-start row stem (`YYYY-MM-DD`) to the structured items for that week.
  * Deterministic for fixed inputs.
@@ -53,55 +57,45 @@ export function bucketCalendarWeekEntries(
   const {agendaBullets, icsEvents, start} = input;
   const iconPrefix = buildAgendaIconPrefix(input.mdAgenda);
 
-  // Month heading per month index, taken from the first agenda bullet that carries one.
-  const monthHeadingByMonthIdx = new Map<number, string>();
-  for (const bullet of agendaBullets) {
-    const heading = bullet.monthHeading.trim();
-    if (heading.length > 0 && !monthHeadingByMonthIdx.has(bullet.date.getMonth())) {
-      monthHeadingByMonthIdx.set(bullet.date.getMonth(), heading);
-    }
-  }
-
   let order = 0;
   const items: CalendarItem[] = [];
 
   // Agenda first so it wins identity ties against calendar events.
   const agendaKeys = new Set<string>();
   for (const bullet of agendaBullets) {
-    const monthIdx = bullet.date.getMonth();
-    const body =
-      bullet.timed && iconPrefix != null ? `${iconPrefix} ${bullet.body}` : bullet.body;
     const date = localCalendarDay(bullet.date);
+    // Strip the leading `HH:MM ` from timed bullets — the token carries the time.
+    const titleBody = bullet.timed ? stripLeadingTime(bullet.body, bullet.time) : bullet.body;
+    const body = bullet.timed && iconPrefix != null ? `${iconPrefix} ${titleBody}` : titleBody;
     items.push({
       date,
       timed: bullet.timed,
       timeMinutes: bullet.timeMinutes,
       body,
-      monthIdx,
-      monthHeading: monthHeadingByMonthIdx.get(monthIdx) ?? monthLong(date),
       source: 'agenda',
       instant: null,
       order: order++,
     });
-    agendaKeys.add(calendarItemKey({date, timed: bullet.timed, timeMinutes: bullet.timeMinutes, body}));
+    agendaKeys.add(calendarItemKey({
+      date,
+      timed: bullet.timed,
+      timeMinutes: bullet.timeMinutes,
+      body,
+    }));
   }
 
   for (const event of icsEvents) {
     const day = localCalendarDay(event.start);
     const minutes = event.start.getHours() * 60 + event.start.getMinutes();
-    const body = `${pad2(event.start.getHours())}:${pad2(event.start.getMinutes())} ${event.summary}`;
-    const key = calendarItemKey({date: day, timed: true, timeMinutes: minutes, body});
+    const key = calendarItemKey({date: day, timed: true, timeMinutes: minutes, body: event.summary});
     if (agendaKeys.has(key)) {
       continue;
     }
-    const monthIdx = day.getMonth();
     items.push({
       date: day,
       timed: true,
       timeMinutes: minutes,
-      body,
-      monthIdx,
-      monthHeading: monthHeadingByMonthIdx.get(monthIdx) ?? monthLong(day),
+      body: event.summary,
       source: 'calendar',
       instant: new Date(event.start.getTime()),
       order: order++,

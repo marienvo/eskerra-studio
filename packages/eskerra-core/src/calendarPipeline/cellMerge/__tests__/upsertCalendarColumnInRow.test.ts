@@ -12,8 +12,6 @@ function item(over: Partial<CalendarItem> & {date: Date; body: string}): Calenda
   return {
     timed: false,
     timeMinutes: null,
-    monthIdx: over.date.getMonth(),
-    monthHeading: 'January',
     source: 'agenda',
     instant: null,
     order: 0,
@@ -34,13 +32,11 @@ describe('upsertCalendarColumnInRow', () => {
       now: NOW,
     });
     expect(res.kind).toBe('write');
-    if (res.kind !== 'write') {
-      throw new Error('expected write');
-    }
+    if (res.kind !== 'write') throw new Error('expected write');
     const cols = splitTodayRowIntoColumns(res.rowBody, 3);
     expect(cols[0]).toBe('');
     expect(cols[1]).toBe('');
-    expect(cols[2]).toBe(['**January**', '**Tue 20:** Standup'].join('\n'));
+    expect(cols[2]).toBe('@2026-01-20 Standup');
   });
 
   it('keeps other columns byte-identical', () => {
@@ -53,13 +49,11 @@ describe('upsertCalendarColumnInRow', () => {
       weekStart: WEEK_START,
       now: NOW,
     });
-    if (res.kind !== 'write') {
-      throw new Error('expected write');
-    }
+    if (res.kind !== 'write') throw new Error('expected write');
     const cols = splitTodayRowIntoColumns(res.rowBody, 3);
     expect(cols[0]).toBe('week note');
     expect(cols[1]).toBe('');
-    expect(cols[2]).toContain('**Tue 20:** Standup');
+    expect(cols[2]).toContain('@2026-01-20 Standup');
   });
 
   it('returns noop when nothing changes (idempotent)', () => {
@@ -71,9 +65,7 @@ describe('upsertCalendarColumnInRow', () => {
       weekStart: WEEK_START,
       now: NOW,
     });
-    if (first.kind !== 'write') {
-      throw new Error('expected write');
-    }
+    if (first.kind !== 'write') throw new Error('expected write');
     const second = upsertCalendarColumnInRow({
       rowBody: first.rowBody,
       columnCount: 3,
@@ -86,7 +78,6 @@ describe('upsertCalendarColumnInRow', () => {
   });
 
   it('fails closed on an ambiguous column split (wrong delimiter count)', () => {
-    // 3 columns expected (2 delimiters) but the body has only 1 delimiter.
     const rowBody = ['col0', 'calendar-ish'].join(DELIM);
     const res = upsertCalendarColumnInRow({
       rowBody,
@@ -97,9 +88,7 @@ describe('upsertCalendarColumnInRow', () => {
       now: NOW,
     });
     expect(res.kind).toBe('skip');
-    if (res.kind === 'skip') {
-      expect(res.reason).toBe('ambiguous-column-split');
-    }
+    if (res.kind === 'skip') expect(res.reason).toBe('ambiguous-column-split');
   });
 
   it('fails closed when the Calendar index is out of range', () => {
@@ -124,11 +113,9 @@ describe('upsertCalendarColumnInRow', () => {
       weekStart: WEEK_START,
       now: NOW,
     });
-    if (res.kind !== 'write') {
-      throw new Error('expected write');
-    }
+    if (res.kind !== 'write') throw new Error('expected write');
     const cols = splitTodayRowIntoColumns(res.rowBody, 3);
     expect(cols[2]).toContain('- my own note');
-    expect(cols[2]).toContain('**Tue 20:** Standup');
+    expect(cols[2]).toContain('@2026-01-20 Standup');
   });
 });

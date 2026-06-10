@@ -140,6 +140,10 @@ function unescapeAmpersandsInSerializedUrl(markdown: string): string {
   return markdown.replace(/\\&/g, '&');
 }
 
+function unescapeNonEntityAmpersandsInSerializedText(markdown: string): string {
+  return markdown.replace(/\\&(?!#\d+;|#[xX][\dA-Fa-f]+;|[A-Za-z][A-Za-z0-9]+;)/g, '&');
+}
+
 const processorCache = new Map<string, ReturnType<typeof remark>>();
 
 function createMarkdownProcessor(resolved: ResolvedCleanNoteOptions): ReturnType<typeof remark> {
@@ -162,6 +166,11 @@ function createMarkdownProcessor(resolved: ResolvedCleanNoteOptions): ReturnType
       setext: false,
       listItemIndent: resolved.listItemIndent,
       handlers: {
+        text(node: unknown, parent: unknown, state: unknown, info: unknown): string {
+          return unescapeNonEntityAmpersandsInSerializedText(
+            defaultHandlers.text(node as never, parent as never, state as never, info as never),
+          );
+        },
         link(node: unknown, parent: unknown, state: unknown, info: unknown): string {
           const n = node as {children?: unknown[]; title?: unknown; url?: unknown};
           const text = getSingleTextLinkValue(n);

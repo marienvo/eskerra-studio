@@ -46,6 +46,17 @@
   );
 }
 
+/* Future reminders: warm amber/yellow. */
+.note-markdown-editor-host .cm-date-token-pill--future {
+  color: color-mix(in srgb, #d97706 90%, var(--color-text));
+  background-color: color-mix(in srgb, #d97706 14%, transparent);
+  border-color: color-mix(in srgb, #d97706 32%, transparent);
+}
+
+.note-markdown-editor-host .cm-date-token-pill--future:hover {
+  background-color: color-mix(in srgb, #d97706 24%, transparent);
+}
+
 /* Past reminders: muted blue-grey instead of the accent colour. */
 .note-markdown-editor-host .cm-date-token-pill--past {
   color: color-mix(in srgb, #64748b 80%, var(--color-text));
@@ -77,4 +88,14 @@
 
 .note-markdown-editor-host .cm-date-token-pill--completed .cm-date-token-pill__label {
   text-decoration: line-through;
+}
+
+.note-markdown-editor-host .cm-date-token-pill__emoji {
+  opacity: 0.85;
+  border-radius: 2px;
+  transition: opacity 0.1s;
+}
+
+.note-markdown-editor-host .cm-date-token-pill__emoji:hover {
+  opacity: 1;
 }

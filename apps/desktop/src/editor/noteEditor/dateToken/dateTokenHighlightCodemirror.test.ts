@@ -41,7 +41,14 @@ function collectIntervals(
       to,
       kind: widget ? 'replace' : 'mark',
       class: spec.class,
-      pillText: widget ? (widget.toDOM().textContent ?? undefined) : undefined,
+      pillText: widget
+        ? (() => {
+          const dom = widget.toDOM();
+          const emoji = dom.querySelector('.cm-date-token-pill__emoji')?.textContent ?? '';
+          const label = dom.querySelector('.cm-date-token-pill__label')?.textContent ?? '';
+          return emoji || label ? `${emoji} ${label}` : undefined;
+        })()
+        : undefined,
     });
   });
   return out;
@@ -167,7 +174,7 @@ describe('dateTokenHighlightCodemirror', () => {
     expect(dom).not.toBeNull();
     const pill = dom as unknown as HTMLElement;
     expect(pill.classList.contains(CM_DATE_TOKEN_PILL_COMPLETED_CLASS)).toBe(true);
-    expect(pill.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('✔️');
+    expect(pill.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('🔕');
     expect(pill.querySelector('.cm-date-token-pill__label')?.textContent).toBe(
       'Tomorrow at 09:30',
     );
@@ -190,7 +197,8 @@ describe('dateTokenHighlightCodemirror', () => {
 
     expect(dom).not.toBeNull();
     const pill = dom as unknown as HTMLElement;
-    expect(pill.textContent).toBe('☑️ 5 Jun');
+    expect(pill.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('☑️');
+    expect(pill.querySelector('.cm-date-token-pill__label')?.textContent).toBe('5 Jun');
     expect(pill.classList.contains('cm-date-token-pill--past')).toBe(true);
   });
 
@@ -311,14 +319,16 @@ describe('dateTokenHighlightCodemirror', () => {
     const pill = () =>
       view!.dom.querySelector(`.${CM_DATE_TOKEN_PILL_CLASS}`) as HTMLElement | null;
 
-    expect(pill()?.textContent).toBe('🔔 Today at 12:00');
+    expect(pill()?.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('🔔');
+    expect(pill()?.querySelector('.cm-date-token-pill__label')?.textContent).toBe('Today at 12:00');
     expect(pill()?.classList.contains(CM_DATE_TOKEN_PILL_PAST_CLASS)).toBe(false);
 
     vi.setSystemTime(new Date(2026, 5, 6, 12, 0, 1));
     await vi.advanceTimersByTimeAsync(30_000);
     await Promise.resolve();
 
-    expect(pill()?.textContent).toBe('☑️ Today at 12:00');
+    expect(pill()?.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('☑️');
+    expect(pill()?.querySelector('.cm-date-token-pill__label')?.textContent).toBe('Today at 12:00');
     expect(pill()?.classList.contains(CM_DATE_TOKEN_PILL_PAST_CLASS)).toBe(true);
   });
 

@@ -272,14 +272,14 @@ export function parseDateToken(text: string): DateTokenValue | null {
   return {year, month, day, hour, minute};
 }
 
-const PRETTY_WEEKDAYS = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
+const SHORT_WEEKDAYS = [
+  'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
 ] as const;
 
 const PRETTY_MONTHS = [
@@ -351,7 +351,7 @@ export function formatDateTokenPretty(value: DateTokenValue, now: Date): string 
     datePart = 'Tomorrow';
   } else if (diffDays >= 2 && diffDays <= 13) {
     const weekDiff = weekDifference(targetMidnight, todayMidnight);
-    const weekday = PRETTY_WEEKDAYS[targetMidnight.getDay()]!;
+    const weekday = SHORT_WEEKDAYS[targetMidnight.getDay()]!;
     if (weekDiff <= 0) {
       datePart = weekday;
     } else if (weekDiff === 1) {
@@ -364,6 +364,14 @@ export function formatDateTokenPretty(value: DateTokenValue, now: Date): string 
   }
 
   return `${datePart}${time}`;
+}
+
+/** Pill glyph for a reminder by state: completed (🔕), past (☑️), or upcoming/future (🔔). */
+export function dateTokenPillEmoji(opts: {past: boolean; completed: boolean}): string {
+  if (opts.completed) {
+    return '🔕';
+  }
+  return opts.past ? '☑️' : '🔔';
 }
 
 /**
@@ -380,4 +388,14 @@ export function isDateTokenInPast(value: DateTokenValue, now: Date): boolean {
   }
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return localMidnight(value).getTime() < todayMidnight.getTime();
+}
+
+/**
+ * Whether the token's local date is strictly after today (day > today). A timed
+ * token for a future date is always "future" regardless of its time component.
+ * Complement of isPast for the "tomorrow and beyond" bucket; today itself is neither.
+ */
+export function isDateTokenFuture(value: DateTokenValue, now: Date): boolean {
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return localMidnight(value).getTime() > todayMidnight.getTime();
 }

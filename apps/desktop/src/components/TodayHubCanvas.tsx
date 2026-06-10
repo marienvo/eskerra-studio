@@ -70,6 +70,7 @@ import {formatDateToken, type DateTokenValue} from '../editor/noteEditor/dateTok
 import {
   TodayHubCellStaticRichText,
   type TodayHubDateTokenPillActivatePayload,
+  type TodayHubDateTokenPillTogglePayload,
 } from './TodayHubCellStaticRichText';
 import {TodayWeekProgressBar} from './TodayWeekProgressBar';
 
@@ -402,11 +403,13 @@ export function TodayHubCanvas({
   const hubDateTokenPickerRef = useRef(hubDateTokenPicker);
   const remindersRef = useRef(reminders);
   const onRemoveReminderRef = useRef(onRemoveReminder);
+  const onEditorErrorRef = useRef(onEditorError);
   useLayoutEffect(() => {
     hubDateTokenPickerRef.current = hubDateTokenPicker;
     remindersRef.current = reminders;
     onRemoveReminderRef.current = onRemoveReminder;
-  }, [hubDateTokenPicker, reminders, onRemoveReminder]);
+    onEditorErrorRef.current = onEditorError;
+  }, [hubDateTokenPicker, reminders, onRemoveReminder, onEditorError]);
 
   const debounceTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{uri: string; columnCount: number} | null>(null);
@@ -938,6 +941,36 @@ export function TodayHubCanvas({
     );
   }, [columnCount]);
 
+  const hubDateTokenPillToggle = useCallback(
+    async ({uri, col, from, to, value}: TodayHubDateTokenPillTogglePayload) => {
+      if (value.struck) {
+        applyTodayHubCellDateTokenReplace(uri, col, from, to, formatDateToken({...value, struck: false}));
+        return;
+      }
+      const key = normUri(uri);
+      const sections =
+        localRowSectionsRef.current[key]
+        ?? splitTodayRowIntoColumns(
+          inboxContentByUriRef.current[key] ?? '',
+          columnCount,
+        );
+      const rowText = mergeTodayRowColumns(sections);
+      const rowOffset = todayHubColumnOffsetToRowOffset(sections, col, from);
+      const result = await requestReminderStrikeViaDaemon(
+        remindersRef.current,
+        uri,
+        rowText,
+        rowOffset,
+        value,
+        onRemoveReminderRef.current,
+      );
+      if (result !== 'removed') {
+        onEditorErrorRef.current?.('Could not mark reminder as done — daemon unavailable.');
+      }
+    },
+    [applyTodayHubCellDateTokenReplace, columnCount],
+  );
+
   const hubDateTokenConfirm = useCallback(
     (value: DateTokenValue) => {
       const picker = hubDateTokenPickerRef.current;
@@ -1164,6 +1197,7 @@ export function TodayHubCanvas({
                           }
                           onMarkdownExternalLinkOpen={onMarkdownExternalLinkOpen}
                           onDateTokenPillActivate={setHubDateTokenPicker}
+                          onDateTokenPillToggle={hubDateTokenPillToggle}
                           linkSnippetBlockedDomains={linkSnippetBlockedDomains}
                           onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
                         />

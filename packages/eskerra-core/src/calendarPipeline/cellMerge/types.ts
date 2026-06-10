@@ -17,12 +17,8 @@ export type CalendarItem = {
   timed: boolean;
   /** Minutes since midnight when {@link timed}, else `null`. */
   timeMinutes: number | null;
-  /** Rendered body text placed after `**{Wd} {day}:** ` (already includes any time/icon prefix). */
+  /** Display text placed after the `@date_time` token (title, icon link, etc.). */
   body: string;
-  /** `date.getMonth()`, for month-heading grouping. */
-  monthIdx: number;
-  /** `**{monthHeading}**` text (emoji + month, or plain month long name). */
-  monthHeading: string;
   source: CalendarItemSource;
   /** Precise start instant (ICS only); used for strict-future scope. `null` for agenda items. */
   instant: Date | null;
@@ -32,15 +28,14 @@ export type CalendarItem = {
 
 /** A classified line of an existing Calendar cell (read-only; used to locate keys + insert points). */
 export type CalendarCellLine =
-  | {kind: 'monthHeading'; raw: string; monthIdx: number}
   | {
       kind: 'pipelineItem';
       raw: string;
-      /** Resolved calendar day (from the row's week-start + the line's day-of-month). */
+      /** Resolved calendar day from the embedded `@date` token. */
       date: Date;
       timed: boolean;
       timeMinutes: number | null;
-      /** Body text after `**{Wd} {day}:** `. */
+      /** Display text after the `@date_time` token. */
       body: string;
     }
   | {kind: 'freeform'; raw: string};

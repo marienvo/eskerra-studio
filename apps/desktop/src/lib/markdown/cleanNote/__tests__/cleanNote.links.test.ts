@@ -43,4 +43,30 @@ describe('cleanNoteMarkdownBody links', () => {
     expect(output).toContain('[ref]: https://example.com/docs?alpha=1&beta=2');
     expect(output).not.toContain('\\&');
   });
+
+  it('does not escape ordinary ampersands in text', () => {
+    const input = [
+      '# A&B',
+      '',
+      'AT&T and R&D',
+      '',
+      '- Fish & chips',
+      '',
+      '> Salt & pepper',
+      '',
+      '| Left | Right |',
+      '| ---- | ----- |',
+      '| A & B | C & D |',
+      '',
+      'Literal \\&copy; stays literal',
+    ].join('\n');
+
+    const output = clean(input, '/tmp/TextAmpersands.md');
+    expect(output).toContain('# A&B');
+    expect(output).toContain('AT&T and R&D');
+    expect(output).toContain('- Fish & chips');
+    expect(output).toContain('> Salt & pepper');
+    expect(output).toContain('| A & B | C & D |');
+    expect(output).toContain('Literal \\&copy; stays literal');
+  });
 });

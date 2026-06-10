@@ -51,7 +51,7 @@ function countSectionDelimiters(rowBody: string): number {
 export function upsertCalendarColumnInRow(
   input: UpsertCalendarColumnInRowInput,
 ): UpsertCalendarColumnInRowResult {
-  const {rowBody, columnCount, calendarColumnIndex, items, weekStart, now} = input;
+  const {rowBody, columnCount, calendarColumnIndex, items, now} = input;
 
   if (calendarColumnIndex < 0 || calendarColumnIndex >= columnCount) {
     return {kind: 'skip', reason: 'calendar-index-out-of-range'};
@@ -67,8 +67,8 @@ export function upsertCalendarColumnInRow(
   const mergedSegment = mergeCalendarCellContent(
     sections[calendarColumnIndex] ?? '',
     items,
-    weekStart,
     now,
+    input.weekStart,
   );
   sections[calendarColumnIndex] = mergedSegment;
 

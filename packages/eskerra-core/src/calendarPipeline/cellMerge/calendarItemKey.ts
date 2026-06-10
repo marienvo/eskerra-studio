@@ -2,23 +2,15 @@
  * Identity keys for Calendar items, shared between bucketing (agenda vs ICS dedup) and cell merge
  * (incoming vs existing dedup). See `specs/architecture/calendar-ics-agenda-pipeline.md` (Part 3b).
  *
- * - Timed:   `"{YYYY-MM-DD}|{HH:MM}|{normalizedTitle}"` — day + clock time + title, so two distinct
- *            events at the same minute (overlapping meetings) stay distinct instead of colliding.
- * - Untimed: `"{YYYY-MM-DD}|{normalizedTitle}"`.
+ * - Timed:   `@YYYY-MM-DD_HHMM` — day + clock time; title is excluded so the user can freely edit
+ *            the display text without causing a re-insertion.
+ * - Untimed: `@YYYY-MM-DD|{normalizedTitle}` — multiple untimed items on the same day stay distinct.
+ *
+ * Trade-off: two distinct timed events at the exact same minute share a token key and are treated
+ * as one.
  */
 import {collapseAsciiWhitespaceRunsToSpace, isAsciiWhitespaceCode} from '../../stringScanners';
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
-function localDayKey(date: Date): string {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-}
-
-function timeKey(timeMinutes: number): string {
-  return `${pad2(Math.floor(timeMinutes / 60))}:${pad2(timeMinutes % 60)}`;
-}
+import {formatCalendarToken} from './calendarDateToken';
 
 const AGENDA_ICON_PREFIX = '[🗓️](<';
 const AGENDA_ICON_SUFFIX = '>)';
@@ -80,7 +72,6 @@ function stripLeadingTime(s: string): string {
 /**
  * Normalizes a Calendar item body for untimed dedup: strip a leading `HH:MM`, drop the agenda
  * `[🗓️](<...>)` icon link, reduce wiki links to their visible text, collapse whitespace, lowercase.
- * Intentionally lighter than full emoji/punctuation stripping so distinct titles stay distinct.
  */
 export function normalizeCalendarTitle(body: string): string {
   const s = collapseAsciiWhitespaceRunsToSpace(expandWikiLinks(stripAgendaIconLinks(body))).trim();
@@ -91,13 +82,61 @@ export type CalendarItemKeyInput = {
   date: Date;
   timed: boolean;
   timeMinutes: number | null;
+};
+
+export type CalendarItemFullKeyInput = CalendarItemKeyInput & {
   body: string;
 };
 
-/** Stable identity for a calendar item; equal keys are treated as the same item across runs. */
-export function calendarItemKey(item: CalendarItemKeyInput): string {
-  if (item.timed && item.timeMinutes != null) {
-    return `${localDayKey(item.date)}|${timeKey(item.timeMinutes)}|${normalizeCalendarTitle(item.body)}`;
+/** `@YYYY-MM-DD` or `@YYYY-MM-DD_HHMM` — used for timed dedup and title-edit tolerance. */
+export function calendarItemTokenKey(item: CalendarItemKeyInput): string {
+  return formatCalendarToken(item.date, item.timed ? item.timeMinutes : null);
+}
+
+/**
+ * Merge/bucket identity: timed items use the token only; untimed items include normalized title so
+ * multiple same-day events stay distinct.
+ */
+export function calendarItemFullKey(item: CalendarItemFullKeyInput): string {
+  const token = calendarItemTokenKey(item);
+  if (item.timed) {
+    return token;
   }
-  return `${localDayKey(item.date)}|${normalizeCalendarTitle(item.body)}`;
+  return `${token}|${normalizeCalendarTitle(item.body)}`;
+}
+
+/** Stable identity for bucketing and exact incoming dedup; equal keys are the same item across runs. */
+export function calendarItemKey(item: CalendarItemFullKeyInput): string {
+  return calendarItemFullKey(item);
+}
+
+/** Keys seeded from an existing pipeline line for merge dedup. */
+export function calendarItemExistingDedupKeys(item: CalendarItemFullKeyInput): string[] {
+  if (item.timed) {
+    return [calendarItemTokenKey(item)];
+  }
+  return [calendarItemFullKey(item)];
+}
+
+/** Returns true when an incoming item should be skipped against the merge `seen` set. */
+export function calendarItemIncomingIsDuplicate(
+  item: CalendarItemFullKeyInput,
+  seen: ReadonlySet<string>,
+): boolean {
+  if (item.timed) {
+    return seen.has(calendarItemTokenKey(item));
+  }
+  return seen.has(calendarItemFullKey(item));
+}
+
+/** Records keys for a newly accepted incoming item in the merge `seen` set. */
+export function calendarItemRecordIncomingDedup(
+  item: CalendarItemFullKeyInput,
+  seen: Set<string>,
+): void {
+  if (item.timed) {
+    seen.add(calendarItemTokenKey(item));
+    return;
+  }
+  seen.add(calendarItemFullKey(item));
 }

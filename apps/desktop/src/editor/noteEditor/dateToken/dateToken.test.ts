@@ -144,13 +144,13 @@ describe('formatDateTokenPretty', () => {
   test('this-week vs next-week weekday', () => {
     // 2026-06-08 (Mon) starts the following Monday-based week.
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 8}, now)).toBe(
-      'Next Monday',
+      'Next Mon',
     );
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
-      'Next Thursday',
+      'Next Thu',
     );
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 14}, now)).toBe(
-      'Next Sunday',
+      'Next Sun',
     );
   });
 
@@ -187,9 +187,9 @@ describe('formatDateTokenPretty', () => {
         {year: 2026, month: 6, day: 11, hour: 15, minute: 0},
         now,
       ),
-    ).toBe('Next Thursday at 15:00');
+    ).toBe('Next Thu at 15:00');
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
-      'Next Thursday',
+      'Next Thu',
     );
   });
 });

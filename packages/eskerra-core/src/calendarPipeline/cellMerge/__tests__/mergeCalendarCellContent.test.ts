@@ -2,15 +2,13 @@ import {describe, expect, it} from 'vitest';
 import {mergeCalendarCellContent} from '../mergeCalendarCellContent';
 import type {CalendarItem} from '../types';
 
-const WEEK_START = new Date(2026, 0, 19); // Mon Jan 19 2026 (week 19..25)
 const NOW = new Date(2026, 0, 19, 12, 0); // Mon noon
+const WEEK_START = new Date(2026, 0, 19); // Mon Jan 19 2026
 
 function item(over: Partial<CalendarItem> & {date: Date; body: string}): CalendarItem {
   return {
     timed: false,
     timeMinutes: null,
-    monthIdx: over.date.getMonth(),
-    monthHeading: 'January',
     source: 'agenda',
     instant: null,
     order: 0,
@@ -22,89 +20,114 @@ function item(over: Partial<CalendarItem> & {date: Date; body: string}): Calenda
 function expectExistingSubsetOfOutput(existing: string, output: string): void {
   const outLines = new Set(output.split('\n'));
   for (const line of existing.split('\n')) {
-    if (line.trim().length === 0) {
-      continue;
-    }
+    if (line.trim().length === 0) continue;
     expect(outLines.has(line)).toBe(true);
   }
 }
 
 describe('mergeCalendarCellContent', () => {
-  it('fills an empty cell with sorted lines + month heading', () => {
+  it('fills an empty cell with sorted @token lines, no month headings', () => {
     const out = mergeCalendarCellContent(
       '',
       [
         item({date: new Date(2026, 0, 21), body: 'B'}),
         item({date: new Date(2026, 0, 20), body: 'A'}),
       ],
-      WEEK_START,
       NOW,
     );
-    expect(out).toBe(['**January**', '**Tue 20:** A', '**Wed 21:** B'].join('\n'));
+    expect(out).toBe(['@2026-01-20 A', '@2026-01-21 B'].join('\n'));
   });
 
-  it('does not duplicate an item whose key already exists (byte-identical)', () => {
-    const existing = ['**January**', '**Tue 20:** 🎂 Birthday'].join('\n');
+  it('inserts two untimed items on the same day when titles differ', () => {
+    const out = mergeCalendarCellContent(
+      '',
+      [
+        item({date: new Date(2026, 0, 20), body: 'Birthday'}),
+        item({date: new Date(2026, 0, 20), body: 'Dentist'}),
+      ],
+      NOW,
+    );
+    expect(out).toBe(['@2026-01-20 Birthday', '@2026-01-20 Dentist'].join('\n'));
+  });
+
+  it('does not duplicate an untimed item whose full key already exists', () => {
+    const existing = '@2026-01-20 🎂 Birthday';
     const out = mergeCalendarCellContent(
       existing,
       [item({date: new Date(2026, 0, 20), body: '🎂 Birthday'})],
-      WEEK_START,
       NOW,
     );
     expect(out).toBe(existing);
   });
 
+  it('inserts a different untimed item on the same day as an existing line', () => {
+    const existing = '@2026-01-20 🎂 Birthday';
+    const out = mergeCalendarCellContent(
+      existing,
+      [item({date: new Date(2026, 0, 20), body: 'Dentist'})],
+      NOW,
+    );
+    expect(out.split('\n').sort()).toEqual(
+      ['@2026-01-20 Dentist', '@2026-01-20 🎂 Birthday'].sort(),
+    );
+    expectExistingSubsetOfOutput(existing, out);
+  });
+
+  it('deduplicates timed items by token when the user edited the title', () => {
+    const existing = '@2026-01-20_0900 Edited title';
+    const out = mergeCalendarCellContent(
+      existing,
+      [item({date: new Date(2026, 0, 20), body: 'Standup', timed: true, timeMinutes: 540})],
+      NOW,
+    );
+    expect(out).toBe(existing);
+  });
+
+  it('does not re-insert an item whose existing line is struck/completed (@~~…~~)', () => {
+    const existing = '@~~2026-01-20_0930~~ Stand-up B2B';
+    const out = mergeCalendarCellContent(
+      existing,
+      [item({date: new Date(2026, 0, 20), body: 'Stand-up B2B', timed: true, timeMinutes: 570})],
+      NOW,
+    );
+    // The struck line is recognized as the same ID — no duplicate appended.
+    expect(out).toBe(existing);
+  });
+
   it('preserves a manual freeform line while inserting a new item', () => {
-    const existing = ['**January**', '**Tue 20:** 🎂 Birthday', '- bellen met X'].join('\n');
+    const existing = ['@2026-01-20 🎂 Birthday', '- bellen met X'].join('\n');
     const out = mergeCalendarCellContent(
       existing,
       [item({date: new Date(2026, 0, 21), body: 'New item'})],
-      WEEK_START,
       NOW,
     );
     expect(out).toContain('- bellen met X');
-    expect(out).toContain('**Wed 21:** New item');
+    expect(out).toContain('@2026-01-21 New item');
     expectExistingSubsetOfOutput(existing, out);
   });
 
-  it('does not add a second month heading when the month is already present', () => {
-    const existing = ['**☔️ April**', '**Mon 27:** Existing'].join('\n');
-    const aprilWeek = new Date(2026, 3, 27); // Mon Apr 27
+  it('preserves legacy **Wd d:** lines while inserting new items on other dates', () => {
+    const existing = ['**January**', '**Tue 20:** 09:00 Standup'].join('\n');
     const out = mergeCalendarCellContent(
       existing,
-      [item({date: new Date(2026, 3, 28), body: 'New', monthIdx: 3, monthHeading: '☔️ April'})],
-      aprilWeek,
-      new Date(2026, 3, 27, 12, 0),
-    );
-    expect(out.match(/April/g)?.length).toBe(1);
-    expect(out).toContain('**Tue 28:** New');
-  });
-
-  it('inserts an earlier-month heading before an existing later-month heading (cross-month week)', () => {
-    // Week of Jan 26 2026 spans Jan 26..Feb 1. Cell first filled with a February-only event, then a
-    // January item arrives on a later run: the January block must precede the February block.
-    const crossWeek = new Date(2026, 0, 26); // Mon Jan 26
-    const crossNow = new Date(2026, 0, 26, 12, 0);
-    const existing = ['**February**', '**Sun 1:** Feb event'].join('\n');
-    const out = mergeCalendarCellContent(
-      existing,
-      [item({date: new Date(2026, 0, 28), body: 'Jan event', monthIdx: 0, monthHeading: 'January'})],
-      crossWeek,
-      crossNow,
-    );
-    expect(out).toBe(
-      ['**January**', '**Wed 28:** Jan event', '**February**', '**Sun 1:** Feb event'].join('\n'),
+      [item({date: new Date(2026, 0, 22), body: 'New'})],
+      NOW,
+      WEEK_START,
     );
     expectExistingSubsetOfOutput(existing, out);
-    // Stable on a second run.
-    expect(
-      mergeCalendarCellContent(
-        out,
-        [item({date: new Date(2026, 0, 28), body: 'Jan event', monthIdx: 0, monthHeading: 'January'})],
-        crossWeek,
-        crossNow,
-      ),
-    ).toBe(out);
+    expect(out).toContain('@2026-01-22 New');
+  });
+
+  it('does not duplicate an incoming item that matches a legacy **Wd d:** line', () => {
+    const existing = '**Tue 20:** 09:00 Standup';
+    const out = mergeCalendarCellContent(
+      existing,
+      [item({date: new Date(2026, 0, 20), body: '09:00 Standup', timed: true, timeMinutes: 540})],
+      NOW,
+      WEEK_START,
+    );
+    expect(out).toBe(existing);
+    expect(out).not.toContain('@2026-01-20_0900');
   });
 
   it('is idempotent on a second merge with identical input', () => {
@@ -112,69 +135,53 @@ describe('mergeCalendarCellContent', () => {
       item({date: new Date(2026, 0, 20), body: 'A'}),
       item({date: new Date(2026, 0, 21), body: 'B'}),
     ];
-    const once = mergeCalendarCellContent('', incoming, WEEK_START, NOW);
-    const twice = mergeCalendarCellContent(once, incoming, WEEK_START, NOW);
+    const once = mergeCalendarCellContent('', incoming, NOW);
+    const twice = mergeCalendarCellContent(once, incoming, NOW);
     expect(twice).toBe(once);
   });
 
-  it('keeps two distinct timed events at the same minute (title is part of the key)', () => {
-    const existing = ['**January**', '**Tue 20:** 09:00 Standup'].join('\n');
+  it('two events at the same timed token are deduplicated (one key per minute)', () => {
+    const existing = '@2026-01-20_0900 Standup';
     const out = mergeCalendarCellContent(
       existing,
-      [item({date: new Date(2026, 0, 20), body: '09:00 Planning', timed: true, timeMinutes: 540})],
-      WEEK_START,
+      [item({date: new Date(2026, 0, 20), body: 'Planning', timed: true, timeMinutes: 540})],
       NOW,
     );
-    // Different title at the same minute is a different item — both are kept.
-    expect(out).toContain('**Tue 20:** 09:00 Standup');
-    expect(out).toContain('**Tue 20:** 09:00 Planning');
-  });
-
-  it('re-dedups a timed item whose existing line carries the canonical title verbatim', () => {
-    // Insert-only stability: an unedited canonical timed line is not re-inserted on the next run.
-    const existing = ['**January**', '**Tue 20:** 14:00 X'].join('\n');
-    const out = mergeCalendarCellContent(
-      existing,
-      [item({date: new Date(2026, 0, 20), body: '14:00 X', timed: true, timeMinutes: 840})],
-      WEEK_START,
-      NOW,
-    );
+    // Same minute → same key → no new line
     expect(out).toBe(existing);
   });
 
   it('ignores an out-of-scope incoming item (past ICS timed) without touching existing', () => {
-    const existing = ['**January**', '**Tue 20:** Keep me'].join('\n');
+    const existing = '@2026-01-20 Keep me';
     const out = mergeCalendarCellContent(
       existing,
       [
         item({
           date: new Date(2026, 0, 18),
-          body: '09:00 Past meeting',
+          body: 'Past meeting',
           timed: true,
           timeMinutes: 540,
           source: 'calendar',
           instant: new Date(2026, 0, 18, 9, 0),
         }),
       ],
-      new Date(2026, 0, 12), // week of Jan 12 (contains Jan 18)
       NOW,
     );
     expect(out).toBe(existing);
   });
 
   it('does not reorder existing lines (existing ⊆ output, order preserved)', () => {
-    const existing = ['**Wed 21:** Later', '- freeform', '**Tue 20:** Earlier'].join('\n');
+    const existing = ['@2026-01-21 Later', '- freeform', '@2026-01-20 Earlier'].join('\n');
     const out = mergeCalendarCellContent(
       existing,
       [item({date: new Date(2026, 0, 22), body: 'Inserted'})],
-      WEEK_START,
       NOW,
     );
     expectExistingSubsetOfOutput(existing, out);
     const outLines = out.split('\n').filter(l => l.trim().length > 0);
-    const idxLater = outLines.indexOf('**Wed 21:** Later');
+    const idxLater = outLines.indexOf('@2026-01-21 Later');
     const idxFreeform = outLines.indexOf('- freeform');
-    const idxEarlier = outLines.indexOf('**Tue 20:** Earlier');
+    const idxEarlier = outLines.indexOf('@2026-01-20 Earlier');
     expect(idxLater).toBeLessThan(idxFreeform);
     expect(idxFreeform).toBeLessThan(idxEarlier);
   });
