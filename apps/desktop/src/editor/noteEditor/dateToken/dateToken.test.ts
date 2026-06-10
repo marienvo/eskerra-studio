@@ -137,7 +137,7 @@ describe('formatDateTokenPretty', () => {
       'Today',
     );
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 7}, now)).toBe(
-      'Tom',
+      'Tomorrow',
     );
   });
 

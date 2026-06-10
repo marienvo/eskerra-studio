@@ -348,7 +348,7 @@ export function formatDateTokenPretty(value: DateTokenValue, now: Date): string 
   if (diffDays === 0) {
     datePart = 'Today';
   } else if (diffDays === 1) {
-    datePart = 'Tom';
+    datePart = 'Tomorrow';
   } else if (diffDays >= 2 && diffDays <= 13) {
     const weekDiff = weekDifference(targetMidnight, todayMidnight);
     const weekday = SHORT_WEEKDAYS[targetMidnight.getDay()]!;

@@ -176,7 +176,7 @@ describe('dateTokenHighlightCodemirror', () => {
     expect(pill.classList.contains(CM_DATE_TOKEN_PILL_COMPLETED_CLASS)).toBe(true);
     expect(pill.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('🔕');
     expect(pill.querySelector('.cm-date-token-pill__label')?.textContent).toBe(
-      'Tom at 09:30',
+      'Tomorrow at 09:30',
     );
     expect(pill.classList.contains('cm-date-token-pill--past')).toBe(false);
   });
