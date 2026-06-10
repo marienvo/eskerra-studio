@@ -11,7 +11,7 @@
  * **Timezone limitation:** without a tz database this parser cannot convert `TZID=...` wall-clock
  * times to absolute instants. Values ending in `Z` are treated as UTC; everything else is interpreted
  * in the host's local timezone. For a single user whose calendar matches their machine timezone this
- * is correct; cross-timezone events may be off. See `specs/plans/calendar-ics-agenda-pipeline.md`.
+ * is correct; cross-timezone events may be off. See `specs/architecture/calendar-ics-agenda-pipeline.md`.
  */
 
 export type IcsEvent = {

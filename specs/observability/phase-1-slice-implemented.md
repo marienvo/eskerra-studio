@@ -1,21 +1,21 @@
 # Phase 1 observability slice — implemented
 
-This documents what was shipped in the minimal Sentry + ring buffer slice (see also [observability-phase1-slice-deferred.md](./observability-phase1-slice-deferred.md)).
+This documents what was shipped in the minimal Sentry + ring buffer slice. Deferred items are listed in [phase-1-implementation-spec.md](./phase-1-implementation-spec.md) (Explicitly deferred).
 
 ## What was added
 
-- **`@sentry/react-native`** dependency with JS init in [`src/core/observability/registerSentry.ts`](../../src/core/observability/registerSentry.ts) (imported first from [`index.js`](../../index.js)).
+- **`@sentry/react-native`** dependency with JS init in [`registerSentry.ts`](../../apps/mobile/src/core/observability/registerSentry.ts) (imported first from [`index.js`](../../apps/mobile/index.js)).
 - **Disabled** for this slice: performance tracing (`tracesSampleRate: 0`), profiling, replays, app hang tracking, failed-request capture, screenshots, view hierarchy.
 - **Unhandled promise rejections:** `patchGlobalPromise: true` (Sentry default behavior).
 - **Global errors:** Sentry’s default React Native error pipeline (no custom `ErrorUtils` wrapper to avoid duplicate capture).
-- **Wrappers:** [`appBreadcrumb`](../../src/core/observability/appBreadcrumb.ts), [`reportUnexpectedError`](../../src/core/observability/reportUnexpectedError.ts), [`syncVaultSessionContext`](../../src/core/observability/syncVaultContext.ts).
-- **Ring buffer v1:** AsyncStorage-backed JSON array in [`ringBuffer.ts`](../../src/core/observability/ringBuffer.ts); mirrored breadcrumbs; tail attached once per cold start (rate-limited 4h) as `eskerra.ring_buffer.tail` with `extra.ring_tail`.
-- **Navigation:** [`RootNavigator.tsx`](../../src/navigation/RootNavigator.tsx) — `onStateChange` breadcrumbs with `name` + `params_keys` only (no param values).
-- **Vault:** [`VaultContext.tsx`](../../src/core/vault/VaultContext.tsx) — restore/apply breadcrumbs; `reportUnexpectedError` for vault restore and session apply failures (`flow: vault_restore` / `vault_session`).
-- **Privacy:** [`redact.ts`](../../src/core/observability/redact.ts) scrubs URI-like substrings in `beforeSend` and `beforeBreadcrumb`.
+- **Wrappers:** [`appBreadcrumb`](../../apps/mobile/src/core/observability/appBreadcrumb.ts), [`reportUnexpectedError`](../../apps/mobile/src/core/observability/reportUnexpectedError.ts), [`syncVaultSessionContext`](../../apps/mobile/src/core/observability/syncVaultContext.ts).
+- **Ring buffer v1:** AsyncStorage-backed JSON array in [`ringBuffer.ts`](../../apps/mobile/src/core/observability/ringBuffer.ts); mirrored breadcrumbs; tail attached once per cold start (rate-limited 4h) as `eskerra.ring_buffer.tail` with `extra.ring_tail`.
+- **Navigation:** [`RootNavigator.tsx`](../../apps/mobile/src/navigation/RootNavigator.tsx) — `onStateChange` breadcrumbs with `name` + `params_keys` only (no param values).
+- **Vault:** [`VaultContext.tsx`](../../apps/mobile/src/core/vault/VaultContext.tsx) — restore/apply breadcrumbs; `reportUnexpectedError` for vault restore and session apply failures (`flow: vault_restore` / `vault_session`).
+- **Privacy:** [`redact.ts`](../../apps/mobile/src/core/observability/redact.ts) scrubs URI-like substrings in `beforeSend` and `beforeBreadcrumb`.
 - **Android:** [`apps/mobile/android/app/build.gradle`](../../apps/mobile/android/app/build.gradle) applies `sentry.gradle`; [`apps/mobile/android/sentry.properties`](../../apps/mobile/android/sentry.properties) has org/project (no auth token).
-- **Jest:** [`__mocks__/sentry-react-native.ts`](../../__mocks__/sentry-react-native.ts) + [`jest.config.js`](../../jest.config.js) mapper so tests do not load the native SDK.
-- **TypeScript:** [`tsconfig.json`](../../tsconfig.json) `resolveJsonModule` for `package.json` release string.
+- **Jest:** [`__mocks__/sentry-react-native.ts`](../../apps/mobile/__mocks__/sentry-react-native.ts) + [`jest.config.js`](../../apps/mobile/jest.config.js) mapper so tests do not load the native SDK.
+- **TypeScript:** [`tsconfig.json`](../../apps/mobile/tsconfig.json) `resolveJsonModule` for `package.json` release string.
 
 ## Android release builds and Sentry upload
 
@@ -43,4 +43,4 @@ Override: `SENTRY_DISABLE_AUTO_UPLOAD=true` forces skip. This is implemented in 
 
 ## Client DSN
 
-Configured in [`src/core/observability/sentryDsn.ts`](../../src/core/observability/sentryDsn.ts). Clear or rotate in Sentry if the repo is shared publicly.
+Configured in [`sentryDsn.ts`](../../apps/mobile/src/core/observability/sentryDsn.ts). Clear or rotate in Sentry if the repo is shared publicly.

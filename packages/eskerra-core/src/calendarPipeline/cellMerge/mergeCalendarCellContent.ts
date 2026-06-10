@@ -1,7 +1,7 @@
 /**
  * INSERT-ONLY merge of incoming pipeline items into an existing Calendar cell.
  *
- * Guards both failure modes (see `specs/plans/calendar-ics-agenda-pipeline.md`, Part 3b):
+ * Guards both failure modes (see `specs/architecture/calendar-ics-agenda-pipeline.md`, Part 3b):
  *  - **Data-loss:** existing cell text is kept byte-verbatim and never reordered; parsing existing
  *    lines is read-only (to find keys + insert points). Only new lines are inserted.
  *  - **Append-loop:** an incoming item whose key already exists as a `pipelineItem` line is skipped,

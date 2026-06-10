@@ -1,7 +1,7 @@
 /**
  * Renders Calendar-cell lines for **new** content only. Never re-serializes existing cell text — the
  * merge step keeps existing lines verbatim and only inserts the lines produced here.
- * See `specs/plans/calendar-ics-agenda-pipeline.md` (Part 3b).
+ * See `specs/architecture/calendar-ics-agenda-pipeline.md` (Part 3b).
  */
 
 import type {CalendarItem} from './types';
