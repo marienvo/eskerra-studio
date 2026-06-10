@@ -189,7 +189,7 @@ Optimistic apply must never produce "I thought I had turned this off". The contr
 
 ### theme migration
 
-`themePreference` moves inside the settings document (`appearance.themePreference`). Migration: on first run, if `app-settings.json` is absent but `theme-preference.json` exists, seed the document from it; keep **writing both** for N releases (mobile does not read theme — mobile is dark-only — so dual-writing is purely for desktop rollback safety), then drop the legacy object in a follow-up. `useThemePreference` switches its source of truth to the settings context.
+`themePreference` moves inside the settings document (`appearance.themePreference`). Migration: on first run, if `app-settings.json` is absent but `theme-preference.json` exists, **seed the document once** from it; from then on the app writes the theme **only** to the settings document — there is no dual-write to the legacy `theme-preference.json`. (Mobile does not read theme — mobile is dark-only — so the legacy object is desktop-only, and we accept that an older desktop build rolled back after this change loses the new theme value rather than keeping a dual-write window.) `useThemePreference` switches its source of truth to the settings context. The legacy object is left untouched on disk; deleting it is the optional follow-up in Phase 6.
 
 ### scope summary
 
@@ -249,12 +249,12 @@ Optimistic apply must never produce "I thought I had turned this off". The contr
 
 Each phase lands independently with tests (Vitest; Storybook stories for new presentational components per repo policy).
 
-1. **Core settings document** (`@eskerra/core`): types, defaults, sparse parse/serialize with unknown-key preservation, per-key lenient validation; R2 object + conditional write + etag poller (generalize theme machinery); vault-mirror embed in `settings-shared.json`; Tauri-store cache. Theme read path migrates (dual-write legacy object).
+1. **Core settings document** (`@eskerra/core`): types, defaults, sparse parse/serialize with unknown-key preservation, per-key lenient validation; R2 object + conditional write + etag poller (generalize theme machinery); vault-mirror embed in `settings-shared.json`; Tauri-store cache. Theme read path migrates with a one-time seed from the legacy `theme-preference.json`; no dual-write afterward.
 2. **Settings tab shell**: synthetic URI, tab pill, `SettingsWorkspace` with section nav; move General (device/display name, change folder), Sync/R2, Themes, Properties into sections; delete `SettingsPage`/`activePage` branch. Note-only code paths hardened against the scheme.
 3. **Behavior settings**: Editor (autosave debounce, link previews + blocked domains UI, confetti), Sync/Git (remote, globs, backup dir, commit template, autosync toggle + timings), Calendar defaults. Consumers switch from constants to `AppSettingsProvider`.
 4. **Keyboard shortcuts**: action registry persisted in the Tauri app store (device-scoped), binding capture field with conflict detection, `useAppMainWindowKeyboardEffects` + CodeMirror compartment + menu labels read from registry; double-key window setting.
 5. **Vault layout settings**: shared schema entries, `VaultLayoutConfig` threading through desktop call sites (tree filter, compose target, podcasts parser, attachments, Today Hub discovery), mobile-compat warnings. Highest risk — last on purpose.
-6. **Cleanup**: drop legacy `theme-preference.json` dual-write; migrate `frontmatterProperties` / `linkSnippetBlockedDomains` readers off the legacy `settings-shared.json` fields (keep one-time migration reads).
+6. **Cleanup**: optionally delete the now-orphaned legacy `theme-preference.json` object (no dual-write exists to remove — see "theme migration"); migrate `frontmatterProperties` / `linkSnippetBlockedDomains` readers off the legacy `settings-shared.json` fields (keep one-time migration reads).
 
 ## open questions
 

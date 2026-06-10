@@ -4,7 +4,7 @@
  * Output is structured ({@link CalendarItem}[] per week-start stem), NOT finished markdown — rendering
  * happens later in the cell-merge step so dedup/scope/insertion operate on structured data. Within
  * each week, a calendar timed event is dropped when an agenda bullet shares the same identity key
- * (agenda precedence); see `calendarItemKey`. See `specs/plans/calendar-ics-agenda-pipeline.md`.
+ * (agenda precedence); see `calendarItemKey`. See `specs/architecture/calendar-ics-agenda-pipeline.md`.
  */
 
 import type {TodayHubStartDay} from '../todayHub/parseTodayHubFrontmatter';

@@ -1,6 +1,6 @@
 /**
  * Shared types for the Calendar-cell merge contract (Part 3b of the calendar pipeline).
- * See `specs/plans/calendar-ics-agenda-pipeline.md`.
+ * See `specs/architecture/calendar-ics-agenda-pipeline.md`.
  */
 
 export type CalendarItemSource = 'agenda' | 'calendar';

@@ -33,7 +33,7 @@ Those uploads are performed by **`sentry-cli`**, invoked from the **Android Grad
 - The DSN is **not** sufficient for source map upload.
 - The auth token must **never** be embedded in the app binary.
 
-For more on when upload runs and how local builds skip it without a token, see [specs/plans/observability-phase1-slice-implemented.md](../specs/plans/observability-phase1-slice-implemented.md) (Android release builds and Sentry upload).
+For more on when upload runs and how local builds skip it without a token, see [specs/observability/phase-1-slice-implemented.md](../specs/observability/phase-1-slice-implemented.md) (Android release builds and Sentry upload).
 
 ---
 
@@ -100,7 +100,7 @@ To get symbolicated stacks for a given release, run a **release** build **with**
 
 ## Related reading
 
-- [specs/plans/observability-phase1-slice-implemented.md](../specs/plans/observability-phase1-slice-implemented.md) — what was implemented for observability, Gradle upload gating, and auth.
+- [specs/observability/phase-1-slice-implemented.md](../specs/observability/phase-1-slice-implemented.md) — what was implemented for observability, Gradle upload gating, and auth.
 - Official docs: Sentry React Native (source maps, Hermes, releases).
 
 ---

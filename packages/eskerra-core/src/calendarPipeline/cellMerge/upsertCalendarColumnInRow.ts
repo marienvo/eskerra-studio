@@ -8,7 +8,7 @@
  * `{kind: 'skip'}` instead of risking a wrong-column write. A non-existent/blank row is treated as a
  * fresh fill (not ambiguous).
  *
- * See `specs/plans/calendar-ics-agenda-pipeline.md` (Part 3b).
+ * See `specs/architecture/calendar-ics-agenda-pipeline.md` (Part 3b).
  */
 
 import {

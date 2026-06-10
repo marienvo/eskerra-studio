@@ -1,6 +1,6 @@
 /**
  * Identity keys for Calendar items, shared between bucketing (agenda vs ICS dedup) and cell merge
- * (incoming vs existing dedup). See `specs/plans/calendar-ics-agenda-pipeline.md` (Part 3b).
+ * (incoming vs existing dedup). See `specs/architecture/calendar-ics-agenda-pipeline.md` (Part 3b).
  *
  * - Timed:   `"{YYYY-MM-DD}|{HH:MM}|{normalizedTitle}"` — day + clock time + title, so two distinct
  *            events at the same minute (overlapping meetings) stay distinct instead of colliding.

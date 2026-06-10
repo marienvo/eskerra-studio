@@ -2,7 +2,7 @@
  * Read-only classifier for an existing Calendar cell. Maps each non-empty line to a
  * {@link CalendarCellLine} so the merge step can locate keys + insert points **without** mutating or
  * re-serializing existing text. Its output is never written back to disk.
- * See `specs/plans/calendar-ics-agenda-pipeline.md` (Part 3b).
+ * See `specs/architecture/calendar-ics-agenda-pipeline.md` (Part 3b).
  */
 
 import {monthIdxFromH2Title} from '../agenda/agendaShared';
