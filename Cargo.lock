@@ -55,7 +55,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "app"
-version = "0.75.3"
+version = "0.75.4"
 dependencies = [
  "base64 0.22.1",
  "eskerra-reminder-core",
@@ -1097,7 +1097,7 @@ checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
 
 [[package]]
 name = "eskerra-reminder-core"
-version = "0.75.3"
+version = "0.75.4"
 dependencies = [
  "chrono",
  "serde",
@@ -1108,7 +1108,7 @@ dependencies = [
 
 [[package]]
 name = "eskerra-reminderd"
-version = "0.75.3"
+version = "0.75.4"
 dependencies = [
  "chrono",
  "eskerra-reminder-core",
@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "eskerra-vault-watch"
-version = "0.75.3"
+version = "0.75.4"
 dependencies = [
  "notify",
  "tempfile",
