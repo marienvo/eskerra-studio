@@ -14,8 +14,10 @@ import {
   discardStoredPrimaryPointerDownForLinkClick,
   isSamePrimaryPointerGesture,
   markDateTokenPickerOpenedForGesture,
+  markDateTokenToggledForGesture,
   peekStoredPrimaryPointerDownForLinkClick,
   resolvePrimaryLinkClickContext,
+  wasDateTokenToggledForGesture,
 } from './linkClickUseMousedownPosition';
 import {markdownActivatableExternalMdLinkAtPosition} from './markdownActivatableExternalMdLinkAtPosition';
 import {wikiLinkPointerActivatableInnerAtDocPosition} from './wikiLinkInnerAtDocPosition';
@@ -163,7 +165,7 @@ function tryOpenDateTokenPickerOnPillMouseUp(
   event: MouseEvent,
   openPicker: DateTokenPickerOpenHandler | undefined,
 ): void {
-  if (event.button !== 0 || !openPicker) {
+  if (event.button !== 0 || !openPicker || wasDateTokenToggledForGesture(view)) {
     return;
   }
   const down = peekStoredPrimaryPointerDownForLinkClick(view);
@@ -196,13 +198,55 @@ function tryOpenDateTokenPickerOnPillMouseUp(
 export function createNoteMarkdownPointerLinkHandlers(
   handlers: NoteMarkdownPointerLinkHandlers,
 ): {
+  onEditorMouseDownToggle: (event: MouseEvent, view: EditorView) => boolean;
   onEditorClick: (event: MouseEvent, view: EditorView) => boolean;
   onEditorMiddleClick: (event: MouseEvent, view: EditorView) => boolean;
   onEditorMouseUp: (event: MouseEvent, view: EditorView) => void;
 } {
   return {
+    /**
+     * Toggle a reminder pill's strike on primary mousedown when the cursor lands on the
+     * clickable emoji. Done on mousedown (not click) so caret placement never focuses the
+     * line — which would swap the pill for the raw chip and drop the `data-date-token-toggle`
+     * target before `click` fires. The caller preventDefaults to suppress caret/focus.
+     */
+    onEditorMouseDownToggle(event, view) {
+      if (event.button !== 0 || event.shiftKey || event.altKey) {
+        return false;
+      }
+      if (
+        !(event.target instanceof Element)
+        || event.target.closest('[data-date-token-toggle]') === null
+      ) {
+        return false;
+      }
+      const toggle = handlers.onToggleDateTokenStrike?.();
+      if (!toggle) {
+        return false;
+      }
+      let pos = view.posAtCoords({x: event.clientX, y: event.clientY});
+      if (pos == null && event.target instanceof Node) {
+        try {
+          pos = view.posAtDOM(event.target);
+        } catch {
+          pos = null;
+        }
+      }
+      if (pos == null || !dateTokenAtPosition(view.state, pos, {includeBoundaries: true})) {
+        return false;
+      }
+      toggle(view, pos, event);
+      // Mark the gesture so neither the trailing mouseup nor click opens the picker.
+      // This flag is non-consuming (read by both), unlike the picker-opened flag.
+      markDateTokenToggledForGesture(view);
+      return true;
+    },
     onEditorClick(event, view) {
       if (event.button !== 0) {
+        return false;
+      }
+      if (wasDateTokenToggledForGesture(view)) {
+        discardStoredPrimaryPointerDownForLinkClick(view);
         return false;
       }
       if (event.shiftKey || event.altKey) {
@@ -216,17 +260,6 @@ export function createNoteMarkdownPointerLinkHandlers(
       }
       if (consumeDateTokenPickerOpenedForGesture(view)) {
         return false;
-      }
-      if (
-        event.target instanceof Element
-        && event.target.closest('[data-date-token-toggle]') !== null
-      ) {
-        const toggle = handlers.onToggleDateTokenStrike?.();
-        if (toggle && dateTokenAtPosition(view.state, pos, {includeBoundaries: true})) {
-          toggle(view, pos, event);
-          markDateTokenPickerOpenedForGesture(view);
-          return false;
-        }
       }
       if (
         openDateTokenPickerAtClickPosition(

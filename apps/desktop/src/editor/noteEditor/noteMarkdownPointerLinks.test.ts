@@ -9,6 +9,7 @@ import {noteMarkdownParserExtensions} from './markdownEditorStyling';
 import {
   activateNoteMarkdownMiddleLinkAtPosition,
   activateNoteMarkdownPrimaryLinkAtPosition,
+  createNoteMarkdownPointerLinkHandlers,
   isActivatableRelativeMarkdownHref,
   type NoteMarkdownPointerLinkHandlers,
 } from './noteMarkdownPointerLinks';
@@ -165,6 +166,76 @@ describe('noteMarkdownPointerLinks', () => {
       href: 'https://bare.example/x',
       at: doc.indexOf('https://bare.example/x'),
     });
+  });
+
+  it('toggles a reminder pill strike on primary mousedown over the emoji', () => {
+    const doc = 'Plan @2026-06-12_0930 standup';
+    view = createView(doc);
+    const toggleSpy = vi.fn();
+    const {onEditorMouseDownToggle} = createNoteMarkdownPointerLinkHandlers({
+      ...handlers(),
+      onToggleDateTokenStrike: () => toggleSpy,
+    });
+
+    const emoji = document.createElement('span');
+    emoji.setAttribute('data-date-token-toggle', '');
+    document.body.append(emoji);
+
+    const tokenPos = doc.indexOf('@2026') + 1;
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(tokenPos);
+    const event = new MouseEvent('mousedown', {button: 0});
+    Object.defineProperty(event, 'target', {value: emoji});
+
+    expect(onEditorMouseDownToggle(event, view)).toBe(true);
+    expect(toggleSpy).toHaveBeenCalledWith(view, tokenPos, event);
+  });
+
+  it('does not open the date picker on the click after an emoji-toggle mousedown', () => {
+    const doc = 'Plan @2026-06-12_0930 standup';
+    view = createView(doc);
+    const openPicker = vi.fn();
+    const toggleSpy = vi.fn();
+    const {onEditorMouseDownToggle, onEditorClick} =
+      createNoteMarkdownPointerLinkHandlers({
+        ...handlers(),
+        onOpenDateTokenPicker: () => openPicker,
+        onToggleDateTokenStrike: () => toggleSpy,
+      });
+
+    const emoji = document.createElement('span');
+    emoji.setAttribute('data-date-token-toggle', '');
+    document.body.append(emoji);
+    const tokenPos = doc.indexOf('@2026') + 1;
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(tokenPos);
+
+    const down = new MouseEvent('mousedown', {button: 0});
+    Object.defineProperty(down, 'target', {value: emoji});
+    expect(onEditorMouseDownToggle(down, view)).toBe(true);
+
+    const click = new MouseEvent('click', {button: 0});
+    Object.defineProperty(click, 'target', {value: emoji});
+    expect(onEditorClick(click, view)).toBe(false);
+
+    expect(toggleSpy).toHaveBeenCalledTimes(1);
+    expect(openPicker).not.toHaveBeenCalled();
+  });
+
+  it('ignores mousedown that is not on a toggle emoji', () => {
+    const doc = 'Plan @2026-06-12_0930 standup';
+    view = createView(doc);
+    const toggleSpy = vi.fn();
+    const {onEditorMouseDownToggle} = createNoteMarkdownPointerLinkHandlers({
+      ...handlers(),
+      onToggleDateTokenStrike: () => toggleSpy,
+    });
+
+    const plain = document.createElement('span');
+    document.body.append(plain);
+    const event = new MouseEvent('mousedown', {button: 0});
+    Object.defineProperty(event, 'target', {value: plain});
+
+    expect(onEditorMouseDownToggle(event, view)).toBe(false);
+    expect(toggleSpy).not.toHaveBeenCalled();
   });
 
   it('activates vault links in the background on middle click', () => {

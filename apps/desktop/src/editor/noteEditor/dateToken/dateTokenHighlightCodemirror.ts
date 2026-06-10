@@ -12,6 +12,7 @@ import {computeMarkerFocusLineStarts} from '../markdownMarkerFocusLine';
 
 import {
   collectDateTokenSpansInLine,
+  dateTokenPillEmoji,
   formatDateTokenPretty,
   isDateTokenFuture,
   isDateTokenInPast,
@@ -80,7 +81,7 @@ class DateTokenPillWidget extends WidgetType {
       span.className = CM_DATE_TOKEN_PILL_CLASS;
     }
     span.setAttribute('data-date-token', '');
-    const emojiChar = this.completed ? '✔️' : (this.past ? '☑️' : '🔔');
+    const emojiChar = dateTokenPillEmoji({past: this.past, completed: this.completed});
     const emoji = document.createElement('span');
     emoji.className = 'cm-date-token-pill__emoji';
     emoji.setAttribute('data-date-token-toggle', '');

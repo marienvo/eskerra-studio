@@ -156,6 +156,66 @@ function buildDateTokenPickerOverlayState(
   };
 }
 
+type DateTokenStrikeToggleContext = {
+  readonly getNoteUri: () => string | null;
+  readonly getReminders: () => readonly Reminder[];
+  readonly removeReminder: (
+    noteUri: string,
+    reminderId: string,
+  ) => Promise<ReminderRemoveResult> | undefined;
+  readonly isEditable: (view: EditorView) => boolean;
+  readonly reportError: (message: string) => void;
+};
+
+async function strikeDateTokenViaDaemon(
+  view: EditorView,
+  hit: {from: number; value: DateTokenValue},
+  ctx: DateTokenStrikeToggleContext,
+): Promise<void> {
+  const noteUri = ctx.getNoteUri();
+  if (!noteUri) {
+    return;
+  }
+  const result = await requestReminderStrikeViaDaemon(
+    ctx.getReminders(),
+    noteUri,
+    view.state.doc.toString(),
+    hit.from,
+    hit.value,
+    (uri, id) => ctx.removeReminder(uri, id) ?? Promise.resolve('remove-unavailable'),
+  );
+  if (result !== 'removed') {
+    ctx.reportError('Could not mark reminder as done — daemon unavailable.');
+  }
+}
+
+/** Toggle a reminder pill's strike: unstrike via an editor edit, strike via the daemon (ADR 003). */
+function toggleDateTokenStrikeAtPosition(
+  view: EditorView,
+  pos: number,
+  ctx: DateTokenStrikeToggleContext,
+): void {
+  const hit = dateTokenAtPosition(view.state, pos, {includeBoundaries: true});
+  if (!hit) {
+    return;
+  }
+  if (hit.value.struck) {
+    // Unstrike rewrites the document, so it needs an editable view.
+    if (!ctx.isEditable(view)) {
+      return;
+    }
+    view.dispatch({
+      changes: {
+        from: hit.from,
+        to: hit.to,
+        insert: formatDateToken({...hit.value, struck: false}),
+      },
+    });
+    return;
+  }
+  void strikeDateTokenViaDaemon(view, hit, ctx);
+}
+
 const NoteMarkdownEditorImpl = forwardRef<
   NoteMarkdownEditorHandle,
   NoteMarkdownEditorProps
@@ -239,7 +299,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       todayHubPerfEnabled() && !showFoldGutter ? performance.now() : 0;
 
     const paste = pasteHandlersRef.current;
-    const {onEditorClick, onEditorMiddleClick, onEditorMouseUp} =
+    const {onEditorClick, onEditorMiddleClick, onEditorMouseUp, onEditorMouseDownToggle} =
       createNoteMarkdownPointerLinkHandlers({
         onOpenDateTokenPicker: () => onOpenDateTokenPickerRef.current,
         onToggleDateTokenStrike: () => onToggleDateTokenStrikeRef.current,
@@ -288,6 +348,7 @@ const NoteMarkdownEditorImpl = forwardRef<
       onEditorMiddleClick,
       onEditorClick,
       onEditorMouseUp,
+      onEditorMouseDownToggle,
     });
 
     shell.codemirrorBootExtensionsRef.current = extensions;
@@ -355,44 +416,13 @@ const NoteMarkdownEditorImpl = forwardRef<
 
   useLayoutEffect(() => {
     onToggleDateTokenStrikeRef.current = (view, pos) => {
-      if (shell.readOnlyRef.current || !view.state.facet(EditorView.editable)) {
-        return;
-      }
-      const hit = dateTokenAtPosition(view.state, pos, {includeBoundaries: true});
-      if (!hit) {
-        return;
-      }
-      if (hit.value.struck) {
-        view.dispatch({
-          changes: {from: hit.from, to: hit.to, insert: formatDateToken({...hit.value, struck: false})},
-        });
-      } else {
-        void (async () => {
-          const noteUri = shell.activeNotePathRef.current;
-          if (!noteUri) {
-            return;
-          }
-          const result = await requestReminderStrikeViaDaemon(
-            remindersRef.current,
-            noteUri,
-            view.state.doc.toString(),
-            hit.from,
-            hit.value,
-            async (uri, id) => {
-              const remove = removeReminderRef.current;
-              if (!remove) {
-                return 'remove-unavailable';
-              }
-              return remove(uri, id);
-            },
-          );
-          if (result !== 'removed') {
-            onEditorErrorRef.current?.(
-              'Could not mark reminder as done — daemon unavailable.',
-            );
-          }
-        })();
-      }
+      toggleDateTokenStrikeAtPosition(view, pos, {
+        getNoteUri: () => shell.activeNotePathRef.current,
+        getReminders: () => remindersRef.current,
+        removeReminder: (uri, id) => removeReminderRef.current?.(uri, id),
+        isEditable: v => !shell.readOnlyRef.current && v.state.facet(EditorView.editable),
+        reportError: message => onEditorErrorRef.current?.(message),
+      });
     };
     return () => {
       onToggleDateTokenStrikeRef.current = undefined;

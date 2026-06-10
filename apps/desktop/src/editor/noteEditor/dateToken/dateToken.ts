@@ -366,6 +366,14 @@ export function formatDateTokenPretty(value: DateTokenValue, now: Date): string 
   return `${datePart}${time}`;
 }
 
+/** Pill glyph for a reminder by state: completed (🔕), past (☑️), or upcoming/future (🔔). */
+export function dateTokenPillEmoji(opts: {past: boolean; completed: boolean}): string {
+  if (opts.completed) {
+    return '🔕';
+  }
+  return opts.past ? '☑️' : '🔔';
+}
+
 /**
  * Whether a token's moment has already passed. Tokens with a time compare to the
  * exact clock; date-only tokens are "past" only once the whole day is behind us

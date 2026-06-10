@@ -25,6 +25,7 @@ import {
   todayHubStaticLineParts,
 } from '../lib/todayHub/todayHubCellStaticDateTokenPill';
 import {
+  dateTokenPillEmoji,
   parseDateTokenSpan,
   type DateTokenValue,
 } from '../editor/noteEditor/dateToken/dateToken';
@@ -485,7 +486,7 @@ export function TodayHubCellStaticRichText({
                         });
                       }}
                     >
-                      {part.completed ? '✔️' : part.past ? '☑️' : '🔔'}
+                      {dateTokenPillEmoji({past: part.past, completed: part.completed})}
                     </span>
                     <span className="cm-date-token-pill__label">
                       {part.label}

@@ -130,6 +130,7 @@ export type NoteMarkdownEditorExtensionsInput = {
   onEditorMiddleClick: (e: MouseEvent, view: EditorView) => boolean;
   onEditorClick: (e: MouseEvent, view: EditorView) => boolean;
   onEditorMouseUp: (e: MouseEvent, view: EditorView) => void;
+  onEditorMouseDownToggle: (e: MouseEvent, view: EditorView) => boolean;
 };
 
 export function createNoteMarkdownUpdateListener(
@@ -236,6 +237,7 @@ export function buildNoteMarkdownEditorExtensions(
     onEditorMiddleClick,
     onEditorClick,
     onEditorMouseUp,
+    onEditorMouseDownToggle,
   } = input;
 
   return [
@@ -353,6 +355,11 @@ export function buildNoteMarkdownEditorExtensions(
     EditorView.domEventHandlers({
       mousedown(event, view) {
         recordPrimaryPointerDownForLinkClick(view, event);
+        if (event.button === 0 && onEditorMouseDownToggle(event, view)) {
+          // Suppress caret placement/focus so the clicked line keeps its pill rendering.
+          event.preventDefault();
+          return true;
+        }
         if (event.button !== 1) {
           return false;
         }

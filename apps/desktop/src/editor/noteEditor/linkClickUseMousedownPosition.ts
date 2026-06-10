@@ -17,6 +17,12 @@ export type LinkPointerDownSample = {
 
 const lastPrimaryDownByView = new WeakMap<EditorView, LinkPointerDownSample>();
 const dateTokenPickerOpenedForGestureByView = new WeakMap<EditorView, boolean>();
+/**
+ * Set when a gesture toggled a reminder pill's strike on mousedown. Unlike the "picker opened"
+ * flag this is *not* consumed, so both the trailing mouseup and click can read it to suppress
+ * the picker; it is reset by the next mousedown via {@link recordPrimaryPointerDownForLinkClick}.
+ */
+const dateTokenToggledForGestureByView = new WeakMap<EditorView, boolean>();
 
 function targetInMarkerFocusLine(target: EventTarget | null): boolean {
   return target instanceof Element
@@ -40,6 +46,7 @@ export function recordPrimaryPointerDownForLinkClick(
     return;
   }
   dateTokenPickerOpenedForGestureByView.delete(view);
+  dateTokenToggledForGestureByView.delete(view);
   lastPrimaryDownByView.set(view, {
     x: e.clientX,
     y: e.clientY,
@@ -81,6 +88,16 @@ export function isSamePrimaryPointerGesture(
 
 export function markDateTokenPickerOpenedForGesture(view: EditorView): void {
   dateTokenPickerOpenedForGestureByView.set(view, true);
+}
+
+/** Records that this gesture toggled a pill strike, so no picker should open for it. */
+export function markDateTokenToggledForGesture(view: EditorView): void {
+  dateTokenToggledForGestureByView.set(view, true);
+}
+
+/** Non-consuming read of the per-gesture toggle flag; reset on the next mousedown. */
+export function wasDateTokenToggledForGesture(view: EditorView): boolean {
+  return dateTokenToggledForGestureByView.get(view) === true;
 }
 
 /** Returns true once per gesture when mouseup already opened the date picker. */
