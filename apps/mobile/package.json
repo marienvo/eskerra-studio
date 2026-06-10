@@ -1,6 +1,6 @@
 {
   "name": "@eskerra/mobile",
-  "version": "0.74.1",
+  "version": "0.75.2",
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
