@@ -988,7 +988,7 @@ function render(doc: ParsedDoc, today: Date): string {
     }
   }
 
-  return collapseNewlineRunsToDouble(out.join('\n')).replace(/\s+$/, '') + '\n';
+  return collapseNewlineRunsToDouble(out.join('\n')).trimEnd() + '\n';
 }
 
 /**
