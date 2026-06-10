@@ -27,6 +27,11 @@ fn is_disallowed_ip(ip: IpAddr) -> bool {
                 || v4.is_unspecified()
         }
         IpAddr::V6(v6) => {
+            // Unwrap IPv4-mapped addresses (::ffff:a.b.c.d) so private/loopback IPv4 ranges
+            // can't bypass the blocklist by being expressed in IPv6 form.
+            if let Some(ipv4) = v6.to_ipv4_mapped() {
+                return is_disallowed_ip(IpAddr::V4(ipv4));
+            }
             v6.is_loopback()
                 || v6.is_multicast()
                 || v6.is_unspecified()
@@ -171,6 +176,14 @@ mod tests {
         assert!(validate_calendar_url(&url("https://[::1]/calendar.ics")).is_err());
         assert!(validate_calendar_url(&url("https://192.168.1.20/calendar.ics")).is_err());
         assert!(validate_calendar_url(&url("https://169.254.169.254/latest/meta-data")).is_err());
+    }
+
+    #[test]
+    fn rejects_ipv4_mapped_ipv6_private_hosts() {
+        assert!(is_disallowed_ip("::ffff:127.0.0.1".parse().unwrap()));
+        assert!(is_disallowed_ip("::ffff:10.0.0.1".parse().unwrap()));
+        assert!(is_disallowed_ip("::ffff:192.168.0.1".parse().unwrap()));
+        assert!(validate_calendar_url(&url("https://[::ffff:127.0.0.1]/calendar.ics")).is_err());
     }
 
     #[test]
