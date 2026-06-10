@@ -76,13 +76,18 @@ export function bucketCalendarWeekEntries(
       instant: null,
       order: order++,
     });
-    agendaKeys.add(calendarItemKey({date, timed: bullet.timed, timeMinutes: bullet.timeMinutes}));
+    agendaKeys.add(calendarItemKey({
+      date,
+      timed: bullet.timed,
+      timeMinutes: bullet.timeMinutes,
+      body,
+    }));
   }
 
   for (const event of icsEvents) {
     const day = localCalendarDay(event.start);
     const minutes = event.start.getHours() * 60 + event.start.getMinutes();
-    const key = calendarItemKey({date: day, timed: true, timeMinutes: minutes});
+    const key = calendarItemKey({date: day, timed: true, timeMinutes: minutes, body: event.summary});
     if (agendaKeys.has(key)) {
       continue;
     }

@@ -68,9 +68,21 @@ describe('parseCalendarCellLines', () => {
     expect(line.body).toBe('Team day');
   });
 
-  it('treats a legacy **Wd d:** line as freeform (no breaking migration)', () => {
+  it('treats a legacy **Wd d:** line as freeform without weekStart', () => {
     const [line] = parseCalendarCellLines('**Mon 19:** 09:00 Standup');
     expect(line.kind).toBe('freeform');
+  });
+
+  it('classifies a legacy **Wd d:** line as pipelineItem when weekStart is provided', () => {
+    const weekStart = new Date(2026, 0, 19); // Mon Jan 19
+    const [line] = parseCalendarCellLines('**Mon 19:** 09:00 Standup', weekStart);
+    expect(line.kind).toBe('pipelineItem');
+    if (line.kind !== 'pipelineItem') throw new Error('expected pipelineItem');
+    expect(line.date.getDate()).toBe(19);
+    expect(line.timed).toBe(true);
+    expect(line.timeMinutes).toBe(9 * 60);
+    expect(line.body).toBe('09:00 Standup');
+    expect(line.raw).toBe('**Mon 19:** 09:00 Standup');
   });
 
   it('treats a bold month heading as freeform', () => {

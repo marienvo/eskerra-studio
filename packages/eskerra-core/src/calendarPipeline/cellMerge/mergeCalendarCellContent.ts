@@ -11,7 +11,11 @@
  * existing lines are never removed).
  */
 
-import {calendarItemKey} from './calendarItemKey';
+import {
+  calendarItemExistingDedupKeys,
+  calendarItemIncomingIsDuplicate,
+  calendarItemRecordIncomingDedup,
+} from './calendarItemKey';
 import {parseCalendarCellLines} from './parseCalendarCellLines';
 import {
   compareCalendarItems,
@@ -63,11 +67,14 @@ function lineSortsAfter(line: Extract<CalendarCellLine, {kind: 'pipelineItem'}>,
 /**
  * Merges `incomingItems` into `existingText`, returning the new cell body. Idempotent: re-running
  * with the same inputs inserts nothing and returns byte-identical text.
+ *
+ * `weekStart` resolves day-of-month on legacy `**Wd d:**` lines for dedup keys only.
  */
 export function mergeCalendarCellContent(
   existingText: string,
   incomingItems: CalendarItem[],
   now: Date,
+  weekStart?: Date,
 ): string {
   const scoped = incomingItems.filter(item => isCalendarItemInUpsertScope(item, now));
 
@@ -76,11 +83,13 @@ export function mergeCalendarCellContent(
     return renderCalendarCellFromScratch(scoped);
   }
 
-  const classified = parseCalendarCellLines(existingText);
+  const classified = parseCalendarCellLines(existingText, weekStart);
   const existingKeys = new Set<string>();
   for (const line of classified) {
     if (line.kind === 'pipelineItem') {
-      existingKeys.add(calendarItemKey(line));
+      for (const key of calendarItemExistingDedupKeys(line)) {
+        existingKeys.add(key);
+      }
     }
   }
 
@@ -88,11 +97,10 @@ export function mergeCalendarCellContent(
   const seen = new Set<string>(existingKeys);
   const toInsert: CalendarItem[] = [];
   for (const item of [...scoped].sort(compareCalendarItems)) {
-    const key = calendarItemKey(item);
-    if (seen.has(key)) {
+    if (calendarItemIncomingIsDuplicate(item, seen)) {
       continue;
     }
-    seen.add(key);
+    calendarItemRecordIncomingDedup(item, seen);
     toInsert.push(item);
   }
   if (toInsert.length === 0) {

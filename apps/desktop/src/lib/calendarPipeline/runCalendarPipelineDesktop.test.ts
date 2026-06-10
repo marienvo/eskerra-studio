@@ -168,9 +168,8 @@ describe('runCalendarPipelineDesktop', () => {
       **January**
       - call Alex about venue
       Keep this paragraph exactly.
-      **Sat 17:** Manual workshop
-
-      @2026-01-16 Coffee with Sam"
+      @2026-01-16 Coffee with Sam
+      **Sat 17:** Manual workshop"
     `);
   });
 

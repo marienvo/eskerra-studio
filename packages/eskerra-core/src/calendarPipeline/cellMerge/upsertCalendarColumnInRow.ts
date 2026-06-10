@@ -68,6 +68,7 @@ export function upsertCalendarColumnInRow(
     sections[calendarColumnIndex] ?? '',
     items,
     now,
+    input.weekStart,
   );
   sections[calendarColumnIndex] = mergedSegment;
 

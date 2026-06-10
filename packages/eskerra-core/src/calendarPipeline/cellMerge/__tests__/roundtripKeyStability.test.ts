@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {calendarItemKey} from '../calendarItemKey';
+import {calendarItemFullKey, calendarItemKey} from '../calendarItemKey';
 import {mergeCalendarCellContent} from '../mergeCalendarCellContent';
 import {parseCalendarCellLines} from '../parseCalendarCellLines';
 import {renderCalendarItemLine} from '../renderCalendarCellLines';
@@ -31,7 +31,7 @@ describe('render → parse → key round-trip stability', () => {
       const [parsed] = parseCalendarCellLines(line);
       expect(parsed.kind).toBe('pipelineItem');
       if (parsed.kind !== 'pipelineItem') throw new Error('expected pipelineItem');
-      expect(calendarItemKey(parsed)).toBe(calendarItemKey(it));
+      expect(calendarItemFullKey(parsed)).toBe(calendarItemKey(it));
     }
   });
 

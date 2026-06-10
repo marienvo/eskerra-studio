@@ -76,19 +76,17 @@ Each week-row file (`{hubDir}/YYYY-MM-DD.md`, the 53-week canvas grid) is one "r
   happens only inside the Calendar-cell merge layer.
 - Item sort order is deterministic: date, timed-before-untimed, time, then source (agenda before
   calendar). Timed agenda bullets keep a `[🗓️](<mdAgenda>)` link prefix.
-- Dedup uses the same `calendarItemKey` contract as the cell merge: a calendar timed event is dropped
-  when an agenda bullet shares the same day + time + normalized title; untimed items dedup by day +
-  normalized title with **agenda precedence**. Two distinct events at the same minute (overlapping
-  meetings) stay distinct because the title is part of the timed key. Trade-off: a user who edits the
-  visible title of a timed Calendar line changes its key, so the canonical line is re-inserted once
-  (one duplicate) on the next refresh rather than being silently dropped.
+- Dedup uses the same `calendarItemKey` contract as the cell merge: timed items match on the
+  `@YYYY-MM-DD_HHMM` token (agenda precedence when keys collide); untimed items match on
+  `@YYYY-MM-DD|{normalizedTitle}` so multiple same-day all-day events stay distinct. Trade-off: two
+  distinct timed events at the exact same minute share a token key and the second is dropped.
 
 ## Part 3b — Calendar-cell merge contract
 
 The Calendar column merge is deliberately **insert-only**. Existing Calendar cell text is never
 re-rendered, reordered, or deleted. Parsing existing lines is read-only and is used only to find
-identity keys, month headings, and best-effort insert positions. If the row cannot be split into the
-configured column count, the pipeline fails closed and skips the write.
+identity keys and best-effort insert positions. If the row cannot be split into the configured column
+count, the pipeline fails closed and skips the write.
 
 ### Never allowed
 
@@ -101,7 +99,6 @@ configured column count, the pipeline fails closed and skips the write.
 ### Allowed
 
 - Add missing pipeline lines in a best-effort chronological position.
-- Add a month heading only when that month is not already represented in the cell.
 - Return byte-identical output for the same `now`, sources, and existing cell, so the runner skips
   no-op disk writes.
 
@@ -111,24 +108,32 @@ Each non-empty Calendar cell line is classified by `parseCalendarCellLines`:
 
 | Type | Recognition | Merge behavior |
 |------|-------------|----------------|
-| `MonthHeading` | `**{optional emoji} {Month}**` with fuzzy month matching | Preserve; add another heading only if that month is absent |
-| `PipelineItem` | `**{Wd} {day}:** {body}` with a 3-letter weekday and day `1..31` | Dedup by item key; existing line wins |
-| `UserFreeform` | Anything else | Always preserve; never dedup away |
+| `pipelineItem` | `@YYYY-MM-DD[_HHMM] body` or struck `@~~YYYY-MM-DD[_HHMM]~~ body` | Dedup by item key; existing line wins |
+| `pipelineItem` (legacy) | `**{Wd} {day}:** {body}` when `weekStart` is provided to the parser | Dedup by item key; `raw` bytes preserved verbatim |
+| `freeform` | Anything else (including legacy `**Wd d:**` without `weekStart`, month headings, bullets) | Always preserve; never dedup away |
 
 User freeform examples include bullets, paragraphs, checklist lines, and calendar-like lines that do
-not match the exact pipeline item shape.
+not match the pipeline item shapes above.
 
 ### Item keys
 
 `calendarItemKey` is shared by bucketing and cell merge:
 
-- Timed: `{YYYY-MM-DD}|{HH:MM}|{normalizedTitle}`.
-- Untimed: `{YYYY-MM-DD}|{normalizedTitle}`.
+- **Timed:** `@YYYY-MM-DD_HHMM` (token only). User title edits on an existing timed line do not cause
+  re-insertion. Trade-off: two distinct timed events at the exact same minute share a key and the
+  second is dropped.
+- **Untimed:** `@YYYY-MM-DD|{normalizedTitle}`.
 
 `normalizedTitle` strips the agenda icon link prefix, normalizes wiki-link markup, removes a leading
-time, collapses whitespace, and compares case-insensitively. If an incoming item has the same key as
-an existing `PipelineItem`, it is not inserted again, even if the existing body text differs. This
-lets user edits to generated-looking lines win and prevents append loops.
+time, collapses whitespace, and compares case-insensitively. If an incoming item matches an existing
+`pipelineItem` key, it is not inserted again.
+
+### Legacy format upgrade
+
+Cells written by older pipeline runs may still contain `**Wd d:**` lines and `**Month**` headings.
+Those lines are never rewritten automatically. When `weekStart` is passed into the merge parser,
+legacy `**Wd d:**` lines contribute dedup keys so the pipeline does not insert a matching `@token`
+line on the first run after upgrade. Legacy lines remain visible until the user deletes them.
 
 ### Insert order
 
@@ -136,11 +141,10 @@ Existing lines keep their exact bytes and relative order. For each missing incom
 
 1. Sort incoming items by date, timed-before-untimed, time, source (`agenda` before `calendar`), then
    original order.
-2. Insert before the first existing or newly inserted `PipelineItem` that sorts later; otherwise append
-   at the end of the cell. `UserFreeform` lines are ignored for positioning but are never moved.
-3. Insert the item's month heading immediately before the item only when no existing month heading or
-   earlier inserted heading represents that month.
-4. If the cell is blank, render the full sorted owned cell from scratch.
+2. Insert before the first existing or newly inserted `pipelineItem` that sorts later; otherwise append
+   at the end of the cell. `freeform` lines are ignored for positioning but are never moved.
+3. If the cell is blank, render the full sorted owned cell from scratch (`@token` lines only; no month
+   headings).
 
 ### Upsert scope
 

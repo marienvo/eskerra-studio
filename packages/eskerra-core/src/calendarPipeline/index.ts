@@ -17,7 +17,11 @@ export {
   type BucketCalendarWeekEntriesInput,
 } from './bucketCalendarWeekEntries';
 export {
+  calendarItemFullKey,
   calendarItemKey,
+  calendarItemTokenKey,
+  normalizeCalendarTitle,
+  type CalendarItemFullKeyInput,
   type CalendarItemKeyInput,
 } from './cellMerge/calendarItemKey';
 export {parseCalendarCellLines} from './cellMerge/parseCalendarCellLines';
