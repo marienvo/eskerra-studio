@@ -174,7 +174,7 @@ describe('dateTokenHighlightCodemirror', () => {
     expect(dom).not.toBeNull();
     const pill = dom as unknown as HTMLElement;
     expect(pill.classList.contains(CM_DATE_TOKEN_PILL_COMPLETED_CLASS)).toBe(true);
-    expect(pill.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('✔️');
+    expect(pill.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('🔕');
     expect(pill.querySelector('.cm-date-token-pill__label')?.textContent).toBe(
       'Tom at 09:30',
     );
