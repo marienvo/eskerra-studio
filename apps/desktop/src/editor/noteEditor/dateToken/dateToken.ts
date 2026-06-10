@@ -272,14 +272,14 @@ export function parseDateToken(text: string): DateTokenValue | null {
   return {year, month, day, hour, minute};
 }
 
-const PRETTY_WEEKDAYS = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
+const SHORT_WEEKDAYS = [
+  'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
 ] as const;
 
 const PRETTY_MONTHS = [
@@ -348,10 +348,10 @@ export function formatDateTokenPretty(value: DateTokenValue, now: Date): string 
   if (diffDays === 0) {
     datePart = 'Today';
   } else if (diffDays === 1) {
-    datePart = 'Tomorrow';
+    datePart = 'Tom';
   } else if (diffDays >= 2 && diffDays <= 13) {
     const weekDiff = weekDifference(targetMidnight, todayMidnight);
-    const weekday = PRETTY_WEEKDAYS[targetMidnight.getDay()]!;
+    const weekday = SHORT_WEEKDAYS[targetMidnight.getDay()]!;
     if (weekDiff <= 0) {
       datePart = weekday;
     } else if (weekDiff === 1) {
