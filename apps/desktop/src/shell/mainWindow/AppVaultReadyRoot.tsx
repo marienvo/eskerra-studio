@@ -167,6 +167,10 @@ export function AppVaultReadyRoot({
       handleWindowCloseRequest,
       closeSyncInProgress,
     },
+    calendarSync: {
+      calendarSyncing,
+      calendarSyncPercent,
+    },
   } = chromeSession;
 
   const {
@@ -247,6 +251,8 @@ export function AppVaultReadyRoot({
               handleEpisodesRssSync={handleEpisodesRssSync}
               rssSyncing={rssSyncing}
               rssSyncPercent={rssSyncPercent}
+              calendarSyncing={calendarSyncing}
+              calendarSyncPercent={calendarSyncPercent}
               onMuteLinkSnippetDomain={onMuteLinkSnippetDomain}
             />
           </AppMainStage>

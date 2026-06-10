@@ -22,10 +22,28 @@ export type EpisodesPaneProps = {
   onRssSync?: () => void;
   rssSyncing?: boolean;
   rssSyncPercent?: number | null;
+  calendarSyncing?: boolean;
+  calendarSyncPercent?: number | null;
 };
 
 function episodeListLabel(text: string): string {
   return text.replaceAll('**', '').trim();
+}
+
+/** Percent of whichever sync (podcast RSS, then calendar) is currently active, else `null`. */
+function pickActiveSyncPercent(
+  rssSyncing: boolean,
+  rssSyncPercent: number | null,
+  calendarSyncing: boolean,
+  calendarSyncPercent: number | null,
+): number | null {
+  if (rssSyncing) {
+    return rssSyncPercent;
+  }
+  if (calendarSyncing) {
+    return calendarSyncPercent;
+  }
+  return null;
 }
 
 function MusicNotePlaceholderIcon(): ReactElement {
@@ -231,22 +249,29 @@ export function EpisodesPane({
   onRssSync,
   rssSyncing = false,
   rssSyncPercent = null,
+  calendarSyncing = false,
+  calendarSyncPercent = null,
 }: EpisodesPaneProps) {
   const episodesRefreshVisible = useDeferredLoadingIndicator(catalogLoading, 100);
-  const refreshStripVisible = rssSyncing || episodesRefreshVisible;
-  const determinateRssPercent =
-    rssSyncing &&
-    rssSyncPercent != null &&
-    Number.isFinite(rssSyncPercent) &&
-    rssSyncPercent >= 0 &&
-    rssSyncPercent <= 100
-      ? rssSyncPercent
+  const refreshStripVisible = rssSyncing || calendarSyncing || episodesRefreshVisible;
+  const activeSyncPercent = pickActiveSyncPercent(
+    rssSyncing,
+    rssSyncPercent,
+    calendarSyncing,
+    calendarSyncPercent,
+  );
+  const determinateSyncPercent =
+    activeSyncPercent != null &&
+    Number.isFinite(activeSyncPercent) &&
+    activeSyncPercent >= 0 &&
+    activeSyncPercent <= 100
+      ? activeSyncPercent
       : null;
-  const refreshStripFill = determinateRssPercent != null
+  const refreshStripFill = determinateSyncPercent != null
     ? (
       <div
         className="episodes-refresh-strip__fill"
-        style={{width: `${determinateRssPercent}%`}}
+        style={{width: `${determinateSyncPercent}%`}}
       />
       )
     : <div className="episodes-refresh-strip__segment" />;
