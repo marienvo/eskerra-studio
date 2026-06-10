@@ -6,6 +6,7 @@
  *  - `VEVENT` with `DTSTART`, `SUMMARY`, `UID`, optional `RRULE`.
  *  - `DTSTART` as UTC (`...Z`) or floating/local time. **All-day** (`VALUE=DATE` / 8-digit) events are skipped.
  *  - `RRULE` `FREQ=DAILY|WEEKLY|MONTHLY|YEARLY` with `INTERVAL`, `COUNT`, `UNTIL`, and (for weekly) `BYDAY`.
+ *  - `EXDATE` (excluded recurrence occurrences) and `STATUS:CANCELLED` (whole-event skip).
  *
  * **Timezone limitation:** without a tz database this parser cannot convert `TZID=...` wall-clock
  * times to absolute instants. Values ending in `Z` are treated as UTC; everything else is interpreted
@@ -277,12 +278,16 @@ type IcsVevent = {
   dtstart: Date;
   dateOnly: boolean;
   rrule: RecurrenceRule | null;
+  /** Timestamps (ms) of excluded recurrence occurrences from `EXDATE`. */
+  exdates: number[];
+  /** `true` when `STATUS:CANCELLED` marks the whole event as cancelled. */
+  cancelled: boolean;
 };
 
 function parseVevents(lines: string[], titleFallback: string): IcsVevent[] {
   const events: IcsVevent[] = [];
   let inVevent = false;
-  let current: Partial<IcsVevent> & {dateOnly?: boolean} = {};
+  let current: Partial<IcsVevent> & {dateOnly?: boolean; exdates?: number[]} = {};
 
   for (const line of lines) {
     const upper = line.toUpperCase();
@@ -299,6 +304,8 @@ function parseVevents(lines: string[], titleFallback: string): IcsVevent[] {
           dtstart: current.dtstart,
           dateOnly: current.dateOnly ?? false,
           rrule: current.rrule ?? null,
+          exdates: current.exdates ?? [],
+          cancelled: current.cancelled ?? false,
         });
       }
       inVevent = false;
@@ -325,6 +332,19 @@ function parseVevents(lines: string[], titleFallback: string): IcsVevent[] {
       current.uid = prop.value.trim();
     } else if (prop.name === 'RRULE') {
       current.rrule = parseRrule(prop.value);
+    } else if (prop.name === 'EXDATE') {
+      // EXDATE may carry a comma-separated list and may appear on multiple lines.
+      const exdates = current.exdates ?? (current.exdates = []);
+      for (const raw of prop.value.split(',')) {
+        const parsed = parseIcsDateTime(raw);
+        if (parsed) {
+          exdates.push(parsed.date.getTime());
+        }
+      }
+    } else if (prop.name === 'STATUS') {
+      if (prop.value.trim().toUpperCase() === 'CANCELLED') {
+        current.cancelled = true;
+      }
     }
   }
 
@@ -360,9 +380,10 @@ export function parseIcsEvents(icsText: string, options: ParseIcsEventsOptions):
   const dedup = new Set<string>();
 
   for (const vevent of vevents) {
-    if (vevent.dateOnly) {
+    if (vevent.dateOnly || vevent.cancelled) {
       continue;
     }
+    const exdates = vevent.exdates.length > 0 ? new Set(vevent.exdates) : null;
     const starts: Date[] = [];
     if (vevent.rrule) {
       for (const occ of expandOccurrences(vevent.dtstart, vevent.rrule, toMs)) {
@@ -374,6 +395,9 @@ export function parseIcsEvents(icsText: string, options: ParseIcsEventsOptions):
     for (const start of starts) {
       const ts = start.getTime();
       if (ts < fromMs || ts > toMs) {
+        continue;
+      }
+      if (exdates?.has(ts)) {
         continue;
       }
       const key = `${vevent.uid}|${ts}|${vevent.summary}`;

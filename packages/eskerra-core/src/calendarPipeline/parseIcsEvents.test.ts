@@ -128,4 +128,30 @@ describe('parseIcsEvents', () => {
     );
     expect(dates).toEqual(['2026-02-28', '2026-03-31', '2026-04-30']);
   });
+
+  it('skips events marked STATUS:CANCELLED', () => {
+    const ics = wrap(
+      vevent(['UID:live', 'SUMMARY:Live meeting', 'DTSTART:20260116T100000Z']),
+      vevent(['UID:dead', 'SUMMARY:Cancelled meeting', 'DTSTART:20260116T110000Z', 'STATUS:CANCELLED']),
+    );
+    expect(parseIcsEvents(ics, {now: NOW}).map(e => e.summary)).toEqual(['Live meeting']);
+  });
+
+  it('excludes EXDATE occurrences from a recurring event', () => {
+    const ics = wrap(
+      vevent([
+        'UID:recurring',
+        'SUMMARY:Daily standup',
+        'DTSTART:20260115T100000Z',
+        'RRULE:FREQ=DAILY;INTERVAL=1',
+        'EXDATE:20260116T100000Z,20260118T100000Z',
+      ]),
+    );
+    const events = parseIcsEvents(ics, {now: NOW, daysAhead: 4});
+    expect(events.map(e => e.start.toISOString())).toEqual([
+      '2026-01-15T10:00:00.000Z',
+      '2026-01-17T10:00:00.000Z',
+      '2026-01-19T10:00:00.000Z',
+    ]);
+  });
 });
