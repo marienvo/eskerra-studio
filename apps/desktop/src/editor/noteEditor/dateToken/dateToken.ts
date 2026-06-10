@@ -381,3 +381,13 @@ export function isDateTokenInPast(value: DateTokenValue, now: Date): boolean {
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return localMidnight(value).getTime() < todayMidnight.getTime();
 }
+
+/**
+ * Whether the token's local date is strictly after today (day > today). A timed
+ * token for a future date is always "future" regardless of its time component.
+ * Complement of isPast for the "tomorrow and beyond" bucket; today itself is neither.
+ */
+export function isDateTokenFuture(value: DateTokenValue, now: Date): boolean {
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return localMidnight(value).getTime() > todayMidnight.getTime();
+}

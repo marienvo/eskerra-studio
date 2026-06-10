@@ -32,6 +32,7 @@ import type {DateTokenPickerOverlayAnchor} from '../editor/noteEditor/dateToken/
 import {
   CM_DATE_TOKEN_PILL_CLASS,
   CM_DATE_TOKEN_PILL_COMPLETED_CLASS,
+  CM_DATE_TOKEN_PILL_FUTURE_CLASS,
   CM_DATE_TOKEN_PILL_PAST_CLASS,
 } from '../editor/noteEditor/dateToken/dateTokenHighlightCodemirror';
 import {parseLoneLinkLine} from '../lib/parseLoneLinkLine';
@@ -89,6 +90,7 @@ function useDateTokenPillMinuteClock(active: boolean): Date {
 
 function todayHubDateTokenPillClassName(
   past: boolean,
+  future: boolean,
   completed: boolean,
 ): string {
   if (completed) {
@@ -96,6 +98,9 @@ function todayHubDateTokenPillClassName(
   }
   if (past) {
     return `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`;
+  }
+  if (future) {
+    return `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_FUTURE_CLASS}`;
   }
   return CM_DATE_TOKEN_PILL_CLASS;
 }
@@ -413,6 +418,7 @@ export function TodayHubCellStaticRichText({
                     key={`pill-${part.from}-${part.to}`}
                     className={todayHubDateTokenPillClassName(
                       part.past,
+                      part.future,
                       part.completed,
                     )}
                     data-date-token=""

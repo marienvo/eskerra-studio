@@ -1,6 +1,7 @@
 import {
   collectDateTokenSpansInLine,
   formatDateTokenPretty,
+  isDateTokenFuture,
   isDateTokenInPast,
   parseDateTokenSpan,
 } from '../../editor/noteEditor/dateToken/dateToken';
@@ -13,9 +14,10 @@ export type TodayHubStaticPillPart = {
   kind: 'date-pill';
   from: number;
   to: number;
-  /** Pretty label (e.g. `Tomorrow 12:00`), matching the CodeMirror widget. */
+  /** Pretty label (e.g. `Tom 12:00`), matching the CodeMirror widget. */
   label: string;
   past: boolean;
+  future: boolean;
   completed: boolean;
 };
 
@@ -48,13 +50,15 @@ function collectDateTokenPillsForLine(
       continue;
     }
     const completed = value.struck === true;
+    const isPast = completed ? false : isDateTokenInPast(value, now);
     const from = lineFrom + tokenStartInLine;
     out.push({
       kind: 'date-pill',
       from,
       to: from + token.length,
       label: formatDateTokenPretty(value, now),
-      past: completed ? false : isDateTokenInPast(value, now),
+      past: isPast,
+      future: completed || isPast ? false : isDateTokenFuture(value, now),
       completed,
     });
   }

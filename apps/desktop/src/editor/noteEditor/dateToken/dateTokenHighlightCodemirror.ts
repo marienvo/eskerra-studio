@@ -13,6 +13,7 @@ import {computeMarkerFocusLineStarts} from '../markdownMarkerFocusLine';
 import {
   collectDateTokenSpansInLine,
   formatDateTokenPretty,
+  isDateTokenFuture,
   isDateTokenInPast,
   parseDateTokenSpan,
 } from './dateToken';
@@ -27,6 +28,7 @@ export const CM_DATE_TOKEN_PILL_CLASS = 'cm-date-token-pill';
 
 /** Modifier class for pills whose moment has already passed. */
 export const CM_DATE_TOKEN_PILL_PAST_CLASS = 'cm-date-token-pill--past';
+export const CM_DATE_TOKEN_PILL_FUTURE_CLASS = 'cm-date-token-pill--future';
 
 /** Modifier class for daemon-struck or user-completed reminder pills. */
 export const CM_DATE_TOKEN_PILL_COMPLETED_CLASS = 'cm-date-token-pill--completed';
@@ -46,12 +48,14 @@ function dateTokenMarkClass(completed: boolean): string {
 class DateTokenPillWidget extends WidgetType {
   readonly label: string;
   readonly past: boolean;
+  readonly future: boolean;
   readonly completed: boolean;
 
-  constructor(label: string, past: boolean, completed: boolean) {
+  constructor(label: string, past: boolean, future: boolean, completed: boolean) {
     super();
     this.label = label;
     this.past = past;
+    this.future = future;
     this.completed = completed;
   }
 
@@ -59,6 +63,7 @@ class DateTokenPillWidget extends WidgetType {
     return (
       other.label === this.label
       && other.past === this.past
+      && other.future === this.future
       && other.completed === this.completed
     );
   }
@@ -77,9 +82,13 @@ class DateTokenPillWidget extends WidgetType {
       span.append(emoji, label);
       return span;
     }
-    span.className = this.past
-      ? `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`
-      : CM_DATE_TOKEN_PILL_CLASS;
+    if (this.past) {
+      span.className = `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`;
+    } else if (this.future) {
+      span.className = `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_FUTURE_CLASS}`;
+    } else {
+      span.className = CM_DATE_TOKEN_PILL_CLASS;
+    }
     span.setAttribute('data-date-token', '');
     span.textContent = `${this.past ? '☑️' : '🔔'} ${this.label}`;
     return span;
@@ -115,9 +124,11 @@ function collectDateTokenRangesForLine(
         }).range(from, to),
       );
     } else {
+      const isPast = completed ? false : isDateTokenInPast(value, now);
       const widget = new DateTokenPillWidget(
         formatDateTokenPretty(value, now),
-        completed ? false : isDateTokenInPast(value, now),
+        isPast,
+        completed || isPast ? false : isDateTokenFuture(value, now),
         completed,
       );
       ranges.push(Decoration.replace({widget}).range(from, to));
