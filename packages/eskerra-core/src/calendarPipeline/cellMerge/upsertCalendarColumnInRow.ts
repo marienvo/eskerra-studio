@@ -67,7 +67,6 @@ export function upsertCalendarColumnInRow(
   const mergedSegment = mergeCalendarCellContent(
     sections[calendarColumnIndex] ?? '',
     items,
-    weekStart,
     now,
   );
   sections[calendarColumnIndex] = mergedSegment;

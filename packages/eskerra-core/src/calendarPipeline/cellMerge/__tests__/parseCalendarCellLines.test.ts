@@ -1,64 +1,68 @@
 import {describe, expect, it} from 'vitest';
 import {parseCalendarCellLines} from '../parseCalendarCellLines';
 
-const WEEK_START = new Date(2026, 0, 19); // Monday Jan 19 2026 (week 19..25)
-
 describe('parseCalendarCellLines', () => {
-  it('classifies pipeline items, month headings, and freeform lines', () => {
+  it('classifies @token lines as pipelineItem and everything else as freeform', () => {
     const cell = [
-      '**January**',
-      '**Mon 19:** 09:00 Standup',
-      '**Tue 20:** 🎂 Birthday',
+      '@2026-01-19_0900 Standup',
+      '@2026-01-20 🎂 Birthday',
       '- bellen met X',
       'free paragraph',
+      '**January**',
     ].join('\n');
-    const lines = parseCalendarCellLines(cell, WEEK_START);
+    const lines = parseCalendarCellLines(cell);
     expect(lines.map(l => l.kind)).toEqual([
-      'monthHeading',
       'pipelineItem',
       'pipelineItem',
+      'freeform',
       'freeform',
       'freeform',
     ]);
   });
 
-  it('resolves the day-of-month to a full date inside the week and parses the time', () => {
-    const [line] = parseCalendarCellLines('**Mon 19:** 09:00 Standup', WEEK_START);
+  it('parses date, timed, timeMinutes, and body from a timed token line', () => {
+    const [line] = parseCalendarCellLines('@2026-01-19_0900 Standup');
     expect(line.kind).toBe('pipelineItem');
-    if (line.kind !== 'pipelineItem') {
-      throw new Error('expected pipelineItem');
-    }
+    if (line.kind !== 'pipelineItem') throw new Error('expected pipelineItem');
     expect(line.date.getFullYear()).toBe(2026);
     expect(line.date.getMonth()).toBe(0);
     expect(line.date.getDate()).toBe(19);
     expect(line.timed).toBe(true);
     expect(line.timeMinutes).toBe(9 * 60);
-    expect(line.body).toBe('09:00 Standup');
+    expect(line.body).toBe('Standup');
   });
 
-  it('resolves a day-of-month across a month boundary within the week', () => {
-    const weekStart = new Date(2026, 5, 29); // Mon Jun 29 -> Jul 5
-    const [line] = parseCalendarCellLines('**Thu 2:** Something', weekStart);
-    if (line.kind !== 'pipelineItem') {
-      throw new Error('expected pipelineItem');
-    }
-    expect(line.date.getMonth()).toBe(6); // July
-    expect(line.date.getDate()).toBe(2);
+  it('parses an untimed token line', () => {
+    const [line] = parseCalendarCellLines('@2026-07-11 Team day');
+    if (line.kind !== 'pipelineItem') throw new Error('expected pipelineItem');
+    expect(line.timed).toBe(false);
+    expect(line.timeMinutes).toBeNull();
+    expect(line.date.getDate()).toBe(11);
+    expect(line.date.getMonth()).toBe(6);
+    expect(line.body).toBe('Team day');
   });
 
-  it('treats a bold line that is not a month as freeform', () => {
-    const [line] = parseCalendarCellLines('**important note**', WEEK_START);
+  it('treats a legacy **Wd d:** line as freeform (no breaking migration)', () => {
+    const [line] = parseCalendarCellLines('**Mon 19:** 09:00 Standup');
     expect(line.kind).toBe('freeform');
   });
 
-  it('treats a near-pipeline line with odd spacing as freeform', () => {
-    const [line] = parseCalendarCellLines('**Tu  14 :** weird', WEEK_START);
+  it('treats a bold month heading as freeform', () => {
+    const [line] = parseCalendarCellLines('**January**');
     expect(line.kind).toBe('freeform');
   });
 
   it('skips blank lines', () => {
-    expect(parseCalendarCellLines('\n\n**January**\n\n', WEEK_START).map(l => l.kind)).toEqual([
-      'monthHeading',
-    ]);
+    const lines = parseCalendarCellLines('\n\n@2026-01-19 Foo\n\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].kind).toBe('pipelineItem');
+  });
+
+  it('classifies a token-only line (no body) as pipelineItem with empty body', () => {
+    const [line] = parseCalendarCellLines('@2026-03-15_1030');
+    expect(line.kind).toBe('pipelineItem');
+    if (line.kind !== 'pipelineItem') throw new Error('expected pipelineItem');
+    expect(line.body).toBe('');
+    expect(line.timeMinutes).toBe(10 * 60 + 30);
   });
 });

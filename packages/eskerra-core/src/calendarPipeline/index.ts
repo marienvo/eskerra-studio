@@ -18,7 +18,6 @@ export {
 } from './bucketCalendarWeekEntries';
 export {
   calendarItemKey,
-  normalizeCalendarTitle,
   type CalendarItemKeyInput,
 } from './cellMerge/calendarItemKey';
 export {parseCalendarCellLines} from './cellMerge/parseCalendarCellLines';
@@ -26,7 +25,6 @@ export {
   compareCalendarItems,
   renderCalendarCellFromScratch,
   renderCalendarItemLine,
-  renderMonthHeadingLine,
 } from './cellMerge/renderCalendarCellLines';
 export {
   isCalendarItemInUpsertScope,

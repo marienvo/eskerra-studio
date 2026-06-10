@@ -122,11 +122,10 @@ describe('runCalendarPipelineDesktop', () => {
     const rowUri = '/vault/Work/2026-01-12.md';
     expect(fs.files.has(rowUri)).toBe(true);
     const row = fs.files.get(rowUri)!;
-    // Calendar column holds the bucketed bodies; ICS timed before untimed agenda.
-    expect(row).toContain('**January**');
-    // Floating DTSTART is host-local, so this assertion is timezone-independent.
-    expect(row).toContain('**Fri 16:** 10:00 Team sync');
-    expect(row).toContain('**Fri 16:** Coffee with Sam');
+    // Calendar column: timed token before untimed, no month heading.
+    // Floating DTSTART is host-local, so the date assertion is timezone-independent.
+    expect(row).toContain('@2026-01-16_1000 Team sync');
+    expect(row).toContain('@2026-01-16 Coffee with Sam');
     // Other column delimiter preserved.
     expect(row).toContain('::today-section::');
   });
@@ -169,8 +168,9 @@ describe('runCalendarPipelineDesktop', () => {
       **January**
       - call Alex about venue
       Keep this paragraph exactly.
-      **Fri 16:** Coffee with Sam
-      **Sat 17:** Manual workshop"
+      **Sat 17:** Manual workshop
+
+      @2026-01-16 Coffee with Sam"
     `);
   });
 
@@ -200,7 +200,7 @@ describe('runCalendarPipelineDesktop', () => {
     expect(result.failedFetches).toBe(1);
     expect(result.hubsProcessed).toBe(1);
     // Agenda-only content still upserted.
-    expect(fs.files.get('/vault/Work/2026-01-12.md')).toContain('**Fri 16:** Coffee with Sam');
+    expect(fs.files.get('/vault/Work/2026-01-12.md')).toContain('@2026-01-16 Coffee with Sam');
   });
 
   it('does not touch past-week rows', async () => {
