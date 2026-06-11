@@ -365,8 +365,10 @@ function endOfLocalDay(d: Date): Date {
 }
 
 /**
- * Parses already-fetched ICS text into timed events inside `[startOfDay(now) .. endOfDay(now + daysAhead)]`,
- * skipping all-day events, deduping on `uid|timestamp|summary`, sorted by time then summary.
+ * Parses already-fetched ICS text into timed events inside
+ * `[startOfDay(now) .. endOfDay(windowEnd)]`, where `windowEnd` is `windowEndInclusive` when set,
+ * otherwise `now + daysAhead` calendar days (default 7). Skips all-day events, dedupes on
+ * `uid|timestamp|summary`, sorted by time then summary.
  */
 export function parseIcsEvents(icsText: string, options: ParseIcsEventsOptions): IcsEvent[] {
   const {now} = options;
