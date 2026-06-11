@@ -125,13 +125,15 @@ When `merge_remote` fails with a non-zero exit **and** `git diff --name-only --d
 2. **`Manual`** → record the path and continue the loop. If any `Manual` paths exist after the loop, resolution fails as a whole (no partially-resolved merge commits).
 3. **`PreferLocal`** → winner = ours (stage 2), loser = theirs (stage 3), backup root = `{backup_directory}/{backup_remote_subdir}`.
 4. **`PreferRemote`** → winner = theirs (stage 3), loser = ours (stage 2), backup root = `{backup_directory}/{backup_local_subdir}`.
-5. **Save the loser.** `git show :<loser_stage>:<p>` into a unique backup path derived from the original path + timestamp + numeric collision suffix. Two stage-missing cases, with distinct annotations:
-   - **Loser stage missing** (loser deleted the file, winner kept it): nothing to back up — skip the backup; the annotation stays `winner: Local`/`Remote` per the policy, since the file survives.
-   - **Winner stage missing** (winner deleted the file): skip the backup and annotate `winner: Deleted`; step 6 applies the delete. The loser's discarded content remains reachable through Git history (both conflict sides are committed), so no working-tree backup is written.
-   If `allow_create_backup_directory` is `false` and the directory is missing, fail loudly (typed error), do not commit a half-resolved tree.
+5. **Save the loser.** Two stage-missing cases are handled before attempting the backup write:
+   - **Winner stage missing** (winner deleted the file): skip the backup and annotate `winner: Deleted`; step 6 applies the delete. The loser's discarded content remains reachable through Git history, so no working-tree backup is written.
+   - **Loser stage missing** (loser deleted the file, winner kept it): skip the backup; the annotation stays `winner: Local`/`Remote` per the policy, since the file survives.
+   Otherwise: if `allow_create_backup_directory` is `false` and the backup directory is missing, bail to the same snapshot+abort recovery used for `Manual` paths (`ConflictResolutionFailed`) — do not return a bare typed error, because the merge is still in progress and any already-applied winners must be aborted cleanly. Any untracked backup files written in earlier loop iterations are left in the working tree as harmless orphans (they are outside the vault's include globs and do not enter Git history). When the backup directory exists (or creation is allowed), write `git show :<loser_stage>:<p>` into a unique backup path derived from the original path + timestamp + numeric collision suffix.
 6. **Apply the winner.** `git checkout --ours|--theirs -- <p>`, or `git rm -f -- <p>` when the winner deleted the file.
 7. **Markdown callout.** Only if `markdown_conflict_callout.enabled`, `p` matches `*.md` (case-insensitive), the winner is a real file, **and** a backup was written: prepend the rendered template (`{backup_path}`, `{timestamp}`, `{winner}`). Binary files never get a callout — detect via `git check-attr binary` (respects `.gitattributes`).
 8. **Stage the resolution.** `git add -- <p>` (deletes already staged by `git rm`).
+
+**Invariant:** any failure that fires after the first winner has been applied to disk must route to snapshot+abort recovery (`ConflictResolutionFailed`), never return a bare typed error. A bare error would leave the merge open and block the next sync with `UnsafeGitState`.
 
 After the loop: bail to the existing snapshot+abort recovery if any path was `Manual` or `--diff-filter=U` is still non-empty (`ConflictResolutionFailed { unresolved, manual }` — variant already exists). Otherwise `git commit --no-edit` (honoring `skip_commit_hooks`) unless the index is empty (both sides made identical changes), then continue to push.
 
@@ -167,7 +169,7 @@ pub struct ConflictBackup {
 - manual policy (and policy-less path) aborts, creates snapshot branch, restores pre-merge HEAD — no hard reset
 - mixed manual + auto-resolvable paths abort as a whole
 - conflict inside the backup directory is forced `Manual`
-- missing backup directory with `allow_create_backup_directory: false` fails loudly without committing
+- missing backup directory with `allow_create_backup_directory: false` routes to snapshot+abort recovery and leaves the repo in a clean pre-merge state (verify with `git status` in the test); orphan backup files from earlier loop iterations are left as untracked
 - both-sides-identical resolution skips the merge commit
 - frontend: result mapping renders backups; notification fires when backups were written
 
