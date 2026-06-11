@@ -39,7 +39,7 @@ Platform implementation (React Native vs native UI, Kotlin vs TypeScript listing
 ### 2.1 Android only
 
 - Target **Android** with **SAF** (`content://` tree URI) as the vault root.
-- **Dark mode only** for the rebuild app (see §15). The reference app still has light-mode branches in some list colors; ignore light palettes when rebuilding.
+- **Dark mode only** for the rebuild app (see §14). The reference app still has light-mode branches in some list colors; ignore light palettes when rebuilding.
 
 ### 2.2 Vault layout (podcast-relevant paths)
 
@@ -333,7 +333,7 @@ Native RSS sync is **not** on app startup; **Episodes pull-to-refresh only** (In
 ### 8.1 Layout
 
 - `SectionList` with horizontal inset `LIST_HORIZONTAL_INSET`.
-- Section headers: centered uppercase caption (10px, letter-spacing 0.9) on hairline divider.
+- Section headers: centered uppercase caption (10px, letter-spacing 0.9, color `#6a6a6a`) on hairline divider.
 - Empty state (not loading, not pulling): *"No unplayed podcast episodes found in vault root."*
 
 ### 8.2 Error lines
@@ -548,10 +548,11 @@ When R2 configured: **R2 object is authoritative**; local `.eskerra/playlist.jso
 
 ### 11.3 Write path (`writePlaylist`)
 
+**Caller** (`usePlayer` persist actor) pre-builds the entry via `buildPlaylistEntryForWrite` — this is where `controlRevision` is incremented. `writePlaylist` receives the pre-built entry and does **not** call `buildPlaylistEntryForWrite` again.
+
 1. Ensure `deviceInstanceId` in local settings.
 2. If no R2: return `{ kind: 'skipped' }`.
-3. Fetch remote, `pickNewerPlaylistEntry`, merge with `buildPlaylistEntryForWrite` (bumps `controlRevision`).
-4. PUT to R2; update known sync metadata.
+3. Fetch remote; if remote is newer than the locally known baseline, reject the write (caller retries after re-reading). Otherwise PUT the pre-built entry to R2; update known sync metadata.
 
 Machine persist actor only runs when `deps.hasR2()` true.
 
@@ -564,7 +565,6 @@ Delete R2 object (if configured), delete local `playlist.json` if present, null 
 - Interval: **1000ms** while app foreground + R2 configured + `allowPolling`.
 - `allowPolling = playbackState !== 'playing'` (paused during active playback).
 - On ETag change: `notifyPlaylistSyncAfterVaultRefresh` → `usePlayer` remote sync effect.
-- Ignore polls that are echo of own device (`isPlaylistR2PollEchoFromOwnDevice`).
 
 ### 11.6 Housekeeping
 
@@ -637,7 +637,7 @@ Rendered globally above tab bar when `activeEpisode != null`.
   1. Episode `title` — 14px semibold, white, 1 line with tail ellipsis.
   2. `seriesName` — 12px, muted, 1 line.
   3. Date line (11px, muted, 1 line): shows `bufferingSubtitle` when loading/near-end, else `formatRelativeCalendarLabelFromIsoDate(episode.date)`.
-  - `bufferingSubtitle` values: `'Bijna klaar'` (near-end), `'Resuming…'` (loading + position ≥ 10s), `'Buffering…'` (loading + position < 10s), `'Starting…'` (paused + transport busy).
+  - `bufferingSubtitle` values: `'Bijna klaar'` (near-end — Dutch; rebuild may localize), `'Resuming…'` (loading + position ≥ 10s), `'Buffering…'` (loading + position < 10s), `'Starting…'` (paused + transport busy).
 - Slider: seek; drag does not persist until `onSlidingComplete`.
 - Transport: elapsed | −10s (`replay-10`) | play/pause (52px) | +10s (`forward-10`) | duration.
 - Skip disabled when `loading && !seeking`.
