@@ -34,7 +34,6 @@ export type ParseIcsEventsOptions = {
 
 const DEFAULT_DAYS_AHEAD = 7;
 const DEFAULT_TITLE_FALLBACK = 'Busy';
-/** Safety cap on generated recurrence instances per event. */
 const MAX_OCCURRENCES = 10000;
 
 type IcsProperty = {
@@ -100,7 +99,6 @@ function unescapeText(value: string): string {
     .replace(/\\\\/g, '\\');
 }
 
-/** Parse an iCal date/date-time value. Returns `null` when unparseable. */
 function parseIcsDateTime(value: string): ParsedDateTime | null {
   const trimmed = value.trim();
   const dateOnlyMatch = /^(\d{4})(\d{2})(\d{2})$/.exec(trimmed);
