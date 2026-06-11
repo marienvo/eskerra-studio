@@ -50,7 +50,7 @@ Platform implementation (React Native vs native UI, Kotlin vs Rust index) may di
 | `.eskerra/settings-shared.json` | Vault-scoped settings (not required for notes MVP but same vault) |
 | `.eskerra/settings-local.json` | Per-device settings (not synced) |
 
-**Hard-excluded from vault-wide markdown index** (not indexed, not wiki targets): top-level directories `Assets`, `Excalidraw`, `Scripts`, `Templates`; dot-prefixed names; `*.md.sync-conflict-*` sync conflict files. Logic: `packages/eskerra-core/src/vaultVisibility.ts`.
+**Hard-excluded from vault-wide markdown index** (not indexed, not wiki targets): directories named `Assets`, `Excalidraw`, `Scripts`, `Templates` **at any depth** (the filter runs at every recursion level, so e.g. `Projects/Assets/private.md` is also excluded); dot-prefixed names; `*.md.sync-conflict-*` sync conflict files. Logic: `packages/eskerra-core/src/vaultVisibility.ts`.
 
 ### 2.3 SAF URI convention
 
@@ -113,7 +113,7 @@ For each note:
 - **Tap row body:** navigate to `NoteDetail` with `{ noteUri, noteFileName, noteTitle }`.
 - **Tap avatar:** toggle multi-select for that URI.
 - **Multi-select header:** back clears selection; title `N selected`; trash deletes selected.
-- **Delete:** calls `deleteNotes(uris)` — see §4.6. Shows spinner on delete icon while in flight.
+- **Delete:** calls `deleteNotes(uris)` — see §7. Shows spinner on delete icon while in flight.
 - **Settings icon** (no selection): opens Settings tab.
 - **Share intent draft:** on focus, if pending share draft exists, navigate to `AddNote` with `initialComposeText`.
 
@@ -178,8 +178,8 @@ Title in H1 is the **logical title**; **filename stem** comes from sanitized tit
 
 1. `sanitizeFileName(title)` → filesystem stem (illegal chars stripped, whitespace collapsed, fallback `note-{timestamp}`).
 2. `pickNextInboxMarkdownFileName(stem, occupiedNames)` → `{stem}.md`, then `{stem}-2.md`, etc.
-3. Write UTF-8 to `{inboxDir}/{fileName}`.
-4. Ensure `Inbox/` exists (`mkdir` if missing).
+3. Ensure `Inbox/` exists (`mkdir` if missing) — must precede the write, since SAF write to a missing parent fails.
+4. Write UTF-8 to `{inboxDir}/{fileName}`.
 5. After create: update search index (`touchVaultSearchNoteUris`), markdown registry (`touchMarkdownNoteUris`), refresh vault markdown refs, optimistic list merge, silent list refresh.
 
 **Navigation after create:** replace/navigate to `NoteDetail` for new note.
