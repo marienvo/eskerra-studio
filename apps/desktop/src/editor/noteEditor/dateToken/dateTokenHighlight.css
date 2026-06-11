@@ -57,6 +57,17 @@
   background-color: color-mix(in srgb, #d97706 24%, transparent);
 }
 
+/* Urgent: a timed today reminder still due in the current daypart. Red. */
+.note-markdown-editor-host .cm-date-token-pill--urgent {
+  color: color-mix(in srgb, #dc2626 90%, var(--color-text));
+  background-color: color-mix(in srgb, #dc2626 14%, transparent);
+  border-color: color-mix(in srgb, #dc2626 32%, transparent);
+}
+
+.note-markdown-editor-host .cm-date-token-pill--urgent:hover {
+  background-color: color-mix(in srgb, #dc2626 24%, transparent);
+}
+
 /* Past reminders: muted blue-grey instead of the accent colour. */
 .note-markdown-editor-host .cm-date-token-pill--past {
   color: color-mix(in srgb, #64748b 80%, var(--color-text));

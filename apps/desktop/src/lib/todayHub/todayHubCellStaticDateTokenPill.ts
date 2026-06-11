@@ -1,8 +1,7 @@
 import {
   collectDateTokenSpansInLine,
+  dateTokenPillTone,
   formatDateTokenPretty,
-  isDateTokenFuture,
-  isDateTokenInPast,
   parseDateTokenSpan,
 } from '../../editor/noteEditor/dateToken/dateToken';
 import type {CellStaticSegment} from '../../editor/noteEditor/eskerraTableV1/eskerraTableCellStaticSegments';
@@ -17,6 +16,7 @@ export type TodayHubStaticPillPart = {
   /** Pretty label (e.g. `Tom 12:00`), matching the CodeMirror widget. */
   label: string;
   past: boolean;
+  urgent: boolean;
   future: boolean;
   completed: boolean;
 };
@@ -50,15 +50,16 @@ function collectDateTokenPillsForLine(
       continue;
     }
     const completed = value.struck === true;
-    const isPast = completed ? false : isDateTokenInPast(value, now);
+    const tone = dateTokenPillTone(value, now);
     const from = lineFrom + tokenStartInLine;
     out.push({
       kind: 'date-pill',
       from,
       to: from + token.length,
       label: formatDateTokenPretty(value, now),
-      past: isPast,
-      future: completed || isPast ? false : isDateTokenFuture(value, now),
+      past: tone === 'past',
+      urgent: tone === 'urgent',
+      future: tone === 'future',
       completed,
     });
   }

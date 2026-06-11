@@ -35,6 +35,7 @@ import {
   CM_DATE_TOKEN_PILL_COMPLETED_CLASS,
   CM_DATE_TOKEN_PILL_FUTURE_CLASS,
   CM_DATE_TOKEN_PILL_PAST_CLASS,
+  CM_DATE_TOKEN_PILL_URGENT_CLASS,
 } from '../editor/noteEditor/dateToken/dateTokenHighlightCodemirror';
 import {parseLoneLinkLine} from '../lib/parseLoneLinkLine';
 import {LinkRichPreviewCard} from './LinkRichPreviewCard';
@@ -91,6 +92,7 @@ function useDateTokenPillMinuteClock(active: boolean): Date {
 
 function todayHubDateTokenPillClassName(
   past: boolean,
+  urgent: boolean,
   future: boolean,
   completed: boolean,
 ): string {
@@ -99,6 +101,9 @@ function todayHubDateTokenPillClassName(
   }
   if (past) {
     return `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_PAST_CLASS}`;
+  }
+  if (urgent) {
+    return `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_URGENT_CLASS}`;
   }
   if (future) {
     return `${CM_DATE_TOKEN_PILL_CLASS} ${CM_DATE_TOKEN_PILL_FUTURE_CLASS}`;
@@ -429,6 +434,7 @@ export function TodayHubCellStaticRichText({
                     key={`pill-${part.from}-${part.to}`}
                     className={todayHubDateTokenPillClassName(
                       part.past,
+                      part.urgent,
                       part.future,
                       part.completed,
                     )}
