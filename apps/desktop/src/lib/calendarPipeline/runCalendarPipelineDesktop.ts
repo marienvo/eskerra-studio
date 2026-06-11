@@ -1,4 +1,5 @@
 import {
+  addLocalCalendarDays,
   bucketCalendarWeekEntries,
   enumerateTodayHubWeekStarts,
   formatTodayHubMondayStem,
@@ -8,8 +9,10 @@ import {
   parseIcsEvents,
   sortedTodayHubNoteUrisFromRefs,
   todayHubRowUriFromTodayNoteUri,
+  todayHubWeekEndInclusive,
   todayHubWeekProgress,
   upsertCalendarColumnInRow,
+  weekStartForDate,
   type AgendaBullet,
   type CalendarItem,
   type IcsEvent,
@@ -127,6 +130,12 @@ export function redactCalendarFeedUrl(url: string): string {
   }
 }
 
+function icsWindowEnd(now: Date, config: TodayHubCalendarConfig): Date {
+  const thisWeekStart = weekStartForDate(now, config.start);
+  const nextWeekStart = addLocalCalendarDays(thisWeekStart, 7);
+  return todayHubWeekEndInclusive(nextWeekStart);
+}
+
 async function fetchHubIcsEvents(
   config: TodayHubCalendarConfig,
   now: Date,
@@ -134,12 +143,13 @@ async function fetchHubIcsEvents(
 ): Promise<{events: IcsEvent[]; failed: number}> {
   const events: IcsEvent[] = [];
   let failed = 0;
+  const windowEndInclusive = icsWindowEnd(now, config);
   for (const url of config.icsUrls) {
     const safeUrl = redactCalendarFeedUrl(url);
     const startedAt = Date.now();
     try {
       const text = await fetchIcs(url, config.timeoutMs);
-      const parsed = parseIcsEvents(text, {now, daysAhead: config.daysAhead});
+      const parsed = parseIcsEvents(text, {now, windowEndInclusive});
       events.push(...parsed);
       console.info(
         `[calendar-pipeline] Fetched ICS (${parsed.length} events, ${Date.now() - startedAt}ms): ${safeUrl}`,

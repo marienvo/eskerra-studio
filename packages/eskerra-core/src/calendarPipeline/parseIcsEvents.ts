@@ -21,7 +21,12 @@ export type IcsEvent = {
 
 export type ParseIcsEventsOptions = {
   now: Date;
-  /** Number of days after `now` (inclusive, end-of-day) to include. Default 7. */
+  /**
+   * Inclusive last calendar day to include (end-of-day). Takes precedence over `daysAhead` when
+   * set. Use this to align the window with week boundaries.
+   */
+  windowEndInclusive?: Date;
+  /** Number of days after `now` (inclusive, end-of-day) to include. Default 7. Ignored when `windowEndInclusive` is set. */
   daysAhead?: number;
   /** Summary used when an event has no usable `SUMMARY`. Default `'Busy'`. */
   titleFallback?: string;
@@ -365,13 +370,13 @@ function endOfLocalDay(d: Date): Date {
  */
 export function parseIcsEvents(icsText: string, options: ParseIcsEventsOptions): IcsEvent[] {
   const {now} = options;
-  const daysAhead = options.daysAhead ?? DEFAULT_DAYS_AHEAD;
   const titleFallback = options.titleFallback ?? DEFAULT_TITLE_FALLBACK;
 
   const fromMs = startOfLocalDay(now).getTime();
-  const toMs = endOfLocalDay(
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysAhead),
-  ).getTime();
+  const windowEnd = options.windowEndInclusive != null
+    ? options.windowEndInclusive
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate() + (options.daysAhead ?? DEFAULT_DAYS_AHEAD));
+  const toMs = endOfLocalDay(windowEnd).getTime();
 
   const lines = unfoldLines(icsText);
   const vevents = parseVevents(lines, titleFallback);

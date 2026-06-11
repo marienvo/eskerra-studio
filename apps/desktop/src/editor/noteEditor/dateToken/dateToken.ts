@@ -306,16 +306,54 @@ function dayDifference(target: Date, base: Date): number {
   return Math.round((target.getTime() - base.getTime()) / 86_400_000);
 }
 
-/** Local midnight of the Monday starting the week `date` belongs to. */
-function mondayOfWeek(date: Date): Date {
-  const weekday = (date.getDay() + 6) % 7; // Mon = 0 … Sun = 6
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - weekday);
+
+/** Part of the day a clock time falls in. Boundaries: 12:30 and 17:30. */
+export type DateTokenDaypart = 'morning' | 'afternoon' | 'evening';
+
+const DAYPART_AFTERNOON_START_MIN = 12 * 60 + 30; // 12:30
+const DAYPART_EVENING_START_MIN = 17 * 60 + 30; // 17:30
+
+/** Daypart for a minute-of-day value (0–1439). */
+export function daypartOfMinutes(minutesSinceMidnight: number): DateTokenDaypart {
+  if (minutesSinceMidnight < DAYPART_AFTERNOON_START_MIN) {
+    return 'morning';
+  }
+  if (minutesSinceMidnight < DAYPART_EVENING_START_MIN) {
+    return 'afternoon';
+  }
+  return 'evening';
 }
 
-/** Whole Monday-based weeks between two dates (target − base). */
-function weekDifference(target: Date, base: Date): number {
-  const diffMs = mondayOfWeek(target).getTime() - mondayOfWeek(base).getTime();
-  return Math.round(diffMs / (7 * 86_400_000));
+const DAYPART_LABELS: Record<DateTokenDaypart, string> = {
+  morning: 'This morning',
+  afternoon: 'This afternoon',
+  evening: 'This evening',
+};
+
+/** Friendly daypart label, e.g. `This evening`. */
+export function daypartLabel(daypart: DateTokenDaypart): string {
+  return DAYPART_LABELS[daypart];
+}
+
+/**
+ * Human duration like `5 h 15 min`, dropping zero parts (`15 min`, `5 h`).
+ * Under a minute reads as `now`.
+ */
+export function formatDurationHm(totalMinutes: number): string {
+  const minutes = Math.max(0, Math.round(totalMinutes));
+  if (minutes < 1) {
+    return 'now';
+  }
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const parts: string[] = [];
+  if (hours > 0) {
+    parts.push(`${hours} h`);
+  }
+  if (mins > 0) {
+    parts.push(`${mins} min`);
+  }
+  return parts.join(' ');
 }
 
 function prettyTimeSuffix(value: DateTokenValue): string {
@@ -333,15 +371,20 @@ function prettyAbsoluteDate(value: DateTokenValue, now: Date): string {
 
 /**
  * Friendly label for a date token, without the bell. Future dates within two
- * weeks render relatively (Today / Tomorrow / weekday this week / "Next
- * <Weekday>" the following week); everything else is an absolute `28 Dec`
- * (with year when not the current one). Time, when present, is appended as
- * `at HH:MM`.
+ * weeks render relatively (Today / Tomorrow / bare weekday for the first
+ * occurrence / "Next <Weekday>" for the second occurrence 8–13 days out);
+ * everything else is an absolute `28 Dec` (with year when not the current
+ * one). Time, when present, is appended as `at HH:MM`.
  */
 export function formatDateTokenPretty(value: DateTokenValue, now: Date): string {
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const targetMidnight = localMidnight(value);
   const diffDays = dayDifference(targetMidnight, todayMidnight);
+
+  if (diffDays === 0 && value.hour !== undefined && value.minute !== undefined) {
+    return formatTodayTimedLabel(value, now);
+  }
+
   const time = prettyTimeSuffix(value);
 
   let datePart: string;
@@ -350,20 +393,81 @@ export function formatDateTokenPretty(value: DateTokenValue, now: Date): string 
   } else if (diffDays === 1) {
     datePart = 'Tomorrow';
   } else if (diffDays >= 2 && diffDays <= 13) {
-    const weekDiff = weekDifference(targetMidnight, todayMidnight);
     const weekday = SHORT_WEEKDAYS[targetMidnight.getDay()]!;
-    if (weekDiff <= 0) {
-      datePart = weekday;
-    } else if (weekDiff === 1) {
-      datePart = `Next ${weekday}`;
-    } else {
-      datePart = prettyAbsoluteDate(value, now);
-    }
+    datePart = diffDays <= 7 ? weekday : `Next ${weekday}`;
   } else {
     datePart = prettyAbsoluteDate(value, now);
   }
 
   return `${datePart}${time}`;
+}
+
+/**
+ * Label for a timed reminder due today. In the current daypart it reads relatively
+ * (`5 h 15 min ago` / `in 5 h 15 min (18:00)`); in another daypart it names that
+ * daypart (`This morning at 09:00`, `This evening at 18:00`).
+ */
+function formatTodayTimedLabel(value: DateTokenValue, now: Date): string {
+  const reminderMin = value.hour! * 60 + value.minute!;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const reminderDaypart = daypartOfMinutes(reminderMin);
+  const currentDaypart = daypartOfMinutes(nowMin);
+
+  if (reminderDaypart !== currentDaypart) {
+    return `${daypartLabel(reminderDaypart)}${prettyTimeSuffix(value)}`;
+  }
+
+  const reminderMs = new Date(
+    value.year,
+    value.month - 1,
+    value.day,
+    value.hour!,
+    value.minute!,
+  ).getTime();
+  const absMin = Math.abs(reminderMs - now.getTime()) / 60_000;
+  if (isDateTokenInPast(value, now)) {
+    return absMin < 1 ? 'just now' : `${formatDurationHm(absMin)} ago`;
+  }
+  return absMin < 1
+    ? `now (${pad2(value.hour!)}:${pad2(value.minute!)})`
+    : `in ${formatDurationHm(absMin)} (${pad2(value.hour!)}:${pad2(value.minute!)})`;
+}
+
+/** Colour bucket for a reminder pill. `urgent` is a timed today reminder in the current daypart. */
+export type DateTokenPillTone =
+  | 'completed'
+  | 'past'
+  | 'urgent'
+  | 'future'
+  | 'neutral';
+
+/**
+ * Classifies a token into its pill colour bucket. Past (incl. earlier today) and
+ * completed keep their muted styling; a timed today reminder still to come is
+ * `urgent` (red) when it lands in the current daypart and `future` (yellow) when
+ * it lands in a later daypart, alongside genuinely future days.
+ */
+export function dateTokenPillTone(
+  value: DateTokenValue,
+  now: Date,
+): DateTokenPillTone {
+  if (value.struck === true) {
+    return 'completed';
+  }
+  if (isDateTokenInPast(value, now)) {
+    return 'past';
+  }
+  if (isDateTokenFuture(value, now)) {
+    return 'future';
+  }
+  if (value.hour !== undefined && value.minute !== undefined) {
+    const reminderDaypart = daypartOfMinutes(value.hour * 60 + value.minute);
+    const currentDaypart = daypartOfMinutes(
+      now.getHours() * 60 + now.getMinutes(),
+    );
+    return reminderDaypart === currentDaypart ? 'urgent' : 'future';
+  }
+  return 'neutral';
 }
 
 /** Pill glyph for a reminder by state: completed (🔕), past (☑️), or upcoming/future (🔔). */

@@ -70,6 +70,23 @@ describe('todayHubStaticLineParts', () => {
     expect(pill!.completed).toBe(false);
   });
 
+  it('marks a timed today reminder in the current daypart as urgent', () => {
+    // NOW is 09:00 (morning); 11:00 is still ahead in the same daypart.
+    const text = 'soon @2026-12-29_1100';
+    const [pill] = pills(todayHubStaticLineParts(0, text, segments(text), NOW));
+    expect(pill!.urgent).toBe(true);
+    expect(pill!.past).toBe(false);
+    expect(pill!.future).toBe(false);
+  });
+
+  it('marks a later daypart today as future, not urgent', () => {
+    // 18:00 is the evening — a later daypart than the morning NOW.
+    const text = 'later @2026-12-29_1800';
+    const [pill] = pills(todayHubStaticLineParts(0, text, segments(text), NOW));
+    expect(pill!.future).toBe(true);
+    expect(pill!.urgent).toBe(false);
+  });
+
   it('renders struck spans as completed pills with full token offsets', () => {
     const text = 'done @~~2026-12-30_1200~~';
     const [pill] = pills(todayHubStaticLineParts(0, text, segments(text), NOW));

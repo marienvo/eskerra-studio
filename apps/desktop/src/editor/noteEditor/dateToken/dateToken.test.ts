@@ -4,8 +4,11 @@ import {
   collectDateTokenSpansInLine,
   DATE_TOKEN_PATTERN,
   DATE_TOKEN_PREFIX_PATTERN,
+  daypartOfMinutes,
+  dateTokenPillTone,
   formatDateToken,
   formatDateTokenPretty,
+  formatDurationHm,
   formatTodayDateToken,
   isDateTokenInPast,
   isValidCalendarDate,
@@ -141,22 +144,30 @@ describe('formatDateTokenPretty', () => {
     );
   });
 
-  test('this-week vs next-week weekday', () => {
-    // 2026-06-08 (Mon) starts the following Monday-based week.
-    expect(formatDateTokenPretty({year: 2026, month: 6, day: 8}, now)).toBe(
-      'Next Mon',
-    );
-    expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
-      'Next Thu',
-    );
+  test('first occurrence (2–7 days) uses bare weekday', () => {
+    // now = Sat 2026-06-06; Mon is 2 days out, Thu 5 days, Sun 1 week out.
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 8}, now)).toBe('Mon');
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe('Thu');
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 13}, now)).toBe('Sat');
+    // 7 days out is still first occurrence (no intervening Sat).
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 13}, now)).toBe('Sat');
+  });
+
+  test('second occurrence (8–13 days) uses "Next <Weekday>"', () => {
+    // Sun 14 Jun is 8 days out — Sun already appeared on 7 Jun, so it's Next Sun.
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 14}, now)).toBe(
       'Next Sun',
+    );
+    // Mon 15 Jun is 9 days out — Mon already appeared on 8 Jun.
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 15}, now)).toBe(
+      'Next Mon',
     );
   });
 
   test('beyond the relative window falls back to absolute', () => {
-    expect(formatDateTokenPretty({year: 2026, month: 6, day: 15}, now)).toBe(
-      '15 Jun',
+    // 14+ days out is absolute (Jun 20 = 14 days from Jun 6).
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 20}, now)).toBe(
+      '20 Jun',
     );
     expect(formatDateTokenPretty({year: 2026, month: 12, day: 28}, now)).toBe(
       '28 Dec',
@@ -178,19 +189,121 @@ describe('formatDateTokenPretty', () => {
   test('appends the time when present, omits it otherwise', () => {
     expect(
       formatDateTokenPretty(
-        {year: 2026, month: 6, day: 6, hour: 9, minute: 5},
-        now,
-      ),
-    ).toBe('Today at 09:05');
-    expect(
-      formatDateTokenPretty(
         {year: 2026, month: 6, day: 11, hour: 15, minute: 0},
         now,
       ),
-    ).toBe('Next Thu at 15:00');
+    ).toBe('Thu at 15:00');
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
-      'Next Thu',
+      'Thu',
     );
+  });
+});
+
+describe('formatDateTokenPretty timed today labels (dayparts)', () => {
+  // 2026-06-06 12:00 — current daypart is the morning (00:00–12:30).
+  const morningNow = new Date(2026, 5, 6, 12, 0);
+
+  test('current daypart, still upcoming, reads relatively with the clock time', () => {
+    expect(
+      formatDateTokenPretty(
+        {year: 2026, month: 6, day: 6, hour: 12, minute: 15},
+        morningNow,
+      ),
+    ).toBe('in 15 min (12:15)');
+  });
+
+  test('current daypart, already passed, reads as a relative "ago"', () => {
+    expect(
+      formatDateTokenPretty(
+        {year: 2026, month: 6, day: 6, hour: 9, minute: 5},
+        morningNow,
+      ),
+    ).toBe('2 h 55 min ago');
+  });
+
+  test('an already-passed daypart reads as its name with the time', () => {
+    // 14:30 is the afternoon; the morning has passed.
+    const afternoonNow = new Date(2026, 5, 6, 14, 30);
+    expect(
+      formatDateTokenPretty(
+        {year: 2026, month: 6, day: 6, hour: 9, minute: 5},
+        afternoonNow,
+      ),
+    ).toBe('This morning at 09:05');
+  });
+
+  test('a later daypart today reads as its name with the time', () => {
+    expect(
+      formatDateTokenPretty(
+        {year: 2026, month: 6, day: 6, hour: 18, minute: 0},
+        morningNow,
+      ),
+    ).toBe('This evening at 18:00');
+  });
+
+  test('a date-only today token keeps the plain "Today" label', () => {
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 6}, morningNow)).toBe(
+      'Today',
+    );
+  });
+
+  test('daypart boundaries: 12:30 is afternoon, 17:30 is evening', () => {
+    expect(daypartOfMinutes(12 * 60 + 29)).toBe('morning');
+    expect(daypartOfMinutes(12 * 60 + 30)).toBe('afternoon');
+    expect(daypartOfMinutes(17 * 60 + 29)).toBe('afternoon');
+    expect(daypartOfMinutes(17 * 60 + 30)).toBe('evening');
+  });
+});
+
+describe('formatDurationHm', () => {
+  test('drops zero parts and floors sub-minute to "now"', () => {
+    expect(formatDurationHm(0)).toBe('now');
+    expect(formatDurationHm(0.4)).toBe('now');
+    expect(formatDurationHm(15)).toBe('15 min');
+    expect(formatDurationHm(60)).toBe('1 h');
+    expect(formatDurationHm(75)).toBe('1 h 15 min');
+  });
+});
+
+describe('dateTokenPillTone', () => {
+  // 2026-06-06 14:30 — current daypart is the afternoon.
+  const now = new Date(2026, 5, 6, 14, 30);
+
+  test('completed and past keep their muted buckets', () => {
+    expect(
+      dateTokenPillTone(
+        {year: 2026, month: 6, day: 7, hour: 9, minute: 0, struck: true},
+        now,
+      ),
+    ).toBe('completed');
+    expect(dateTokenPillTone({year: 2026, month: 6, day: 5}, now)).toBe('past');
+    // Earlier today is also past.
+    expect(
+      dateTokenPillTone({year: 2026, month: 6, day: 6, hour: 9, minute: 0}, now),
+    ).toBe('past');
+  });
+
+  test('a timed today reminder in the current daypart is urgent (red)', () => {
+    expect(
+      dateTokenPillTone(
+        {year: 2026, month: 6, day: 6, hour: 17, minute: 0},
+        now,
+      ),
+    ).toBe('urgent');
+  });
+
+  test('later dayparts today and future days are future (yellow)', () => {
+    expect(
+      dateTokenPillTone(
+        {year: 2026, month: 6, day: 6, hour: 18, minute: 0},
+        now,
+      ),
+    ).toBe('future');
+    expect(dateTokenPillTone({year: 2026, month: 6, day: 8}, now)).toBe('future');
+  });
+
+  test('a date-only today token is neutral', () => {
+    expect(dateTokenPillTone({year: 2026, month: 6, day: 6}, now)).toBe('neutral');
   });
 });
 

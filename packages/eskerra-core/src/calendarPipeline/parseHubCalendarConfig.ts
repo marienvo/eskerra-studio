@@ -9,9 +9,7 @@ import {
 /** Column label whose Today Hub segment the calendar pipeline owns. */
 export const CALENDAR_COLUMN_LABEL = 'Calendar';
 
-export const DEFAULT_ICS_DAYS_AHEAD = 7;
 export const DEFAULT_ICS_TIMEOUT_MS = 8000;
-export const MAX_ICS_DAYS_AHEAD = 60;
 export const MAX_ICS_TIMEOUT_MS = 15000;
 export const MAX_ICS_FEEDS_PER_HUB = 10;
 
@@ -20,8 +18,6 @@ export type TodayHubCalendarConfig = {
   icsUrls: string[];
   /** Relative path/filename of this hub's agenda markdown source, or `null` when unset. */
   mdAgenda: string | null;
-  /** Days of look-ahead for ICS events (frontmatter `daysAhead`, default {@link DEFAULT_ICS_DAYS_AHEAD}). */
-  daysAhead: number;
   /** Per-feed fetch timeout in ms (frontmatter `timeoutMs`, default {@link DEFAULT_ICS_TIMEOUT_MS}). */
   timeoutMs: number;
   /** First day of the hub week (drives week-start bucketing). */
@@ -112,7 +108,6 @@ export function parseHubCalendarConfig(markdown: string): TodayHubCalendarConfig
   const {frontmatter} = splitYamlFrontmatter(markdown);
   let icsUrls: string[] = [];
   let mdAgenda: string | null = null;
-  let daysAhead = DEFAULT_ICS_DAYS_AHEAD;
   let timeoutMs = DEFAULT_ICS_TIMEOUT_MS;
   if (frontmatter != null) {
     try {
@@ -121,12 +116,6 @@ export function parseHubCalendarConfig(markdown: string): TodayHubCalendarConfig
         const record = parsed as Record<string, unknown>;
         icsUrls = coerceToStringArray(record.icsUrl, MAX_ICS_FEEDS_PER_HUB);
         mdAgenda = coerceToTrimmedStringOrNull(record.mdAgenda);
-        daysAhead = coercePositiveIntOrDefault(
-          record.daysAhead,
-          DEFAULT_ICS_DAYS_AHEAD,
-          0,
-          MAX_ICS_DAYS_AHEAD,
-        );
         timeoutMs = coercePositiveIntOrDefault(
           record.timeoutMs,
           DEFAULT_ICS_TIMEOUT_MS,
@@ -142,7 +131,6 @@ export function parseHubCalendarConfig(markdown: string): TodayHubCalendarConfig
   return {
     icsUrls,
     mdAgenda,
-    daysAhead,
     timeoutMs,
     start: settings.start,
     columns: settings.columns,

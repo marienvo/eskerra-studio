@@ -84,21 +84,21 @@ describe('dateTokenHighlightCodemirror', () => {
   });
 
   it('renders pretty pills for valid tokens when no line is focused', () => {
-    const doc = 'Due @2026-06-06_1200 tomorrow\n@2026-12-28 end';
+    const doc = 'Due @2026-06-06_1215 tomorrow\n@2026-12-28 end';
     view = mountView(doc);
     vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(false);
 
     const intervals = collectIntervals(view, buildDateTokenDecorations(view, NOW));
-    const withTimeFrom = doc.indexOf('@2026-06-06_1200');
+    const withTimeFrom = doc.indexOf('@2026-06-06_1215');
     const dateOnlyFrom = doc.indexOf('@2026-12-28');
 
     expect(intervals).toEqual([
       {
         from: withTimeFrom,
-        to: withTimeFrom + '@2026-06-06_1200'.length,
+        to: withTimeFrom + '@2026-06-06_1215'.length,
         kind: 'replace',
         class: undefined,
-        pillText: '🔔 Today at 12:00',
+        pillText: '🔔 in 15 min (12:15)',
       },
       {
         from: dateOnlyFrom,
@@ -310,7 +310,7 @@ describe('dateTokenHighlightCodemirror', () => {
 
   it('refreshes pill labels when the aligned minute clock fires', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 5, 6, 11, 59, 30));
+    vi.setSystemTime(new Date(2026, 5, 6, 11, 55, 0));
 
     const doc = 'Due @2026-06-06_1200 tomorrow';
     view = mountViewWithHighlight(doc);
@@ -320,32 +320,36 @@ describe('dateTokenHighlightCodemirror', () => {
       view!.dom.querySelector(`.${CM_DATE_TOKEN_PILL_CLASS}`) as HTMLElement | null;
 
     expect(pill()?.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('🔔');
-    expect(pill()?.querySelector('.cm-date-token-pill__label')?.textContent).toBe('Today at 12:00');
+    expect(pill()?.querySelector('.cm-date-token-pill__label')?.textContent).toBe(
+      'in 5 min (12:00)',
+    );
     expect(pill()?.classList.contains(CM_DATE_TOKEN_PILL_PAST_CLASS)).toBe(false);
 
-    vi.setSystemTime(new Date(2026, 5, 6, 12, 0, 1));
-    await vi.advanceTimersByTimeAsync(30_000);
+    // Advance 8 minutes to 12:03; the aligned-minute clock fires and rebuilds.
+    await vi.advanceTimersByTimeAsync(8 * 60_000);
     await Promise.resolve();
 
     expect(pill()?.querySelector('.cm-date-token-pill__emoji')?.textContent).toBe('☑️');
-    expect(pill()?.querySelector('.cm-date-token-pill__label')?.textContent).toBe('Today at 12:00');
+    expect(pill()?.querySelector('.cm-date-token-pill__label')?.textContent).toBe(
+      '3 min ago',
+    );
     expect(pill()?.classList.contains(CM_DATE_TOKEN_PILL_PAST_CLASS)).toBe(true);
   });
 
   it('swaps chip/pill only on affected lines when focus moves between lines', () => {
-    const doc = 'Due @2026-06-06_1200 tomorrow\n@2026-12-28 end';
+    const doc = 'Due @2026-06-06_1215 tomorrow\n@2026-12-28 end';
     view = mountViewWithHighlight(doc);
     vi.spyOn(view, 'hasFocus', 'get').mockReturnValue(true);
 
     view.dispatch({selection: EditorSelection.cursor(0)});
     const beforeMove = collectIntervals(view, buildDateTokenDecorations(view, NOW));
-    const withTimeFrom = doc.indexOf('@2026-06-06_1200');
+    const withTimeFrom = doc.indexOf('@2026-06-06_1215');
     const dateOnlyFrom = doc.indexOf('@2026-12-28');
 
     expect(beforeMove).toEqual([
       {
         from: withTimeFrom,
-        to: withTimeFrom + '@2026-06-06_1200'.length,
+        to: withTimeFrom + '@2026-06-06_1215'.length,
         kind: 'mark',
         class: CM_DATE_TOKEN_CLASS,
         pillText: undefined,
@@ -366,10 +370,10 @@ describe('dateTokenHighlightCodemirror', () => {
     expect(afterMove).toEqual([
       {
         from: withTimeFrom,
-        to: withTimeFrom + '@2026-06-06_1200'.length,
+        to: withTimeFrom + '@2026-06-06_1215'.length,
         kind: 'replace',
         class: undefined,
-        pillText: '🔔 Today at 12:00',
+        pillText: '🔔 in 15 min (12:15)',
       },
       {
         from: dateOnlyFrom,
