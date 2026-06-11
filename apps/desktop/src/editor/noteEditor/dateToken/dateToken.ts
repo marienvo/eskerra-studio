@@ -306,17 +306,6 @@ function dayDifference(target: Date, base: Date): number {
   return Math.round((target.getTime() - base.getTime()) / 86_400_000);
 }
 
-/** Local midnight of the Monday starting the week `date` belongs to. */
-function mondayOfWeek(date: Date): Date {
-  const weekday = (date.getDay() + 6) % 7; // Mon = 0 … Sun = 6
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - weekday);
-}
-
-/** Whole Monday-based weeks between two dates (target − base). */
-function weekDifference(target: Date, base: Date): number {
-  const diffMs = mondayOfWeek(target).getTime() - mondayOfWeek(base).getTime();
-  return Math.round(diffMs / (7 * 86_400_000));
-}
 
 /** Part of the day a clock time falls in. Boundaries: 12:30 and 17:30. */
 export type DateTokenDaypart = 'morning' | 'afternoon' | 'evening';
@@ -382,10 +371,10 @@ function prettyAbsoluteDate(value: DateTokenValue, now: Date): string {
 
 /**
  * Friendly label for a date token, without the bell. Future dates within two
- * weeks render relatively (Today / Tomorrow / weekday this week / "Next
- * <Weekday>" the following week); everything else is an absolute `28 Dec`
- * (with year when not the current one). Time, when present, is appended as
- * `at HH:MM`.
+ * weeks render relatively (Today / Tomorrow / bare weekday for the first
+ * occurrence / "Next <Weekday>" for the second occurrence 8–13 days out);
+ * everything else is an absolute `28 Dec` (with year when not the current
+ * one). Time, when present, is appended as `at HH:MM`.
  */
 export function formatDateTokenPretty(value: DateTokenValue, now: Date): string {
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -404,15 +393,8 @@ export function formatDateTokenPretty(value: DateTokenValue, now: Date): string 
   } else if (diffDays === 1) {
     datePart = 'Tomorrow';
   } else if (diffDays >= 2 && diffDays <= 13) {
-    const weekDiff = weekDifference(targetMidnight, todayMidnight);
     const weekday = SHORT_WEEKDAYS[targetMidnight.getDay()]!;
-    if (weekDiff <= 0) {
-      datePart = weekday;
-    } else if (weekDiff === 1) {
-      datePart = `Next ${weekday}`;
-    } else {
-      datePart = prettyAbsoluteDate(value, now);
-    }
+    datePart = diffDays <= 7 ? weekday : `Next ${weekday}`;
   } else {
     datePart = prettyAbsoluteDate(value, now);
   }

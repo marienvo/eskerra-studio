@@ -144,22 +144,30 @@ describe('formatDateTokenPretty', () => {
     );
   });
 
-  test('this-week vs next-week weekday', () => {
-    // 2026-06-08 (Mon) starts the following Monday-based week.
-    expect(formatDateTokenPretty({year: 2026, month: 6, day: 8}, now)).toBe(
-      'Next Mon',
-    );
-    expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
-      'Next Thu',
-    );
+  test('first occurrence (2–7 days) uses bare weekday', () => {
+    // now = Sat 2026-06-06; Mon is 2 days out, Thu 5 days, Sun 1 week out.
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 8}, now)).toBe('Mon');
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe('Thu');
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 13}, now)).toBe('Sat');
+    // 7 days out is still first occurrence (no intervening Sat).
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 13}, now)).toBe('Sat');
+  });
+
+  test('second occurrence (8–13 days) uses "Next <Weekday>"', () => {
+    // Sun 14 Jun is 8 days out — Sun already appeared on 7 Jun, so it's Next Sun.
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 14}, now)).toBe(
       'Next Sun',
+    );
+    // Mon 15 Jun is 9 days out — Mon already appeared on 8 Jun.
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 15}, now)).toBe(
+      'Next Mon',
     );
   });
 
   test('beyond the relative window falls back to absolute', () => {
-    expect(formatDateTokenPretty({year: 2026, month: 6, day: 15}, now)).toBe(
-      '15 Jun',
+    // 14+ days out is absolute (Jun 20 = 14 days from Jun 6).
+    expect(formatDateTokenPretty({year: 2026, month: 6, day: 20}, now)).toBe(
+      '20 Jun',
     );
     expect(formatDateTokenPretty({year: 2026, month: 12, day: 28}, now)).toBe(
       '28 Dec',
@@ -184,9 +192,9 @@ describe('formatDateTokenPretty', () => {
         {year: 2026, month: 6, day: 11, hour: 15, minute: 0},
         now,
       ),
-    ).toBe('Next Thu at 15:00');
+    ).toBe('Thu at 15:00');
     expect(formatDateTokenPretty({year: 2026, month: 6, day: 11}, now)).toBe(
-      'Next Thu',
+      'Thu',
     );
   });
 });
