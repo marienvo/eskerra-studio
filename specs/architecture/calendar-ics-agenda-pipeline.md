@@ -17,7 +17,6 @@ Each Today Hub (`Today.md`) configures its own calendar feed:
 | `mdAgenda`  | Vault-relative path of the hub's agenda markdown (Part 2 source).       |
 | `start`     | Hub week start day (`monday`, `sunday`, …). Drives week bucketing.      |
 | `columns`   | Extra column labels; the implicit column 0 is the week-start date.      |
-| `daysAhead` | ICS look-ahead window in days (default 7).                             |
 | `timeoutMs` | Per-feed fetch timeout (default 8000, min 500).                        |
 
 **Calendar column resolution.** The pipeline writes into the column named `Calendar`
@@ -39,7 +38,7 @@ Parsed by `parseHubCalendarConfig` (`packages/eskerra-core/src/calendarPipeline`
   - Resource caps: per-feed timeout is clamped to 500-15000ms, response bodies are capped at 2MB, and
     logs redact feed URL paths/query strings because calendar URLs often contain bearer-like tokens.
 - `parseIcsEvents` (pure, in core) turns ICS text into `{start, summary}[]`:
-  - `VEVENT` only; window `[startOfDay(now) .. endOfDay(now + daysAhead)]`.
+  - `VEVENT` only; window `[startOfDay(now) .. end-of-day(end of next week)]`.
   - **All-day events are skipped** (`VALUE=DATE` or 8-digit `DTSTART`).
   - `RRULE` expansion for `FREQ=DAILY|WEEKLY|MONTHLY|YEARLY` with `INTERVAL`, `COUNT`, `UNTIL`, and
     (weekly) `BYDAY`.
@@ -201,7 +200,7 @@ calendar source fails. No startup-path work.
 - **TS vs Rust:** network fetch + file I/O in Rust (CORS-safe, off-renderer, native disk);
   parsing/transform in TS (small data — one user's calendars — so default-TS applies). No new TS deps.
 - **Mitigations:** yield between hubs; skip no-op writes; touch only affected week files.
-- **Resource caps:** max 10 ICS feeds per hub; max `daysAhead` 60; max `timeoutMs` 15000; max ICS
+- **Resource caps:** max 10 ICS feeds per hub; max `timeoutMs` 15000; max ICS
   body 2MB; no startup-path fetches.
 
 ## Tests

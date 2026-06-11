@@ -426,9 +426,11 @@ function formatTodayTimedLabel(value: DateTokenValue, now: Date): string {
   ).getTime();
   const absMin = Math.abs(reminderMs - now.getTime()) / 60_000;
   if (isDateTokenInPast(value, now)) {
-    return `${formatDurationHm(absMin)} ago`;
+    return absMin < 1 ? 'just now' : `${formatDurationHm(absMin)} ago`;
   }
-  return `in ${formatDurationHm(absMin)} (${pad2(value.hour!)}:${pad2(value.minute!)})`;
+  return absMin < 1
+    ? `now (${pad2(value.hour!)}:${pad2(value.minute!)})`
+    : `in ${formatDurationHm(absMin)} (${pad2(value.hour!)}:${pad2(value.minute!)})`;
 }
 
 /** Colour bucket for a reminder pill. `urgent` is a timed today reminder in the current daypart. */
