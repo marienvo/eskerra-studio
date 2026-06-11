@@ -416,7 +416,7 @@ Near-end thresholds (`playlist.ts`):
 
 ### 9.3 Near-end UI copy (reference app)
 
-Mini player shows **`Bijna klaar`** when `playbackPhase` is `nearEndPlaying` or `nearEndPaused` (Dutch in reference; rebuild may localize).
+Mini player shows **`Almost done`** when `playbackPhase` is `nearEndPlaying` or `nearEndPaused`.
 
 ---
 
@@ -637,7 +637,7 @@ Rendered globally above tab bar when `activeEpisode != null`.
   1. Episode `title` — 14px semibold, white, 1 line with tail ellipsis.
   2. `seriesName` — 12px, muted, 1 line.
   3. Date line (11px, muted, 1 line): shows `bufferingSubtitle` when loading/near-end, else `formatRelativeCalendarLabelFromIsoDate(episode.date)`.
-  - `bufferingSubtitle` values: `'Bijna klaar'` (near-end — Dutch; rebuild may localize), `'Resuming…'` (loading + position ≥ 10s), `'Buffering…'` (loading + position < 10s), `'Starting…'` (paused + transport busy).
+  - `bufferingSubtitle` values: `'Almost done'` (near-end), `'Resuming…'` (loading + position ≥ 10s), `'Buffering…'` (loading + position < 10s), `'Starting…'` (paused + transport busy).
 - Slider: seek; drag does not persist until `onSlidingComplete`.
 - Transport: elapsed | −10s (`replay-10`) | play/pause (52px) | +10s (`forward-10`) | duration.
 - Skip disabled when `loading && !seeking`.
