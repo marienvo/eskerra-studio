@@ -1,6 +1,5 @@
 export {
   CALENDAR_COLUMN_LABEL,
-  DEFAULT_ICS_DAYS_AHEAD,
   DEFAULT_ICS_TIMEOUT_MS,
   parseHubCalendarConfig,
   type TodayHubCalendarConfig,

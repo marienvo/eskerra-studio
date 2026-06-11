@@ -129,6 +129,19 @@ describe('parseIcsEvents', () => {
     expect(dates).toEqual(['2026-02-28', '2026-03-31', '2026-04-30']);
   });
 
+  it('windowEndInclusive aligns the window to a specific date regardless of daysAhead', () => {
+    // NOW is Thu Jan 15 2026. Next-week end (Mon-start) = Sun Jan 25 2026.
+    // A Friday of next week (Jan 23) must be included; the week after (Jan 26) must not.
+    const ics = wrap(
+      vevent(['UID:this-fri', 'SUMMARY:This Friday', 'DTSTART:20260116T100000Z']),
+      vevent(['UID:next-fri', 'SUMMARY:Next Friday', 'DTSTART:20260123T100000Z']),
+      vevent(['UID:week-after', 'SUMMARY:Too far', 'DTSTART:20260126T100000Z']),
+    );
+    const windowEndInclusive = new Date(2026, 0, 25); // Sun Jan 25 2026
+    const events = parseIcsEvents(ics, {now: NOW, windowEndInclusive});
+    expect(events.map(e => e.summary)).toEqual(['This Friday', 'Next Friday']);
+  });
+
   it('skips events marked STATUS:CANCELLED', () => {
     const ics = wrap(
       vevent(['UID:live', 'SUMMARY:Live meeting', 'DTSTART:20260116T100000Z']),
